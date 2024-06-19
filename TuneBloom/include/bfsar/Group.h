@@ -7,12 +7,27 @@ class Group : public Item
 public:
     class ItemInfo : public Item
     {
+        enum LoadFlag
+        {
+            // Sound
+            LoadSeq = 1 << 0,
+            LoadWsd = 1 << 1,
+
+            // Bank
+            LoadBank = 1 << 2,
+
+            // Waveform Archive
+            LoadWarc = 1 << 3,
+
+            LoadAll = 0xFFFFFFFF
+        };
+
     public:
         ItemInfo(Group* owner)
             : Item()
             , mItemRefType(ItemType::Invalid)
             , mItemRef(owner)
-            , mLoadFlag(0xFFFFFFFF)
+            , mLoadFlag(LoadFlag::LoadAll)
         {
             mItemType = ItemType::GroupItemInfo;
         }
@@ -45,6 +60,11 @@ public:
         ItemReference& getItemRef()
         {
             return mItemRef;
+        }
+
+        u32 getLoadFlag() const
+        {
+            return mLoadFlag;
         }
 
     private:

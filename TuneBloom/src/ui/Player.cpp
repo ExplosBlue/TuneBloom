@@ -464,7 +464,7 @@ void PlaySeqSound(const Sound* sound)
         SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
         const Bank* bank = static_cast<const Bank*>(item);
 
-        item = bank->getFile().getItem();
+        item = bank->getFileRef().getItem();
         if (!item)
         {
             continue;

@@ -27,10 +27,10 @@ void DrawBankPropertiesUI()
     }
 
     {
-        Item* file = bank->getFile().getItem();
+        Item* file = bank->getFileRef().getItem();
         if (ItemSelector("File", sBfsar.getBankFileList(), &file))
         {
-            bank->getFile().attach(file);
+            bank->getFileRef().attach(file);
         }
     }
 }

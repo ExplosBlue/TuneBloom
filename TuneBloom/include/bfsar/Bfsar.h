@@ -209,6 +209,27 @@ public:
         return nullptr;
     }
 
+    const Item::List& getItemList(Item::ItemType itemType)
+    {
+        switch (itemType)
+        {
+            case Item::ItemType::Sound:
+                return getSoundList();
+
+            case Item::ItemType::SoundSet:
+                return getSoundSetList();
+
+            case Item::ItemType::Bank:
+                return getBankList();
+
+            case Item::ItemType::WaveArchive:
+                return getWaveArchiveList();
+        }
+
+        static const Item::List cNullList;
+        return cNullList;
+    }
+
     bool validateName(const sead::SafeString& name) const;
 
     void updateList(Item::List& list);

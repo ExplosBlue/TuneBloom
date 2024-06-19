@@ -10,7 +10,7 @@ public:
         : Item()
         , mWaveArchiveType(WaveArchiveType::Invalid)
         , mWaveArchiveRef(this)
-        , mFile(this)
+        , mFileRef(this)
     {
         mItemType = ItemType::Bank;
     }
@@ -35,20 +35,20 @@ public:
         return mWaveArchiveRef;
     }
 
-    const ItemReference& getFile() const
+    const ItemReference& getFileRef() const
     {
-        return mFile;
+        return mFileRef;
     }
 
-    ItemReference& getFile()
+    ItemReference& getFileRef()
     {
-        return mFile;
+        return mFileRef;
     }
 
 private:
     WaveArchiveType mWaveArchiveType;
     ItemReference mWaveArchiveRef;
-    ItemReference mFile;
+    ItemReference mFileRef;
 
     friend class Bfsar;
 };

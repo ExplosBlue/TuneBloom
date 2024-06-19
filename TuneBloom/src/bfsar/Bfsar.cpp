@@ -16,6 +16,7 @@
 #include <md5/md5.h>
 
 #include <unordered_map>
+#include <unordered_set>
 
 Bfsar::Bfsar()
     : mOpen(false)
@@ -625,10 +626,8 @@ void Bfsar::open_(sead::Heap* heap)
 
         SEAD_ASSERT(bank->mWaveArchiveType != WaveArchiveType::Invalid);
 
-        bank->mFile.attach(getItem(bankFileIdxMap[bankInfo->fileId], getBankFileList()));
-        SEAD_ASSERT(bank->mFile.isAttached());
-
-        // TODO: Load Bank stuff (Instruments...)
+        bank->mFileRef.attach(getItem(bankFileIdxMap[bankInfo->fileId], getBankFileList()));
+        SEAD_ASSERT(bank->mFileRef.isAttached());
 
         mBankList.pushBack(bank);
     }
@@ -904,31 +903,99 @@ void Bfsar::open_(sead::Heap* heap)
             group->mName = mSoundArchive->GetString(groupInfo->GetStringId());
         }
 
-        nw::snd::internal::GroupFileReader reader(mSoundArchive->detail_GetFileAddress(groupInfo->fileId));
-        if (reader.GetGroupItemCount() > 0)
+        if (groupInfo->fileId != nw::snd::SoundArchive::INVALID_ID)
         {
-            nw::snd::internal::GroupItemLocationInfo locationInfo;
-            bool success = reader.ReadGroupItemLocationInfo(&locationInfo, 0);
-            SEAD_ASSERT(success);
-
-            if (locationInfo.address)
+            nw::snd::internal::GroupFileReader reader(mSoundArchive->detail_GetFileAddress(groupInfo->fileId));
+            if (reader.GetGroupItemCount() > 0)
             {
-                group->mOutputType = Group::OutputType::Embed;
+                nw::snd::internal::GroupItemLocationInfo locationInfo;
+                bool success = reader.ReadGroupItemLocationInfo(&locationInfo, 0);
+                SEAD_ASSERT(success);
+
+                if (locationInfo.address)
+                {
+                    group->mOutputType = Group::OutputType::Embed;
+                }
+                else
+                {
+                    group->mOutputType = Group::OutputType::Link;
+                }
             }
             else
             {
-                group->mOutputType = Group::OutputType::Link;
+                //? Can't know OutputType... Fallback to Embed
+                group->mOutputType = Group::OutputType::Embed;
+            }
+
+            for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
+            {
+                nw::snd::internal::GroupFile::GroupItemInfoEx itemInfoEx;
+                bool success = reader.ReadGroupItemInfoEx(&itemInfoEx, j);
+                SEAD_ASSERT(success);
+
+                Group::ItemInfo* itemInfo = new(heap) Group::ItemInfo(group);
+                itemInfo->mId = j;
+
+                switch (nw::snd::internal::Util::GetItemType(itemInfoEx.itemId))
+                {
+                    case nw::snd::internal::ItemType_Sound:
+                        itemInfo->mItemRefType = Item::ItemType::Sound;
+                        break;
+
+                    case nw::snd::internal::ItemType_SoundGroup:
+                        itemInfo->mItemRefType = Item::ItemType::SoundSet;
+                        break;
+
+                    case nw::snd::internal::ItemType_Bank:
+                        itemInfo->mItemRefType = Item::ItemType::Bank;
+                        break;
+
+                    case nw::snd::internal::ItemType_WaveArchive:
+                        itemInfo->mItemRefType = Item::ItemType::WaveArchive;
+                        break;
+
+                    default:
+                        itemInfo->mItemRefType = Item::ItemType::Invalid;
+                        break;
+                }
+
+                itemInfo->mItemRef.attach(getItem(itemInfoEx.itemId, getItemList(itemInfo->mItemRefType)));
+
+                itemInfo->mLoadFlag = itemInfoEx.loadFlag;
+
+                group->mItemInfoList.pushBack(itemInfo);
             }
         }
         else
         {
-            //? Can't know OutputType... Fallback to Embed
-            group->mOutputType = Group::OutputType::Embed;
+            SEAD_ASSERT_MSG(false, "External group died");
         }
 
         mGroupList.pushBack(group);
     }
 }
+
+template <typename T>
+class VectorSet
+{
+public:
+    using iterator                     = typename std::vector<T>::iterator;
+    using const_iterator               = typename std::vector<T>::const_iterator;
+    iterator begin()                   { return theVector.begin(); }
+    iterator end()                     { return theVector.end(); }
+    const_iterator begin() const       { return theVector.begin(); }
+    const_iterator end() const         { return theVector.end(); }
+    const T& front() const             { return theVector.front(); }
+    const T& back() const              { return theVector.back(); }
+    void insert(const T& item)         { if (theSet.insert(item).second) theVector.push_back(item); }
+    size_t count(const T& item) const  { return theSet.count(item); }
+    bool empty() const                 { return theSet.empty(); }
+    size_t size() const                { return theSet.size(); }
+
+private:
+    std::vector<T> theVector;
+    std::unordered_set<T> theSet;
+};
 
 void Bfsar::save_(sead::FileHandle& handle)
 {
@@ -948,6 +1015,412 @@ void Bfsar::save_(sead::FileHandle& handle)
         else
             return nw::snd::internal::DEFAULT_STRING_ID;
     };
+
+    std::unordered_map<const Item*, VectorSet<const Group*>> itemAttachedGroups;
+    std::unordered_map<const WaveArchive*, VectorSet<const WaveFile*>> warcWaveFiles;
+
+    //? ResolveNames
+    {
+        for (const Item* item : mSoundSetList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::SoundSet);
+            const SoundSet* soundSet = static_cast<const SoundSet*>(item);
+
+            if (soundSet->getSoundSetType() != SoundSet::SoundSetType::Wave || soundSet->getWaveArchiveType() != WaveArchiveType::Explicit)
+            {
+                continue;
+            }
+
+            const WaveArchive* warc = static_cast<const WaveArchive*>(soundSet->getWaveArchiveRef().getItem());
+            SEAD_ASSERT(warc);
+
+            for (const Item::ListNode* itemNode = getItem(soundSet->getStartId(), getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = getSoundList().next(itemNode))
+            {
+                SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
+                const Sound* sound = static_cast<const Sound*>(itemNode->val());
+
+                if (sound->getSoundType() != Sound::SoundType::Wave)
+                {
+                    continue;
+                }
+
+                const WaveFile* waveFile = static_cast<const WaveFile*>(sound->getWaveSoundInfo().getWaveFileRef().getItem());
+                SEAD_ASSERT(waveFile);
+
+                warcWaveFiles[warc].insert(waveFile);
+            }
+        }
+
+        for (const Item* item : mBankList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
+            const Bank* bank = static_cast<const Bank*>(item);
+
+            if (bank->getWaveArchiveType() != WaveArchiveType::Explicit)
+            {
+                continue;
+            }
+
+            const WaveArchive* warc = static_cast<const WaveArchive*>(bank->getWaveArchiveRef().getItem());
+            SEAD_ASSERT(warc);
+
+            const BankFile* bankFile = static_cast<const BankFile*>(bank->getFileRef().getItem());
+            SEAD_ASSERT(bankFile);
+
+            for (const Item* instrumentItem : bankFile->getInstrumentList())
+            {
+                SEAD_ASSERT(instrumentItem->getItemType() == Item::ItemType::BankFileInstrument);
+                const BankFile::Instrument* instrument = static_cast<const BankFile::Instrument*>(instrumentItem);
+
+                for (const Item* keyRegionItem : instrument->getKeyRegionList())
+                {
+                    SEAD_ASSERT(keyRegionItem->getItemType() == Item::ItemType::BankFileKeyRegion);
+                    const BankFile::KeyRegion* keyRegion = static_cast<const BankFile::KeyRegion*>(keyRegionItem);
+
+                    for (const Item* velocityRegionItem : keyRegion->getVelocityRegionList())
+                    {
+                        SEAD_ASSERT(velocityRegionItem->getItemType() == Item::ItemType::BankFileVelocityRegion);
+                        const BankFile::VelocityRegion* velocityRegion = static_cast<const BankFile::VelocityRegion*>(velocityRegionItem);
+
+                        const WaveFile* waveFile = static_cast<const WaveFile*>(velocityRegion->getWaveFileRef().getItem());
+                        SEAD_ASSERT(waveFile);
+
+                        warcWaveFiles[warc].insert(waveFile);
+                    }
+                }
+            }
+        }
+
+        for (const Item* item : mGroupList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::Group);
+            const Group* group = static_cast<const Group*>(item);
+
+            for (const Item* groupItem : group->getItemInfoList())
+            {
+                SEAD_ASSERT(groupItem->getItemType() == Item::ItemType::GroupItemInfo);
+                const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(groupItem);
+
+                if (!itemInfo->getItemRef().isAttached())
+                {
+                    continue;
+                }
+/*
+                if (itemInfo->getItemRefType() == Item::ItemType::Sound)
+                {
+                    const Sound* sound = static_cast<const Sound*>(itemInfo->getItemRef().getItem());
+
+                    if (sound->getSoundType() == Sound::SoundType::Seq)
+                    {
+                        for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
+                        {
+                            const ItemReference& bankRef = sound->getSequenceSoundInfo().getBankRef(i);
+                            if (!bankRef.isAttached())
+                            {
+                                continue;
+                            }
+
+                            const Bank* bank = static_cast<const Bank*>(bankRef.getItem());
+
+                            const auto& pair = itemAttachedGroups.try_emplace(bank);
+                            pair.first->second.insert(group);
+                        }
+
+                        const auto& pair = itemAttachedGroups.try_emplace(sound);
+                        pair.first->second.insert(group);
+                    }
+                }
+                else if (itemInfo->getItemRefType() == Item::ItemType::SoundSet)
+                {
+                    const SoundSet* soundSet = static_cast<const SoundSet*>(itemInfo->getItemRef().getItem());
+
+                    if (soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave)
+                    {
+                        if (soundSet->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
+                        {
+                            groupHasSharedWarc = true;
+                            break;
+                        }
+                    }
+                    else if (soundSet->getSoundSetType() == SoundSet::SoundSetType::Seq)
+                    {
+                        for (const Item::ListNode* itemNode = getItem(soundSet->getStartId(), getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = getSoundList().next(itemNode))
+                        {
+                            SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
+                            const Sound* sound = static_cast<const Sound*>(itemNode->val());
+
+                            if (sound->getSoundType() == Sound::SoundType::Seq)
+                            {
+                                for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
+                                {
+                                    const ItemReference& bankRef = sound->getSequenceSoundInfo().getBankRef(i);
+                                    if (!bankRef.isAttached())
+                                    {
+                                        continue;
+                                    }
+
+                                    const Bank* bank = static_cast<const Bank*>(bankRef.getItem());
+
+                                    if (bank->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
+                                    {
+                                        groupHasSharedWarc = true;
+                                        break;
+                                    }
+                                }
+
+                                if (groupHasSharedWarc)
+                                {
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (groupHasSharedWarc)
+                        {
+                            break;
+                        }
+                    }
+                }
+                else if (itemInfo->getItemRefType() == Item::ItemType::Bank)
+                {
+                    const Bank* bank = static_cast<const Bank*>(itemInfo->getItemRef().getItem());
+
+                    if (bank->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
+                    {
+                        groupHasSharedWarc = true;
+                        break;
+                    }
+                }
+*/
+            }
+        }
+    }
+
+    std::unordered_map<const Group*, const WaveArchive*> groupTargetWarcs;
+
+    //? GenerateItems
+    {
+        for (const Item* item : mGroupList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::Group);
+            const Group* group = static_cast<const Group*>(item);
+
+            bool groupHasSharedWarc = false;
+            if (group->getOutputType() == Group::OutputType::Embed)
+            {
+                for (const Item* groupItem : group->getItemInfoList())
+                {
+                    SEAD_ASSERT(groupItem->getItemType() == Item::ItemType::GroupItemInfo);
+                    const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(groupItem);
+
+                    if (!itemInfo->getItemRef().isAttached())
+                    {
+                        continue;
+                    }
+
+                    if (itemInfo->getItemRefType() == Item::ItemType::Sound)
+                    {
+                        const Sound* sound = static_cast<const Sound*>(itemInfo->getItemRef().getItem());
+
+                        if (sound->getSoundType() == Sound::SoundType::Seq)
+                        {
+                            for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
+                            {
+                                const ItemReference& bankRef = sound->getSequenceSoundInfo().getBankRef(i);
+                                if (!bankRef.isAttached())
+                                {
+                                    continue;
+                                }
+
+                                const Bank* bank = static_cast<const Bank*>(bankRef.getItem());
+
+                                if (bank->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
+                                {
+                                    groupHasSharedWarc = true;
+                                    break;
+                                }
+                            }
+
+                            if (groupHasSharedWarc)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    else if (itemInfo->getItemRefType() == Item::ItemType::SoundSet)
+                    {
+                        const SoundSet* soundSet = static_cast<const SoundSet*>(itemInfo->getItemRef().getItem());
+
+                        if (soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave)
+                        {
+                            if (soundSet->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
+                            {
+                                groupHasSharedWarc = true;
+                                break;
+                            }
+                        }
+                        else if (soundSet->getSoundSetType() == SoundSet::SoundSetType::Seq)
+                        {
+                            for (const Item::ListNode* itemNode = getItem(soundSet->getStartId(), getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = getSoundList().next(itemNode))
+                            {
+                                SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
+                                const Sound* sound = static_cast<const Sound*>(itemNode->val());
+
+                                if (sound->getSoundType() == Sound::SoundType::Seq)
+                                {
+                                    for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
+                                    {
+                                        const ItemReference& bankRef = sound->getSequenceSoundInfo().getBankRef(i);
+                                        if (!bankRef.isAttached())
+                                        {
+                                            continue;
+                                        }
+
+                                        const Bank* bank = static_cast<const Bank*>(bankRef.getItem());
+
+                                        if (bank->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
+                                        {
+                                            groupHasSharedWarc = true;
+                                            break;
+                                        }
+                                    }
+
+                                    if (groupHasSharedWarc)
+                                    {
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (groupHasSharedWarc)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    else if (itemInfo->getItemRefType() == Item::ItemType::Bank)
+                    {
+                        const Bank* bank = static_cast<const Bank*>(itemInfo->getItemRef().getItem());
+
+                        if (bank->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
+                        {
+                            groupHasSharedWarc = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!groupHasSharedWarc)
+            {
+                continue;
+            }
+
+            WaveArchive* warc = new WaveArchive();
+            warc->mId = mWaveArchiveList.size();
+
+            warc->mEnableName = false;
+            warc->mName.format("%s_WaveArchive@AutoGenerated", group->getNameOrNull().cstr());
+
+            mWaveArchiveList.pushBack(warc);
+
+            // Attach warc group
+
+            groupTargetWarcs[group] = warc;
+        }
+
+        for (const Item* item : mSoundSetList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::SoundSet);
+            const SoundSet* soundSet = static_cast<const SoundSet*>(item);
+
+            if (soundSet->getSoundSetType() != SoundSet::SoundSetType::Wave)
+            {
+                continue;
+            }
+
+            bool generateOriginalWarc = false;
+            if (!generateOriginalWarc)
+            {
+                continue;
+            }
+        }
+    }
+
+    for (const auto& pair : warcWaveFiles)
+    {
+        const WaveArchive* warc = pair.first;
+
+        SEAD_PRINT(" %s\n", warc->getFormattedName().cstr());
+        for (const auto& waveFile : warcWaveFiles[warc])
+        {
+            SEAD_PRINT(" - %s\n", waveFile->getFormattedName().cstr());
+        }
+    }
+
+    struct File
+    {
+        File(u32 id_, const InnerFile* innerFile_)
+            : id(id_)
+            , innerFile(innerFile_)
+            , external(false)
+            , externalPath()
+        {
+        }
+
+        File(u32 id_, const std::string& externalPath_)
+            : id(id_)
+            , innerFile(nullptr)
+            , external(true)
+            , externalPath(externalPath_)
+        {
+        }
+
+        u32 id;
+        const InnerFile* innerFile;
+        bool external;
+        std::string externalPath;
+    };
+
+    std::vector<File> files;
+
+    //? Setup Files
+    {
+        //? Stream files are placed first
+        if (mVersion <= 0x00020000)
+        {
+            for (const Item* item : mSoundList)
+            {
+                SEAD_ASSERT(item->getItemType() == Item::ItemType::Sound);
+                const Sound* sound = static_cast<const Sound*>(item);
+
+                if (sound->getSoundType() != Sound::SoundType::Strm)
+                {
+                    continue;
+                }
+
+                files.push_back(File(files.size(), sound->getStreamSoundInfo().getPath().cstr()));
+            }
+        }
+
+        for (const Item* item : mSequenceFileList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::SequenceFile);
+            const SequenceFile* sequenceFile = static_cast<const SequenceFile*>(item);
+
+            files.push_back(File(files.size(), sequenceFile));
+        }
+
+        // TODO: BFWSD
+
+        // TODO: BFBNK
+
+        // TODO: BFWAR
+
+        // TODO: BFGRP
+
+        // TODO: Other BFWAR
+    }
 
     //? String Block
     if (mIncludeStringTable)

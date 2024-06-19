@@ -135,6 +135,16 @@ public:
             return nullptr;
         }
 
+        const VelocityRegion::List& getVelocityRegionList() const
+        {
+            return mVelocityRegionList;
+        }
+
+        VelocityRegion::List& getVelocityRegionList()
+        {
+            return mVelocityRegionList;
+        }
+
     private:
         u8 mKeyMin;
         u8 mKeyMax;
@@ -184,6 +194,16 @@ public:
             return keyRegion->getVelocityRegion(velocity);
         }
 
+        const KeyRegion::List& getKeyRegionList() const
+        {
+            return mKeyRegionList;
+        }
+
+        KeyRegion::List& getKeyRegionList()
+        {
+            return mKeyRegionList;
+        }
+
     private:
         u8 mProgramNo;
         KeyRegion::List mKeyRegionList;
@@ -222,6 +242,16 @@ public:
         }
 
         return nullptr;
+    }
+
+    const Instrument::List& getInstrumentList() const
+    {
+        return mInstrumentList;
+    }
+
+    Instrument::List& getInstrumentList()
+    {
+        return mInstrumentList;
     }
 
 private:

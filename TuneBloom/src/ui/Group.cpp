@@ -29,4 +29,11 @@ void DrawGroupPropertiesUI()
             group->setOutputType(static_cast<Group::OutputType>(outputType));
         }
     }
+
+    // TODO: Move to a separate window
+    if (ImGui::BeginChild("ChildItems", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
+    {
+        DrawAllItemsUI("Item", group->getItemInfoList());
+    }
+    ImGui::EndChild();
 }

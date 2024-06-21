@@ -2074,7 +2074,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                             flags[nw::snd::internal::SOUND_INFO_OFFSET_TO_3D_PARAM] = 0;
                         }
 
-                        if (sound->isEnableIsFrontBypass())
+                        if (sound->isEnableIsFrontBypass() && sound->getSoundType() != Sound::SoundType::Strm)
                         {
                             flags[nw::snd::internal::SOUND_INFO_OFFSET_TO_CTR_PARAM] = sound->getIsFrontBypass();
                         }

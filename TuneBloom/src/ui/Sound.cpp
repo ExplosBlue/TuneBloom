@@ -144,17 +144,25 @@ void DrawSoundPropertiesUI()
     }
 
     {
-        bool enableIsFrontBypass = sound->isEnableIsFrontBypass();
+        bool isStrm = sound->getSoundType() == Sound::SoundType::Strm;
+
+        if (isStrm)
+            ImGui::BeginDisabled();
+
+        bool enableIsFrontBypass = !isStrm ? sound->isEnableIsFrontBypass() : false;
         if (ImGui::Checkbox("Enable Front Bypass", &enableIsFrontBypass))
         {
             sound->setEnableIsFrontBypass(enableIsFrontBypass);
         }
 
+        if (isStrm)
+            ImGui::EndDisabled();
+
         if (!enableIsFrontBypass)
             ImGui::BeginDisabled();
 
         {
-            bool isFrontBypass = sound->getIsFrontBypass();
+            bool isFrontBypass = !isStrm ? sound->getIsFrontBypass() : false;
             if (ImGui::Checkbox("Front Bypass", &isFrontBypass))
             {
                 sound->setIsFrontBypass(isFrontBypass);
@@ -163,6 +171,12 @@ void DrawSoundPropertiesUI()
 
         if (!enableIsFrontBypass)
             ImGui::EndDisabled();
+
+        if (isStrm)
+        {
+            ImGui::SameLine();
+            HelpMarker("For stream sounds this field is specified in each track");
+        }
     }
 
     {

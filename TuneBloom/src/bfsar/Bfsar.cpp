@@ -979,23 +979,47 @@ template <typename T>
 class VectorSet
 {
 public:
-    using iterator                     = typename std::vector<T>::iterator;
-    using const_iterator               = typename std::vector<T>::const_iterator;
-    iterator begin()                   { return theVector.begin(); }
-    iterator end()                     { return theVector.end(); }
-    const_iterator begin() const       { return theVector.begin(); }
-    const_iterator end() const         { return theVector.end(); }
-    const T& front() const             { return theVector.front(); }
-    const T& back() const              { return theVector.back(); }
-    void insert(const T& item)         { if (theSet.insert(item).second) theVector.push_back(item); }
-    size_t count(const T& item) const  { return theSet.count(item); }
-    bool empty() const                 { return theSet.empty(); }
-    size_t size() const                { return theSet.size(); }
+    using iterator                    = typename std::vector<T>::iterator;
+    using const_iterator              = typename std::vector<T>::const_iterator;
+    iterator begin()                  { return theVector.begin(); }
+    iterator end()                    { return theVector.end(); }
+    const_iterator begin() const      { return theVector.begin(); }
+    const_iterator end() const        { return theVector.end(); }
+    const T& front() const            { return theVector.front(); }
+    const T& back() const             { return theVector.back(); }
+    void insert(const T& item)        { if (theSet.insert(item).second) theVector.push_back(item); }
+    size_t count(const T& item) const { return theSet.count(item); }
+    bool empty() const                { return theSet.empty(); }
+    size_t size() const               { return theSet.size(); }
 
 private:
     std::vector<T> theVector;
     std::unordered_set<T> theSet;
 };
+
+// template <typename Key, typename T>
+// class VectorMap
+// {
+// public:
+//     using iterator                             = typename std::vector<T>::iterator;
+//     using const_iterator                       = typename std::vector<T>::const_iterator;
+//     iterator begin()                           { return theVector.begin(); }
+//     iterator end()                             { return theVector.end(); }
+//     const_iterator begin() const               { return theVector.begin(); }
+//     const_iterator end() const                 { return theVector.end(); }
+//     const T& front() const                     { return theVector.front(); }
+//     const T& back() const                      { return theVector.back(); }
+//     void insert(const Key& key, const T& item) { if (theMap.try_emplace(key, item).second) theVector.push_back(item); }
+//     size_t count(const T& item) const          { return theMap.count(item); }
+//     bool empty() const                         { return theMap.empty(); }
+//     size_t size() const                        { return theMap.size(); }
+//     auto& operator[](const Key& key)           { return theMap[key]; }
+//     bool contains(const Key& key) const        { return theMap.contains(key); }
+
+// private:
+//     std::vector<T> theVector;
+//     std::unordered_map<Key, T> theMap;
+// };
 
 void Bfsar::save_(sead::FileHandle& handle)
 {
@@ -1080,6 +1104,66 @@ void Bfsar::save_(sead::FileHandle& handle)
             delegateBankWaveFiles(static_cast<const Bank*>(item), warc);
         }
     };
+
+    std::unordered_map<const SoundSet*, VectorSet<const WaveArchive*>> waveSoundSetsWarcs;
+    std::unordered_map<const Bank*, VectorSet<const WaveArchive*>> banksWarcs;
+
+    std::unordered_map<const Sound*, u32> wsdIndexes;
+
+    //? AssignItems
+    {
+        for (const Item* item : mSoundSetList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::SoundSet);
+            const SoundSet* soundSet = static_cast<const SoundSet*>(item);
+
+            if (soundSet->getSoundSetType() != SoundSet::SoundSetType::Wave)
+            {
+                continue;
+            }
+
+            if (soundSet->getWaveArchiveType() == WaveArchiveType::Explicit)
+            {
+                const WaveArchive* warc = static_cast<const WaveArchive*>(soundSet->getWaveArchiveRef().getItem());
+                SEAD_ASSERT(warc);
+
+                waveSoundSetsWarcs[soundSet].insert(warc);
+            }
+
+            u32 i = 0;
+            for (const Item::ListNode* itemNode = getItem(soundSet->getStartId(), getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = getSoundList().next(itemNode))
+            {
+                SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
+                const Sound* sound = static_cast<const Sound*>(itemNode->val());
+
+                if (sound->getSoundType() != Sound::SoundType::Wave)
+                {
+                    continue;
+                }
+
+                SEAD_ASSERT_MSG(!wsdIndexes.contains(sound), "Wave Sound is included in multiple Wave Sound Sets");
+
+                wsdIndexes[sound] = i;
+                i++;
+            }
+        }
+
+        for (const Item* item : mBankList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
+            const Bank* bank = static_cast<const Bank*>(item);
+
+            if (bank->getWaveArchiveType() != WaveArchiveType::Explicit)
+            {
+                continue;
+            }
+
+            const WaveArchive* warc = static_cast<const WaveArchive*>(bank->getWaveArchiveRef().getItem());
+            SEAD_ASSERT(warc);
+
+            banksWarcs[bank].insert(warc);
+        }
+    }
 
     //? ResolveNames
     {
@@ -1237,6 +1321,7 @@ void Bfsar::save_(sead::FileHandle& handle)
         }
     }
 
+    std::vector<const WaveArchive*> generatedWarcs;
     std::unordered_map<const Group*, const WaveArchive*> groupTargetWarcs;
 
     //? GenerateItems
@@ -1373,6 +1458,8 @@ void Bfsar::save_(sead::FileHandle& handle)
             itemAttachedGroups.try_emplace(warc).first->second.insert(group);
 
             groupTargetWarcs[group] = warc;
+
+            generatedWarcs.push_back(warc);
         }
 
         for (const Item* item : mSoundSetList)
@@ -1424,9 +1511,11 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 mWaveArchiveList.pushBack(warc);
 
-                // TODO: Add warc to SoundSet
+                waveSoundSetsWarcs[soundSet].insert(warc);
 
                 delegateWaveFiles(soundSet, warc);
+
+                generatedWarcs.push_back(warc);
             }
 
             if (soundSet->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
@@ -1439,7 +1528,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                     {
                         const WaveArchive* warc = groupTargetWarcs[group];
 
-                        // TODO: Add warc to SoundSet
+                        waveSoundSetsWarcs[soundSet].insert(warc);
 
                         delegateWaveFiles(soundSet, warc);
                     }
@@ -1491,9 +1580,11 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 mWaveArchiveList.pushBack(warc);
 
-                // TODO: Add warc to Bank
+                banksWarcs[bank].insert(warc);
 
                 delegateWaveFiles(bank, warc);
+
+                generatedWarcs.push_back(warc);
             }
 
             if (bank->getWaveArchiveType() == WaveArchiveType::AutomaticShared)
@@ -1506,7 +1597,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                     {
                         const WaveArchive* warc = groupTargetWarcs[group];
 
-                        // TODO: Add warc to Bank
+                        banksWarcs[bank].insert(warc);
 
                         delegateWaveFiles(bank, warc);
                     }
@@ -1528,6 +1619,14 @@ void Bfsar::save_(sead::FileHandle& handle)
 
     struct File
     {
+        File()
+            : id(nw::snd::SoundArchive::INVALID_ID)
+            , innerFile(nullptr)
+            , external(false)
+            , externalPath()
+        {
+        }
+
         File(u32 id_, const InnerFile* innerFile_)
             : id(id_)
             , innerFile(innerFile_)
@@ -1550,10 +1649,41 @@ void Bfsar::save_(sead::FileHandle& handle)
         std::string externalPath;
     };
 
+    std::unordered_map<const Item*, File> itemFileIds;
     std::vector<File> files;
+    std::unordered_map<u32, VectorSet<const Item*>> filesItems;
 
     //? Setup Files
     {
+        std::unordered_map<std::string, File> strmFiles;
+
+        auto addStrmSoundFile = [&](const Sound* sound)
+        {
+            SEAD_ASSERT(sound->getSoundType() == Sound::SoundType::Strm);
+
+            const char* path = sound->getStreamSoundInfo().getPath().cstr();
+
+            const auto& it = strmFiles.find(path);
+            if (it == strmFiles.end())
+            {
+                File file(files.size(), path);
+
+                strmFiles.try_emplace(path, file);
+                itemFileIds.try_emplace(sound, file);
+                files.push_back(file);
+
+                filesItems[file.id].insert(sound);
+            }
+            else
+            {
+                const File& file = it->second;
+
+                itemFileIds.try_emplace(sound, file);
+
+                filesItems[file.id].insert(sound);
+            }
+        };
+
         //? Stream files are placed first
         if (mVersion <= 0x00020000)
         {
@@ -1562,32 +1692,195 @@ void Bfsar::save_(sead::FileHandle& handle)
                 SEAD_ASSERT(item->getItemType() == Item::ItemType::Sound);
                 const Sound* sound = static_cast<const Sound*>(item);
 
-                if (sound->getSoundType() != Sound::SoundType::Strm)
+                switch (sound->getSoundType())
+                {
+                    case Sound::SoundType::Strm:
+                        addStrmSoundFile(sound);
+                        break;
+                }
+            }
+        }
+
+        std::unordered_map<const SequenceFile*, File> bfseqFiles;
+
+        //? BFSEQ
+        for (const Item* item : mSoundList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::Sound);
+            const Sound* sound = static_cast<const Sound*>(item);
+
+            switch (sound->getSoundType())
+            {
+                case Sound::SoundType::Seq:
+                {
+                    const ItemReference& seqFileRef = sound->getSequenceSoundInfo().getSequenceFileRef();
+                    const Item* seqFileItem = seqFileRef.getItem();
+                    SEAD_ASSERT(seqFileItem);
+                    SEAD_ASSERT(seqFileItem->getItemType() == Item::ItemType::SequenceFile);
+
+                    const SequenceFile* seqFile = static_cast<const SequenceFile*>(seqFileItem);
+
+                    const auto& it = bfseqFiles.find(seqFile);
+                    if (it == bfseqFiles.end())
+                    {
+                        File file(files.size(), seqFile);
+
+                        bfseqFiles.try_emplace(seqFile, file);
+                        itemFileIds.try_emplace(sound, file);
+                        files.push_back(file);
+
+                        filesItems[file.id].insert(sound);
+                    }
+                    else
+                    {
+                        const File& file = it->second;
+
+                        itemFileIds.try_emplace(sound, file);
+
+                        filesItems[file.id].insert(sound);
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        //! Temp
+        class NullFile : public InnerFile
+        {
+        public:
+            NullFile()
+                : InnerFile(0xFFFFFFFF)
+            {
+            }
+
+        private:
+            void doRead(const void* fileAddr) override
+            {
+            }
+
+            u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const override
+            {
+                return 0;
+            }
+        };
+
+        static const NullFile cNullFile;
+
+        //? BFWSD
+        for (const Item* item : mSoundSetList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::SoundSet);
+            const SoundSet* soundSet = static_cast<const SoundSet*>(item);
+
+            if (soundSet->getSoundSetType() != SoundSet::SoundSetType::Wave)
+            {
+                continue;
+            }
+
+            File file(files.size(), &cNullFile); // TODO: BFWSD file
+
+            itemFileIds.try_emplace(soundSet, file);
+            files.push_back(file);
+
+            filesItems[file.id].insert(soundSet);
+
+            for (const Item::ListNode* itemNode = getItem(soundSet->getStartId(), getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = getSoundList().next(itemNode))
+            {
+                SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
+                const Sound* sound = static_cast<const Sound*>(itemNode->val());
+
+                if (sound->getSoundType() != Sound::SoundType::Wave)
                 {
                     continue;
                 }
 
-                files.push_back(File(files.size(), sound->getStreamSoundInfo().getPath().cstr()));
+                SEAD_ASSERT_MSG(!itemFileIds.contains(sound), "Wave Sound is included in multiple Wave Sound Sets");
+
+                itemFileIds.try_emplace(sound, file);
             }
         }
 
-        for (const Item* item : mSequenceFileList)
+        //? BFBNK
+        for (const Item* item : mBankList)
         {
-            SEAD_ASSERT(item->getItemType() == Item::ItemType::SequenceFile);
-            const SequenceFile* sequenceFile = static_cast<const SequenceFile*>(item);
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
+            const Bank* bank = static_cast<const Bank*>(item);
 
-            files.push_back(File(files.size(), sequenceFile));
+            const Item* bankFileItem = bank->getFileRef().getItem();
+            SEAD_ASSERT(bankFileItem);
+            SEAD_ASSERT(bankFileItem->getItemType() == Item::ItemType::BankFile);
+
+            const BankFile* bankFile = static_cast<const BankFile*>(bankFileItem);
+
+            File file(files.size(), bankFile);
+
+            itemFileIds.try_emplace(bank, file);
+            files.push_back(file);
+
+            filesItems[file.id].insert(bank);
         }
 
-        // TODO: BFWSD
+        //? BFWAR
+        for (const Item* item : mWaveArchiveList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::WaveArchive);
+            const WaveArchive* warc = static_cast<const WaveArchive*>(item);
 
-        // TODO: BFBNK
+            if (warc->getName().endsWith("@AutoGenerated"))
+            {
+                continue;
+            }
 
-        // TODO: BFWAR
+            File file(files.size(), &cNullFile); // TODO: BFWAR file
 
-        // TODO: BFGRP
+            itemFileIds.try_emplace(warc, file);
+            files.push_back(file);
 
-        // TODO: Other BFWAR
+            filesItems[file.id].insert(warc);
+        }
+
+        //? BFGRP
+        for (const Item* item : mGroupList)
+        {
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::Group);
+            const Group* group = static_cast<const Group*>(item);
+
+            File file(files.size(), &cNullFile); // TODO: BFGRP file
+
+            itemFileIds.try_emplace(group, file);
+            files.push_back(file);
+
+            filesItems[file.id].insert(group);
+        }
+
+        //? Other BFWAR
+        for (const WaveArchive* warc : generatedWarcs)
+        {
+            File file(files.size(), &cNullFile); // TODO: BFWAR file
+
+            itemFileIds.try_emplace(warc, file);
+            files.push_back(file);
+
+            filesItems[file.id].insert(warc);
+        }
+
+        //? Stream files are placed last
+        if (mVersion > 0x00020000)
+        {
+            for (const Item* item : mSoundList)
+            {
+                SEAD_ASSERT(item->getItemType() == Item::ItemType::Sound);
+                const Sound* sound = static_cast<const Sound*>(item);
+
+                switch (sound->getSoundType())
+                {
+                    case Sound::SoundType::Strm:
+                        addStrmSoundFile(sound);
+                        break;
+                }
+            }
+        }
     }
 
     //? String Block
@@ -1740,7 +2033,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                 {
                     u32 pos = writer.getPosition();
 
-                    //stream.writeU32(sound->getFileId()); // TODO
+                    stream.writeU32(itemFileIds[sound].id);
 
                     stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(sound->getPlayerId(), nw::snd::internal::ItemType_Player));
                     stream.writeU8(sound->getVolume());
@@ -2021,7 +2314,10 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                                 const Sound::WaveSoundInfo& waveInfo = sound->getWaveSoundInfo();
 
-                                //stream.writeU32(waveInfo.getIndex()); // TODO
+                                const auto& it = wsdIndexes.find(sound);
+                                SEAD_ASSERT(it != wsdIndexes.end());
+
+                                stream.writeU32(it->second);
                                 stream.writeU32(waveInfo.getAllocateTrackCount());
 
                                 std::unordered_map<u32, u32> flags;
@@ -2081,10 +2377,11 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                     writer.closeReference("FileIdTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
 
-                    //writeIdTable(soundSet->getFileIdTable(), nw::snd::internal::ItemType(0)); // TODO
-
                     if (soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave)
                     {
+                        stream.writeU32(1); // FileIdTable count
+                        stream.writeU32(itemFileIds[soundSet].id); // FileIdTable[0]
+
                         writer.closeReference("DetailSoundGroup", nw::snd::internal::ElementType_SoundArchiveFile_WaveSoundGroupInfo);
 
                         writer.pushOffsetBase();
@@ -2095,12 +2392,48 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                             writer.closeReference("WaveArchiveIdTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
 
-                            //writeIdTable(soundSet->getWaveArchiveIdTable(), nw::snd::internal::ItemType_WaveArchive); // TODO
+                            if (soundSet->getWaveArchiveType() != WaveArchiveType::AutomaticShared)
+                            {
+                                const VectorSet<const WaveArchive*>& warcs = waveSoundSetsWarcs[soundSet];
+
+                                stream.writeU32(warcs.size()); // WaveArchiveIdTable count
+
+                                for (const WaveArchive* warc : warcs)
+                                {
+                                    stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(warc->getId(), nw::snd::internal::ItemType_WaveArchive)); // WaveArchiveIdTable entries
+                                }
+                            }
+                            else
+                            {
+                                stream.writeU32(0); // WaveArchiveIdTable count
+                            }
                         }
                         writer.popOffsetBase();
                     }
                     else
                     {
+                        VectorSet<u32> filesIds;
+
+                        for (const Item::ListNode* itemNode = getItem(soundSet->getStartId(), getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = getSoundList().next(itemNode))
+                        {
+                            SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
+                            const Sound* sound = static_cast<const Sound*>(itemNode->val());
+
+                            if (sound->getSoundType() != Sound::SoundType::Seq)
+                            {
+                                continue;
+                            }
+
+                            filesIds.insert(itemFileIds[sound].id);
+                        }
+
+                        stream.writeU32(filesIds.size()); // FileIdTable count
+
+                        for (u32 fileId : filesIds)
+                        {
+                            stream.writeU32(fileId); // FileIdTable entries
+                        }
+
                         writer.closeNullReference("DetailSoundGroup");
                     }
                 }
@@ -2125,7 +2458,7 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 writer.pushOffsetBase();
                 {
-                    //stream.writeU32(bank->getFileId()); // TODO
+                    stream.writeU32(itemFileIds[bank].id);
 
                     writer.openReference("WaveArchiveIdTable");
 
@@ -2140,7 +2473,21 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                     writer.closeReference("WaveArchiveIdTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
 
-                    //writeIdTable(bank->getWaveArchiveIdTable(), nw::snd::internal::ItemType_WaveArchive); // TODO
+                    if (bank->getWaveArchiveType() != WaveArchiveType::AutomaticShared)
+                    {
+                        const VectorSet<const WaveArchive*>& warcs = banksWarcs[bank];
+
+                        stream.writeU32(warcs.size()); // WaveArchiveIdTable count
+
+                        for (const WaveArchive* warc : warcs)
+                        {
+                            stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(warc->getId(), nw::snd::internal::ItemType_WaveArchive)); // WaveArchiveIdTable entries
+                        }
+                    }
+                    else
+                    {
+                        stream.writeU32(0); // WaveArchiveIdTable count
+                    }
                 }
                 writer.popOffsetBase();
             }
@@ -2161,7 +2508,7 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 writer.addReferenceTableReference("WaveArchiveInfoSectionTable", nw::snd::internal::ElementType_SoundArchiveFile_WaveArchiveInfo);
 
-                //stream.writeU32(warc->getFileId()); // TODO
+                stream.writeU32(itemFileIds[warc].id);
                 stream.writeU8(warc->getIsLoadIndividual());
                 stream.writeU8(0); // Padding1
                 stream.writeU16(0); // Padding2
@@ -2174,7 +2521,7 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 if (warc->getIsLoadIndividual())
                 {
-                    u32 waveCount = 0; // TODO: Get actual count from file
+                    u32 waveCount = warcWaveFiles[warc].size();
 
                     flags[nw::snd::internal::WAVE_ARCHIVE_INFO_WAVE_COUNT] = waveCount;
                 }
@@ -2199,7 +2546,7 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 writer.addReferenceTableReference("GroupInfoSectionTable", nw::snd::internal::ElementType_SoundArchiveFile_GroupInfo);
 
-                //stream.writeU32(group->getFileId()); // TODO
+                stream.writeU32(itemFileIds[group].id);
 
                 std::unordered_map<u32, u32> flags;
                 if (group->isEnableName())
@@ -2249,16 +2596,13 @@ void Bfsar::save_(sead::FileHandle& handle)
         writer.popOffsetBase();
 
         writer.closeReference("FileInfoSection", nw::snd::internal::ElementType_SoundArchiveFile_FileInfoSection);
-/*
+
         writer.pushOffsetBase();
         {
-            writer.openReferenceTable("FileInfoSectionTable", mFileList.size());
+            writer.openReferenceTable("FileInfoSectionTable", files.size());
 
-            for (const Item* item : mFileList)
+            for (const File& file : files)
             {
-                SEAD_ASSERT(item->getItemType() == Item::ItemType::File);
-                const File* file = static_cast<const File*>(item);
-
                 writer.addReferenceTableReference("FileInfoSectionTable", nw::snd::internal::ElementType_SoundArchiveFile_FileInfo);
 
                 writer.pushOffsetBase();
@@ -2269,43 +2613,44 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                     writer.pushOffsetBase();
                     {
-                        switch (file->getLocationType())
+                        if (file.innerFile)
                         {
-                            case File::LocationType::None:
-                                writer.closeNullReference("DetailFileInfo");
-                                break;
+                            writer.closeReference("DetailFileInfo", nw::snd::internal::ElementType_SoundArchiveFile_InternalFileInfo);
 
-                            case File::LocationType::Internal:
-                            case File::LocationType::Group:
+                            writer.openSizedReference(sead::FormatFixedSafeString<32>("File%u", file.id));
+
+                            writer.openReference("AttachedGroupIdTable");
+                            writer.closeReference("AttachedGroupIdTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
+
+                            std::vector<u32> groupIds;
+
+                            const VectorSet<const Item*>& fileItems = filesItems[file.id];
+                            for (const Item* fileItem : fileItems)
                             {
-                                writer.closeReference("DetailFileInfo", nw::snd::internal::ElementType_SoundArchiveFile_InternalFileInfo);
-
-                                writer.openSizedReference(sead::FormatFixedSafeString<32>("File%u", file->getId()));
-
-                                if (file->getLocationType() == File::LocationType::Group)
+                                const VectorSet<const Group*>& attachedGroups = itemAttachedGroups[fileItem];
+                                for (const Group* group : attachedGroups)
                                 {
-                                    writer.closeNullSizedReference(sead::FormatFixedSafeString<32>("File%u", file->getId()));
+                                    groupIds.push_back(group->getId());
                                 }
-
-                                writer.openReference("AttachedGroupIdTable");
-                                writer.closeReference("AttachedGroupIdTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
-
-                                writeIdTable(file->getGroupIdTable(), nw::snd::internal::ItemType_Group);
-                                break;
                             }
 
-                            case File::LocationType::External:
-                                writer.closeReference("DetailFileInfo", nw::snd::internal::ElementType_SoundArchiveFile_ExternalFileInfo);
+                            stream.writeU32(groupIds.size()); // AttachedGroupIdTable count
 
-                                stream.writeString(file->getName(), file->getName().calcLength() + 1);
-                                writer.align(4);
-                                break;
+                            for (u32 groupId : groupIds)
+                            {
+                                stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(groupId, nw::snd::internal::ItemType_Group)); // AttachedGroupIdTable entries
+                            }
+                        }
+                        else if (file.external)
+                        {
+                            writer.closeReference("DetailFileInfo", nw::snd::internal::ElementType_SoundArchiveFile_ExternalFileInfo);
 
-                            default:
-                                SEAD_ASSERT_MSG(false, "invalid LocationType");
-
-                                writer.closeNullReference("DetailFileInfo");
-                                break;
+                            stream.writeString(file.externalPath.c_str(), file.externalPath.size() + 1);
+                            writer.align(4);
+                        }
+                        else
+                        {
+                            writer.closeNullReference("DetailFileInfo");
                         }
                     }
                     writer.popOffsetBase();
@@ -2316,7 +2661,6 @@ void Bfsar::save_(sead::FileHandle& handle)
             writer.closeReferenceTable("FileInfoSectionTable");
         }
         writer.popOffsetBase();
-*/
 
         writer.closeReference("SoundArchivePlayerInfo", nw::snd::internal::ElementType_SoundArchiveFile_SoundArchivePlayerInfo);
         writer.pushOffsetBase();
@@ -2345,104 +2689,117 @@ void Bfsar::save_(sead::FileHandle& handle)
         u32 fileBlockPos = writer.getPosition() - sizeof(nw::ut::BinaryBlockHeader);
         writer.align(0x20);
 
-/*
         u32 lastFileId = 0xFFFFFFFF;
-        for (const Item* item : mFileList)
+        for (const File& file : files)
         {
-            SEAD_ASSERT(item->getItemType() == Item::ItemType::File);
-            const File* file = static_cast<const File*>(item);
-
-            for (u32 i = 0; i < file->getVariations().size(); i++)
-            {
-                bool embeddedInGroup = file->isEmbeddedInGroup(i);
-                if (file->getLocationType() == File::LocationType::Internal && !embeddedInGroup)
-                {
-                    lastFileId = file->getId();
-                    break;
-                }
-            }
+            // for (u32 i = 0; i < file->getVariations().size(); i++)
+            // {
+            //     bool embeddedInGroup = file->isEmbeddedInGroup(i);
+            //     if (file->getLocationType() == File::LocationType::Internal && !embeddedInGroup)
+            //     {
+            //         lastFileId = file->getId();
+            //         break;
+            //     }
+            // }
         }
 
-        for (const Item* item : mFileList)
+        for (const File& file : files)
         {
-            SEAD_ASSERT(item->getItemType() == Item::ItemType::File);
-            const File* file = static_cast<const File*>(item);
-
-            for (u32 i = 0; i < file->getVariations().size(); i++)
+            if (file.external)
             {
-                bool embeddedInGroup = file->isEmbeddedInGroup(i);
-                if (file->getLocationType() == File::LocationType::Group && !embeddedInGroup)
-                {
-                    //! Bad cuz file will be lost...
-                    SEAD_PRINT("BRUH BAD\n");
-                }
-
-                if (file->getLocationType() == File::LocationType::Internal && !embeddedInGroup)
-                {
-                    writer.align(0x20);
-
-                    const InnerFile* innerFile = file->getInnerFile(i);
-
-                    u32 startPos = writer.getPosition();
-                    u32 size = 0;
-                    {
-                        SEAD_ASSERT(innerFile);
-                        size = innerFile->write(&handle, &stream, mEndian, file->getId() == lastFileId);
-                    }
-
-                    writer.closeSizedReference(
-                        sead::FormatFixedSafeString<32>("File%u", file->getId()),
-                        file->getFileType() == File::FileType::Bfgrp ? 0 : nw::snd::internal::ElementType_General_ByteStream,
-                        startPos - fileBlockPos - sizeof(nw::ut::BinaryBlockHeader),
-                        size
-                    );
-                }
+                continue;
             }
+
+            if (file.innerFile)
+            {
+                // writer.closeSizedReference(
+                //     sead::FormatFixedSafeString<32>("File%u", file.id),
+                //     false ? 0 : nw::snd::internal::ElementType_General_ByteStream,
+                //     0xFFFFFFFF,
+                //     0xFFFFFFFF
+                // );
+
+                writer.closeNullSizedReference(sead::FormatFixedSafeString<32>("File%u", file.id));
+            }
+
+            // for (u32 i = 0; i < file->getVariations().size(); i++)
+            // {
+            //     bool embeddedInGroup = file->isEmbeddedInGroup(i);
+            //     if (file->getLocationType() == File::LocationType::Group && !embeddedInGroup)
+            //     {
+            //         //! Bad cuz file will be lost...
+            //         SEAD_PRINT("BRUH BAD\n");
+            //     }
+
+            //     if (file->getLocationType() == File::LocationType::Internal && !embeddedInGroup)
+            //     {
+            //         writer.align(0x20);
+
+            //         const InnerFile* innerFile = file->getInnerFile(i);
+
+            //         u32 startPos = writer.getPosition();
+            //         u32 size = 0;
+            //         {
+            //             SEAD_ASSERT(innerFile);
+            //             size = innerFile->write(&handle, &stream, mEndian, file->getId() == lastFileId);
+            //         }
+
+            //         writer.closeSizedReference(
+            //             sead::FormatFixedSafeString<32>("File%u", file->getId()),
+            //             file->getFileType() == File::FileType::Bfgrp ? 0 : nw::snd::internal::ElementType_General_ByteStream,
+            //             startPos - fileBlockPos - sizeof(nw::ut::BinaryBlockHeader),
+            //             size
+            //         );
+            //     }
+            // }
         }
 
-        for (Item* item : mFileList)
+        for (const File& file : files)
         {
-            SEAD_ASSERT(item->getItemType() == Item::ItemType::File);
-            File* file = static_cast<File*>(item);
+            // for (u32 i = 0; i < file->getVariations().size(); i++)
+            // {
+            //     InnerFile* innerFile = file->getInnerFile(i);
 
-            for (u32 i = 0; i < file->getVariations().size(); i++)
-            {
-                InnerFile* innerFile = file->getInnerFile(i);
+            //     bool embeddedInGroup = file->isEmbeddedInGroup(i);
+            //     if (file->getLocationType() == File::LocationType::Internal && embeddedInGroup)
+            //     {
+            //         SEAD_ASSERT(innerFile);
 
-                bool embeddedInGroup = file->isEmbeddedInGroup(i);
-                if (file->getLocationType() == File::LocationType::Internal && embeddedInGroup)
-                {
-                    SEAD_ASSERT(innerFile);
+            //         u32 writePos = innerFile->getWritePos();
+            //         u32 writeSize = innerFile->getWriteSize();
+            //         SEAD_ASSERT(writePos != 0xFFFFFFFF);
+            //         SEAD_ASSERT(writeSize != 0xFFFFFFFF);
 
-                    u32 writePos = innerFile->getWritePos();
-                    u32 writeSize = innerFile->getWriteSize();
-                    SEAD_ASSERT(writePos != 0xFFFFFFFF);
-                    SEAD_ASSERT(writeSize != 0xFFFFFFFF);
+            //         sead::FormatFixedSafeString<32> refName("File%u", file->getId());
+            //         if (writer.hasSizedReference(refName))
+            //         {
+            //             writer.closeSizedReference(
+            //                 refName,
+            //                 nw::snd::internal::ElementType_General_ByteStream,
+            //                 writePos - fileBlockPos - sizeof(nw::ut::BinaryBlockHeader),
+            //                 writeSize
+            //             );
+            //         }
+            //     }
 
-                    sead::FormatFixedSafeString<32> refName("File%u", file->getId());
-                    if (writer.hasSizedReference(refName))
-                    {
-                        writer.closeSizedReference(
-                            refName,
-                            nw::snd::internal::ElementType_General_ByteStream,
-                            writePos - fileBlockPos - sizeof(nw::ut::BinaryBlockHeader),
-                            writeSize
-                        );
-                    }
-                }
-
-                if (innerFile)
-                {
-                    innerFile->clearWriteInfo();
-                }
-            }
+            //     if (innerFile)
+            //     {
+            //         innerFile->clearWriteInfo();
+            //     }
+            // }
         }
-*/
 
         writer.closeBlock();
     }
 
     writer.closeFile();
+
+    for (const WaveArchive* warc : generatedWarcs)
+    {
+        delete warc;
+    }
+
+    updateList(mWaveArchiveList);
 }
 
 void Bfsar::close_()

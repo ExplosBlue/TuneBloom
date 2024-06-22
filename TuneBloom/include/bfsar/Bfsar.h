@@ -2,7 +2,6 @@
 
 #include <bfsar/Bank.h>
 #include <bfsar/BankFile.h>
-#include <bfsar/File.h>
 #include <bfsar/Group.h>
 #include <bfsar/Player.h>
 #include <bfsar/SequenceFile.h>

@@ -845,9 +845,111 @@ static const char* WaveFileNamePrefixFunc(Item* item)
     return nullptr;
 }
 
+static WaveFile::Encoding sEncoding = WaveFile::Encoding::DspAdpcm;
+static WaveFile* sImportWaveFile = nullptr;
+static sead::FixedSafeString<512> sWavFilePath;
+
+void WaveFileContextMenuFunc(Item* item)
+{
+    WaveFile* wave = nullptr;
+    if (item)
+    {
+        wave = static_cast<WaveFile*>(item);
+    }
+
+    ImGui::Separator();
+
+    bool disableMenu = wave == nullptr;
+    if (disableMenu)
+    {
+        ImGui::BeginDisabled();
+    }
+
+    if (ImGui::MenuItem("Replace"))
+    {
+        sImportWaveFile = nullptr;
+        sWavFilePath.clear();
+
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { "Wave (*.wav)", "*.wav" }
+        };
+
+        if (OpenFileDialog(&sWavFilePath, nullptr, filterCount, filters))
+        {
+            sEncoding = WaveFile::Encoding::DspAdpcm;
+            sImportWaveFile = wave;
+        }
+    }
+
+    if (ImGui::MenuItem("Export"))
+    {
+        sead::FixedSafeString<512> path;
+
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { "Wave (*.wav)", "*.wav" }
+        };
+
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav"))
+        {
+            wave->writeWavFile(path);
+        }
+    }
+
+    if (disableMenu)
+    {
+        ImGui::EndDisabled();
+    }
+}
+
 void DrawWaveFilesUI()
 {
-    DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(), nullptr, &WaveFileNamePrefixFunc);
+    DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(), nullptr, &WaveFileNamePrefixFunc, &WaveFileContextMenuFunc);
+
+    if (sImportWaveFile && !sWavFilePath.isEmpty())
+    {
+        ImGui::OpenPopup("WavImport");
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("WavImport", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+    {
+        ImGui::Text("Select the Encoding");
+
+        if (ImGui::Combo("Encoding", (s32*)&sEncoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes)))
+        {
+        }
+
+        ImGui::Separator();
+
+        ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
+
+        if (ImGui::Button("Import", buttonSize))
+        {
+            bool success = sImportWaveFile->readWavFile(sWavFilePath, sEncoding);
+            SEAD_PRINT("Wav Import: %d\n", success);
+
+            sImportWaveFile = nullptr;
+            sWavFilePath.clear();
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", buttonSize))
+        {
+            sImportWaveFile = nullptr;
+            sWavFilePath.clear();
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 }
 
 void DrawSequenceFilesUI()

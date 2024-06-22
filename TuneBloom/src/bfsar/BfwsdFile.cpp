@@ -1,13 +1,27 @@
-#include <bfsar/File.h>
+#include <bfsar/BfwsdFile.h>
 
-#include <snd/snd_WaveSoundFileReader.h>
+#include <snd/snd_WaveSoundFile.h>
 
-void BfwsdFile::drawUI()
+u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
-    InnerFile::drawUI();
-}
+    SEAD_ASSERT(mWaveArchive);
 
-void BfwsdFile::doRead(const void* fileAddr)
-{
-    nw::snd::internal::WaveSoundFileReader reader(fileAddr);
+    FileWriter writer(handle, stream);
+    writer.openFile("FWSD", 1, mVersion);
+
+    //? Info Block
+    {
+        writer.openBlock(nw::snd::internal::ElementType_WaveSoundFile_InfoBlock, "INFO");
+
+        writer.align(0x20);
+        writer.closeBlock();
+    }
+
+    u32 fileSize = writer.getPosition();
+
+    writer.closeFile();
+
+    mWaveArchive = nullptr;
+
+    return fileSize;
 }

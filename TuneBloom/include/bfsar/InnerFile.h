@@ -45,16 +45,22 @@ public:
     {
         stream->setBinaryEndian(mEndian);
 
-        if (mWritePos == 0xFFFFFFFF)
+        if (updateWriteInfo_())
         {
-            mWritePos = handle->getCurrentSeekPos();
+            if (mWritePos == 0xFFFFFFFF)
+            {
+                mWritePos = handle->getCurrentSeekPos();
+            }
         }
 
         u32 fileSize = doWrite(handle, stream, isLast);
 
-        if (mWriteSize == 0xFFFFFFFF)
+        if (updateWriteInfo_())
         {
-            mWriteSize = handle->getCurrentSeekPos() - mWritePos;
+            if (mWriteSize == 0xFFFFFFFF)
+            {
+                mWriteSize = handle->getCurrentSeekPos() - mWritePos;
+            }
         }
 
         stream->setBinaryEndian(prevEndian);
@@ -63,10 +69,6 @@ public:
     }
 
     virtual void drawUI();
-
-    virtual void postInit()
-    {
-    }
 
     u32 getWritePos() const
     {
@@ -87,6 +89,11 @@ public:
 protected:
     virtual void doRead(const void* fileAddr) = 0;
     virtual u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const = 0;
+
+    virtual bool updateWriteInfo_() const
+    {
+        return true;
+    }
 
 protected:
     sead::Endian::Types mEndian;

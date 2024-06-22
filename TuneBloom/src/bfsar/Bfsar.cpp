@@ -3,6 +3,7 @@
 #include <bfsar/writer/FileWriter.h>
 #include <bfsar/writer/FlagParameters.h>
 #include <bfsar/writer/PatriciaTree.h>
+#include <bfsar/BfwsdFile.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
@@ -1841,15 +1842,6 @@ void Bfsar::save_(sead::FileHandle& handle)
             sead::SafeString mMagic;
         };
 
-        class BFWSDFile : public NullFile
-        {
-        public:
-            BFWSDFile()
-                : NullFile("FWSD")
-            {
-            }
-        };
-
         class BFBNKFile : public NullFile
         {
         public:
@@ -1962,10 +1954,10 @@ void Bfsar::save_(sead::FileHandle& handle)
                 }
             }
 
-            InnerFile* innerFile = new BFWSDFile();
+            InnerFile* innerFile = new BfwsdFile();
             generatedInnerFiles.push_back(innerFile);
 
-            File file(files.size(), innerFile, includeInBfsar); // TODO: BFWSD file
+            File file(files.size(), innerFile, includeInBfsar);
 
             itemFileIds.try_emplace(soundSet, file);
             files.push_back(file);
@@ -2983,6 +2975,29 @@ void Bfsar::save_(sead::FileHandle& handle)
             writer.align(0x20);
 
             const InnerFile* innerFile = file.innerFile;
+
+            {
+                const BfwsdFile* bfwsdFile = sead::DynamicCast<const BfwsdFile>(innerFile);
+                if (bfwsdFile)
+                {
+                    const VectorSet<const Item *> fileItems = filesItems[file.id];
+                    SEAD_ASSERT(fileItems.size() == 1);
+
+                    const Item* item = fileItems.front();
+                    SEAD_ASSERT(item->getItemType() == Item::ItemType::SoundSet);
+
+                    const SoundSet* soundSet = static_cast<const SoundSet*>(item);
+                    SEAD_ASSERT(soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave);
+
+                    SEAD_ASSERT(waveSoundSetsWarcs[soundSet].size() > 0);
+                    const auto& pair = waveSoundSetsWarcs[soundSet].front();
+
+                    SEAD_ASSERT(pair.first == nullptr);
+                    const WaveArchive* warc = pair.second;
+
+                    bfwsdFile->prepare(soundSet, warc, true);
+                }
+            }
 
             u32 startPos = writer.getPosition();
             u32 size = 0;

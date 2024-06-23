@@ -75,6 +75,12 @@ void FileWriter::closeFile()
         return;
     }
 
+    if (mOffsetBases.size() > 0)
+    {
+        SEAD_ASSERT_MSG(false, "tried to close file with OffsetBases mismatch");
+        return;
+    }
+
     u32 size = mHeaderSize;
     for (const Block* block = mBlocks.front(); block; block = mBlocks.next(block))
     {
@@ -141,6 +147,12 @@ void FileWriter::closeBlock()
     if (!mBlockOpen)
     {
         SEAD_ASSERT_MSG(false, "block open/close mismatch");
+        return;
+    }
+
+    if (mOffsetBases.size() > 0)
+    {
+        SEAD_ASSERT_MSG(false, "tried to close block with OffsetBases mismatch");
         return;
     }
 

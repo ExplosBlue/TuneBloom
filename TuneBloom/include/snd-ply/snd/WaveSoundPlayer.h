@@ -8,7 +8,8 @@
 #include "snd/snd_WaveSoundFileReader.h"
 
 #include <bfsar/BankFile.h>
-#include <bfsar/WaveFile.h>
+
+class Sound;
 
 class WaveSoundPlayer : public BasicSoundPlayer, public snd::internal::driver::SoundThread::PlayerCallback
 {
@@ -47,7 +48,7 @@ public:
     void init();
     void deinit(bool stop = false);
     void prepare(s32 index, const PrepareArg& arg, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
-    void prepare(const WaveFile& waveFile, s32 channelIdx = -1, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
+    void prepare(const WaveFile& waveFile, s32 channelIdx = -1, const Sound* sound = nullptr, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
     void setBankNoteInfo(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
 
     void pause(bool flag) override;
@@ -56,7 +57,7 @@ public:
 
     bool isChannelActive() const { return mChannel && mChannel->isActive(); }
 
-    bool startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr = nullptr);
+    bool startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr = nullptr, const Sound* sound = nullptr);
     void closeChannel(bool stop = false);
     void updateChannel();
 

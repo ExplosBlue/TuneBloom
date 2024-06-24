@@ -2,6 +2,8 @@
 
 #include "snd/BankR.h"
 
+#include "bfsar/Sound.h"
+
 WaveSoundPlayer::WaveSoundPlayer()
     : mIsRegisterPlayerCallback(false)
     , mChannel(nullptr)
@@ -22,6 +24,13 @@ void WaveSoundPlayer::init()
     mUpdateType = snd::UpdateType::AudioFrame;
 
     mWaveSoundInfo.pitch = 1.0f;
+
+    mWaveSoundInfo.adshr.attack = 127;
+    mWaveSoundInfo.adshr.decay = 127;
+    mWaveSoundInfo.adshr.sustain = 127;
+    mWaveSoundInfo.adshr.hold = 127;
+    mWaveSoundInfo.adshr.release = 127;
+
     mWaveSoundInfo.pan = 64;
     mWaveSoundInfo.surroundPan = 0;
     for (s32 i = 0; i < (s32)snd::AuxBus::Num; i++)
@@ -81,7 +90,7 @@ void WaveSoundPlayer::prepare(s32 index, const PrepareArg& arg, snd::UpdateType 
     mActiveFlag = true;
 }
 
-void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, snd::UpdateType updateType)
+void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, const Sound* sound, snd::UpdateType updateType)
 {
     mUpdateType = updateType;
 
@@ -99,7 +108,7 @@ void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, snd::Upd
     nw::snd::internal::WaveInfo waveInfo;
     nw::snd::internal::GetWaveInfoFromWaveFile(&waveInfo, waveFile, channelIdx);
 
-    startChannel(&waveInfo);
+    startChannel(&waveInfo, sound);
 
     mActiveFlag = true;
 }
@@ -171,7 +180,7 @@ void WaveSoundPlayer::update()
     updateChannel();
 }
 
-bool WaveSoundPlayer::startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr)
+bool WaveSoundPlayer::startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr, const Sound* sound)
 {
     nw::snd::internal::WaveInfo waveInfo;
     if (waveInfoPtr)
@@ -197,7 +206,47 @@ bool WaveSoundPlayer::startChannel(const nw::snd::internal::WaveInfo* waveInfoPt
     if (!channel)
         return false;
 
-    if (!waveInfoPtr)
+    if (waveInfoPtr)
+    {
+        if (sound)
+        {
+            SEAD_ASSERT(sound->getSoundType() == Sound::SoundType::Wave);
+
+            const Sound::WaveSoundInfo& waveSoundInfo = sound->getWaveSoundInfo();
+
+            mWaveSoundInfo.pitch = waveSoundInfo.getPitch();
+
+            const snd::AdshrCurve& adshrCurve = waveSoundInfo.getAdshrCurve();
+            mWaveSoundInfo.adshr.attack = adshrCurve.attack;
+            mWaveSoundInfo.adshr.decay = adshrCurve.decay;
+            mWaveSoundInfo.adshr.sustain = adshrCurve.sustain;
+            mWaveSoundInfo.adshr.hold = adshrCurve.hold;
+            mWaveSoundInfo.adshr.release = adshrCurve.release;
+
+            mWaveSoundInfo.pan = waveSoundInfo.getPan();
+            mWaveSoundInfo.surroundPan = waveSoundInfo.getSurroundPan();
+
+            mWaveSoundInfo.mainSend = waveSoundInfo.getMainSend();
+            for (s32 i = 0; i < (s32)snd::AuxBus::Num; i++)
+            {
+                mWaveSoundInfo.fxSend[i] = waveSoundInfo.getFxSend(i);
+            }
+
+            if (true) // TODO: Check version
+            {
+                mWaveSoundInfo.lpfFreq = waveSoundInfo.getLpfFreq();
+                mWaveSoundInfo.biquadType = waveSoundInfo.getBiquadType();
+                mWaveSoundInfo.biquadValue = waveSoundInfo.getBiquadValue();
+            }
+
+            channel->setAttack(mWaveSoundInfo.adshr.attack);
+            channel->setHold(mWaveSoundInfo.adshr.hold);
+            channel->setDecay(mWaveSoundInfo.adshr.decay);
+            channel->setSustain(mWaveSoundInfo.adshr.sustain);
+            channel->setRelease(mWaveSoundInfo.adshr.release);
+        }
+    }
+    else
     {
         {
             nw::snd::internal::WaveSoundFileReader reader(mWsdFile);

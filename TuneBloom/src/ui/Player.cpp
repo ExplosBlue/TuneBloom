@@ -703,7 +703,7 @@ void PlayWaveFile(const WaveFile& wave, s32 channel, const Sound* sound)
 
         sWavePlayer.setVolume(sVolume);
 
-        sWavePlayer.prepare(wave, channel);
+        sWavePlayer.prepare(wave, channel, sound);
 
         sCurrentSoundPlayer = &sWavePlayer;
 

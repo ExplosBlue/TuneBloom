@@ -238,6 +238,11 @@ public:
         return 0x00010100; // TODO
     }
 
+    u32 getVersionForBfwar() const
+    {
+        return 0x00010000;
+    }
+
 private:
     void open_(sead::Heap* heap);
     void save_(sead::FileHandle& handle);

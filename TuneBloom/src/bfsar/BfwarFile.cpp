@@ -1,5 +1,7 @@
 #include <bfsar/BfwarFile.h>
 
+#include <bfsar/WaveFile.h>
+
 #include <snd/snd_WaveArchiveFile.h>
 
 u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
@@ -11,7 +13,7 @@ u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     {
         writer.openBlock(nw::snd::internal::ElementType_WaveArchiveFile_InfoBlock, "INFO");
 
-        // writer.openSizedReferenceTable("WaveTable", mWaveList.size());
+        writer.openSizedReferenceTable("WaveTable", mWaveFiles.size());
 
         writer.align(0x20);
         writer.closeBlock();
@@ -23,25 +25,27 @@ u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
         writer.align(0x20);
 
-        // for (const Item* item : mWaveList)
-        // {
-        //     SEAD_ASSERT(item->getItemType() == Item::ItemType::WaveFile);
-        //     const WaveFile* wave = static_cast<const WaveFile*>(item);
+        u32 i = 0;
+        for (const WaveFile* wave : mWaveFiles)
+        {
+            SEAD_ASSERT(wave->getItemType() == Item::ItemType::WaveFile);
 
-        //     writer.align(0x20);
+            writer.align(0x20);
 
-        //     writer.addSizedReferenceTableReference("WaveTable", nw::snd::internal::ElementType_General_ByteStream, 0);
+            writer.addSizedReferenceTableReference("WaveTable", nw::snd::internal::ElementType_General_ByteStream, 0);
 
-        //     u32 pos = writer.getPosition();
-        //     {
-        //         wave->write(handle, stream, mEndian, wave->getId() == mWaveList.size() - 1);
-        //     }
-        //     u32 size = writer.getPosition() - pos;
+            u32 pos = writer.getPosition();
+            {
+                wave->write(handle, stream, mEndian, i == mWaveFiles.size() - 1);
+            }
+            u32 size = writer.getPosition() - pos;
 
-        //     writer.setSizedReferenceTableReferenceSize("WaveTable", size);
-        // }
+            writer.setSizedReferenceTableReferenceSize("WaveTable", size);
 
-        // writer.closeSizedReferenceTable("WaveTable");
+            i++;
+        }
+
+        writer.closeSizedReferenceTable("WaveTable");
 
         writer.closeBlock();
     }

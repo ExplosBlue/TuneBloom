@@ -3,6 +3,7 @@
 #include <bfsar/writer/FileWriter.h>
 #include <bfsar/writer/FlagParameters.h>
 #include <bfsar/writer/PatriciaTree.h>
+#include <bfsar/BfwarFile.h>
 #include <bfsar/BfwsdFile.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
@@ -15,6 +16,8 @@
 #include <snd/snd_WaveSoundFileReader.h>
 
 #include <md5/md5.h>
+
+#include <VectorSet.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -212,76 +215,6 @@ void Bfsar::updateList(Item::List& list)
         i++;
     }
 }
-
-template <typename T, typename THasher = std::hash<T>, typename TKeyEq = std::equal_to<T>>
-class VectorSet
-{
-public:
-    using iterator                     = typename std::vector<T>::iterator;
-    using const_iterator               = typename std::vector<T>::const_iterator;
-    iterator begin()                   { return theVector.begin(); }
-    iterator end()                     { return theVector.end(); }
-    const_iterator begin() const       { return theVector.begin(); }
-    const_iterator end() const         { return theVector.end(); }
-    const T& front() const             { return theVector.front(); }
-    const T& back() const              { return theVector.back(); }
-    void insert(const T& item)         { if (theSet.insert(item).second) theVector.push_back(item); }
-    size_t count(const T& item) const  { return theSet.count(item); }
-    bool empty() const                 { return theSet.empty(); }
-    size_t size() const                { return theSet.size(); }
-    bool contains(const T& item) const { return theSet.contains(item); }
-
-    void insert(const iterator& it, const T& item)
-    {
-        if (theSet.insert(item).second)
-        {
-            theVector.insert(it, item);
-        }
-    }
-
-    void resize(u32 newSize)
-    {
-        const size_t oldSize = size();
-        SEAD_ASSERT(newSize <= oldSize);
-
-        if (newSize == oldSize)
-        {
-            return;
-        }
-
-        for (u32 i = newSize; i < oldSize; i++)
-        {
-            theSet.erase(theVector[i]);
-        }
-
-        theVector.resize(newSize);
-    }
-
-    void reserve(u32 size)
-    {
-        theSet.reserve(size);
-        theVector.reserve(size);
-    }
-
-    bool operator==(const std::vector<T>& rhs) const
-    {
-        return theVector == rhs;
-    }
-
-    const T& operator[](u32 idx) const
-    {
-        return theVector[idx];
-    }
-
-    T& operator[](u32 idx)
-    {
-        return theVector[idx];
-    }
-
-private:
-    std::vector<T> theVector;
-    std::unordered_set<T, THasher, TKeyEq> theSet;
-};
 
 void Bfsar::open_(sead::Heap* heap)
 {
@@ -2351,15 +2284,6 @@ void Bfsar::save_(sead::FileHandle& handle)
             }
         };
 
-        class BFWARFile : public NullFile
-        {
-        public:
-            BFWARFile()
-                : NullFile("FWAR")
-            {
-            }
-        };
-
         class BFGRPFile : public NullFile
         {
         public:
@@ -2586,7 +2510,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                 continue;
             }
 
-            InnerFile* innerFile = new BFWARFile();
+            InnerFile* innerFile = new BfwarFile(mEndian, getVersionForBfwar(), warcWaveFiles[warc]);
             generatedInnerFiles.push_back(innerFile);
 
             File file(files.size(), innerFile, !itemInEmbedGroup(warc)); // TODO: BFWAR file
@@ -2624,7 +2548,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                 includeInBfsar = includeGeneratedWarcInBfsar[warc];
             }
 
-            InnerFile* innerFile = new BFWARFile();
+            InnerFile* innerFile = new BfwarFile(mEndian, getVersionForBfwar(), warcWaveFiles[warc]);
             generatedInnerFiles.push_back(innerFile);
 
             File file(files.size(), innerFile, includeInBfsar); // TODO: BFWAR file
@@ -3496,6 +3420,12 @@ void Bfsar::save_(sead::FileHandle& handle)
                     const WaveArchive* warc = pair.second;
 
                     bfwsdFile->prepare(soundSet, warc, warcWaveFilesIndexes, true);
+                }
+
+                const BfwarFile* bfwarFile = sead::DynamicCast<const BfwarFile>(innerFile);
+                if (bfwarFile)
+                {
+                    bfwarFile->prepare(true);
                 }
             }
 

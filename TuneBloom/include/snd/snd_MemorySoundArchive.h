@@ -179,6 +179,8 @@ public:
     const internal::Util::Table<ut::ResU32>* detail_GetWaveArchiveIdTable(ItemId id) const;
 
     const void* detail_GetFileAddress(FileId fileId, u32* outFileSize = nullptr, u32 variationId = 0, u32* outGroupFileId = nullptr) const;
+    const void* detail_GetFileAddressGroup(FileId fileId, u32 groupId) const;
+    const void* detail_GetFileAddressSimple(FileId fileId) const;
 
     internal::SoundArchiveFile::FileHeader mHeader;
     const internal::SoundArchiveFile::StringBlockBody* mStringBlockBody;

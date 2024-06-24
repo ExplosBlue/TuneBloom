@@ -217,4 +217,59 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
     return nullptr;
 }
 
+const void* MemorySoundArchive::detail_GetFileAddressGroup(FileId fileId, u32 groupId) const
+{
+    const internal::SoundArchiveFile::GroupInfo* info = GetGroupInfo(groupId);
+    if (info)
+    {
+        const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
+        if (groupFileInfo && groupFileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_NONE)
+        {
+            const internal::SoundArchiveFile::InternalFileInfo* groupInternalFileInfo = groupFileInfo->GetInternalFileInfo();
+            SEAD_ASSERT(groupInternalFileInfo);
+
+            u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
+            SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
+
+            const void* groupFile = sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+
+            internal::GroupFileReader reader(groupFile);
+            u32 groupItemCount = reader.GetGroupItemCount();
+            for (u32 j = 0; j < groupItemCount; j++)
+            {
+                internal::GroupItemLocationInfo locationInfo;
+                if (reader.ReadGroupItemLocationInfo(&locationInfo, j))
+                {
+                    if (locationInfo.fileId == fileId)
+                    {
+                        return locationInfo.address;
+                    }
+                }
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const void* MemorySoundArchive::detail_GetFileAddressSimple(FileId fileId) const
+{
+    const internal::SoundArchiveFile::FileInfo* fileInfo = detail_GetFileInfo(fileId);
+
+    if (fileInfo)
+    {
+        const internal::SoundArchiveFile::InternalFileInfo* internalFileInfo = fileInfo->GetInternalFileInfo();
+        if (internalFileInfo)
+        {
+            u32 offsetFromFileBlockHead = internalFileInfo->GetOffsetFromFileBlockHead();
+            if (offsetFromFileBlockHead != 0xFFFFFFFF)
+            {
+                return sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+            }
+        }
+    }
+
+    return nullptr;
+}
+
 } } // namespace nw::snd

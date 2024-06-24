@@ -18,6 +18,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <functional>
 
 Bfsar::Bfsar()
     : mOpen(false)
@@ -211,6 +212,76 @@ void Bfsar::updateList(Item::List& list)
         i++;
     }
 }
+
+template <typename T, typename THasher = std::hash<T>, typename TKeyEq = std::equal_to<T>>
+class VectorSet
+{
+public:
+    using iterator                     = typename std::vector<T>::iterator;
+    using const_iterator               = typename std::vector<T>::const_iterator;
+    iterator begin()                   { return theVector.begin(); }
+    iterator end()                     { return theVector.end(); }
+    const_iterator begin() const       { return theVector.begin(); }
+    const_iterator end() const         { return theVector.end(); }
+    const T& front() const             { return theVector.front(); }
+    const T& back() const              { return theVector.back(); }
+    void insert(const T& item)         { if (theSet.insert(item).second) theVector.push_back(item); }
+    size_t count(const T& item) const  { return theSet.count(item); }
+    bool empty() const                 { return theSet.empty(); }
+    size_t size() const                { return theSet.size(); }
+    bool contains(const T& item) const { return theSet.contains(item); }
+
+    void insert(const iterator& it, const T& item)
+    {
+        if (theSet.insert(item).second)
+        {
+            theVector.insert(it, item);
+        }
+    }
+
+    void resize(u32 newSize)
+    {
+        const size_t oldSize = size();
+        SEAD_ASSERT(newSize <= oldSize);
+
+        if (newSize == oldSize)
+        {
+            return;
+        }
+
+        for (u32 i = newSize; i < oldSize; i++)
+        {
+            theSet.erase(theVector[i]);
+        }
+
+        theVector.resize(newSize);
+    }
+
+    void reserve(u32 size)
+    {
+        theSet.reserve(size);
+        theVector.reserve(size);
+    }
+
+    bool operator==(const std::vector<T>& rhs) const
+    {
+        return theVector == rhs;
+    }
+
+    const T& operator[](u32 idx) const
+    {
+        return theVector[idx];
+    }
+
+    T& operator[](u32 idx)
+    {
+        return theVector[idx];
+    }
+
+private:
+    std::vector<T> theVector;
+    std::unordered_set<T, THasher, TKeyEq> theSet;
+};
 
 void Bfsar::open_(sead::Heap* heap)
 {
@@ -541,17 +612,22 @@ void Bfsar::open_(sead::Heap* heap)
 
         const nw::snd::internal::Util::WaveIdTable& waveIdTable = *reader.GetWaveIdTable();
         nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable.table.item[0]);
-        for (u32 j = 0; j < waveIdTable.GetCount(); j++, waveId++)
+        for (u32 j = 0; j < waveIdTable.GetCount(); j++)
         {
-            u32 warcId = waveId->waveArchiveId;
-            u32 waveIdx = waveId->waveIndex;
+            if (j != 0)
+            {
+                SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+            }
+
+            u32 warcId = waveId[j].waveArchiveId;
+            u32 waveIdx = waveId[j].waveIndex;
 
             const auto& it = waveFileIdxMap.find((u64)warcId << 32 | waveIdx);
             SEAD_ASSERT(it != waveFileIdxMap.end());
             u32 globalWaveId = it->second;
 
-            waveId->waveArchiveId = 0;
-            waveId->waveIndex = globalWaveId;
+            //waveId[j].waveArchiveId = 0;
+            waveId[j].waveIndex = globalWaveId;
         }
 
         std::string hash = md5(bankFile, bankFileSize);
@@ -820,6 +896,17 @@ void Bfsar::open_(sead::Heap* heap)
             }
 
             nw::snd::internal::WaveSoundFileReader reader(mSoundArchive->detail_GetFileAddress(soundInfo->fileId));
+            SEAD_ASSERT(reader.IsAvailable());
+
+            const nw::snd::internal::Util::WaveIdTable& waveIdTable = reader.mInfoBlockBody->GetWaveIdTable();
+            const nw::snd::internal::Util::WaveId* waveId = &waveIdTable.table.item[0];
+            for (u32 j = 0; j < waveIdTable.GetCount(); j++)
+            {
+                if (j != 0)
+                {
+                    SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                }
+            }
 
             nw::snd::internal::WaveSoundNoteInfo noteInfo;
             bool success = reader.ReadNoteInfo(&noteInfo, waveSoundInfo.index, 0);
@@ -936,7 +1023,8 @@ void Bfsar::open_(sead::Heap* heap)
 
     for (u32 i = 0; i < mSoundArchive->GetGroupCount(); i++)
     {
-        const nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = mSoundArchive->GetGroupInfo(mSoundArchive->GetGroupIdFromIndex(i));
+        u32 groupId = mSoundArchive->GetGroupIdFromIndex(i);
+        const nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = mSoundArchive->GetGroupInfo(groupId);
 
         Group* group = new(heap) Group();
         group->mId = i;
@@ -971,43 +1059,421 @@ void Bfsar::open_(sead::Heap* heap)
                 group->mOutputType = Group::OutputType::Embed;
             }
 
-            for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
+            auto addGroupItem = [&](u32 itemIdx, bool assertNotDisabled)
             {
                 nw::snd::internal::GroupFile::GroupItemInfoEx itemInfoEx;
-                bool success = reader.ReadGroupItemInfoEx(&itemInfoEx, j);
+                bool success = reader.ReadGroupItemInfoEx(&itemInfoEx, itemIdx);
                 SEAD_ASSERT(success);
 
-                Group::ItemInfo* itemInfo = new(heap) Group::ItemInfo(group);
-                itemInfo->mId = j;
-
-                switch (nw::snd::internal::Util::GetItemType(itemInfoEx.itemId))
+                bool itemDisabled = itemInfoEx.itemId == 0 || itemInfoEx.itemId == nw::snd::SoundArchive::INVALID_ID;
+                if (assertNotDisabled)
                 {
-                    case nw::snd::internal::ItemType_Sound:
-                        itemInfo->mItemRefType = Item::ItemType::Sound;
-                        break;
-
-                    case nw::snd::internal::ItemType_SoundGroup:
-                        itemInfo->mItemRefType = Item::ItemType::SoundSet;
-                        break;
-
-                    case nw::snd::internal::ItemType_Bank:
-                        itemInfo->mItemRefType = Item::ItemType::Bank;
-                        break;
-
-                    case nw::snd::internal::ItemType_WaveArchive:
-                        itemInfo->mItemRefType = Item::ItemType::WaveArchive;
-                        break;
-
-                    default:
-                        itemInfo->mItemRefType = Item::ItemType::Invalid;
-                        break;
+                    SEAD_ASSERT(!itemDisabled);
                 }
 
-                itemInfo->mItemRef.attach(getItem(itemInfoEx.itemId, getItemList(itemInfo->mItemRefType)));
+                Group::ItemInfo* itemInfo = new(heap) Group::ItemInfo(group);
+                itemInfo->mId = itemIdx;
+
+                if (!itemDisabled)
+                {
+                    switch (nw::snd::internal::Util::GetItemType(itemInfoEx.itemId))
+                    {
+                        case nw::snd::internal::ItemType_Sound:
+                            itemInfo->mItemRefType = Item::ItemType::Sound;
+                            break;
+
+                        case nw::snd::internal::ItemType_SoundGroup:
+                            itemInfo->mItemRefType = Item::ItemType::SoundSet;
+                            break;
+
+                        case nw::snd::internal::ItemType_Bank:
+                            itemInfo->mItemRefType = Item::ItemType::Bank;
+                            break;
+
+                        case nw::snd::internal::ItemType_WaveArchive:
+                            itemInfo->mItemRefType = Item::ItemType::WaveArchive;
+                            break;
+
+                        default:
+                            itemInfo->mItemRefType = Item::ItemType::Invalid;
+                            break;
+                    }
+
+                    itemInfo->mItemRef.attach(getItem(itemInfoEx.itemId, getItemList(itemInfo->mItemRefType)));
+                    SEAD_ASSERT(itemInfo->mItemRef.isAttached());
+                }
 
                 itemInfo->mLoadFlag = itemInfoEx.loadFlag;
 
                 group->mItemInfoList.pushBack(itemInfo);
+            };
+
+            if (mVersion <= 0x00020000)
+            {
+                for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
+                {
+                    addGroupItem(j, false);
+                }
+            }
+            else
+            {
+                std::vector<VectorSet<u32>> itemFileMap(reader.GetGroupItemExCount());
+
+                for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
+                {
+                    nw::snd::internal::GroupFile::GroupItemInfoEx itemInfoEx;
+                    bool success = reader.ReadGroupItemInfoEx(&itemInfoEx, j);
+                    SEAD_ASSERT(success);
+
+                    auto addBankFiles = [&](u32 bankId)
+                    {
+                        const nw::snd::internal::SoundArchiveFile::BankInfo* bankInfo = mSoundArchive->GetBankInfo(bankId);
+                        SEAD_ASSERT(bankInfo);
+
+                        if (itemInfoEx.loadFlag & Group::ItemInfo::LoadFlag::LoadBank)
+                        {
+                            itemFileMap[j].insert(bankInfo->fileId);
+                        }
+
+                        if (itemInfoEx.loadFlag & Group::ItemInfo::LoadFlag::LoadWarc)
+                        {
+                            const Item* bankItem = getItem(bankId, getBankList());
+                            SEAD_ASSERT(bankItem);
+                            const Bank* bank = static_cast<const Bank*>(bankItem);
+
+                            switch (bank->getWaveArchiveType())
+                            {
+                                case WaveArchiveType::AutomaticShared:
+                                {
+                                    const void* bankFile = mSoundArchive->detail_GetFileAddressGroup(bankInfo->fileId, groupId);
+                                    if (!bankFile)
+                                    {
+                                        SEAD_ASSERT(group->mOutputType == Group::OutputType::Link);
+                                        bankFile = mSoundArchive->detail_GetFileAddressSimple(bankInfo->fileId);
+                                        SEAD_ASSERT(bankFile);
+                                    }
+
+                                    nw::snd::internal::BankFileReader reader(bankFile);
+                                    SEAD_ASSERT(reader.IsInitialized());
+
+                                    const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
+                                    if (waveIdTable->GetCount() > 0)
+                                    {
+                                        u32 warcId = waveIdTable->GetWaveId(0)->waveArchiveId;
+
+                                        const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                        SEAD_ASSERT(warcInfo);
+
+                                        itemFileMap[j].insert(warcInfo->fileId);
+                                    }
+                                    break;
+                                }
+
+                                case WaveArchiveType::AutomaticIndividual:
+                                case WaveArchiveType::Explicit:
+                                {
+                                    SEAD_ASSERT(bankInfo->GetWaveArchiveItemIdTable()->count == 1);
+                                    u32 warcId = bankInfo->GetWaveArchiveItemIdTable()->item[0];
+
+                                    const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                    SEAD_ASSERT(warcInfo);
+
+                                    itemFileMap[j].insert(warcInfo->fileId);
+                                    break;
+                                }
+                            }
+                        }
+                    };
+
+                    auto addSoundFiles = [&](u32 soundId, bool assertSeq)
+                    {
+                        const nw::snd::internal::SoundArchiveFile::SoundInfo* soundInfo = mSoundArchive->GetSoundInfo(soundId);
+                        SEAD_ASSERT(soundInfo);
+                        if (soundInfo->GetSoundType() != nw::snd::SoundArchive::SOUND_TYPE_SEQ)
+                        {
+                            if (assertSeq)
+                            {
+                                SEAD_ASSERT_MSG(false, "Sound is not a sequence.");
+                            }
+
+                            return;
+                        }
+
+                        if (itemInfoEx.loadFlag & Group::ItemInfo::LoadFlag::LoadSeq)
+                        {
+                            itemFileMap[j].insert(soundInfo->fileId);
+                        }
+
+                        const nw::snd::internal::SoundArchiveFile::SequenceSoundInfo& seqSoundInfo = soundInfo->GetSequenceSoundInfo();
+                        u32 bankIds[nw::snd::SoundArchive::SEQ_BANK_MAX];
+                        seqSoundInfo.GetBankIds(bankIds);
+
+                        for (u32 k = 0; k < nw::snd::SoundArchive::SEQ_BANK_MAX; k++)
+                        {
+                            if (bankIds[k] == nw::snd::SoundArchive::INVALID_ID)
+                            {
+                                continue;
+                            }
+
+                            addBankFiles(bankIds[k]);
+                        }
+                    };
+
+                    switch (nw::snd::internal::Util::GetItemType(itemInfoEx.itemId))
+                    {
+                        case nw::snd::internal::ItemType_Sound:
+                        {
+                            addSoundFiles(itemInfoEx.itemId, true);
+                            break;
+                        }
+
+                        case nw::snd::internal::ItemType_SoundGroup:
+                        {
+                            const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = mSoundArchive->detail_GetSoundGroupInfo(itemInfoEx.itemId);
+                            SEAD_ASSERT(soundSetInfo);
+
+                            const nw::snd::internal::SoundArchiveFile::WaveSoundGroupInfo* waveSoundSetInfo = soundSetInfo->GetWaveSoundGroupInfo();
+                            if (waveSoundSetInfo)
+                            {
+                                SEAD_ASSERT(soundSetInfo->GetFileIdTable()->count == 1);
+                                u32 waveSoundFileId = soundSetInfo->GetFileIdTable()->item[0];
+                                if (itemInfoEx.loadFlag & Group::ItemInfo::LoadFlag::LoadWsd)
+                                {
+                                    itemFileMap[j].insert(waveSoundFileId);
+                                }
+
+                                if (itemInfoEx.loadFlag & Group::ItemInfo::LoadFlag::LoadWarc)
+                                {
+                                    const Item* soundSetItem = getItem(itemInfoEx.itemId, getSoundSetList());
+                                    SEAD_ASSERT(soundSetItem);
+                                    const SoundSet* soundSet = static_cast<const SoundSet*>(soundSetItem);
+                                    SEAD_ASSERT(soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave);
+
+                                    switch (soundSet->getWaveArchiveType())
+                                    {
+                                        case WaveArchiveType::AutomaticShared:
+                                        {
+                                            const void* waveSoundFile = mSoundArchive->detail_GetFileAddressGroup(waveSoundFileId, groupId);
+                                            if (!waveSoundFile)
+                                            {
+                                                SEAD_ASSERT(group->mOutputType == Group::OutputType::Link);
+                                                waveSoundFile = mSoundArchive->detail_GetFileAddressSimple(waveSoundFileId);
+                                                SEAD_ASSERT(waveSoundFile);
+                                            }
+
+                                            nw::snd::internal::WaveSoundFileReader reader(waveSoundFile);
+                                            SEAD_ASSERT(reader.IsAvailable());
+
+                                            const nw::snd::internal::Util::WaveIdTable& waveIdTable = reader.mInfoBlockBody->GetWaveIdTable();
+                                            if (waveIdTable.GetCount() > 0)
+                                            {
+                                                u32 warcId = waveIdTable.GetWaveId(0)->waveArchiveId;
+
+                                                const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                                SEAD_ASSERT(warcInfo);
+
+                                                itemFileMap[j].insert(warcInfo->fileId);
+                                            }
+                                            break;
+                                        }
+
+                                        case WaveArchiveType::AutomaticIndividual:
+                                        case WaveArchiveType::Explicit:
+                                        {
+                                            SEAD_ASSERT(waveSoundSetInfo->GetWaveArchiveItemIdTable()->count == 1);
+                                            u32 warcId = waveSoundSetInfo->GetWaveArchiveItemIdTable()->item[0];
+
+                                            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                            SEAD_ASSERT(warcInfo);
+
+                                            itemFileMap[j].insert(warcInfo->fileId);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                if (soundSetInfo->startId != soundSetInfo->endId || soundSetInfo->startId != nw::snd::SoundArchive::INVALID_ID)
+                                {
+                                    for (u32 id = soundSetInfo->startId; id <= soundSetInfo->endId; id++)
+                                    {
+                                        addSoundFiles(id, false);
+                                    }
+                                }
+                            }
+                            break;
+                        }
+
+                        case nw::snd::internal::ItemType_Bank:
+                        {
+                            addBankFiles(itemInfoEx.itemId);
+                            break;
+                        }
+
+                        case nw::snd::internal::ItemType_WaveArchive:
+                        {
+                            SEAD_ASSERT(itemInfoEx.loadFlag == Group::ItemInfo::LoadFlag::LoadAll);
+
+                            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(itemInfoEx.itemId);
+                            SEAD_ASSERT(warcInfo);
+
+                            itemFileMap[j].insert(warcInfo->fileId);
+                            break;
+                        }
+                    }
+                }
+
+                auto isAnonWarc = [&](u32 fileId)
+                {
+                    for (u32 j = 0; j < mSoundArchive->GetWaveArchiveCount(); j++)
+                    {
+                        const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(mSoundArchive->GetWaveArchiveIdFromIndex(j));
+                        SEAD_ASSERT(warcInfo);
+
+                        if (warcInfo->fileId == fileId)
+                        {
+                            return warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) == 0;
+                        }
+                    }
+
+                    return false;
+                };
+
+                for (u32 j = 0; j < reader.GetGroupItemCount(); j++)
+                {
+                    nw::snd::internal::GroupItemLocationInfo locationInfo;
+                    bool success = reader.ReadGroupItemLocationInfo(&locationInfo, j);
+                    SEAD_ASSERT(success);
+
+                    if (!isAnonWarc(locationInfo.fileId))
+                    {
+                        continue;
+                    }
+
+                    SEAD_ASSERT(j != 0);
+
+                    nw::snd::internal::GroupItemLocationInfo prevLocationInfo;
+                    success = reader.ReadGroupItemLocationInfo(&prevLocationInfo, j - 1);
+                    SEAD_ASSERT(success);
+
+                    for (auto& itemFiles : itemFileMap)
+                    {
+                        auto it = std::find(itemFiles.begin(), itemFiles.end(), prevLocationInfo.fileId);
+
+                        if (it == itemFiles.end())
+                        {
+                            continue;
+                        }
+
+                        itemFiles.insert(std::next(it), locationInfo.fileId);
+                    }
+                }
+
+                // SEAD_PRINT(" %s\n", group->getNameOrNull().cstr());
+                // for (u32 j = 0; j < itemFileMap.size(); j++)
+                // {
+                //     SEAD_PRINT(" - %u\n", j);
+                //     const auto& itemFiles = itemFileMap[j];
+                //     for (u32 fileId : itemFiles)
+                //     {
+                //         SEAD_PRINT("   - %u\n", fileId);
+                //     }
+                // }
+
+                std::vector<u32> fileIds;
+
+                for (u32 j = 0; j < reader.GetGroupItemCount(); j++)
+                {
+                    nw::snd::internal::GroupItemLocationInfo locationInfo;
+                    bool success = reader.ReadGroupItemLocationInfo(&locationInfo, j);
+                    SEAD_ASSERT(success);
+
+                    fileIds.push_back(locationInfo.fileId);
+                }
+
+                std::vector<u32> validSorting;
+                validSorting.reserve(itemFileMap.size());
+
+                std::vector<bool> used(itemFileMap.size(), false);
+
+                VectorSet<u32> tmpFileIds;
+                tmpFileIds.reserve(fileIds.size());
+
+                std::function<bool(void)> backtrack;
+                backtrack = [&]()
+                {
+                    if (validSorting.size() == itemFileMap.size())
+                    {
+                        return tmpFileIds == fileIds;
+                    }
+
+                    for (u32 j = 0; j < itemFileMap.size(); j++)
+                    {
+                        if (used[j])
+                        {
+                            continue;
+                        }
+
+                        used[j] = true;
+                        const auto& itemFiles = itemFileMap[j];
+                        const size_t initialSize = tmpFileIds.size();
+
+                        for (u32 fileId : itemFiles)
+                        {
+                            tmpFileIds.insert(fileId);
+                        }
+
+                        bool matchingPrefix = tmpFileIds.size() <= fileIds.size();
+                        if (matchingPrefix)
+                        {
+                            for (u32 k = 0; k < tmpFileIds.size(); k++)
+                            {
+                                if (tmpFileIds[k] != fileIds[k])
+                                {
+                                    matchingPrefix = false;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (matchingPrefix)
+                        {
+                            validSorting.push_back(j);
+                            if (backtrack())
+                            {
+                                return true;
+                            }
+                            validSorting.pop_back();
+                        }
+
+                        tmpFileIds.resize(initialSize);
+                        used[j] = false;
+                    }
+
+                    return false;
+                };
+
+                bool success = backtrack();
+                if (success)
+                {
+                    // for (u32 itemId : validSorting)
+                    // {
+                    //     SEAD_PRINT(" itemID - %u\n", itemId);
+                    // }
+
+                    for (u32 j : validSorting)
+                    {
+                        addGroupItem(j, true);
+                    }
+                }
+                else
+                {
+                    for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
+                    {
+                        addGroupItem(j, true);
+                    }
+                }
             }
         }
         else
@@ -1018,28 +1484,6 @@ void Bfsar::open_(sead::Heap* heap)
         mGroupList.pushBack(group);
     }
 }
-
-template <typename T, typename THasher = std::hash<T>, typename TKeyEq = std::equal_to<T>>
-class VectorSet
-{
-public:
-    using iterator                    = typename std::vector<T>::iterator;
-    using const_iterator              = typename std::vector<T>::const_iterator;
-    iterator begin()                  { return theVector.begin(); }
-    iterator end()                    { return theVector.end(); }
-    const_iterator begin() const      { return theVector.begin(); }
-    const_iterator end() const        { return theVector.end(); }
-    const T& front() const            { return theVector.front(); }
-    const T& back() const             { return theVector.back(); }
-    void insert(const T& item)        { if (theSet.insert(item).second) theVector.push_back(item); }
-    size_t count(const T& item) const { return theSet.count(item); }
-    bool empty() const                { return theSet.empty(); }
-    size_t size() const               { return theSet.size(); }
-
-private:
-    std::vector<T> theVector;
-    std::unordered_set<T, THasher, TKeyEq> theSet;
-};
 
 // template <typename Key, typename T>
 // class VectorMap

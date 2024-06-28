@@ -529,6 +529,7 @@ void Bfsar::open_(sead::Heap* heap)
 
     std::unordered_map<std::string, TempFile> bankFileCache;
     std::unordered_map<u32, u32> bankFileIdxMap;
+    std::unordered_map<u32, u32> bankFileWarcId;
 
     for (u32 i = 0; i < mSoundArchive->detail_GetFileCount(); i++)
     {
@@ -545,13 +546,19 @@ void Bfsar::open_(sead::Heap* heap)
 
         const nw::snd::internal::Util::WaveIdTable& waveIdTable = *reader.GetWaveIdTable();
         nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable.table.item[0]);
+
         for (u32 j = 0; j < waveIdTable.GetCount(); j++)
         {
             if (j != 0)
             {
                 SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
             }
+        }
 
+        bankFileWarcId[i] = waveId->waveArchiveId;
+
+        for (u32 j = 0; j < waveIdTable.GetCount(); j++)
+        {
             u32 warcId = waveId[j].waveArchiveId;
             u32 waveIdx = waveId[j].waveIndex;
 
@@ -559,7 +566,7 @@ void Bfsar::open_(sead::Heap* heap)
             SEAD_ASSERT(it != waveFileIdxMap.end());
             u32 globalWaveId = it->second;
 
-            //waveId[j].waveArchiveId = 0;
+            waveId[j].waveArchiveId = 0;
             waveId[j].waveIndex = globalWaveId;
         }
 
@@ -1092,7 +1099,10 @@ void Bfsar::open_(sead::Heap* heap)
                                     const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
                                     if (waveIdTable->GetCount() > 0)
                                     {
-                                        u32 warcId = waveIdTable->GetWaveId(0)->waveArchiveId;
+                                        const auto& it = bankFileWarcId.find(bankInfo->fileId);
+                                        SEAD_ASSERT(it != bankFileWarcId.end());
+
+                                        u32 warcId = it->second;
 
                                         const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
                                         SEAD_ASSERT(warcInfo);

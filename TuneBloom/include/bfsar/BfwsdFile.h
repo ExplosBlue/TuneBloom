@@ -32,11 +32,13 @@ public:
         SEAD_ASSERT(!mWaveArchive);
         mWaveArchive = warc;
 
-        const auto& it = waveFilesIndexes.find(warc);
-        SEAD_ASSERT(it != waveFilesIndexes.end());
-
         SEAD_ASSERT(!mWaveArchiveWaveFilesIndexes);
-        mWaveArchiveWaveFilesIndexes = &it->second;
+
+        const auto& it = waveFilesIndexes.find(warc);
+        if (it != waveFilesIndexes.end())
+        {
+            mWaveArchiveWaveFilesIndexes = &it->second;
+        }
 
         mUpdateWriteInfo = updateWriteInfo;
     }

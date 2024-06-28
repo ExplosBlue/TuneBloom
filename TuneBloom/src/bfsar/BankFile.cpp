@@ -425,7 +425,6 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
 {
     SEAD_ASSERT(mBank);
     SEAD_ASSERT(mWaveArchive);
-    SEAD_ASSERT(mWaveArchiveWaveFilesIndexes);
 
     struct WaveId
     {
@@ -466,6 +465,8 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
                 if (!waveIdIndexes.contains(waveFile))
                 {
                     waveIdIndexes[waveFile] = waveIds.size();
+
+                    SEAD_ASSERT(mWaveArchiveWaveFilesIndexes);
 
                     const auto& it = mWaveArchiveWaveFilesIndexes->find(waveFile);
                     SEAD_ASSERT(it != mWaveArchiveWaveFilesIndexes->end());

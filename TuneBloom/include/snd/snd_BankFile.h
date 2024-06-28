@@ -9,6 +9,23 @@
 
 namespace nw { namespace snd { namespace internal {
 
+enum VelocityRegionBitFlag
+{
+    VELOCITY_REGION_KEY = 0x00,
+    VELOCITY_REGION_VOLUME,
+    VELOCITY_REGION_PAN,
+    VELOCITY_REGION_PITCH,
+    VELOCITY_REGION_INSTRUMENT_NOTE_PARAM,
+    VELOCITY_REGION_ENVELOPE = 0x09,
+    VELOCITY_REGION_BASIC_PARAM_FLAG =
+        (1 << VELOCITY_REGION_KEY)
+      | (1 << VELOCITY_REGION_VOLUME)
+      | (1 << VELOCITY_REGION_PAN)
+      | (1 << VELOCITY_REGION_PITCH)
+      | (1 << VELOCITY_REGION_INSTRUMENT_NOTE_PARAM)
+      | (1 << VELOCITY_REGION_ENVELOPE)
+};
+
 enum RegionType
 {
     REGION_TYPE_DIRECT,
@@ -80,6 +97,30 @@ struct RangeChunk
         const Util::Reference& ref = GetRegionTableAddress(regionTableIndex);
         return sead::PtrUtil::addOffset(this, ref.offset);
     }
+
+    // Added
+
+    const Util::Reference* GetRegionRef(u32 index) const
+    {
+        SEAD_ASSERT(index <= 127);
+
+        bool isFoundRangeChunkIndex = false;
+        u32 regionTableIndex = 0;
+        for (u32 i = 0; i < borderTable.count; i++)
+        {
+            if (index <= borderTable.item[i])
+            {
+                regionTableIndex = i;
+                isFoundRangeChunkIndex = true;
+                break;
+            }
+        }
+
+        if (!isFoundRangeChunkIndex)
+            return nullptr;
+
+        return &GetRegionTableAddress(regionTableIndex);
+    }
 };
 
 struct IndexChunk
@@ -103,6 +144,24 @@ struct IndexChunk
             return nullptr;
 
         return sead::PtrUtil::addOffset(this, toRegion[index - min].offset);
+    }
+
+    // Added
+
+    const Util::Reference* GetRegionRef(u32 index) const
+    {
+        if (!(index >= min))
+            SEAD_WARNING("out of region value[%d] < min[%d]\n", index, min);
+
+        if (!(index <= max))
+            SEAD_WARNING("out of region value[%d] > max[%d]\n", index, max);
+
+        if (index < min)
+            return nullptr;
+        else if (index > max)
+            return nullptr;
+
+        return &toRegion[index - min];
     }
 };
 

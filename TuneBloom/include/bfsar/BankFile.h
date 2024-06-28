@@ -6,16 +6,23 @@
 
 #include <snd/snd_BankFileReader.h>
 
+#include <unordered_map>
+
+class Bank;
+class WaveArchive;
+
 class BankFile : public Item, public InnerFile
 {
+    SEAD_RTTI_OVERRIDE(BankFile, InnerFile);
+
 public:
     class VelocityRegion : public Item
     {
     public:
-        VelocityRegion(u8 keyMin, u8 keyMax)
+        VelocityRegion(u8 velocityMin, u8 velocityMax)
             : Item()
-            , mKeyMin(keyMin)
-            , mKeyMax(keyMax)
+            , mVelocityMin(velocityMin)
+            , mVelocityMax(velocityMax)
 
             , mWaveFileRef(this)
             , mOriginalKey(60)
@@ -29,11 +36,21 @@ public:
         {
             mItemType = ItemType::BankFileVelocityRegion;
 
-            SEAD_ASSERT(mKeyMin <= 127);
-            SEAD_ASSERT(mKeyMax <= 127);
+            SEAD_ASSERT(mVelocityMin <= 127);
+            SEAD_ASSERT(mVelocityMax <= 127);
         }
 
         void read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
+
+        u8 getVelocityMin() const
+        {
+            return mVelocityMin;
+        }
+
+        u8 getVelocityMax() const
+        {
+            return mVelocityMax;
+        }
 
         const ItemReference& getWaveFileRef() const
         {
@@ -65,7 +82,7 @@ public:
             return mPitch;
         }
 
-        bool isIgnoreNoteOff() const
+        bool getIsIgnoreNoteOff() const
         {
             return mIsIgnoreNoteOff;
         }
@@ -86,8 +103,8 @@ public:
         }
 
     private:
-        u8 mKeyMin;
-        u8 mKeyMax;
+        u8 mVelocityMin;
+        u8 mVelocityMax;
 
         ItemReference mWaveFileRef;
         u8 mOriginalKey;
@@ -126,13 +143,23 @@ public:
                 SEAD_ASSERT(item->getItemType() == ItemType::BankFileVelocityRegion);
                 const VelocityRegion* velocityRegion = static_cast<const VelocityRegion*>(item);
 
-                if (velocityRegion->mKeyMin <= velocity && velocity <= velocityRegion->mKeyMax)
+                if (velocityRegion->mVelocityMin <= velocity && velocity <= velocityRegion->mVelocityMax)
                 {
                     return velocityRegion;
                 }
             }
 
             return nullptr;
+        }
+
+        u8 getKeyMin() const
+        {
+            return mKeyMin;
+        }
+
+        u8 getKeyMax() const
+        {
+            return mKeyMax;
         }
 
         const VelocityRegion::List& getVelocityRegionList() const
@@ -166,6 +193,11 @@ public:
 
         void read(const nw::snd::internal::BankFile::Instrument* instrumentInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
         void drawUI();
+
+        u32 getProgramNo() const
+        {
+            return mProgramNo;
+        }
 
         const KeyRegion* getKeyRegion(u8 key) const
         {
@@ -216,6 +248,11 @@ public:
         : Item()
         , InnerFile()
         , mInstrumentList()
+
+        , mBank(nullptr)
+        , mWaveArchive(nullptr)
+        , mWaveArchiveWaveFilesIndexes(nullptr)
+        , mUpdateWriteInfo(true)
     {
         mItemType = ItemType::BankFile;
     }
@@ -223,9 +260,37 @@ public:
     void drawUI() override;
     void drawFileUI();
 
+    void setup(sead::Endian::Types endian, u32 version) const
+    {
+        mEndian = endian;
+        mVersion = version;
+    }
+
+    void prepare(const Bank* bank, const WaveArchive* warc, const std::unordered_map<const WaveArchive*, std::unordered_map<const WaveFile*, u32>>& waveFilesIndexes, bool updateWriteInfo) const
+    {
+        SEAD_ASSERT(!mBank);
+        mBank = bank;
+
+        SEAD_ASSERT(!mWaveArchive);
+        mWaveArchive = warc;
+
+        const auto& it = waveFilesIndexes.find(warc);
+        SEAD_ASSERT(it != waveFilesIndexes.end());
+
+        SEAD_ASSERT(!mWaveArchiveWaveFilesIndexes);
+        mWaveArchiveWaveFilesIndexes = &it->second;
+
+        mUpdateWriteInfo = updateWriteInfo;
+    }
+
 private:
     void doRead(const void* fileAddr) override;
     u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const override;
+
+    bool updateWriteInfo_() const override
+    {
+        return mUpdateWriteInfo;
+    }
 
 public:
     const Instrument* getInstrument(u8 programNo) const
@@ -256,4 +321,9 @@ public:
 
 private:
     Instrument::List mInstrumentList;
+
+    mutable const Bank* mBank;
+    mutable const WaveArchive* mWaveArchive;
+    mutable const std::unordered_map<const WaveFile*, u32>* mWaveArchiveWaveFilesIndexes;
+    mutable bool mUpdateWriteInfo;
 };

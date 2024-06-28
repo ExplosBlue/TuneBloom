@@ -2275,15 +2275,6 @@ void Bfsar::save_(sead::FileHandle& handle)
             sead::SafeString mMagic;
         };
 
-        class BFBNKFile : public NullFile
-        {
-        public:
-            BFBNKFile()
-                : NullFile("FBNK")
-            {
-            }
-        };
-
         class BFGRPFile : public NullFile
         {
         public:
@@ -2317,7 +2308,7 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                         if (includeInBfsar)
                         {
-                            SEAD_ASSERT(waveSoundSetsWarcs[soundSet].size() > 1);
+                            SEAD_ASSERT(waveSoundSetsWarcs[soundSet].size() > 0);
                             const auto& pair = waveSoundSetsWarcs[soundSet].front();
 
                             SEAD_ASSERT(pair.first == nullptr);
@@ -2427,7 +2418,7 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                         if (includeInBfsar)
                         {
-                            SEAD_ASSERT(banksWarcs[bank].size() > 1);
+                            SEAD_ASSERT(banksWarcs[bank].size() > 0);
                             const auto& pair = banksWarcs[bank].front();
 
                             SEAD_ASSERT(pair.first == nullptr);
@@ -2488,10 +2479,9 @@ void Bfsar::save_(sead::FileHandle& handle)
                 }
             }
 
-            InnerFile* innerFile = new BFBNKFile();
-            generatedInnerFiles.push_back(innerFile);
+            bankFile->setup(mEndian, getVersionForBfbnk());
 
-            File file(files.size(), innerFile, includeInBfsar); // TODO: BFBNK file
+            File file(files.size(), bankFile, includeInBfsar);
 
             itemFileIds.try_emplace(bank, file);
             files.push_back(file);
@@ -3420,6 +3410,26 @@ void Bfsar::save_(sead::FileHandle& handle)
                     const WaveArchive* warc = pair.second;
 
                     bfwsdFile->prepare(soundSet, warc, warcWaveFilesIndexes, true);
+                }
+
+                const BankFile* bankFile = sead::DynamicCast<const BankFile>(innerFile);
+                if (bankFile)
+                {
+                    const VectorSet<const Item *> fileItems = filesItems[file.id];
+                    SEAD_ASSERT(fileItems.size() == 1);
+
+                    const Item* item = fileItems.front();
+                    SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
+
+                    const Bank* bank = static_cast<const Bank*>(item);
+
+                    SEAD_ASSERT(banksWarcs[bank].size() > 0);
+                    const auto& pair = banksWarcs[bank].front();
+
+                    SEAD_ASSERT(pair.first == nullptr);
+                    const WaveArchive* warc = pair.second;
+
+                    bankFile->prepare(bank, warc, warcWaveFilesIndexes, true);
                 }
 
                 const BfwarFile* bfwarFile = sead::DynamicCast<const BfwarFile>(innerFile);

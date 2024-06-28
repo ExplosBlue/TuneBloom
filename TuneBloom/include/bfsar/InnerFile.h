@@ -96,8 +96,8 @@ protected:
     }
 
 protected:
-    sead::Endian::Types mEndian;
-    u32 mVersion;
+    mutable sead::Endian::Types mEndian;
+    mutable u32 mVersion;
 
     mutable u32 mWritePos;
     mutable u32 mWriteSize;

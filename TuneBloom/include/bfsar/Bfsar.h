@@ -235,7 +235,15 @@ public:
 
     u32 getVersionForBfwsd() const
     {
-        return 0x00010100; // TODO
+        if (mVersion <= 0x00020000)
+            return 0x00010000;
+
+        return 0x00010100;
+    }
+
+    u32 getVersionForBfbnk() const
+    {
+        return 0x00010000;
     }
 
     u32 getVersionForBfwar() const

@@ -138,7 +138,7 @@ void WaveSoundPlayer::setBankNoteInfo(u8 key, u8 velocity, const BankFile::Veloc
     mChannel->setInitPan(initPan);
 
     mChannel->setKeyGroupId(velocityRegion.getKeyGroup());
-    mChannel->setIsIgnoreNoteOff(velocityRegion.isIgnoreNoteOff());
+    mChannel->setIsIgnoreNoteOff(velocityRegion.getIsIgnoreNoteOff());
     mChannel->setInterpolationType(velocityRegion.getInterpolationType());
 }
 

@@ -150,7 +150,7 @@ public:
         //pChannel->setInitSurroundPan(0.0f);
 
         pChannel->setKeyGroupId(velocityRegion->getKeyGroup());
-        pChannel->setIsIgnoreNoteOff(velocityRegion->isIgnoreNoteOff());
+        pChannel->setIsIgnoreNoteOff(velocityRegion->getIsIgnoreNoteOff());
         pChannel->setInterpolationType(velocityRegion->getInterpolationType());
         pChannel->setUpdateType(noteOnInfo.updateType);
 

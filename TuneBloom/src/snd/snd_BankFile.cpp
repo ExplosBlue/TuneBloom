@@ -19,23 +19,6 @@ const AdshrCurve DEFAULT_ADSHR_CURVE(
     127     // u8 release
 );
 
-enum VelocityRegionBitFlag
-{
-    VELOCITY_REGION_KEY = 0x00,
-    VELOCITY_REGION_VOLUME,
-    VELOCITY_REGION_PAN,
-    VELOCITY_REGION_PITCH,
-    VELOCITY_REGION_INSTRUMENT_NOTE_PARAM,
-    VELOCITY_REGION_ENVELOPE = 0x09,
-    VELOCITY_REGION_BASIC_PARAM_FLAG =
-        (1 << VELOCITY_REGION_KEY)
-      | (1 << VELOCITY_REGION_VOLUME)
-      | (1 << VELOCITY_REGION_PAN)
-      | (1 << VELOCITY_REGION_PITCH)
-      | (1 << VELOCITY_REGION_INSTRUMENT_NOTE_PARAM)
-      | (1 << VELOCITY_REGION_ENVELOPE)
-};
-
 inline const void* GetDirectChunk(const void* regionChunk)
 {
     const DirectChunk& directChunk = *reinterpret_cast<const DirectChunk*>(regionChunk);

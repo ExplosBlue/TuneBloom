@@ -145,7 +145,6 @@ public:
         BankFileVelocityRegion,
 
         GroupItemInfo,
-        GroupItemInfoEx
     };
 
     static const u32 cInvalidId = nw::snd::SoundArchive::INVALID_ID;

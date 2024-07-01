@@ -251,6 +251,11 @@ public:
         return 0x00010000;
     }
 
+    u32 getVersionForBfgrp() const
+    {
+        return 0x00010000;
+    }
+
 private:
     void open_(sead::Heap* heap);
     void save_(sead::FileHandle& handle);

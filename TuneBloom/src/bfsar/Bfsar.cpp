@@ -4275,6 +4275,15 @@ void Bfsar::save_(sead::FileHandle& handle)
                 startPos - fileBlockPos - sizeof(nw::ut::BinaryBlockHeader),
                 size
             );
+
+            // {
+            //     u32 prevPos = writer.getPosition();
+            //     writer.seek(startPos);
+            //     stream.writeU16(file.id);
+            //     writer.seek(prevPos);
+            // }
+
+            innerFile->clearWriteInfo();
         }
 
         for (const File& file : files)

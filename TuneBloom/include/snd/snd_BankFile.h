@@ -143,6 +143,12 @@ struct IndexChunk
         else if (index > max)
             return nullptr;
 
+        //const nw::snd::internal::Util::Reference& ref = toRegion[index - min];
+        //if (ref.typeId == ElementType_BankFile_NullInfo)
+        //    return nullptr;
+
+        //return sead::PtrUtil::addOffset(this, ref.offset);
+
         return sead::PtrUtil::addOffset(this, toRegion[index - min].offset);
     }
 

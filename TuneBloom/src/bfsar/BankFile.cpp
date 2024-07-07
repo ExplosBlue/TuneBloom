@@ -2,7 +2,10 @@
 
 #include <ui/UI.h>
 
+#include <VectorSet.h>
+
 #include <algorithm>
+#include <functional>
 #include <vector>
 
 enum ImGuiPianoKeyboardMsg
@@ -85,6 +88,7 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
     SEAD_ASSERT(waveId);
 
     //? waveId->waveIndex is patched with global wave index already
+    SEAD_ASSERT(waveId->waveArchiveId == 0);
     WaveFile* waveFile = static_cast<WaveFile*>(sBfsar.getItem(waveId->waveIndex, sBfsar.getWaveFileList()));
     mWaveFileRef.attach(waveFile);
 
@@ -371,6 +375,36 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
 void BankFile::Instrument::drawUI()
 {
     ImGui::Text("ProgramNo: %u", mProgramNo);
+
+    for (Item* keyRegionItem : mKeyRegionList)
+    {
+        KeyRegion* keyRegion = static_cast<KeyRegion*>(keyRegionItem);
+
+        if (ImGui::TreeNode(sead::FormatFixedSafeString<32>("KeyRegion (%u, %u)", keyRegion->getKeyMin(), keyRegion->getKeyMax()).cstr()))
+        {
+            for (Item* velocityRegionItem : keyRegion->getVelocityRegionList())
+            {
+                VelocityRegion* velocityRegion = static_cast<VelocityRegion*>(velocityRegionItem);
+
+                if (ImGui::TreeNode(sead::FormatFixedSafeString<32>("VelocityRegion (%u, %u)", velocityRegion->getVelocityMin(), velocityRegion->getVelocityMax()).cstr()))
+                {
+                    {
+                        Item* waveFile = velocityRegion->getWaveFileRef().getItem();
+                        if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
+                        {
+                            velocityRegion->getWaveFileRef().attach(waveFile);
+                        }
+
+                        ImGui::Text("Original Key: %u", velocityRegion->getOriginalKey());
+                    }
+
+                    ImGui::TreePop();
+                }
+            }
+
+            ImGui::TreePop();
+        }
+    }
 }
 
 void BankFile::drawUI()
@@ -389,8 +423,15 @@ void BankFile::drawFileUI()
     if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
     {
         static s32 PrevNoteActive = -1;
-        //ImGui_PianoKeyboard("PianoTest", ImVec2(1024, 70), &PrevNoteActive, 0, 127, TestPianoBoardFunct, nullptr, nullptr);
-        ImGui_PianoKeyboard("PianoTest", ImVec2(ImGui::GetWindowContentRegionMax().x, 70), &PrevNoteActive, 0, 127, TestPianoBoardFunct, sSelectedItem, nullptr);
+
+        //ImVec2 size(1024, 70);
+        ImVec2 size(ImGui::GetWindowContentRegionMax().x, 70);
+
+        //ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+        //drawList->AddRectFilled(ImVec2(0.0f, 0.0f), ImVec2(50.0f, 50.0f), ImColor(1.0f, 0.0f, 1.0f));
+
+        ImGui_PianoKeyboard("PianoTest", size, &PrevNoteActive, 0, 127, TestPianoBoardFunct, sSelectedItem, nullptr);
     }
     ImGui::EndChild();
 }
@@ -400,13 +441,28 @@ void BankFile::doRead(const void* fileAddr)
     nw::snd::internal::BankFileReader reader(fileAddr);
     SEAD_ASSERT(reader.IsInitialized());
 
+    using InstrumentItemPair = std::pair<s16, const nw::snd::internal::BankFile::Instrument*>;
+    std::vector<InstrumentItemPair> instruments;
+
     for (s32 programNo = 0; programNo < reader.GetInstrumentCount(); programNo++)
     {
         const nw::snd::internal::BankFile::Instrument* instrumentInfo = reader.GetInstrument(programNo);
         if (!instrumentInfo)
-        {
             continue;
+
+        instruments.emplace_back(s16(programNo), instrumentInfo);
+    }
+
+    std::sort(instruments.begin(), instruments.end(), [](const InstrumentItemPair& a, const InstrumentItemPair& b) -> bool
+        {
+            return a.second < b.second;
         }
+    );
+
+    for (const InstrumentItemPair& pair : instruments)
+    {
+        const s16& programNo = pair.first;
+        const nw::snd::internal::BankFile::Instrument* const& instrumentInfo = pair.second;
 
         Instrument* instrument = new Instrument();
         instrument->mId = mInstrumentList.size();
@@ -570,13 +626,16 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     struct InstrumentInfo
     {
         InstrumentInfo(const Instrument* instrument)
-            : isNull(instrument == nullptr)
+            : programNo(-1)
+            , isNull(instrument == nullptr)
             , tableType(0)
         {
             if (!instrument)
             {
                 return;
             }
+
+            programNo = instrument->getProgramNo();
 
             std::vector<const KeyRegion*> keyRegions;
             for (const Item* keyRegionItem : instrument->getKeyRegionList())
@@ -652,6 +711,7 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
             tableType = nw::snd::internal::ElementType_BankFile_IndexReferenceTable;
         }
 
+        s16 programNo;
         bool isNull;
         std::vector<KeyRegionInfo> sortedKeyRegions;
         u16 tableType;
@@ -815,17 +875,25 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         writer.closeReference("InstrumentTableRef", nw::snd::internal::ElementType_Table_ReferenceTable);
         writer.pushOffsetBase();
         {
-            writer.openReferenceTable("InstrumentTable", instruments.size());
+            stream->writeU32(instruments.size());
 
             for (const InstrumentInfo& instrument : instruments)
             {
+                sead::FormatFixedSafeString<32> refName("Instrument%i", instrument.programNo);
+                writer.openReference(refName);
+
                 if (instrument.isNull)
                 {
-                    writer.addReferenceTableNullReference("InstrumentTable", nw::snd::internal::ElementType_BankFile_NullInfo);
-                    continue;
+                    writer.closeReference(refName, nw::snd::internal::ElementType_BankFile_NullInfo, -1);
                 }
+            }
 
-                writer.addReferenceTableReference("InstrumentTable", nw::snd::internal::ElementType_BankFile_InstrumentInfo);
+            for (const Item* instrItem : getInstrumentList())
+            {
+                const Instrument* instr = static_cast<const Instrument*>(instrItem);
+                const InstrumentInfo& instrument = instruments[instr->getProgramNo()];
+
+                writer.closeReference(sead::FormatFixedSafeString<32>("Instrument%i", instr->getProgramNo()), nw::snd::internal::ElementType_BankFile_InstrumentInfo);
 
                 writer.pushOffsetBase();
                 {
@@ -957,8 +1025,6 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
                 }
                 writer.popOffsetBase();
             }
-
-            writer.closeReferenceTable("InstrumentTable");
         }
         writer.popOffsetBase();
 

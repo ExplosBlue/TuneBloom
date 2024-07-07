@@ -194,7 +194,7 @@ public:
         void read(const nw::snd::internal::BankFile::Instrument* instrumentInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
         void drawUI();
 
-        u32 getProgramNo() const
+        s16 getProgramNo() const
         {
             return mProgramNo;
         }
@@ -237,7 +237,7 @@ public:
         }
 
     private:
-        u8 mProgramNo;
+        s16 mProgramNo;
         KeyRegion::List mKeyRegionList;
 
         friend class BankFile;

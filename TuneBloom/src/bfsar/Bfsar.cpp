@@ -2299,6 +2299,11 @@ void Bfsar::save_(sead::FileHandle& handle)
                 if (loadFlag & Group::ItemInfo::LoadFlag::LoadSeq)
                 {
                     itemAttachedGroups.try_emplace(sound).first->second.insert(group);
+
+                    SEAD_ASSERT(sound->getSequenceSoundInfo().getSequenceFileRef().isAttached());
+                    const Item* seqFile = sound->getSequenceSoundInfo().getSequenceFileRef().getItem();
+
+                    itemAttachedGroups.try_emplace(seqFile).first->second.insert(group);
                 }
 
                 for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
@@ -2804,7 +2809,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                     const auto& it = bfseqFiles.find(seqFile);
                     if (it == bfseqFiles.end())
                     {
-                        File file(files.size(), seqFile, !itemInEmbedGroup(sound));
+                        File file(files.size(), seqFile, !itemInEmbedGroup(sound) && !itemInEmbedGroup(seqFile));
 
                         bfseqFiles.try_emplace(seqFile, file);
                         itemFileIds.try_emplace(sound, file);

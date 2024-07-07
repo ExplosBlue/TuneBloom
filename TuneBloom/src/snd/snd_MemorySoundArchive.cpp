@@ -113,7 +113,7 @@ const internal::Util::Table<ut::ResU32>* MemorySoundArchive::detail_GetWaveArchi
     }
 }
 
-const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFileSize, u32 variationId, u32* outGroupFileId) const
+const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFileSize, u32 variationId, u32* outGroupFileId, u32* outGroupId) const
 {
     u32 counter = 0;
 
@@ -144,6 +144,11 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
                         *outGroupFileId = INVALID_ID;
                     }
 
+                    if (outGroupId)
+                    {
+                        *outGroupId = INVALID_ID;
+                    }
+
                     return sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
                 }
 
@@ -155,7 +160,8 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
     u32 groupCount = GetGroupCount();
     for (u32 i = 0; i < groupCount; i++)
     {
-        const internal::SoundArchiveFile::GroupInfo* info = GetGroupInfo(GetGroupIdFromIndex(i));
+        u32 groupId = GetGroupIdFromIndex(i);
+        const internal::SoundArchiveFile::GroupInfo* info = GetGroupInfo(groupId);
         if (info)
         {
             const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
@@ -193,6 +199,11 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
                                     *outGroupFileId = info->fileId;
                                 }
 
+                                if (outGroupId)
+                                {
+                                    *outGroupId = groupId;
+                                }
+
                                 return locationInfo.address;
                             }
 
@@ -212,6 +223,11 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
     if (outGroupFileId)
     {
         *outGroupFileId = INVALID_ID;
+    }
+
+    if (outGroupId)
+    {
+        *outGroupId = INVALID_ID;
     }
 
     return nullptr;

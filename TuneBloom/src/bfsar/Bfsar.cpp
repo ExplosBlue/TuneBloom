@@ -453,6 +453,21 @@ void Bfsar::open_(sead::Heap* heap)
         seqFileIdxMap.try_emplace(i, globalId);
     }
 
+    // {
+    //     u32 bankFileId = mSoundArchive->GetBankInfo(mSoundArchive->GetBankIdFromIndex(29))->fileId;
+    //     nw::snd::internal::BankFileReader reader(mSoundArchive->detail_GetFileAddressGroup(bankFileId, mSoundArchive->GetGroupIdFromIndex(5)));
+    //     SEAD_ASSERT(reader.IsInitialized());
+
+    //     const nw::snd::internal::Util::WaveIdTable& table = *reader.GetWaveIdTable();
+    //     for (u32 i = 0; i < table.GetCount(); i++)
+    //     {
+    //         const nw::snd::internal::Util::WaveId* waveId = table.GetWaveId(i);
+    //         SEAD_ASSERT(waveId);
+
+    //         SEAD_PRINT("WaveId %u, (%u, %u)\n", i, (u32)waveId->waveArchiveId, (u32)waveId->waveIndex);
+    //     }
+    // }
+
     struct WaveTempFile
     {
         std::string hash;
@@ -584,6 +599,15 @@ void Bfsar::open_(sead::Heap* heap)
         }
     }
 
+    // {
+    //     const std::vector<WaveTempFile>& warc5 = warcFileCache[5];
+    //     for (u32 i = 0; i < warc5.size(); i++)
+    //     {
+    //         const WaveTempFile& ref = warc5[i];
+    //         SEAD_PRINT("WARC 5 File %u -> Global ID %u\n", i, ref.id);
+    //     }
+    // }
+
     std::unordered_map<u64, u32> bankFileWarcId;
 
     for (u32 i = 0; i < mSoundArchive->GetBankCount(); i++)
@@ -594,103 +618,200 @@ void Bfsar::open_(sead::Heap* heap)
 
         const u32 fileId = bank->fileId;
         u32 groupId;
-        const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, 0, &groupId);
+        const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, 0, nullptr, &groupId);
         if (!file)
             continue;
 
-        std::vector<u32> baseWaveId;
+        std::vector<std::vector<u32>> globalWaveIdTable;
+        std::vector<u32> warcIdxVec;
         std::unordered_map<const void*, u32> fileMap;
+        u32 variationId;
 
-        // Process variation 0
+        // Step 1: Gather information about the variations
         {
-            nw::snd::internal::BankFileReader reader(file);
-            SEAD_ASSERT(reader.IsInitialized());
-
-            const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
-            SEAD_ASSERT(waveIdTable);
-
-            nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
-            const u32 waveCount = waveIdTable->GetCount();
-            baseWaveId.resize(waveCount);
-
-            for (u32 j = 0; j < waveCount; j++)
+            // Process variation 0
             {
-                if (j != 0)
+                nw::snd::internal::BankFileReader reader(file);
+                SEAD_ASSERT(reader.IsInitialized());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
+                SEAD_ASSERT(waveIdTable);
+
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                const u32 waveCount = waveIdTable->GetCount();
+                std::vector<u32>& globalWaveIdVec = globalWaveIdTable.emplace_back(waveCount);
+
+                for (u32 j = 0; j < waveCount; j++)
                 {
-                    SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    if (j != 0)
+                    {
+                        SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    }
+                }
+
+                u32 warcId = nw::snd::SoundArchive::INVALID_ID;
+                u32 warcIdx = nw::snd::SoundArchive::INVALID_ID;
+                if (waveCount > 0)
+                {
+                    warcId = waveId[0].waveArchiveId;
+                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
+                }
+                bankFileWarcId[u64(fileId) << 32 | groupId] = warcId;
+                fileMap[file] = warcId;
+                warcIdxVec.push_back(warcIdx);
+
+                for (u32 j = 0; j < waveCount; j++)
+                {
+                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    globalWaveIdVec[j] = globalWaveId;
                 }
             }
 
-            u32 warcId = nw::snd::SoundArchive::INVALID_ID;
-            u32 warcIdx = nw::snd::SoundArchive::INVALID_ID;
-            if (waveCount > 0)
+            variationId = 1;
+            while (true)
             {
-                warcId = waveId[0].waveArchiveId;
-                SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
-                warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
-            }
-            bankFileWarcId[u64(fileId) << 32 | groupId] = warcId;
-            fileMap[file] = warcId;
+                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                if (!file)
+                    break;
 
-            for (u32 j = 0; j < waveCount; j++)
-            {
-                u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
-                baseWaveId[j] = globalWaveId;
+                const auto& it = fileMap.find(file);
+                if (it != fileMap.end())
+                {
+                    bankFileWarcId[u64(fileId) << 32 | groupId] = fileMap[file];
+                    variationId++;
+                    continue;
+                }
 
-                waveId[j].waveArchiveId = 0;
-                waveId[j].waveIndex = globalWaveId;
+                nw::snd::internal::BankFileReader reader(file);
+                SEAD_ASSERT(reader.IsInitialized());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
+                SEAD_ASSERT(waveIdTable);
+
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                const u32 waveCount = waveIdTable->GetCount();
+                SEAD_ASSERT(waveCount == globalWaveIdTable[0].size());
+                std::vector<u32>& globalWaveIdVec = globalWaveIdTable.emplace_back(waveCount);
+
+                for (u32 j = 0; j < waveCount; j++)
+                {
+                    if (j != 0)
+                    {
+                        SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    }
+                }
+
+                u32 warcId = nw::snd::SoundArchive::INVALID_ID;
+                u32 warcIdx = nw::snd::SoundArchive::INVALID_ID;
+                if (waveCount > 0)
+                {
+                    warcId = waveId[0].waveArchiveId;
+                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
+                }
+                bankFileWarcId[u64(fileId) << 32 | groupId] = warcId;
+                fileMap[file] = warcId;
+                warcIdxVec.push_back(warcIdx);
+
+                for (u32 j = 0; j < waveCount; j++)
+                {
+                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    globalWaveIdVec[j] = globalWaveId;
+                }
+
+                variationId++;
             }
         }
 
-        u32 variationId = 1;
-        while (true)
+        SEAD_ASSERT(globalWaveIdTable.size() == warcIdxVec.size());
+        const u32 variationCount = globalWaveIdTable.size();
+
+        const size_t waveCount = globalWaveIdTable[0].size();
+        std::vector<u32> baseWaveId(waveCount);
+
+        // Step 2: Pick the most appropriate global ID for each wave
+        for (u32 j = 0; j < waveCount; j++)
         {
-            const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, &groupId);
-            if (!file)
-                break;
-
-            const auto& it = fileMap.find(file);
-            if (it != fileMap.end())
+            bool found = false;
+            for (u32 k = 0; k < variationCount; k++)
             {
-                bankFileWarcId[u64(fileId) << 32 | groupId] = fileMap[file];
-                variationId++;
-                continue;
-            }
-
-            nw::snd::internal::BankFileReader reader(file);
-            SEAD_ASSERT(reader.IsInitialized());
-
-            const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
-            SEAD_ASSERT(waveIdTable);
-
-            nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
-            const u32 waveCount = baseWaveId.size();
-            SEAD_ASSERT(waveCount == waveIdTable->GetCount());
-
-            for (u32 j = 0; j < waveCount; j++)
-            {
-                if (j != 0)
+                const u32 trialId = globalWaveIdTable[k][j];
+                bool consistent = true;
+                for (u32 l = 0; l < variationCount; l++)
                 {
-                    SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    if (k == l)
+                        continue;
+
+                    u32 warcIdx = warcIdxVec[l];
+                    SEAD_ASSERT(warcIdx != nw::snd::SoundArchive::INVALID_ID && warcIdx < waveIdMapSet.size());
+                    if (waveIdMapSet[warcIdx].contains(trialId))
+                    {
+                        consistent = false;
+                        break;
+                    }
+                }
+                if (consistent)
+                {
+                    baseWaveId[j] = trialId;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) // Welp
+            {
+              //SEAD_PRINT("Bank %u: Failed to find consistent global wave ID for wave entry %u\n", i, j);
+                baseWaveId[j] = globalWaveIdTable[0][j];
+            }
+        }
+
+        // Step 3: Patch all files to use the determined global ID for each wave
+        {
+            // Process variation 0
+            {
+                nw::snd::internal::BankFileReader reader(file);
+                SEAD_ASSERT(reader.IsInitialized());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
+                SEAD_ASSERT(waveIdTable);
+
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                for (u32 j = 0; j < waveIdTable->GetCount(); j++)
+                {
+                    waveId[j].waveArchiveId = 0;
+                    waveId[j].waveIndex = baseWaveId[j];
                 }
             }
 
-            u32 warcId = nw::snd::SoundArchive::INVALID_ID;
-            if (waveCount > 0)
+            variationId = 1;
+            while (true)
             {
-                warcId = waveId[0].waveArchiveId;
-                SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
-            }
-            bankFileWarcId[u64(fileId) << 32 | groupId] = warcId;
-            fileMap[file] = warcId;
+                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                if (!file)
+                    break;
 
-            for (u32 j = 0; j < waveCount; j++)
-            {
-                waveId[j].waveArchiveId = 0;
-                waveId[j].waveIndex = baseWaveId[j];
-            }
+                const auto& it = fileMap.find(file);
+                if (it != fileMap.end())
+                {
+                    variationId++;
+                    continue;
+                }
 
-            variationId++;
+                nw::snd::internal::BankFileReader reader(file);
+                SEAD_ASSERT(reader.IsInitialized());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
+                SEAD_ASSERT(waveIdTable);
+
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                for (u32 j = 0; j < waveIdTable->GetCount(); j++)
+                {
+                    waveId[j].waveArchiveId = 0;
+                    waveId[j].waveIndex = baseWaveId[j];
+                }
+
+                variationId++;
+            }
         }
     }
 
@@ -708,101 +829,209 @@ void Bfsar::open_(sead::Heap* heap)
         SEAD_ASSERT(soundSetInfo->GetFileIdTable()->count == 1);
         const u32 fileId = soundSetInfo->GetFileIdTable()->item[0];
         u32 groupId;
-        const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, 0, &groupId);
+        const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, 0, nullptr, &groupId);
         if (!file)
             continue;
 
-        std::vector<u32> baseWaveId;
+        std::vector<std::vector<u32>> globalWaveIdTable;
+        std::vector<u32> warcIdxVec;
         std::unordered_map<const void*, u32> fileMap;
+        u32 variationId;
 
-        // Process variation 0
+        // Step 1: Gather information about the variations
         {
-            nw::snd::internal::WaveSoundFileReader reader(file);
-            SEAD_ASSERT(reader.IsAvailable());
-
-            const nw::snd::internal::Util::WaveIdTable* waveIdTable = &reader.mInfoBlockBody->GetWaveIdTable();
-            nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
-            const u32 waveCount = waveIdTable->GetCount();
-            baseWaveId.resize(waveCount);
-
-            for (u32 j = 0; j < waveCount; j++)
+            // Process variation 0
             {
-                if (j != 0)
+                nw::snd::internal::WaveSoundFileReader reader(file);
+                SEAD_ASSERT(reader.IsAvailable());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = &reader.mInfoBlockBody->GetWaveIdTable();
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                const u32 waveCount = waveIdTable->GetCount();
+                std::vector<u32>& globalWaveIdVec = globalWaveIdTable.emplace_back(waveCount);
+
+                for (u32 j = 0; j < waveCount; j++)
                 {
-                    SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    if (j != 0)
+                    {
+                        SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    }
+                }
+
+                u32 warcId = nw::snd::SoundArchive::INVALID_ID;
+                u32 warcIdx = nw::snd::SoundArchive::INVALID_ID;
+                if (waveCount > 0)
+                {
+                    warcId = waveId[0].waveArchiveId;
+                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
+                }
+                wsdFileWarcId[u64(fileId) << 32 | groupId] = warcId;
+                fileMap[file] = warcId;
+                warcIdxVec.push_back(warcIdx);
+
+                for (u32 j = 0; j < waveCount; j++)
+                {
+                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    globalWaveIdVec[j] = globalWaveId;
                 }
             }
 
-            u32 warcId = nw::snd::SoundArchive::INVALID_ID;
-            u32 warcIdx = nw::snd::SoundArchive::INVALID_ID;
-            if (waveCount > 0)
+            variationId = 1;
+            while (true)
             {
-                warcId = waveId[0].waveArchiveId;
-                SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
-                warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
-            }
-            wsdFileWarcId[u64(fileId) << 32 | groupId] = warcId;
-            fileMap[file] = warcId;
+                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                if (!file)
+                    break;
 
-            for (u32 j = 0; j < waveCount; j++)
-            {
-                u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
-                baseWaveId[j] = globalWaveId;
+                const auto& it = fileMap.find(file);
+                if (it != fileMap.end())
+                {
+                    wsdFileWarcId[u64(fileId) << 32 | groupId] = fileMap[file];
+                    variationId++;
+                    continue;
+                }
 
-                waveId[j].waveArchiveId = 0;
-                waveId[j].waveIndex = globalWaveId;
+                nw::snd::internal::WaveSoundFileReader reader(file);
+                SEAD_ASSERT(reader.IsAvailable());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = &reader.mInfoBlockBody->GetWaveIdTable();
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                const u32 waveCount = waveIdTable->GetCount();
+                SEAD_ASSERT(waveCount == globalWaveIdTable[0].size());
+                std::vector<u32>& globalWaveIdVec = globalWaveIdTable.emplace_back(waveCount);
+
+                for (u32 j = 0; j < waveCount; j++)
+                {
+                    if (j != 0)
+                    {
+                        SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    }
+                }
+
+                u32 warcId = nw::snd::SoundArchive::INVALID_ID;
+                u32 warcIdx = nw::snd::SoundArchive::INVALID_ID;
+                if (waveCount > 0)
+                {
+                    warcId = waveId[0].waveArchiveId;
+                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
+                }
+                wsdFileWarcId[u64(fileId) << 32 | groupId] = warcId;
+                fileMap[file] = warcId;
+                warcIdxVec.push_back(warcIdx);
+
+                for (u32 j = 0; j < waveCount; j++)
+                {
+                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    globalWaveIdVec[j] = globalWaveId;
+                }
+
+                variationId++;
             }
         }
 
-        u32 variationId = 1;
-        while (true)
+        SEAD_ASSERT(globalWaveIdTable.size() == warcIdxVec.size());
+        const u32 variationCount = globalWaveIdTable.size();
+
+        const size_t waveCount = globalWaveIdTable[0].size();
+        std::vector<u32> baseWaveId(waveCount);
+
+        // Step 2: Pick the most appropriate global ID for each wave
+        for (u32 j = 0; j < waveCount; j++)
         {
-            const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, &groupId);
-            if (!file)
-                break;
-
-            const auto& it = fileMap.find(file);
-            if (it != fileMap.end())
+            bool found = false;
+            for (u32 k = 0; k < variationCount; k++)
             {
-                wsdFileWarcId[u64(fileId) << 32 | groupId] = fileMap[file];
-                variationId++;
-                continue;
-            }
-
-            nw::snd::internal::WaveSoundFileReader reader(file);
-            SEAD_ASSERT(reader.IsAvailable());
-
-            const nw::snd::internal::Util::WaveIdTable* waveIdTable = &reader.mInfoBlockBody->GetWaveIdTable();
-            nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
-            const u32 waveCount = baseWaveId.size();
-            SEAD_ASSERT(waveCount == waveIdTable->GetCount());
-
-            for (u32 j = 0; j < waveCount; j++)
-            {
-                if (j != 0)
+                const u32 trialId = globalWaveIdTable[k][j];
+                bool consistent = true;
+                for (u32 l = 0; l < variationCount; l++)
                 {
-                    SEAD_ASSERT(waveId[j].waveArchiveId == waveId[0].waveArchiveId);
+                    if (k == l)
+                        continue;
+
+                    u32 warcIdx = warcIdxVec[l];
+                    SEAD_ASSERT(warcIdx != nw::snd::SoundArchive::INVALID_ID && warcIdx < waveIdMapSet.size());
+                    if (waveIdMapSet[warcIdx].contains(trialId))
+                    {
+                        consistent = false;
+                        break;
+                    }
+                }
+                if (consistent)
+                {
+                    baseWaveId[j] = trialId;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) // Welp
+            {
+              //SEAD_PRINT("Bank %u: Failed to find consistent global wave ID for wave entry %u\n", i, j);
+                baseWaveId[j] = globalWaveIdTable[0][j];
+            }
+        }
+
+        // Step 3: Patch all files to use the determined global ID for each wave
+        {
+            // Process variation 0
+            {
+                nw::snd::internal::WaveSoundFileReader reader(file);
+                SEAD_ASSERT(reader.IsAvailable());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = &reader.mInfoBlockBody->GetWaveIdTable();
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                for (u32 j = 0; j < waveIdTable->GetCount(); j++)
+                {
+                    waveId[j].waveArchiveId = 0;
+                    waveId[j].waveIndex = baseWaveId[j];
                 }
             }
 
-            u32 warcId = nw::snd::SoundArchive::INVALID_ID;
-            if (waveCount > 0)
+            variationId = 1;
+            while (true)
             {
-                warcId = waveId[0].waveArchiveId;
-                SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
-            }
-            wsdFileWarcId[u64(fileId) << 32 | groupId] = warcId;
-            fileMap[file] = warcId;
+                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                if (!file)
+                    break;
 
-            for (u32 j = 0; j < waveCount; j++)
-            {
-                waveId[j].waveArchiveId = 0;
-                waveId[j].waveIndex = baseWaveId[j];
-            }
+                const auto& it = fileMap.find(file);
+                if (it != fileMap.end())
+                {
+                    variationId++;
+                    continue;
+                }
 
-            variationId++;
+                nw::snd::internal::WaveSoundFileReader reader(file);
+                SEAD_ASSERT(reader.IsAvailable());
+
+                const nw::snd::internal::Util::WaveIdTable* waveIdTable = &reader.mInfoBlockBody->GetWaveIdTable();
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
+                for (u32 j = 0; j < waveIdTable->GetCount(); j++)
+                {
+                    waveId[j].waveArchiveId = 0;
+                    waveId[j].waveIndex = baseWaveId[j];
+                }
+
+                variationId++;
+            }
         }
     }
+
+    // {
+    //     u32 bankFileId = mSoundArchive->GetBankInfo(mSoundArchive->GetBankIdFromIndex(29))->fileId;
+    //     nw::snd::internal::BankFileReader reader(mSoundArchive->detail_GetFileAddressGroup(bankFileId, mSoundArchive->GetGroupIdFromIndex(5)));
+    //     SEAD_ASSERT(reader.IsInitialized());
+
+    //     const nw::snd::internal::Util::WaveIdTable& table = *reader.GetWaveIdTable();
+    //     for (u32 i = 0; i < table.GetCount(); i++)
+    //     {
+    //         const nw::snd::internal::Util::WaveId* waveId = table.GetWaveId(i);
+    //         SEAD_ASSERT(waveId);
+
+    //         SEAD_PRINT("WaveId %u, (%u, %u)\n", i, (u32)waveId->waveArchiveId, (u32)waveId->waveIndex);
+    //     }
+    // }
 
     // for (u32 i = 0; i < mSoundArchive->detail_GetFileCount(); i++)
     // {
@@ -1227,6 +1456,7 @@ void Bfsar::open_(sead::Heap* heap)
             bool success = reader.ReadNoteInfo(&noteInfo, waveSoundInfo.index, 0);
             SEAD_ASSERT(success);
 
+            //? noteInfo.waveIndex is patched with global wave index already
             SEAD_ASSERT(noteInfo.waveArchiveId == 0);
             WaveFile* waveFile = static_cast<WaveFile*>(getItem(noteInfo.waveIndex, getWaveFileList()));
 
@@ -2449,16 +2679,16 @@ void Bfsar::save_(sead::FileHandle& handle)
         }
     }
 
-    for (const auto& pair : warcWaveFiles)
-    {
-        const WaveArchive* warc = pair.first;
+    // for (const auto& pair : warcWaveFiles)
+    // {
+    //     const WaveArchive* warc = pair.first;
 
-        SEAD_PRINT(" %s\n", warc->getFormattedName().cstr());
-        for (const auto& waveFile : warcWaveFiles[warc])
-        {
-            SEAD_PRINT(" - %s\n", waveFile->getFormattedName().cstr());
-        }
-    }
+    //     SEAD_PRINT(" %s\n", warc->getFormattedName().cstr());
+    //     for (const auto& waveFile : warcWaveFiles[warc])
+    //     {
+    //         SEAD_PRINT(" - %s\n", waveFile->getFormattedName().cstr());
+    //     }
+    // }
 
     std::unordered_map<const Item*, File> itemFileIds;
     std::vector<File> files;
@@ -3063,6 +3293,10 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                     attachSoundFileToGroup(sound, loadFlag, group);
                 }
+            }
+            else
+            {
+                SEAD_ASSERT(false);
             }
         };
 

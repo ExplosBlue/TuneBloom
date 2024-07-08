@@ -2026,6 +2026,8 @@ void Bfsar::open_(sead::Heap* heap)
                     }
                 }
             }
+
+            updateList(group->getItemInfoList());
         }
         else
         {

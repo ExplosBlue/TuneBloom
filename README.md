@@ -20,9 +20,8 @@ TuneBloom is an extremely fast & stable editor for editing NintendoWare audio fo
 
 ## Screenshots
 <div align="center">
-  <img width="420" alt="TuneBloom_4eZ7G778jO" src="https://github.com/user-attachments/assets/d60c81f7-429d-4d51-aff0-10f626ec3e6b">
-  <span>        </span>
-  <img width="420" alt="TuneBloom_KtDCAtcRTj" src="https://github.com/user-attachments/assets/9b8901ec-93de-4266-80c8-bb008629f173">
+  <img width="480" alt="TuneBloom_4eZ7G778jO" src="https://github.com/user-attachments/assets/d60c81f7-429d-4d51-aff0-10f626ec3e6b">
+  <img width="480" alt="TuneBloom_KtDCAtcRTj" src="https://github.com/user-attachments/assets/9b8901ec-93de-4266-80c8-bb008629f173">
 </div>
 
 ## Credits

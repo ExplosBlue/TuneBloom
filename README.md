@@ -1,10 +1,7 @@
-![readmeheader](https://github.com/user-attachments/assets/cd3935ce-55d8-4684-93a0-ff0f66321265)
+![readmeheader](https://github.com/user-attachments/assets/97fff130-5eb7-4258-b7db-85a90da45555)
 
 <div align="center">
   <img src="https://img.shields.io/badge/for-Wii%20U-blue?color=%2302a4c7&style=flat" alt="For Wii U"/>
-  <a href="https://github.com/Zenith-Team/TuneBloom/releases/latest">
-    <img src="https://img.shields.io/github/v/tag/zenith-team/tunebloom?label=version&style=flat&color=%2346ad14" alt="Version"/>
-  </a>
   <a href="https://go.nsmbu.net/discord">
     <img src="https://img.shields.io/discord/800510605785563186?logo=discord&color=%235662f6&style=flat&label=zenith" alt="Discord Link"/>
   </a>
@@ -20,8 +17,8 @@ TuneBloom is an extremely fast & stable editor for editing NintendoWare audio fo
 
 ## Screenshots
 <div align="center">
-  <img width="480" alt="TuneBloom_4eZ7G778jO" src="https://github.com/user-attachments/assets/d60c81f7-429d-4d51-aff0-10f626ec3e6b">
-  <img width="480" alt="TuneBloom_KtDCAtcRTj" src="https://github.com/user-attachments/assets/9b8901ec-93de-4266-80c8-bb008629f173">
+  <img width="640" alt="TuneBloom_KtDCAtcRTj" src="https://github.com/user-attachments/assets/9a9f17c0-dd70-402b-980c-491435f6b882">
+  <img width="640" alt="TuneBloom_4eZ7G778jO" src="https://github.com/user-attachments/assets/33314c74-339b-41a4-b470-5d8c0df08e9a">
 </div>
 
 ## Credits

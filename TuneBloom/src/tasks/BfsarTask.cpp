@@ -240,6 +240,8 @@ void BfsarTask::calc()
     DrawMenuBar();
     DrawUI();
 
+    //? Code for printing all banks instruments info
+
     static bool sDo = false;
     if (!sDo)
     {
@@ -380,6 +382,7 @@ void BfsarTask::calc()
 
 void BfsarTask::draw()
 {
+    //? Leftover code from when i started this... fun times
     return;
 
     if (!sSoundArchive)

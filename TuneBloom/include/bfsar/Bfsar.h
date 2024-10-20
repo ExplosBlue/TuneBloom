@@ -263,6 +263,8 @@ private:
 
     bool validateName_(const sead::SafeString& name, const Item::List& list) const;
 
+    void readStreamWaves_(const void* strmFile);
+
 private:
     bool mOpen;
     u8* mBfsarFile;

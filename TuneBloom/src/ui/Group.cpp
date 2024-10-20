@@ -29,11 +29,72 @@ void DrawGroupPropertiesUI()
             group->setOutputType(static_cast<Group::OutputType>(outputType));
         }
     }
+}
 
-    // TODO: Move to a separate window
-    if (ImGui::BeginChild("ChildItems", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
+static const char* sItemIdTypes[] = {
+    //"None",
+    "Sound",
+    "Sound Set",
+    "Bank",
+    "Wave Archive"
+};
+
+void Group::ItemInfo::drawUI()
+{
+    const ImU32 cStepU32 = 1;
+
     {
-        DrawAllItemsUI("Item", group->getItemInfoList());
+        u32 itemRefType = (u32)mItemRefType - 1;
+        if (ImGui::Combo("Item Type", (s32*)&itemRefType, sItemIdTypes, IM_ARRAYSIZE(sItemIdTypes)))
+        {
+            mItemRefType = static_cast<ItemType>(itemRefType + 1);
+            mItemRef.detach();
+        }
     }
-    ImGui::EndChild();
+
+    {
+        Item* item = mItemRef.getItem();
+        if (ItemSelector("Item", sBfsar.getItemList(mItemRefType), &item, false))
+        {
+            mItemRef.attach(item);
+        }
+    }
+
+    {
+        u32 loadFlag = mLoadFlag;
+        //if (ImGui::InputScalar("Load Flags", ImGuiDataType_U32, &loadFlag, &cStepU32))
+        //{
+        //    mLoadFlag = loadFlag;
+        //}
+
+        // TODO: Use Combo for flags
+
+        CenteredTextX("Load Flags");
+
+        if (ImGui::CheckboxFlagsT<u32>("Sequence", &loadFlag, LoadFlag::LoadSeq))
+        {
+            mLoadFlag = loadFlag;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::CheckboxFlagsT<u32>("Wave Sound", &loadFlag, LoadFlag::LoadWsd))
+        {
+            mLoadFlag = loadFlag;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::CheckboxFlagsT<u32>("Bank", &loadFlag, LoadFlag::LoadBank))
+        {
+            mLoadFlag = loadFlag;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::CheckboxFlagsT<u32>("Wave Archive", &loadFlag, LoadFlag::LoadWarc))
+        {
+            mLoadFlag = loadFlag;
+        }
+    }
 }

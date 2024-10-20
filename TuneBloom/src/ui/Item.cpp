@@ -1,5 +1,7 @@
 #include <ui/UI.h>
 
+bool sSelectedItemIsSubWindow = false;
+
 static Item* sDeleteItem = nullptr;
 
 InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback instanciateItemCallback, ItemPropertiesCallback itemPropertiesCallback)
@@ -103,7 +105,7 @@ void WarningPopup(const char* name, const char* content)
     }
 }
 
-static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, ContextMenuCallback menuCallback)
+static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, ContextMenuCallback menuCallback, Item*& selectedItem)
 {
     bool add = false;
 
@@ -111,7 +113,17 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
     {
         if (item)
         {
-            sSelectedItem = item;
+            selectedItem = item;
+
+            if (&selectedItem == &sSubSelectedItem)
+            {
+                sSelectedItemIsSubWindow = true;
+            }
+            else
+            {
+                sSelectedItemIsSubWindow = false;
+                sSubSelectedItem = nullptr;
+            }
         }
 
         {
@@ -167,9 +179,22 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 {
     const bool cUseChild = true;
 
+    bool isSubWindow = false;
+
     if (cUseChild)
     {
-        ImGuiChildFlags flags = ImGui::GetCurrentWindow() == ImGui::FindWindowByName("###InfoWindow") ? ImGuiChildFlags_AlwaysUseWindowPadding : 0;
+        ImGuiChildFlags flags = 0;
+
+        ImGuiWindow* currentWindow = ImGui::GetCurrentWindow();
+        if (currentWindow == ImGui::FindWindowByName("###InfoWindow"))
+        {
+            flags = ImGuiChildFlags_AlwaysUseWindowPadding;
+        }
+        else if (currentWindow == ImGui::FindWindowByName("###SubInfoWindow"))
+        {
+            flags = ImGuiChildFlags_AlwaysUseWindowPadding;
+            isSubWindow = true;
+        }
 
         ImGui::BeginChild(sead::FormatFixedSafeString<64>("%sInnerWindow", listName).cstr(), ImVec2(0.0f, 0.0f), flags);
     }
@@ -184,40 +209,42 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
     static Item* sScrollItem = nullptr;
 
+    Item*& selectedItem = isSubWindow ? sSubSelectedItem : sSelectedItem;
+
     //if (false)
     {
-        if (ImGui::IsWindowFocused() && sSelectedItem && &list == sSelectedItem->list())
+        if (ImGui::IsWindowFocused() && selectedItem && &list == selectedItem->list())
         {
             if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
             {
-                Item::ListNode* prev = list.prev(sSelectedItem);
+                Item::ListNode* prev = list.prev(selectedItem);
                 if (prev)
                 {
-                    sSelectedItem = prev->val();
-                    sScrollItem = sSelectedItem;
+                    selectedItem = prev->val();
+                    sScrollItem = selectedItem;
                 }
             }
 
             if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
             {
-                Item::ListNode* next = list.next(sSelectedItem);
+                Item::ListNode* next = list.next(selectedItem);
                 if (next)
                 {
-                    sSelectedItem = next->val();
-                    sScrollItem = sSelectedItem;
+                    selectedItem = next->val();
+                    sScrollItem = selectedItem;
                 }
             }
 
             if (canEdit && ImGui::IsKeyPressed(ImGuiKey_Delete))
             {
-                sDeleteItem = sSelectedItem;
+                sDeleteItem = selectedItem;
             }
         }
     }
 
     if (canEdit)
     {
-        if (ItemContextMenu(nullptr, createCallback, menuCallback))
+        if (ItemContextMenu(nullptr, createCallback, menuCallback, selectedItem))
         {
             add = true;
         }
@@ -249,10 +276,32 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         sead::FixedSafeString<256> name = item->getFormattedName();
 
-        bool selected = sSelectedItem == item;
+        bool popColor = false;
+        if (!isSubWindow && sSelectedItemIsSubWindow)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(140.0f / 255.0f, 140.0f / 255.0f, 140.0f / 255.0f, 1.0f));
+            popColor = true;
+        }
+
+        bool selected = selectedItem == item;
         if (ImGui::Selectable(sead::FormatFixedSafeString<256>("%s%s", namePrefix, name.cstr()).cstr(), selected))
         {
-            sSelectedItem = item;
+            selectedItem = item;
+
+            if (isSubWindow)
+            {
+                sSelectedItemIsSubWindow = true;
+            }
+            else
+            {
+                sSelectedItemIsSubWindow = false;
+                sSubSelectedItem = nullptr;
+            }
+        }
+
+        if (popColor)
+        {
+            ImGui::PopStyleColor();
         }
 
         if (sScrollItem == item)
@@ -263,7 +312,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         if (canEdit)
         {
-            if (ItemContextMenu(item, createCallback, menuCallback))
+            if (ItemContextMenu(item, createCallback, menuCallback, selectedItem))
             {
                 add = true;
             }
@@ -321,8 +370,13 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
             else
             {
                 delete sDeleteItem;
-                sSelectedItem = nullptr;
+                selectedItem = nullptr;
                 sBfsar.updateList(list);
+
+                // if (isSubWindow)
+                // {
+                //     sSelectedItemIsSubWindow = false;
+                // }
 
                 sDeleteItem = nullptr;
             }
@@ -348,7 +402,13 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 if (addedItem)
                 {
                     sScrollItem = addedItem;
-                    sSelectedItem = addedItem;
+                    selectedItem = addedItem;
+
+                    if (!isSubWindow)
+                    {
+                        sSelectedItemIsSubWindow = false;
+                        sSubSelectedItem = nullptr;
+                    }
 
                     list.pushBack(addedItem);
 
@@ -380,7 +440,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
             if (ImGui::Button("Delete", buttonSize))
             {
                 delete sDeleteItem;
-                sSelectedItem = nullptr;
+                selectedItem = nullptr;
                 sBfsar.updateList(list);
 
                 sDeleteItem = nullptr;
@@ -424,6 +484,43 @@ void DrawItemPropertiesUI()
     Item* item = sSelectedItem;
 
     //ImGui::Text("Id: %u", item->getId());
+
+    // {
+    //     for (const ItemReference* ref : item->getReferences())
+    //     {
+    //         const Item* owner = ref->getOwner();
+    //         if (owner->getItemType() != Item::ItemType::Sound)
+    //             continue;
+
+    //         const Sound* sound = static_cast<const Sound*>(owner);
+    //         if (sound->getSoundType() != Sound::SoundType::Seq)
+    //             continue;
+
+    //         for (const Item* soundSetItem : sBfsar.getSoundSetList())
+    //         {
+    //             const SoundSet* soundSet = static_cast<const SoundSet*>(soundSetItem);
+    //           //if (soundSet->getSoundSetType() != SoundSet::SoundSetType::Seq)
+    //           //    continue;
+
+    //             if (!(soundSet->getStartId() <= sound->getId() && sound->getId() <= soundSet->getEndId()))
+    //                 continue;
+
+    //             for (const ItemReference* seqRef : soundSet->getReferences())
+    //             {
+    //                 const Item* seqOwner = seqRef->getOwner();
+    //                 if (seqOwner->getItemType() == Item::ItemType::Group)
+    //                 {
+    //                     const Group* group = static_cast<const Group*>(seqOwner);
+    //                     if (group->getId() == 5)
+    //                     {
+    //                         ImGui::Text("%s", sound->getFormattedName().cstr());
+    //                         break;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     bool enableName = item->isEnableName();
     if (ImGui::Checkbox("Enable Name", &enableName))

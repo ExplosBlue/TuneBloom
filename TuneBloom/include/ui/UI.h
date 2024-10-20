@@ -46,6 +46,9 @@ extern u32 sSequenceSoundSetCount;
 
 //
 extern Item* sSelectedItem;
+extern Item* sSubSelectedItem;
+
+extern bool sSelectedItemIsSubWindow;
 
 class FileWindow : public Item
 {

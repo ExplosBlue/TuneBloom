@@ -49,6 +49,8 @@ public:
             return name;
         }
 
+        void drawUI();
+
         ItemType getItemRefType() const
         {
             return mItemRefType;

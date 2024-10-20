@@ -466,7 +466,7 @@ void DrawSoundPropertiesUI()
                     ImGui::BeginDisabled();
 
                 // TODO
-                ImGui::Text("Tracks... (%d)", strmSoundInfo.getTracks().size());
+                //ImGui::Text("Tracks... (%d)", strmSoundInfo.getTracks().size());
 
                 if (!enableTracks)
                     ImGui::EndDisabled();
@@ -836,4 +836,27 @@ void DrawSoundPropertiesUI()
             //ParseSequenceFile(sound->getFileId());
         }
     }
+}
+
+void Sound::StreamSoundInfo::Track::drawUI()
+{
+    const ImU8 cStepU8 = 1;
+
+    {
+        u8 volume = mVolume;
+        if (ImGui::InputScalar("Volume", ImGuiDataType_U8, &volume, &cStepU8))
+        {
+            mVolume = volume;
+        }
+    }
+
+    {
+        u8 pan = mPan;
+        if (ImGui::InputScalar("Pan", ImGuiDataType_U8, &pan, &cStepU8))
+        {
+            mPan = pan;
+        }
+    }
+
+    // TODO: Finish this
 }

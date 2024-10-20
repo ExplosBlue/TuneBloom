@@ -574,11 +574,12 @@ void PlayStrmSound(const Sound* sound)
 
     if (sBfsar.isStreamTrackInfoAvailable())
     {
-        for (u32 i = 0; i < strmSoundInfo.getTracks().size(); i++)
+        for (u32 i = 0; i < strmSoundInfo.getTrackList().size(); i++)
         {
             nw::snd::SoundArchive::StreamTrackInfo& tmp = setupArg.tracks[i];
 
-            const Sound::StreamSoundInfo::Track& trackInfo = *strmSoundInfo.getTracks().nth(i);
+            const Item* trackItem = strmSoundInfo.getTrackList().nth(i)->val();
+            const Sound::StreamSoundInfo::Track& trackInfo = *static_cast<const Sound::StreamSoundInfo::Track*>(trackItem);
 
             tmp.volume = trackInfo.getVolume();
             tmp.pan = trackInfo.getPan();

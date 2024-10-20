@@ -137,6 +137,7 @@ u32 sWaveSoundSetCount = 0;
 u32 sSequenceSoundSetCount = 0;
 
 Item* sSelectedItem = nullptr;
+Item* sSubSelectedItem = nullptr;
 
 void OpenFile()
 {
@@ -260,6 +261,8 @@ void SaveFileAs()
 void CloseFile()
 {
     sSelectedItem = nullptr;
+    sSubSelectedItem = nullptr;
+    sSelectedItemIsSubWindow = false;
     sFileWindows.clear();
 
     sStreamSoundCount = 0;

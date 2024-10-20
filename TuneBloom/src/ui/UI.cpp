@@ -6,9 +6,9 @@
 
 enum class UIType
 {
-    None = 0,
+    Min = 0,
 
-    ProjectInfo,
+    ProjectInfo = Min,
 
     AllSounds,
     StreamSounds,
@@ -26,7 +26,9 @@ enum class UIType
 
     WaveFiles,
     SequenceFiles,
-    BankFiles
+    BankFiles,
+
+    Max = BankFiles
 };
 
 UIType sSelectedUIType = UIType::ProjectInfo;
@@ -39,6 +41,7 @@ ItemList sFileWindows;
 // Windows
 void DrawProjectUI();
 void DrawInfoUI();
+void DrawSubInfoUI();
 void DrawFileUI(ImGuiID dockspaceId);
 void DrawPropertiesUI();
 
@@ -176,6 +179,7 @@ void DrawUI()
 
     DrawProjectUI();
     DrawInfoUI();
+    DrawSubInfoUI();
     DrawFileUI(dockspaceId);
     DrawPropertiesUI();
     DrawPlayerUI();
@@ -206,37 +210,62 @@ void DrawProjectUI()
     {
         bool selected = false;
 
+        auto resetSelectedItemAndSubWindow = []()
+        {
+            sSelectedItem = nullptr;
+            sSubSelectedItem = nullptr;
+            sSelectedItemIsSubWindow = false;
+        };
+
+        auto resetSelectedItemAndSubWindowIfNotType = [&](Item::ItemType type)
+        {
+            if (sSelectedItem && sSelectedItem->getItemType() != type)
+            {
+                resetSelectedItemAndSubWindow();
+            }
+        };
+
         if (ImGui::Selectable(ICON_LC_INFO " Project Info", sSelectedUIType == UIType::ProjectInfo))
         {
             sSelectedUIType = UIType::ProjectInfo;
             selected = true;
+
+            resetSelectedItemAndSubWindow();
         }
 
         ImGui::Separator();
 
-    if (ImGui::Selectable(ICON_LC_LIST_MUSIC " All Sounds", sSelectedUIType == UIType::AllSounds))
-    {
-        sSelectedUIType = UIType::AllSounds;
-        selected = true;
-    }
+        if (ImGui::Selectable(ICON_LC_LIST_MUSIC " All Sounds", sSelectedUIType == UIType::AllSounds))
+        {
+            sSelectedUIType = UIType::AllSounds;
+            selected = true;
 
-    if (ImGui::Selectable(ICON_LC_DISC_3 " Stream Sounds", sSelectedUIType == UIType::StreamSounds, ImGuiSelectableFlags_SpanAvailWidth))
-    {
-        sSelectedUIType = UIType::StreamSounds;
-        selected = true;
-    }
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
+        }
 
-    if (ImGui::Selectable(ICON_LC_AUDIO_LINES " Wave Sounds", sSelectedUIType == UIType::WaveSounds))
-    {
-        sSelectedUIType = UIType::WaveSounds;
-        selected = true;
-    }
+        if (ImGui::Selectable(ICON_LC_DISC_3 " Stream Sounds", sSelectedUIType == UIType::StreamSounds, ImGuiSelectableFlags_SpanAvailWidth))
+        {
+            sSelectedUIType = UIType::StreamSounds;
+            selected = true;
 
-    if (ImGui::Selectable(ICON_LC_MUSIC_3 " Sequence Sounds", sSelectedUIType == UIType::SequenceSounds))
-    {
-        sSelectedUIType = UIType::SequenceSounds;
-        selected = true;
-    }
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
+        }
+
+        if (ImGui::Selectable(ICON_LC_AUDIO_LINES " Wave Sounds", sSelectedUIType == UIType::WaveSounds))
+        {
+            sSelectedUIType = UIType::WaveSounds;
+            selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
+        }
+
+        if (ImGui::Selectable(ICON_LC_MUSIC_3 " Sequence Sounds", sSelectedUIType == UIType::SequenceSounds))
+        {
+            sSelectedUIType = UIType::SequenceSounds;
+            selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
+        }
 
         ImGui::Separator();
 
@@ -244,18 +273,24 @@ void DrawProjectUI()
         {
             sSelectedUIType = UIType::AllSoundSets;
             selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::SoundSet);
         }
 
         if (ImGui::Selectable(ICON_LC_AUDIO_LINES " Wave Sound Sets", sSelectedUIType == UIType::WaveSoundSets))
         {
             sSelectedUIType = UIType::WaveSoundSets;
             selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::SoundSet);
         }
 
         if (ImGui::Selectable(ICON_LC_MUSIC_2 " Sequence Sound Sets", sSelectedUIType == UIType::SequenceSoundSets))
         {
             sSelectedUIType = UIType::SequenceSoundSets;
             selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::SoundSet);
         }
 
         ImGui::Separator();
@@ -264,24 +299,32 @@ void DrawProjectUI()
         {
             sSelectedUIType = UIType::Banks;
             selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Bank);
         }
 
         if (ImGui::Selectable(ICON_LC_FILE_MUSIC " Wave Archives", sSelectedUIType == UIType::WaveArchives))
         {
             sSelectedUIType = UIType::WaveArchives;
             selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::WaveArchive);
         }
 
         if (ImGui::Selectable(ICON_LC_FOLDERS " Groups", sSelectedUIType == UIType::Groups))
         {
             sSelectedUIType = UIType::Groups;
             selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Group);
         }
 
         if (ImGui::Selectable(ICON_LC_VOLUME_2 " Players", sSelectedUIType == UIType::Players))
         {
             sSelectedUIType = UIType::Players;
             selected = true;
+
+            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Player);
         }
 
         ImGui::Separator();
@@ -304,6 +347,25 @@ void DrawProjectUI()
             selected = true;
         }
 
+        if (ImGui::IsWindowFocused())
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+            {
+                if (sSelectedUIType > UIType::Min)
+                {
+                    sSelectedUIType = UIType(u32(sSelectedUIType) - 1);
+                }
+            }
+
+            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+            {
+                if (sSelectedUIType < UIType::Max)
+                {
+                    sSelectedUIType = UIType(u32(sSelectedUIType) + 1);
+                }
+            }
+        }
+
         if (selected)
         {
             ImGuiWindow* w = ImGui::FindWindowByName("###FileWindow");
@@ -324,13 +386,14 @@ void DrawInfoUI()
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     }
 
-    ImGui::Begin(ICON_LC_PEN " Info###InfoWindow", nullptr, sSelectedUIType == UIType::ProjectInfo ? ImGuiWindowFlags_NoScrollbar : 0);
+    bool windowOpen = ImGui::Begin(ICON_LC_PEN " Info###InfoWindow", nullptr, sSelectedUIType == UIType::ProjectInfo ? ImGuiWindowFlags_NoScrollbar : 0);
 
     if (pushPadding)
     {
         ImGui::PopStyleVar();
     }
 
+    if (windowOpen)
     {
         if (!sBfsar.getSoundArchive())
         {
@@ -410,6 +473,150 @@ void DrawInfoUI()
     ImGui::End();
 }
 
+const char* GroupItemPrefixFunc(Item* item)
+{
+    Group::ItemInfo* groupItem = (Group::ItemInfo*)item;
+
+    const char* icon = ICON_LC_FILE_QUESTION " ";
+    switch (groupItem->getItemRefType())
+    {
+        case Item::ItemType::Sound:
+            if (groupItem->getItemRef().isAttached())
+            {
+                Sound* sound = (Sound*)groupItem->getItemRef().getItem();
+                switch (sound->getSoundType())
+                {
+                    case Sound::SoundType::Seq:
+                        icon = ICON_LC_MUSIC_3 " ";
+                        break;
+
+                    case Sound::SoundType::Strm:
+                        icon = ICON_LC_DISC_3 " ";
+                        break;
+
+                    case Sound::SoundType::Wave:
+                        icon = ICON_LC_AUDIO_LINES " ";
+                        break;
+                }
+            }
+
+            break;
+
+        case Item::ItemType::SoundSet:
+            if (groupItem->getItemRef().isAttached())
+            {
+                SoundSet* soundSet = (SoundSet*)groupItem->getItemRef().getItem();
+                switch (soundSet->getSoundSetType())
+                {
+                    case SoundSet::SoundSetType::Wave:
+                        icon = ICON_LC_AUDIO_LINES " ";
+                        break;
+
+                    case SoundSet::SoundSetType::Seq:
+                        icon = ICON_LC_MUSIC_2 " ";
+                        break;
+                }
+            }
+
+            break;
+
+        case Item::ItemType::Bank:
+            icon = ICON_LC_PIANO " ";
+            break;
+
+        case Item::ItemType::WaveArchive:
+            icon = ICON_LC_FILE_MUSIC " ";
+            break;
+    }
+
+    return icon;
+}
+
+void DrawSubInfoUI()
+{
+    if (!sBfsar.isOpen())
+    {
+        return;
+    }
+
+    sead::FixedSafeString<512> name(ICON_LC_PEN " ");
+
+    switch (sSelectedUIType)
+    {
+        case UIType::AllSounds:
+        {
+            if (!sSelectedItem || sSelectedItem->getItemType() != Item::ItemType::Sound)
+            {
+                return;
+            }
+
+            const Sound* sound = static_cast<const Sound*>(sSelectedItem);
+            if (sound->getSoundType() != Sound::SoundType::Strm)
+            {
+                return;
+            }
+
+            name.append("Tracks");
+            break;
+        }
+
+        case UIType::StreamSounds:
+            name.append("Tracks");
+            break;
+
+        case UIType::Groups:
+            name.append("Items");
+            break;
+
+        default:
+            return;
+    }
+
+    name.append("###SubInfoWindow");
+
+    //ImGui::SetNextWindowDockID();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    //bool windowOpen = ImGui::Begin(name.cstr(), nullptr, ImGuiWindowFlags_NoMove);
+    bool windowOpen = ImGui::Begin(name.cstr(), nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
+    ImGui::PopStyleVar();
+    
+    if (windowOpen)
+    {
+        if (!sSelectedItem)
+        {
+            CenteredText("No Item Selected");
+
+            ImGui::End();
+            return;
+        }
+
+        switch (sSelectedItem->getItemType())
+        {
+            case Item::ItemType::Sound:
+            {
+                Sound* sound = static_cast<Sound*>(sSelectedItem);
+
+                if (sound->getSoundType() == Sound::SoundType::Strm)
+                {
+                    DrawAllItemsUI("Track", sound->getStreamSoundInfo().getTrackList());
+                }
+                break;
+            }
+
+            case Item::ItemType::Group:
+            {
+                Group* group = static_cast<Group*>(sSelectedItem);
+
+                DrawAllItemsUI("Item", group->getItemInfoList(), nullptr, &GroupItemPrefixFunc);
+                break;
+            }
+        }
+    }
+
+    ImGui::End();
+}
+
 void DrawPropertiesUI()
 {
     sead::FixedSafeString<512> name(ICON_LC_TABLE_PROPERTIES " Properties");
@@ -426,6 +633,37 @@ void DrawPropertiesUI()
         if (!sSelectedItem)
         {
             CenteredText("No Item Selected");
+
+            ImGui::End();
+            return;
+        }
+
+        if (sSelectedItemIsSubWindow)
+        {
+            if (!sSubSelectedItem)
+            {
+                CenteredText("No Item Selected");
+
+                ImGui::End();
+                return;
+            }
+
+            switch (sSubSelectedItem->getItemType())
+            {
+                case Item::ItemType::StreamTrack:
+                {
+                    Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(sSubSelectedItem);
+                    track->drawUI();
+                    break;
+                }
+
+                case Item::ItemType::GroupItemInfo:
+                {
+                    Group::ItemInfo* itemInfo = static_cast<Group::ItemInfo*>(sSubSelectedItem);
+                    itemInfo->drawUI();
+                    break;
+                }
+            }
 
             ImGui::End();
             return;
@@ -498,13 +736,6 @@ void DrawPropertiesUI()
                 instrument->drawUI();
                 break;
             }
-
-            case Item::ItemType::GroupItemInfo:
-            {
-                Group::ItemInfo* itemInfo = static_cast<Group::ItemInfo*>(sSelectedItem);
-                //itemInfo->drawUI();
-                break;
-            }
         }
     }
     ImGui::End();
@@ -529,7 +760,7 @@ void DrawFileUI(ImGuiID dockspaceId)
 
         Item* file = window->getFileRef().getItem();
 
-        ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_Appearing);
 
         if (ImGui::Begin(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%u", file->getFormattedName().cstr(), file).cstr(), window->getOpenPtr()))
         {
@@ -677,6 +908,12 @@ const char* SoundNamePrefixFunc(Item* item)
 
     if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", sound->getId()).cstr()))
     {
+        if (sound != sSelectedItem)
+        {
+            sSubSelectedItem = nullptr;
+            sSelectedItemIsSubWindow = false;
+        }
+
         PlaySound(sound);
     }
 
@@ -712,6 +949,12 @@ const char* SoundNamePrefixFunc2(Item* item)
 
     if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", sound->getId()).cstr()))
     {
+        if (sound != sSelectedItem)
+        {
+            sSubSelectedItem = nullptr;
+            sSelectedItemIsSubWindow = false;
+        }
+
         PlaySound(sound);
     }
 

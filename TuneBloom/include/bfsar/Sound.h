@@ -238,11 +238,12 @@ public:
     class StreamSoundInfo
     {
     public:
-        class Track
+        class Track : public Item
         {
         public:
             Track()
-                : mVolume(127)
+                : Item()
+                , mVolume(127)
                 , mPan(64)
                 , mSPan(0)
                 , mFlags(0)
@@ -252,6 +253,8 @@ public:
                 , mBiquadType(0)
                 , mBiquadValue(0)
             {
+                mItemType = ItemType::StreamTrack;
+
                 mChannels.allocBuffer(2);
 
                 for (u32 i = 0; i < 3; i++)
@@ -264,6 +267,8 @@ public:
             {
                 mChannels.freeBuffer();
             }
+
+            void drawUI();
 
             u8 getVolume() const
             {
@@ -399,7 +404,7 @@ public:
 
             , mAllocateTrackFlags(0)
             , mAllocateChannelCount(0)
-            , mTracks()
+            , mTrackList()
             , mPitch(1.0f)
             , mMainSend(127)
 
@@ -411,8 +416,6 @@ public:
 
             , mPrefetchFileRef(owner)
         {
-            mTracks.allocBuffer(8);
-
             for (u32 i = 0; i < 3; i++)
             {
                 mFxSend[i] = 0;
@@ -421,7 +424,6 @@ public:
 
         ~StreamSoundInfo()
         {
-            mTracks.freeBuffer();
         }
 
         const sead::SafeString& getPath() const
@@ -455,14 +457,14 @@ public:
             mAllocateChannelCount = channelCount;
         }
 
-        const sead::ObjList<Track>& getTracks() const
+        const Track::List& getTrackList() const
         {
-            return mTracks;
+            return mTrackList;
         }
 
-        sead::ObjList<Track>& getTracks()
+        Track::List& getTrackList()
         {
-            return mTracks;
+            return mTrackList;
         }
 
         f32 getPitch() const
@@ -578,7 +580,7 @@ public:
 
         u16 mAllocateTrackFlags;
         u16 mAllocateChannelCount;
-        sead::ObjList<Track> mTracks;
+        Track::List mTrackList;
         f32 mPitch;
         u8 mMainSend;
         u8 mFxSend[3];

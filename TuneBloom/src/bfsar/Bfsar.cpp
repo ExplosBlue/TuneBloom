@@ -14,8 +14,11 @@
 
 #include <snd/snd_BankFileReader.h>
 #include <snd/snd_GroupFileReader.h>
+#include <snd/snd_StreamSoundFileReader.h>
 #include <snd/snd_WaveArchiveFileReader.h>
 #include <snd/snd_WaveSoundFileReader.h>
+
+#include <snd/StreamSoundPlayer.h> //? For cStrmTrackNum
 
 #include <md5/md5.h>
 
@@ -1358,50 +1361,132 @@ void Bfsar::open_(sead::Heap* heap)
             sound->mStreamSoundInfo.mAllocateTrackFlags = strmSoundInfo.allocateTrackFlags;
             sound->mStreamSoundInfo.mAllocateChannelCount = strmSoundInfo.allocateChannelCount;
 
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            SEAD_ASSERT(device);
+
+            sead::FixedSafeString<512> dir;
+            bool b = sead::Path::getDirectoryName(&dir, getFilePath());
+            SEAD_ASSERT(b);
+
+            SEAD_ASSERT(!sound->mStreamSoundInfo.mPath.isEmpty());
+            const char* filePath = sound->mStreamSoundInfo.mPath.cstr();
+
+            sead::FixedSafeString<512> path;
+            path.format("%s/%s", dir.cstr(), filePath);
+            //SEAD_PRINT("%s\n", path.cstr());
+
+            sead::FileDevice::LoadArg loadArg;
+            loadArg.path = path;
+
+            u8* strmFile = device->tryLoad(loadArg);
+            SEAD_ASSERT_MSG(strmFile, "Stream file not found [%s]", filePath);
+
+            SEAD_ASSERT_MSG(sead::MemUtil::compare(strmFile, "FSTM", 4) == 0, "Referenced file is not a bfstm [%s]", filePath);
+
+            nw::snd::internal::StreamSoundFileReader reader;
+            reader.Initialize(strmFile);
+            SEAD_ASSERT(reader.IsAvailable());
+
+            readStreamWaves_(strmFile);
+
+            // If track information is embedded in bXstm (up to binary version 0.2.0.0)
+            if (reader.IsTrackInfoAvailable())
+            {
+                u32 trackCount = reader.GetTrackCount();
+                if (trackCount > cStrmTrackNum)
+                {
+                    trackCount = cStrmTrackNum;
+                }
+
+                // Read track information.
+                for (u32 j = 0; j < trackCount; j++)
+                {
+                    nw::snd::internal::StreamSoundFileReader::TrackInfo trackInfo;
+                    b = reader.ReadStreamTrackInfo(&trackInfo, j);
+                    SEAD_ASSERT(b);
+
+                    Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
+                    track->mId = j;
+
+                    track->mEnableName = true;
+                    track->mName = "Track";
+
+                    track->mVolume = trackInfo.volume;
+                    track->mPan = trackInfo.pan;
+                    track->mSPan = trackInfo.span;
+                    track->mFlags = trackInfo.flags;
+
+                    u8 channelCount = trackInfo.channelCount;
+                    SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
+
+                    for (u8 k = 0; k < channelCount; k++)
+                    {
+                        u8& channel = *track->getChannels().birthBack();
+                        channel = trackInfo.globalChannelIndex[k];
+                    }
+
+                    sound->mStreamSoundInfo.mTrackList.pushBack(track);
+                }
+            }
+
+            if (loadArg.need_unload)
+            {
+                device->unload(strmFile);
+            }
+
             if (isStreamTrackInfoAvailable())
             {
-                const nw::snd::internal::SoundArchiveFile::StreamTrackInfoTable* trackInfoTable = strmSoundInfo.GetTrackInfoTable();
-                //SEAD_ASSERT(trackInfoTable);
-
-                if (trackInfoTable)
+                if (sound->mStreamSoundInfo.mTrackList.isEmpty())
                 {
-                    for (u32 j = 0; j < nw::snd::SoundArchive::STRM_TRACK_NUM && j < trackInfoTable->GetTrackCount(); j++)
+                    const nw::snd::internal::SoundArchiveFile::StreamTrackInfoTable* trackInfoTable = strmSoundInfo.GetTrackInfoTable();
+                    //SEAD_ASSERT(trackInfoTable);
+
+                    if (trackInfoTable)
                     {
-                        const nw::snd::internal::SoundArchiveFile::StreamTrackInfo* trackInfo = trackInfoTable->GetTrackInfo(j);
-                        SEAD_ASSERT(trackInfo);
-
-                        Sound::StreamSoundInfo::Track& track = *sound->mStreamSoundInfo.mTracks.birthBack();
-
-                        track.mVolume = trackInfo->volume;
-                        track.mPan = trackInfo->pan;
-                        track.mSPan = trackInfo->span;
-                        track.mFlags = trackInfo->flags;
-
-                        u32 channelCount = trackInfo->GetTrackChannelCount();
-                        SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
-
-                        for (u32 k = 0; k < channelCount; k++)
+                        for (u32 j = 0; j < nw::snd::SoundArchive::STRM_TRACK_NUM && j < trackInfoTable->GetTrackCount(); j++)
                         {
-                            u8& channel = *track.getChannels().birthBack();
-                            channel = trackInfo->GetGlobalChannelIndex(k);
-                        }
+                            const nw::snd::internal::SoundArchiveFile::StreamTrackInfo* trackInfo = trackInfoTable->GetTrackInfo(j);
+                            SEAD_ASSERT(trackInfo);
 
-                        if (isStreamSendAvailable())
-                        {
-                            const nw::snd::internal::SoundArchiveFile::SendValue send = trackInfo->GetSendValue();
-                            track.mMainSend = send.mainSend;
+                            Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
+                            track->mId = j;
 
-                            for (u32 k = 0; k < nw::snd::AUX_BUS_NUM; k++)
+                            track->mEnableName = true;
+                            track->mName = "Track";
+
+                            track->mVolume = trackInfo->volume;
+                            track->mPan = trackInfo->pan;
+                            track->mSPan = trackInfo->span;
+                            track->mFlags = trackInfo->flags;
+
+                            u32 channelCount = trackInfo->GetTrackChannelCount();
+                            SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
+
+                            for (u32 k = 0; k < channelCount; k++)
                             {
-                                track.mFxSend[k] = send.fxSend[k];
+                                u8& channel = *track->getChannels().birthBack();
+                                channel = trackInfo->GetGlobalChannelIndex(k);
                             }
-                        }
 
-                        if (isFilterSupportedVersion())
-                        {
-                            track.mLpfFreq = trackInfo->lpfFreq;
-                            track.mBiquadType = trackInfo->biquadType;
-                            track.mBiquadValue = trackInfo->biquadValue;
+                            if (isStreamSendAvailable())
+                            {
+                                const nw::snd::internal::SoundArchiveFile::SendValue send = trackInfo->GetSendValue();
+                                track->mMainSend = send.mainSend;
+
+                                for (u32 k = 0; k < nw::snd::AUX_BUS_NUM; k++)
+                                {
+                                    track->mFxSend[k] = send.fxSend[k];
+                                }
+                            }
+
+                            if (isFilterSupportedVersion())
+                            {
+                                track->mLpfFreq = trackInfo->lpfFreq;
+                                track->mBiquadType = trackInfo->biquadType;
+                                track->mBiquadValue = trackInfo->biquadValue;
+                            }
+
+                            sound->mStreamSoundInfo.mTrackList.pushBack(track);
                         }
                     }
                 }
@@ -3667,16 +3752,17 @@ void Bfsar::save_(sead::FileHandle& handle)
                                         stream.writeU32(0); //! Unknown
                                     }
 
-                                    if (strmInfo.getTracks().size() > 0)
+                                    if (strmInfo.getTrackList().size() > 0)
                                     {
                                         writer.closeReference("TrackInfoTableRef", nw::snd::internal::ElementType_Table_ReferenceTable);
                                         writer.pushOffsetBase();
                                         {
-                                            writer.openReferenceTable("TrackInfoTable", strmInfo.getTracks().size());
+                                            writer.openReferenceTable("TrackInfoTable", strmInfo.getTrackList().size());
 
-                                            for (u32 i = 0; i < strmInfo.getTracks().size(); i++)
+                                            for (u32 i = 0; i < strmInfo.getTrackList().size(); i++)
                                             {
-                                                const Sound::StreamSoundInfo::Track& track = *strmInfo.getTracks().nth(i);
+                                                const Item* trackItem = strmInfo.getTrackList().nth(i)->val();
+                                                const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(trackItem);
 
                                                 writer.addReferenceTableReference("TrackInfoTable", nw::snd::internal::ElementType_SoundArchiveFile_StreamSoundTrackInfo);
 
@@ -4367,4 +4453,13 @@ bool Bfsar::validateName_(const sead::SafeString& name, const Item::List& list) 
     }
 
     return true;
+}
+
+void Bfsar::readStreamWaves_(const void* strmFile)
+{
+    nw::snd::internal::StreamSoundFileReader reader;
+    reader.Initialize(strmFile);
+    SEAD_ASSERT(reader.IsAvailable());
+
+    // TODO
 }

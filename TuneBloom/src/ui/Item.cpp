@@ -23,7 +23,7 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
         sName.clear();
     }
 
-    ImGui::Checkbox("Enable Name", &sEnableName);
+    // ImGui::Checkbox("Enable Name", &sEnableName);
 
     if (!sEnableName)
     {
@@ -37,6 +37,8 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
         ImGui::EndDisabled();
     }
 
+    WarningPopup("###InvalidName", "Invalid name");
+    WarningPopup("###EmptyName", "Name can't be empty");
     DupeNamePopup();
 
     if (sItemPropertiesCallback)
@@ -48,7 +50,19 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
     {
         SEAD_ASSERT(sInstanciateItemCallback);
 
-        if (sEnableName && !sName.isEmpty() && !sBfsar.validateName(sName))
+        if (sName.isEmpty())
+        {
+            ImGui::OpenPopup("###EmptyName");
+            return nullptr;
+        }
+
+        if (!sBfsar.validName(sName))
+        {
+            ImGui::OpenPopup("###InvalidName");
+            return nullptr;
+        }
+
+        if (!sBfsar.validateName(sName))
         {
             ImGui::OpenPopup("###Dupe");
             return nullptr;
@@ -527,10 +541,10 @@ void DrawItemPropertiesUI()
     // }
 
     bool enableName = item->isEnableName();
-    if (ImGui::Checkbox("Enable Name", &enableName))
-    {
-        item->setEnableName(enableName);
-    }
+    // if (ImGui::Checkbox("Enable Name", &enableName))
+    // {
+    //     item->setEnableName(enableName);
+    // }
 
     if (!enableName)
         ImGui::BeginDisabled();
@@ -540,20 +554,24 @@ void DrawItemPropertiesUI()
     {
         if (name != item->getName())
         {
-            if (!name.isEmpty())
+            if (name.isEmpty())
             {
-                if (sBfsar.validateName(name))
-                {
-                    item->getName() = name;
-                }
-                else
-                {
-                    ImGui::OpenPopup("###Dupe");
-                }
+                ImGui::OpenPopup("###EmptyName");
             }
             else
             {
-                item->getName() = name;
+                if (!sBfsar.validName(name))
+                {
+                    ImGui::OpenPopup("###InvalidName");
+                }
+                else if (!sBfsar.validateName(name))
+                {
+                    ImGui::OpenPopup("###Dupe");
+                }
+                else
+                {
+                    item->getName() = name;
+                }
             }
         }
     }
@@ -561,6 +579,8 @@ void DrawItemPropertiesUI()
     if (!enableName)
         ImGui::EndDisabled();
 
+    WarningPopup("###InvalidName", "Invalid name");
+    WarningPopup("###EmptyName", "Name can't be empty");
     DupeNamePopup();
 }
 

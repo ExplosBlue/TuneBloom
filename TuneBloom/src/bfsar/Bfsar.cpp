@@ -187,6 +187,33 @@ void Bfsar::close()
     mOpen = false;
 }
 
+bool Bfsar::validName(const sead::SafeString& name) const
+{
+    if (name.isEmpty())
+    {
+        return false;
+    }
+
+    if (!name.startsWith("_") && !::isalpha(name[0]))
+    {
+        return false;
+    }
+
+    auto isValidNameChar = [](int c) -> int
+    {
+        return ::isalnum(c) || c == '_';
+    };
+
+    std::string n = name.cstr();
+
+    if (!std::all_of(n.begin(), n.end(), isValidNameChar))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 bool Bfsar::validateName(const sead::SafeString& name) const
 {
     if (name.isEmpty())
@@ -413,6 +440,10 @@ void Bfsar::open_(sead::Heap* heap)
         {
             player->mName = mSoundArchive->GetString(playerInfo->GetStringId());
         }
+        else
+        {
+            player->mName.format("PLAYER_%u", i);
+        }
 
         player->mPlayableSoundMax = playerInfo->playableSoundMax;
 
@@ -592,6 +623,10 @@ void Bfsar::open_(sead::Heap* heap)
             if (mIncludeStringTable && warcInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
             {
                 warc->mName = mSoundArchive->GetString(warcInfo->GetStringId());
+            }
+            else
+            {
+                warc->mName.format("WARC_%u", i);
             }
 
             warc->mIsLoadIndividual = warcInfo->isLoadIndividual;
@@ -1239,6 +1274,10 @@ void Bfsar::open_(sead::Heap* heap)
         {
             bank->mName = mSoundArchive->GetString(bankInfo->GetStringId());
         }
+        else
+        {
+            bank->mName.format("BANK_%u", i);
+        }
 
         const nw::snd::internal::Util::Table<nw::ut::ResU32>* warcIdTable = bankInfo->GetWaveArchiveItemIdTable();
         SEAD_ASSERT(warcIdTable->count <= 1);
@@ -1277,6 +1316,10 @@ void Bfsar::open_(sead::Heap* heap)
         if (mIncludeStringTable && soundInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
             sound->mName = mSoundArchive->GetString(soundInfo->GetStringId());
+        }
+        else
+        {
+            sound->mName.format("SOUND_%u", i);
         }
 
         sound->mPlayerRef.attach(getItem(soundInfo->playerId, getPlayerList()));
@@ -1617,6 +1660,17 @@ void Bfsar::open_(sead::Heap* heap)
         {
             soundSet->mName = mSoundArchive->GetString(soundSetInfo->GetStringId());
         }
+        else
+        {
+            if (soundSetInfo->GetWaveSoundGroupInfo())
+            {
+                soundSet->mName.format("WSDSET_%u", i);
+            }
+            else
+            {
+                soundSet->mName.format("SEQSET_%u", i);
+            }
+        }
 
         const nw::snd::internal::SoundArchiveFile::WaveSoundGroupInfo* waveSoundSetInfo = soundSetInfo->GetWaveSoundGroupInfo();
         if (waveSoundSetInfo)
@@ -1674,6 +1728,10 @@ void Bfsar::open_(sead::Heap* heap)
         if (mIncludeStringTable && groupInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
             group->mName = mSoundArchive->GetString(groupInfo->GetStringId());
+        }
+        else
+        {
+            group->mName.format("GROUP_%u", i);
         }
 
         if (groupInfo->fileId != nw::snd::SoundArchive::INVALID_ID)
@@ -3460,14 +3518,8 @@ void Bfsar::save_(sead::FileHandle& handle)
         }
     }
 
-    //? String Block
-    if (mIncludeStringTable)
+    //? Add strings because even if the BFSAR don't include the String Block, items still have a string id...
     {
-        writer.openBlock(nw::snd::internal::ElementType_SoundArchiveFile_StringBlock, "STRG");
-
-        writer.openReference("StringTable");
-        writer.openReference("PatriciaTree");
-
         auto addListNames = [&](const Item::List& list)
         {
             for (const Item* item : list)
@@ -3493,6 +3545,15 @@ void Bfsar::save_(sead::FileHandle& handle)
         addListNames(mWaveArchiveList);
         addListNames(mGroupList);
         addListNames(mPlayerList);
+    }
+
+    //? String Block
+    if (mIncludeStringTable)
+    {
+        writer.openBlock(nw::snd::internal::ElementType_SoundArchiveFile_StringBlock, "STRG");
+
+        writer.openReference("StringTable");
+        writer.openReference("PatriciaTree");
 
         writer.closeReference("StringTable", nw::snd::internal::ElementType_SoundArchiveFile_StringTable);
         writer.pushOffsetBase();

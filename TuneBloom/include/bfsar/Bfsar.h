@@ -229,6 +229,9 @@ public:
         return cNullList;
     }
 
+    //? Check if name constains only allowed characters
+    bool validName(const sead::SafeString& name) const;
+    //? Check if name is duplicated
     bool validateName(const sead::SafeString& name) const;
 
     void updateList(Item::List& list);

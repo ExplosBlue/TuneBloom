@@ -12,6 +12,8 @@ public:
         , mFileRef(this)
     {
         mItemType = ItemType::Bank;
+
+        mWaveArchiveRef.setOnDetachCallback<Bank>(&Bank::onDetachWaveArchive_); // Temp ? Idk a good solution yet
     }
 
     WaveArchiveType getWaveArchiveType() const
@@ -42,6 +44,12 @@ public:
     ItemReference& getFileRef()
     {
         return mFileRef;
+    }
+
+private:
+    void onDetachWaveArchive_(Item* item)
+    {
+        mWaveArchiveType = WaveArchiveType::AutomaticShared;
     }
 
 private:

@@ -19,17 +19,20 @@ const char* WaveFile::sEncodingTypes[3] = {
 
 WaveFile::Channel::~Channel()
 {
-    {
-        snd::internal::driver::SoundThreadLock lock;
-
-        snd::internal::driver::DisposeCallbackMgr::instance()->dispose(mData, mDataSize);
-    }
+    dispose_();
 
     if (mOwnsData && mData)
     {
         delete[] mData;
         mData = nullptr;
     }
+}
+
+void WaveFile::Channel::dispose_()
+{
+    snd::internal::driver::SoundThreadLock lock;
+
+    snd::internal::driver::DisposeCallbackMgr::instance()->dispose(mData, mDataSize);
 }
 
 WaveFile::~WaveFile()
@@ -43,6 +46,89 @@ WaveFile::~WaveFile()
     invalidateOriginalData_();
 }
 
+void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam)
+{
+    SEAD_ASSERT(adpcmInfo);
+
+    adpcmInfo->coef[0]  = param.coef[0][0];
+    adpcmInfo->coef[1]  = param.coef[0][1];
+    adpcmInfo->coef[2]  = param.coef[1][0];
+    adpcmInfo->coef[3]  = param.coef[1][1];
+    adpcmInfo->coef[4]  = param.coef[2][0];
+    adpcmInfo->coef[5]  = param.coef[2][1];
+    adpcmInfo->coef[6]  = param.coef[3][0];
+    adpcmInfo->coef[7]  = param.coef[3][1];
+    adpcmInfo->coef[8]  = param.coef[4][0];
+    adpcmInfo->coef[9]  = param.coef[4][1];
+    adpcmInfo->coef[10] = param.coef[5][0];
+    adpcmInfo->coef[11] = param.coef[5][1];
+    adpcmInfo->coef[12] = param.coef[6][0];
+    adpcmInfo->coef[13] = param.coef[6][1];
+    adpcmInfo->coef[14] = param.coef[7][0];
+    adpcmInfo->coef[15] = param.coef[7][1];
+
+    adpcmInfo->pred_scale = param.predScale;
+    adpcmInfo->yn1 = param.yn1;
+    adpcmInfo->yn2 = param.yn2;
+
+    adpcmInfo->loop_pred_scale = loopParam.loopPredScale;
+    adpcmInfo->loop_yn1 = loopParam.loopYn1;
+    adpcmInfo->loop_yn2 = loopParam.loopYn2;
+}
+
+void FillAdpcmParam(snd::DspAdpcmParam* param, snd::internal::DspAdpcmLoopParam* loopParam, const ADPCMINFO& adpcmInfo)
+{
+    SEAD_ASSERT(param);
+    SEAD_ASSERT(loopParam);
+
+    param->coef[0][0] = adpcmInfo.coef[0];
+    param->coef[0][1] = adpcmInfo.coef[1];
+    param->coef[1][0] = adpcmInfo.coef[2];
+    param->coef[1][1] = adpcmInfo.coef[3];
+    param->coef[2][0] = adpcmInfo.coef[4];
+    param->coef[2][1] = adpcmInfo.coef[5];
+    param->coef[3][0] = adpcmInfo.coef[6];
+    param->coef[3][1] = adpcmInfo.coef[7];
+    param->coef[4][0] = adpcmInfo.coef[8];
+    param->coef[4][1] = adpcmInfo.coef[9];
+    param->coef[5][0] = adpcmInfo.coef[10];
+    param->coef[5][1] = adpcmInfo.coef[11];
+    param->coef[6][0] = adpcmInfo.coef[12];
+    param->coef[6][1] = adpcmInfo.coef[13];
+    param->coef[7][0] = adpcmInfo.coef[14];
+    param->coef[7][1] = adpcmInfo.coef[15];
+
+    param->predScale = adpcmInfo.pred_scale;
+    param->yn1 = adpcmInfo.yn1;
+    param->yn2 = adpcmInfo.yn2;
+
+    loopParam->loopPredScale = adpcmInfo.loop_pred_scale;
+    loopParam->loopYn1 = adpcmInfo.loop_yn1;
+    loopParam->loopYn2 = adpcmInfo.loop_yn2;
+}
+
+void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo)
+{
+    SEAD_ASSERT(param);
+
+    param->coef[0][0] = adpcmInfo.coef[0];
+    param->coef[0][1] = adpcmInfo.coef[1];
+    param->coef[1][0] = adpcmInfo.coef[2];
+    param->coef[1][1] = adpcmInfo.coef[3];
+    param->coef[2][0] = adpcmInfo.coef[4];
+    param->coef[2][1] = adpcmInfo.coef[5];
+    param->coef[3][0] = adpcmInfo.coef[6];
+    param->coef[3][1] = adpcmInfo.coef[7];
+    param->coef[4][0] = adpcmInfo.coef[8];
+    param->coef[4][1] = adpcmInfo.coef[9];
+    param->coef[5][0] = adpcmInfo.coef[10];
+    param->coef[5][1] = adpcmInfo.coef[11];
+    param->coef[6][0] = adpcmInfo.coef[12];
+    param->coef[6][1] = adpcmInfo.coef[13];
+    param->coef[7][0] = adpcmInfo.coef[14];
+    param->coef[7][1] = adpcmInfo.coef[15];
+}
+
 void WaveFile::drawUI()
 {
     InnerFile::drawUI();
@@ -51,13 +137,16 @@ void WaveFile::drawUI()
 
     const ImU32 cStepU32 = 1;
 
+    static Encoding sEncoding = Encoding::DspAdpcm;
+
     {
         u32 encoding = (u32)mEncoding;
         if (ImGui::Combo("Encoding", (s32*)&encoding, sEncodingTypes, IM_ARRAYSIZE(sEncodingTypes)))
         {
             if (encoding != (u32)mEncoding)
             {
-                ImGui::OpenPopup("Encoding");
+                sEncoding = Encoding(encoding);
+                ImGui::OpenPopup("###ENCODING");
             }
         }
     }
@@ -92,7 +181,11 @@ void WaveFile::drawUI()
             }
 
             mLoopStartFrame = loopStartFrame;
+
+            updateLoopInfo_();
         }
+
+        //ImGui::Text("Loop Start: %u", (mLoopStartFrame / 14) * 14);
     }
 
     {
@@ -120,6 +213,8 @@ void WaveFile::drawUI()
 
             mLoopEndFrame = loopEndFrame;
         }
+
+        //ImGui::Text("Loop End: %u", (mLoopEndFrame / 14) * 14);
     }
 
     {
@@ -179,12 +274,68 @@ void WaveFile::drawUI()
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (ImGui::BeginPopupModal("Encoding", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+    if (ImGui::BeginPopupModal(ICON_LC_ALERT_TRIANGLE " Warning###ENCODING", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("So true...");
+        ImGui::Text("Altering the wave file encoding can result in quality loss and noise.\nConvert anyway ?");
         ImGui::Separator();
 
-        if (ImGui::Button("OK", ImVec2(ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x, 0)))
+        ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
+
+        if (ImGui::Button("Convert", buttonSize))
+        {
+            {
+                snd::internal::driver::SoundThreadLock lock;
+
+                for (u32 i = 0; i < mChannels.size(); i++)
+                {
+                    Channel* channel = mChannels.nth(i);
+                    channel->dispose_();
+                }
+            }
+
+            for (u32 i = 0; i < mChannels.size(); i++)
+            {
+                Channel* channel = mChannels.nth(i);
+
+                if (mUseOriginalData)
+                {
+                    const void* src = channel->getData();
+                    channel->mData = new u8[channel->getDataSize()];
+                    sead::MemUtil::copy(const_cast<void*>(channel->mData), src, channel->getDataSize());
+                }
+
+                u32 dataSize = 0;
+                ADPCMINFO adpcmInfo;
+                sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
+
+                if (mEncoding == Encoding::DspAdpcm)
+                {
+                    FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(), channel->getAdpcmLoopParam());
+                }
+
+                channel->mOwnsData = true;
+                channel->mData = WaveFile::convert_(const_cast<void*>(channel->getData()), mDataEndian, mSampleCount, mEncoding, sEncoding, &dataSize, &adpcmInfo, mLoopStartFrame);
+                channel->mDataSize = dataSize;
+
+                if (sEncoding == Encoding::DspAdpcm)
+                {
+                    FillAdpcmParam(&channel->mAdpcmParam, &channel->mAdpcmLoopParam, adpcmInfo);
+                }
+                else if (sEncoding == Encoding::Pcm16)
+                {
+                    mDataEndian = sead::Endian::getHostEndian();
+                }
+            }
+
+            invalidateOriginalData_();
+            mEncoding = sEncoding;
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", buttonSize))
         {
             ImGui::CloseCurrentPopup();
         }
@@ -432,7 +583,7 @@ bool WaveFile::readWavFile(const sead::SafeString& path, Encoding encoding)
         return false;
     }
 
-    sead::Endian::Types endian = sead::Endian::eLittle;
+    sead::Endian::Types endian = sead::Endian::eLittle; // RIFF wave files are always little endian... or they should
 
     sead::FileDeviceReadStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(endian);
@@ -583,9 +734,24 @@ bool WaveFile::readWavFile(const sead::SafeString& path, Encoding encoding)
         Channel* channel = mChannels.birthBack();
         SEAD_ASSERT(channel);
 
+        u32 dataSize = 0;
+        ADPCMINFO adpcmInfo;
+        sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
+
         channel->mOwnsData = true;
-        channel->mData = channels[i]; // TODO: Convert to Encoding
-        channel->mDataSize = sampleBytes / numChannels;
+        channel->mData = WaveFile::convert_(channels[i], endian, mSampleCount, sampleFormat == snd::SampleFormat::PcmS8 ? Encoding::Pcm8 : Encoding::Pcm16, encoding, &dataSize, &adpcmInfo, mLoopStartFrame);
+
+        if (dataSize == 0)
+        {
+            dataSize = sampleBytes / numChannels;
+        }
+
+        channel->mDataSize = dataSize;
+
+        if (encoding == Encoding::DspAdpcm)
+        {
+            FillAdpcmParam(&channel->mAdpcmParam, &channel->mAdpcmLoopParam, adpcmInfo);
+        }
     }
 
     return true;
@@ -615,7 +781,7 @@ bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
     stream.setBinaryEndian(endian);
 
     stream.writeString("RIFF", 4);
-    stream.writeU32(0); // File Size
+    stream.writeU32(0); // File Size, updated at the end
     stream.writeString("WAVE", 4);
 
     SEAD_ASSERT(channelIdx < (s32)snd::cWaveChannelMax);
@@ -641,7 +807,7 @@ bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
 
         for (u32 ch = 0; ch < numChannels; ch++)
         {
-            WaveFile::Channel* channel = mChannels.nth(channelIdx == -1 ? ch : channelIdx);
+            const WaveFile::Channel* channel = mChannels.nth(channelIdx == -1 ? ch : channelIdx);
 
             channels[ch] = static_cast<const s8*>(channel->getData());
         }
@@ -672,7 +838,7 @@ bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
 
         for (u32 ch = 0; ch < numChannels; ch++)
         {
-            WaveFile::Channel* channel = mChannels.nth(channelIdx == -1 ? ch : channelIdx);
+            const WaveFile::Channel* channel = mChannels.nth(channelIdx == -1 ? ch : channelIdx);
 
             channels[ch] = static_cast<const s16*>(channel->getData());
         }
@@ -702,7 +868,7 @@ bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
 
         for (u32 ch = 0; ch < numChannels; ch++)
         {
-            WaveFile::Channel* channel = mChannels.nth(channelIdx == -1 ? ch : channelIdx);
+            const WaveFile::Channel* channel = mChannels.nth(channelIdx == -1 ? ch : channelIdx);
 
             const snd::DspAdpcmParam& dspAdpcmParam = channel->getAdpcmParam();
 
@@ -777,4 +943,196 @@ bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
     stream.writeU32(fileSize);
 
     return true;
+}
+
+void WaveFile::updateLoopInfo_()
+{
+    if (mEncoding != Encoding::DspAdpcm)
+    {
+        return;
+    }
+
+    for (u32 i = 0; i < mChannels.size(); i++)
+    {
+        Channel* channel = mChannels.nth(i);
+
+        ADPCMINFO adpcmInfo;
+        sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
+
+        FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(), channel->getAdpcmLoopParam());
+
+        getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, mLoopStartFrame);
+
+        channel->mAdpcmLoopParam.loopPredScale = adpcmInfo.loop_pred_scale;
+        channel->mAdpcmLoopParam.loopYn1 = adpcmInfo.loop_yn1;
+        channel->mAdpcmLoopParam.loopYn2 = adpcmInfo.loop_yn2;
+    }
+}
+
+void* WaveFile::convert_(void* data, sead::Endian::Types dataEndian, u32 samples, Encoding from, Encoding to, u32* size, ADPCMINFO* adpcmInfo, u32 loopSample)
+{
+    SEAD_ASSERT(size);
+
+    if (from == to)
+    {
+        // TODO: Set size
+        return data;
+    }
+
+    auto Pcm8ToPcm16 = [&](void* dataSrc) -> void*
+    {
+        s8* src = static_cast<s8*>(dataSrc);
+        s16* dst = new s16[samples];
+
+        for (u32 i = 0; i < samples; i++)
+        {
+            dst[i] = s16(src[i] << 8);
+        }
+
+        delete[] src;
+
+        *size = sizeof(s16) * samples;
+        return dst;
+    };
+
+    auto Pcm8ToAdpcm = [&](void* dataSrc) -> void*
+    {
+        SEAD_ASSERT(adpcmInfo);
+
+        u32 bufferSize = getBytesForAdpcmBuffer(samples);
+
+        s16* src = static_cast<s16*>(Pcm8ToPcm16(dataSrc));
+        u8* dst = new u8[bufferSize];
+
+        encode(src, dst, adpcmInfo, samples);
+        getLoopContext(dst, adpcmInfo, loopSample);
+
+        delete[] src;
+
+        *size = bufferSize;
+        return dst;
+    };
+
+    auto Pcm16ToPcm8 = [&](void* dataSrc) -> void*
+    {
+        s16* src = static_cast<s16*>(dataSrc);
+        s8* dst = new s8[samples];
+
+        for (u32 i = 0; i < samples; i++)
+        {
+            dst[i] = s8(sead::Endian::toHostS16(dataEndian, src[i]) >> 8);
+        }
+
+        delete[] src;
+
+        *size = sizeof(s8) * samples;
+        return dst;
+    };
+
+    auto Pcm16ToAdpcm = [&](void* dataSrc) -> void*
+    {
+        SEAD_ASSERT(adpcmInfo);
+
+        u32 bufferSize = getBytesForAdpcmBuffer(samples);
+
+        s16* src = static_cast<s16*>(dataSrc);
+        u8* dst = new u8[bufferSize];
+
+        if (dataEndian != sead::Endian::getHostEndian())
+        {            
+            for (u32 i = 0; i < samples; i++)
+            {
+                src[i] = sead::Endian::toHostS16(dataEndian, src[i]);
+            }
+        }
+
+        encode(src, dst, adpcmInfo, samples);
+        getLoopContext(dst, adpcmInfo, loopSample);
+
+        delete[] src;
+
+        *size = bufferSize;
+        return dst;
+    };
+
+    auto AdpcmToPcm16 = [&](void* dataSrc) -> void*
+    {
+        SEAD_ASSERT(adpcmInfo);
+
+        u8* src = static_cast<u8*>(dataSrc);
+        s16* dst = new s16[samples];
+
+        snd::AdpcmContext adpcmContext;
+        adpcmContext.pred_scale = adpcmInfo->pred_scale;
+        adpcmContext.yn1 = adpcmInfo->yn1;
+        adpcmContext.yn2 = adpcmInfo->yn2;
+
+        snd::AdpcmParam adpcmParam;
+        FillAdpcmParam(&adpcmParam, *adpcmInfo);
+
+        snd::internal::DecodeDspAdpcm(0, adpcmContext, adpcmParam, src, samples, dst);
+
+        delete[] src;
+
+        *size = sizeof(s16) * samples;
+        return dst;
+    };
+
+    auto AdpcmToPcm8 = [&](void* dataSrc) -> void*
+    {
+        SEAD_ASSERT(adpcmInfo);
+
+        s8* dst = static_cast<s8*>(Pcm16ToPcm8(AdpcmToPcm16(dataSrc)));
+
+        *size = sizeof(s8) * samples;
+        return dst;
+    };
+
+    switch (from)
+    {
+        case Encoding::Pcm8:
+        {
+            switch (to)
+            {
+                case Encoding::Pcm16:
+                    return Pcm8ToPcm16(data);
+
+                case Encoding::DspAdpcm:
+                    return Pcm8ToAdpcm(data);
+            }
+
+            break;
+        }
+
+        case Encoding::Pcm16:
+        {
+            switch (to)
+            {
+                case Encoding::Pcm8:
+                    return Pcm16ToPcm8(data);
+
+                case Encoding::DspAdpcm:
+                    return Pcm16ToAdpcm(data);
+            }
+
+            break;
+        }
+
+        case Encoding::DspAdpcm:
+        {
+            switch (to)
+            {
+                case Encoding::Pcm8:
+                    return AdpcmToPcm8(data);
+
+                case Encoding::Pcm16:
+                    return AdpcmToPcm16(data);
+            }
+
+            break;
+        }
+    }
+
+    SEAD_ASSERT_MSG(false, "Invalid Encoding");
+    return data;
 }

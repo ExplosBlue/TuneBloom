@@ -7,6 +7,8 @@
 
 #include <container/seadObjList.h>
 
+#include <dsp/dsp.h>
+
 class WaveFile : public Item, public InnerFile
 {
 public:
@@ -52,6 +54,9 @@ public:
         {
             return mAdpcmLoopParam;
         }
+
+    private:
+        void dispose_();
 
     private:
         bool mOwnsData;
@@ -169,7 +174,9 @@ private:
         mUseOriginalData = false;
     }
 
-    void convert_();
+    void updateLoopInfo_();
+
+    static void* convert_(void* data, sead::Endian::Types dataEndian, u32 samples, Encoding from, Encoding to, u32* size, ADPCMINFO* adpcmInfo, u32 loopSample);
 
 private:
     sead::Endian::Types mDataEndian; //? For when Encoding is Pcm16

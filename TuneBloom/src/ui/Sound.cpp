@@ -2,6 +2,16 @@
 
 #include <imgui/imgui_custom.h>
 
+extern const Sound* sLastPlayedSound;
+
+Sound::~Sound()
+{
+    if (this == sLastPlayedSound)
+    {
+        sLastPlayedSound = nullptr;
+    }
+}
+
 void DrawSoundPropertiesUI()
 {
     Sound* sound = static_cast<Sound*>(sSelectedItem);

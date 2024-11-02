@@ -93,6 +93,9 @@ public:
     }
 
 private:
+    void invalidatePlayer_() const;
+
+private:
     bool mIsValid;
     bool mIsDirty;
     TextEditor* mTextEditor;

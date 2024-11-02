@@ -8,6 +8,8 @@
 #include <functional>
 #include <vector>
 
+extern SequenceSoundPlayer sSequencePlayer;
+
 enum ImGuiPianoKeyboardMsg
 {
     NoteGetStatus,
@@ -404,6 +406,15 @@ void BankFile::Instrument::drawUI()
 
             ImGui::TreePop();
         }
+    }
+}
+
+BankFile::~BankFile()
+{
+    if (sSequencePlayer.isActive())
+    {
+        snd::internal::driver::SoundThreadLock lock;
+        sSequencePlayer.invalidateBankFile(*this);
     }
 }
 

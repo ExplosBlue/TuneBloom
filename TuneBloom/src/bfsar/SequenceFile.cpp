@@ -3,6 +3,7 @@
 #include <bfsar/SeqCommand.h>
 
 #include <snd/snd_SequenceSoundFileReader.h>
+#include <snd/DisposeCallbackMgr.h>
 
 #include <ui/UI.h>
 #include <imgui/imgui.h>
@@ -19,6 +20,8 @@ extern SequenceSoundPlayer sSequencePlayer;
 
 SequenceFile::~SequenceFile()
 {
+    invalidatePlayer_();
+
     if (mTextEditor)
     {
         delete mTextEditor;
@@ -259,6 +262,21 @@ std::string SequenceFile::getLabelFromParsedOffset(u32 offset, u32 allocTrackFla
     return "";
 }
 
+void SequenceFile::invalidatePlayer_() const
+{
+    if (sSequencePlayer.isPlayingFile(*this))
+    {
+        sSequencePlayer.clearPlayingFile();
+    }
+
+    if (mSeqBytes)
+    {
+        snd::internal::driver::SoundThreadLock lock;
+
+        snd::internal::driver::DisposeCallbackMgr::instance()->dispose(mSeqBytes, mSeqBytesSize);
+    }
+}
+
 void SequenceFile::doRead(const void* fileAddr)
 {
     std::vector<std::string> lines;
@@ -489,8 +507,11 @@ void SequenceFile::compile_(bool setCursorPos)
     {
         if (mSeqBytes)
         {
+            invalidatePlayer_();
+
             delete mSeqBytes;
             mSeqBytes = nullptr;
+            mSeqBytesSize = 0;
         }
 
         mLabels.clear();
@@ -780,8 +801,11 @@ void SequenceFile::compile_(bool setCursorPos)
 
     if (mSeqBytes)
     {
+        invalidatePlayer_();
+
         delete mSeqBytes;
         mSeqBytes = nullptr;
+        mSeqBytesSize = 0;
     }
 
     mSeqBytesSize = seqBytes.size();

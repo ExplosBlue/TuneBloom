@@ -44,7 +44,7 @@ public:
     virtual snd::internal::driver::Channel* noteOn(SequenceSoundPlayer* sequenceSoundPlayer, u8 bankIndex, const NoteOnInfo& noteOnInfo) = 0;
 };
 
-class SequenceSoundPlayer : public BasicSoundPlayer, public snd::internal::driver::SoundThread::PlayerCallback
+class SequenceSoundPlayer : public BasicSoundPlayer, public snd::internal::driver::DisposeCallback, public snd::internal::driver::SoundThread::PlayerCallback
 {
 public:
     struct ParserPlayerParam
@@ -94,7 +94,6 @@ public:
     void deinit(bool stop = false);
     void setup(u32 allocTracks, NoteOnCallback* callback);
     void prepare(const void* seqFile, s32 seqOffset, const void** bankFiles, const void** warcFiles, const bool* warcIsIndividuals, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
-    void prepare(const void* seqFile, s32 seqOffset, const BankFile** bankFiles, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
     void prepare(const SequenceFile& seqFile, s32 seqOffset, const BankFile** bankFiles, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
 
     void pause(bool flag) override;
@@ -114,6 +113,11 @@ public:
     bool isPlayingFile(const SequenceFile& file) const
     {
         return &file == mPlayingFile;
+    }
+
+    void clearPlayingFile()
+    {
+        mPlayingFile = nullptr;
     }
 
     SequenceTrack* getPlayerTrack(s32 trackNo);
@@ -189,6 +193,8 @@ public:
             return nullptr;
     }
 
+    void invalidateData(const void* start, const void* end) override;
+
     const nw::snd::internal::BankFileReader& getBankFileReader(u8 bankIndex) const
     {
         return mBankFileReader[bankIndex];
@@ -203,6 +209,30 @@ public:
     const BankFile* getBankFile(u8 bankIndex)
     {
         return mBankFile[bankIndex];
+    }
+
+    void invalidateBankFile(const BankFile& bank)
+    {
+        for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
+        {
+            if (mBankFile[i] == &bank)
+            {
+                mBankFile[i] = nullptr;
+            }
+        }
+    }
+
+    bool usesBankFile(const BankFile& bank)
+    {
+        for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
+        {
+            if (mBankFile[i] == &bank)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     f32 calcTickPerMinute() const { return mParserParam.timebase * mParserParam.tempo * mTempoRatio; }

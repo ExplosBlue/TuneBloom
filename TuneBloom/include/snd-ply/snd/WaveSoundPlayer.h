@@ -11,7 +11,7 @@
 
 class Sound;
 
-class WaveSoundPlayer : public BasicSoundPlayer, public snd::internal::driver::SoundThread::PlayerCallback
+class WaveSoundPlayer : public BasicSoundPlayer, public snd::internal::driver::DisposeCallback, public snd::internal::driver::SoundThread::PlayerCallback
 {
 public:
     struct PrepareArg
@@ -62,6 +62,8 @@ public:
     void updateChannel();
 
     s32 getPlaySamplePosition(bool isOriginalSamplePosition) const;
+
+    void invalidateData(const void* start, const void* end) override;
 
     u32 getSampleRate() const
     {

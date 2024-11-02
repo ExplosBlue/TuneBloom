@@ -1,6 +1,7 @@
 #include "snd/WaveSoundPlayer.h"
 
 #include "snd/BankR.h"
+#include "snd/DisposeCallbackMgr.h"
 
 #include "bfsar/Sound.h"
 
@@ -55,6 +56,7 @@ void WaveSoundPlayer::deinit(bool stop)
     if (mIsRegisterPlayerCallback)
     {
         snd::internal::driver::SoundThread::instance()->unregisterPlayerCallback(this);
+        snd::internal::driver::DisposeCallbackMgr::instance()->unregisterDisposeCallback(this);
         mIsRegisterPlayerCallback = false;
     }
 
@@ -73,6 +75,7 @@ void WaveSoundPlayer::prepare(s32 index, const PrepareArg& arg, snd::UpdateType 
 
     if (!mIsRegisterPlayerCallback)
     {
+        snd::internal::driver::DisposeCallbackMgr::instance()->registerDisposeCallback(this);
         snd::internal::driver::SoundThread::instance()->registerPlayerCallback(this);
         mIsRegisterPlayerCallback = true;
     }
@@ -98,6 +101,7 @@ void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, const So
 
     if (!mIsRegisterPlayerCallback)
     {
+        snd::internal::driver::DisposeCallbackMgr::instance()->registerDisposeCallback(this);
         snd::internal::driver::SoundThread::instance()->registerPlayerCallback(this);
         mIsRegisterPlayerCallback = true;
     }
@@ -379,6 +383,19 @@ s32 WaveSoundPlayer::getPlaySamplePosition(bool isOriginalSamplePosition) const
         return 0;
 
     return static_cast<s32>(mChannel->getCurrentPlayingSample(isOriginalSamplePosition));
+}
+
+void WaveSoundPlayer::invalidateData(const void* start, const void* end)
+{
+    if (mActiveFlag)
+    {
+        const void* current = mWsdFile;
+        if (start <= current && current <= end)
+        {
+            //finishPlayer();
+            deinit();
+        }
+    }
 }
 
 void WaveSoundPlayer::channelCallbackFunc(snd::internal::driver::Channel* dropChannel, snd::internal::driver::Channel::ChannelCallbackStatus, void* userData)

@@ -75,7 +75,7 @@ BasicSoundPlayer* sCurrentSoundPlayer = nullptr;
 bool sLoop = true;
 static f32 sVolume = 0.5f;
 
-const Sound* sLastPlayedSound = nullptr; // TODO: Handle sound deletion
+const Sound* sLastPlayedSound = nullptr;
 
 u32 sSampleRate = 0;
 u32 sSampleCount = 0;

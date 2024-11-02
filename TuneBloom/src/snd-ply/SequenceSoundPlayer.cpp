@@ -1,5 +1,6 @@
 #include "snd/SequenceSoundPlayer.h"
 
+#include "snd/DisposeCallbackMgr.h"
 #include "snd/HardwareMgr.h"
 #include "snd/MmlParser.h"
 
@@ -114,40 +115,7 @@ void SequenceSoundPlayer::prepare(const void* seqFile, s32 seqOffset, const void
         mWarcFileReader[i].Initialize(warcFiles[i], warcIsIndividuals[i]);
     }
 
-    snd::internal::driver::SoundThread::instance()->registerPlayerCallback(this);
-    mIsRegisterPlayerCallback = true;
-    mActiveFlag = true;
-
-    mUpdateType = updateType;
-}
-
-void SequenceSoundPlayer::prepare(const void* seqFile, s32 seqOffset, const BankFile** bankFiles, snd::UpdateType updateType)
-{
-    if (mActiveFlag)
-    {
-        finishPlayer();
-    }
-
-    SequenceTrack* seqTrack = getPlayerTrack(0);
-    if (!seqTrack)
-    {
-        //finalize();
-        return;
-    }
-
-    {
-        SEAD_ASSERT(seqFile);
-        nw::snd::internal::SequenceSoundFileReader reader(seqFile);
-        const void* seqData = reader.GetSequenceData(); // Data block body.
-        seqTrack->setSeqData(seqData, seqOffset);
-        seqTrack->open();
-    }
-
-    for (s32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
-    {
-        mBankFile[i] = bankFiles[i];
-    }
-
+    snd::internal::driver::DisposeCallbackMgr::instance()->registerDisposeCallback(this);
     snd::internal::driver::SoundThread::instance()->registerPlayerCallback(this);
     mIsRegisterPlayerCallback = true;
     mActiveFlag = true;
@@ -188,6 +156,7 @@ void SequenceSoundPlayer::prepare(const SequenceFile& seqFile, s32 seqOffset, co
         mBankFile[i] = bankFiles[i];
     }
 
+    snd::internal::driver::DisposeCallbackMgr::instance()->registerDisposeCallback(this);
     snd::internal::driver::SoundThread::instance()->registerPlayerCallback(this);
     mIsRegisterPlayerCallback = true;
     mActiveFlag = true;
@@ -253,6 +222,7 @@ void SequenceSoundPlayer::finishPlayer(bool stop)
     if (mIsRegisterPlayerCallback)
     {
         snd::internal::driver::SoundThread::instance()->unregisterPlayerCallback(this);
+        snd::internal::driver::DisposeCallbackMgr::instance()->unregisterDisposeCallback(this);
         mIsRegisterPlayerCallback = false;
     }
 
@@ -410,4 +380,36 @@ snd::internal::driver::Channel* SequenceSoundPlayer::noteOn(u8 bankIndex, const 
     );
 
     return channel;
+}
+
+void SequenceSoundPlayer::invalidateData(const void* start, const void* end)
+{
+    if (mActiveFlag)
+    {
+        for (s32 trackNo = 0; trackNo < cTrackNumPerPlayer; trackNo++)
+        {
+            SequenceTrack* track = getPlayerTrack(trackNo);
+            if (!track)
+            {
+                continue;
+            }
+
+            const u8* cur = track->getParserTrackParam().baseAddr;
+            if (start <= cur && cur <= end)
+            {
+                finishPlayer();
+                //finalize();
+                break;
+            }
+        }
+
+        for (s32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
+        {
+            const void* cur = mBankFileReader[i].GetBankFileAddress();
+            if (start <= cur && cur <= end)
+            {
+                mBankFileReader[i].Finalize();
+            }
+        }
+    }
 }

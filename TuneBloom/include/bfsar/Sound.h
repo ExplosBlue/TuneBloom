@@ -955,6 +955,8 @@ public:
         mEnableUserParam[0] = true;
     }
 
+    ~Sound() override;
+
     u32 getPlayerId() const
     {
         return mPlayerRef.getItemId();

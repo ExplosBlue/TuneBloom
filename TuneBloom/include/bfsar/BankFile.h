@@ -257,6 +257,8 @@ public:
         mItemType = ItemType::BankFile;
     }
 
+    ~BankFile() override;
+
     void drawUI() override;
     void drawFileUI();
 

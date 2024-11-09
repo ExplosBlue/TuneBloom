@@ -6,6 +6,8 @@
 
 #include "snd/snd_SoundArchive.h"
 
+#include <bfsar/Sound.h>
+
 static const u32 cStrmChannelNum = 16;
 static const u32 cStrmTrackNum = 8;
 
@@ -138,6 +140,7 @@ public:
     void deinit(bool freeBuffers = true);
     void setup(const SetupArg& arg);
     void prepare(const void* strmFile, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
+    void prepare(const Sound::StreamSoundInfo& streamSoundInfo, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
 
     void pause(bool flag) override;
 

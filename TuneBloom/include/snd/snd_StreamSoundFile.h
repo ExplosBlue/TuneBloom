@@ -324,6 +324,7 @@ struct StreamSoundFile
         DspAdpcmLoopParam adpcmContext[16]; // 16 channels (= 2ch/trk * 8 trk).
         u8 pading[152];                     // Adjust so that each RegionInfo is 256 bytes long.
     };
+    static_assert(sizeof(RegionInfo) == 256);
 };
 
 } } } // namespace nw::snd::internal

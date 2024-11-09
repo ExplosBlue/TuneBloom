@@ -269,6 +269,8 @@ public:
         public:
             Track()
                 : Item()
+                , mWaveFileRef(this)
+
                 , mVolume(127)
                 , mPan(64)
                 , mSPan(0)
@@ -289,12 +291,22 @@ public:
                 }
             }
 
-            ~Track()
+            ~Track() override
             {
                 mChannels.freeBuffer();
             }
 
             void drawUI();
+
+            const ItemReference& getWaveFileRef() const
+            {
+                return mWaveFileRef;
+            }
+
+            ItemReference& getWaveFileRef()
+            {
+                return mWaveFileRef;
+            }
 
             u8 getVolume() const
             {
@@ -313,6 +325,7 @@ public:
 
             void setPan(u8 pan)
             {
+                pan = sead::MathCalcCommon<u8>::clampMax(pan, 127);
                 mPan = pan;
             }
 
@@ -323,6 +336,7 @@ public:
 
             void setSPan(u8 span)
             {
+                span = sead::MathCalcCommon<u8>::clampMax(span, 127);
                 mSPan = span;
             }
 
@@ -336,14 +350,25 @@ public:
                 mFlags = flags;
             }
 
-            const sead::ObjList<u8>& getChannels() const
-            {
-                return mChannels;
-            }
+            // const sead::ObjList<u8>& getChannels() const
+            // {
+            //     return mChannels;
+            // }
 
-            sead::ObjList<u8>& getChannels()
+            // sead::ObjList<u8>& getChannels()
+            // {
+            //     return mChannels;
+            // }
+
+            u16 getChannelCount() const
             {
-                return mChannels;
+                if (!mWaveFileRef.isAttached())
+                {
+                    return 0;
+                }
+
+                const WaveFile* wave = static_cast<const WaveFile*>(mWaveFileRef.getItem());
+                return static_cast<u16>(wave->getChannels().size());
             }
 
             u8 getMainSend() const
@@ -378,6 +403,7 @@ public:
 
             void setLpfFreq(u8 lpfFreq)
             {
+                lpfFreq = sead::MathCalcCommon<u8>::clampMax(lpfFreq, 64);
                 mLpfFreq = lpfFreq;
             }
 
@@ -398,15 +424,18 @@ public:
 
             void setBiquadValue(u8 biquadValue)
             {
+                biquadValue = sead::MathCalcCommon<u8>::clampMax(biquadValue, 127);
                 mBiquadValue = biquadValue;
             }
 
         private:
+            ItemReference mWaveFileRef;
+
             u8 mVolume;
             u8 mPan;
             u8 mSPan;
             u8 mFlags;
-            sead::ObjList<u8> mChannels;
+            sead::ObjList<u8> mChannels; // TODO: Remove this
             u8 mMainSend;
             u8 mFxSend[3];
             u8 mLpfFreq;
@@ -428,8 +457,8 @@ public:
         StreamSoundInfo(Sound* owner)
             : mPath()
 
-            , mAllocateTrackFlags(0)
-            , mAllocateChannelCount(0)
+            //, mAllocateTrackFlags(0)
+            //, mAllocateChannelCount(0)
             , mTrackList()
             , mPitch(1.0f)
             , mMainSend(127)
@@ -464,24 +493,33 @@ public:
 
         u16 getAllocateTrackFlags() const
         {
-            return mAllocateTrackFlags;
+            return ~(sead::MathCalcCommon<u16>::maxNumber() << mTrackList.size());
         }
 
-        void setAllocateTrackFlags(u16 flags)
-        {
-            mAllocateTrackFlags = flags;
-        }
+        // void setAllocateTrackFlags(u16 flags)
+        // {
+        //     mAllocateTrackFlags = flags;
+        // }
 
         u16 getAllocateChannelCount() const
         {
-            return mAllocateChannelCount;
+            u16 channelCount = 0;
+            for (u32 i = 0; i < mTrackList.size(); i++)
+            {
+                Item* trackItem = mTrackList.nth(i)->val();
+                Sound::StreamSoundInfo::Track& track = *static_cast<Sound::StreamSoundInfo::Track*>(trackItem);
+
+                channelCount += track.getChannelCount();
+            }
+
+            return channelCount;
         }
 
-        void setAllocateChannelCount(u16 channelCount)
-        {
-            channelCount = sead::MathCalcCommon<u16>::clampMax(channelCount, 16);
-            mAllocateChannelCount = channelCount;
-        }
+        // void setAllocateChannelCount(u16 channelCount)
+        // {
+        //     channelCount = sead::MathCalcCommon<u16>::clampMax(channelCount, 16);
+        //     mAllocateChannelCount = channelCount;
+        // }
 
         const Track::List& getTrackList() const
         {
@@ -604,8 +642,8 @@ public:
     private:
         sead::FixedSafeString<512> mPath; //? Temp solution, will probably not leave like this
 
-        u16 mAllocateTrackFlags;
-        u16 mAllocateChannelCount;
+        //u16 mAllocateTrackFlags;
+        //u16 mAllocateChannelCount;
         Track::List mTrackList;
         f32 mPitch;
         u8 mMainSend;

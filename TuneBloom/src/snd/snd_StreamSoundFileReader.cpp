@@ -69,8 +69,8 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
         return false;
     }
 
-    if (false)
-    //if (!(0x00010000 <= header->version && header->version <= 0x00040000))
+    //if (false)
+    if (!(0x00010000 <= header->version && header->version <= 0x00040000))
     {
         SEAD_ASSERT_MSG(false, "STREAM SOUND version not supported (0x%08X)", (u32)header->version);
         return false;

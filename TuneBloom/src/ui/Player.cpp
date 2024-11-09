@@ -496,49 +496,7 @@ void PlayStrmSound(const Sound* sound)
         return;
     }
 
-    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-    SEAD_ASSERT(device);
-
-    sead::FixedSafeString<512> dir;
-    bool b = sead::Path::getDirectoryName(&dir, sBfsar.getFilePath());
-    //SEAD_PRINT("%d\n", b);
-
     const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
-
-    if (strmSoundInfo.getPath().isEmpty())
-    {
-        SEAD_PRINT("Path is empty\n");
-        return;
-    }
-
-    const char* filePath = strmSoundInfo.getPath().cstr();
-
-    sead::FixedSafeString<512> path;
-    path.format("%s/%s", dir.cstr(), filePath);
-    //SEAD_PRINT("%s\n", path.cstr());
-
-    sead::FileDevice::LoadArg loadArg;
-    loadArg.path = path;
-
-    u8* strmFile = device->tryLoad(loadArg);
-    if (!strmFile)
-    {
-        SEAD_PRINT("Stream file not found [%s]\n", filePath);
-        return;
-    }
-
-    //if (sead::MemUtil::compare(strmFile, "CSTM", 4) != 0)
-    if (sead::MemUtil::compare(strmFile, "FSTM", 4) != 0)
-    {
-        SEAD_PRINT("Referenced file is not a bfstm [%s]\n", filePath);
-
-        if (loadArg.need_unload)
-        {
-            device->unload(strmFile);
-        }
-
-        return;
-    }
 
     StreamSoundPlayer::SetupArg setupArg;
     setupArg.allocChannelCount = strmSoundInfo.getAllocateChannelCount();
@@ -563,57 +521,57 @@ void PlayStrmSound(const Sound* sound)
         }
     }
 
-    if (sBfsar.isStreamTrackInfoAvailable())
+    u32 channelIdxStart = 0;
+    for (u32 i = 0; i < strmSoundInfo.getTrackList().size(); i++)
     {
-        for (u32 i = 0; i < strmSoundInfo.getTrackList().size(); i++)
+        nw::snd::SoundArchive::StreamTrackInfo& tmp = setupArg.tracks[i];
+
+        const Item* trackItem = strmSoundInfo.getTrackList().nth(i)->val();
+        const Sound::StreamSoundInfo::Track& trackInfo = *static_cast<const Sound::StreamSoundInfo::Track*>(trackItem);
+
+        tmp.volume = trackInfo.getVolume();
+        tmp.pan = trackInfo.getPan();
+        tmp.span = trackInfo.getSPan();
+        tmp.flags = trackInfo.getFlags();
+        tmp.channelCount = static_cast<u8>(trackInfo.getChannelCount());
+
+        if (sBfsar.isStreamSendAvailable())
         {
-            nw::snd::SoundArchive::StreamTrackInfo& tmp = setupArg.tracks[i];
-
-            const Item* trackItem = strmSoundInfo.getTrackList().nth(i)->val();
-            const Sound::StreamSoundInfo::Track& trackInfo = *static_cast<const Sound::StreamSoundInfo::Track*>(trackItem);
-
-            tmp.volume = trackInfo.getVolume();
-            tmp.pan = trackInfo.getPan();
-            tmp.span = trackInfo.getSPan();
-            tmp.flags = trackInfo.getFlags();
-            tmp.channelCount = static_cast<u8>(trackInfo.getChannels().size());
-
-            if (sBfsar.isStreamSendAvailable())
+            tmp.mainSend = trackInfo.getMainSend();
+            for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
             {
-                tmp.mainSend = trackInfo.getMainSend();
-                for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
-                {
-                    tmp.fxSend[j] = trackInfo.getFxSend(j);
-                }
-            }
-            else
-            {
-                tmp.mainSend = 127;
-                for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
-                {
-                    tmp.fxSend[j] = 0;
-                }
-            }
-
-            if (sBfsar.isFilterSupportedVersion())
-            {
-                tmp.lpfFreq = trackInfo.getLpfFreq();
-                tmp.biquadType = trackInfo.getBiquadType();
-                tmp.biquadValue = trackInfo.getBiquadValue();
-            }
-            else
-            {
-                tmp.lpfFreq = 64;
-                tmp.biquadType = 0;
-                tmp.biquadValue = 0;
-            }
-
-            u32 count = sead::Mathu::min(static_cast<u32>(tmp.channelCount), nw::snd::WAVE_CHANNEL_MAX);
-            for (u32 ch = 0; ch < count; ch++)
-            {
-                tmp.globalChannelIndex[ch] = *trackInfo.getChannels().nth(ch);
+                tmp.fxSend[j] = trackInfo.getFxSend(j);
             }
         }
+        else
+        {
+            tmp.mainSend = 127;
+            for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
+            {
+                tmp.fxSend[j] = 0;
+            }
+        }
+
+        if (sBfsar.isFilterSupportedVersion())
+        {
+            tmp.lpfFreq = trackInfo.getLpfFreq();
+            tmp.biquadType = trackInfo.getBiquadType();
+            tmp.biquadValue = trackInfo.getBiquadValue();
+        }
+        else
+        {
+            tmp.lpfFreq = 64;
+            tmp.biquadType = 0;
+            tmp.biquadValue = 0;
+        }
+
+        u32 count = sead::Mathu::min(static_cast<u32>(tmp.channelCount), nw::snd::WAVE_CHANNEL_MAX);
+        for (u32 ch = 0; ch < count; ch++)
+        {
+            tmp.globalChannelIndex[ch] = channelIdxStart + ch;
+        }
+
+        channelIdxStart += count;
     }
 
     {
@@ -627,17 +585,12 @@ void PlayStrmSound(const Sound* sound)
         sStreamPlayer.setVolume(sVolume);
 
         sStreamPlayer.setup(setupArg);
-        sStreamPlayer.prepare(strmFile);
+        sStreamPlayer.prepare(strmSoundInfo);
 
         sCurrentSoundPlayer = &sStreamPlayer;
 
         sSampleCount = sStreamPlayer.getSampleCount();
         sSampleRate = sStreamPlayer.getSampleRate();
-    }
-
-    if (loadArg.need_unload)
-    {
-        device->unload(strmFile);
     }
 
     sSelectedItem = const_cast<Sound*>(sound);

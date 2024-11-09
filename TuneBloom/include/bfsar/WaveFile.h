@@ -67,6 +67,7 @@ public:
         snd::DspAdpcmParam mAdpcmParam;
         snd::internal::DspAdpcmLoopParam mAdpcmLoopParam;
 
+        friend class Bfsar;
         friend class WaveFile;
     };
 
@@ -83,6 +84,7 @@ public:
         , mLoopStartFrame(0)
         , mLoopEndFrame(0)
         , mOriginalLoopStartFrame(0)
+        , mOriginalLoopEndFrame(0)
 
         , mSampleCount(0)
 
@@ -152,6 +154,14 @@ public:
         return mLoopStartFrame;
     }
 
+    u32 getOriginalLoopEndFrame() const
+    {
+        if (isOriginalLoopAvailable())
+            return mOriginalLoopEndFrame;
+
+        return mLoopEndFrame;
+    }
+
     const sead::ObjList<Channel>& getChannels() const
     {
         return mChannels;
@@ -186,6 +196,7 @@ private:
     u32 mLoopStartFrame;
     u32 mLoopEndFrame;
     u32 mOriginalLoopStartFrame;
+    u32 mOriginalLoopEndFrame; //? Only used for streams
 
     u32 mSampleCount;
 
@@ -195,5 +206,6 @@ private:
     void* mOriginalData;
     u32 mOriginalDataSize;
 
+    friend class Bfsar;
     friend class BfwarFile;
 };

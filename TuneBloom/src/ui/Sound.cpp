@@ -234,7 +234,7 @@ void DrawSoundPropertiesUI()
 
                 ImGui::SameLine();
 
-                if (ImGui::CheckboxFlagsT<u32>("SPan", &flags, Sound::Sound3DInfo::Flags::SPan))
+                if (ImGui::CheckboxFlagsT<u32>("Surround Pan", &flags, Sound::Sound3DInfo::Flags::SPan))
                 {
                     sound3DInfo.setFlags(flags);
                 }
@@ -455,54 +455,41 @@ void DrawSoundPropertiesUI()
                 }
             }
 
-            {
-                u32 allocateTrackFlags = strmSoundInfo.getAllocateTrackFlags();
-                //if (ImGui::InputScalar("Allocate Track Flags", ImGuiDataType_U16, &allocateTrackFlags, &cStepU16))
-                //{
-                //    strmSoundInfo.setAllocateTrackFlags(allocateTrackFlags);
-                //}
+            // {
+            //     u32 allocateTrackFlags = strmSoundInfo.getAllocateTrackFlags();
+            //     //if (ImGui::InputScalar("Allocate Track Flags", ImGuiDataType_U16, &allocateTrackFlags, &cStepU16))
+            //     //{
+            //     //    strmSoundInfo.setAllocateTrackFlags(allocateTrackFlags);
+            //     //}
 
-                CenteredTextX("Allocate Tracks");
+            //     CenteredTextX("Allocate Tracks");
 
-                for (u32 i = 0; i < 8; i++)
-                {
-                    if (ImGui::CheckboxFlagsT<u32>(sead::FormatFixedSafeString<8>("###%u", i).cstr(), &allocateTrackFlags, 1 << i))
-                    {
-                        strmSoundInfo.setAllocateTrackFlags(allocateTrackFlags);
-                    }
+            //     for (u32 i = 0; i < 8; i++)
+            //     {
+            //         if (ImGui::CheckboxFlagsT<u32>(sead::FormatFixedSafeString<8>("###%u", i).cstr(), &allocateTrackFlags, 1 << i))
+            //         {
+            //             strmSoundInfo.setAllocateTrackFlags(allocateTrackFlags);
+            //         }
 
-                    ImGui::SameLine();
-                    f32 cursorPos = ImGui::GetCursorPosX();
-                    ImGui::Text("%u", i);
+            //         ImGui::SameLine();
+            //         f32 cursorPos = ImGui::GetCursorPosX();
+            //         ImGui::Text("%u", i);
 
-                    if ((i + 1) % 8 != 0)
-                    {
-                        ImGui::SameLine();
-                        ImGui::SetCursorPosX(cursorPos + 30.0f);
-                    }
-                }
-            }
+            //         if ((i + 1) % 8 != 0)
+            //         {
+            //             ImGui::SameLine();
+            //             ImGui::SetCursorPosX(cursorPos + 30.0f);
+            //         }
+            //     }
+            // }
 
-            {
-                u16 allocateChannelCount = strmSoundInfo.getAllocateChannelCount();
-                if (ImGui::InputScalar("Allocate Channel Count", ImGuiDataType_U16, &allocateChannelCount, &cStepU16))
-                {
-                    strmSoundInfo.setAllocateChannelCount(allocateChannelCount);
-                }
-            }
-
-            {
-                bool enableTracks = sBfsar.isStreamTrackInfoAvailable();
-
-                if (!enableTracks)
-                    ImGui::BeginDisabled();
-
-                // TODO
-                //ImGui::Text("Tracks... (%d)", strmSoundInfo.getTracks().size());
-
-                if (!enableTracks)
-                    ImGui::EndDisabled();
-            }
+            // {
+            //     u16 allocateChannelCount = strmSoundInfo.getAllocateChannelCount();
+            //     if (ImGui::InputScalar("Allocate Channel Count", ImGuiDataType_U16, &allocateChannelCount, &cStepU16))
+            //     {
+            //         strmSoundInfo.setAllocateChannelCount(allocateChannelCount);
+            //     }
+            // }
 
             {
                 bool enableSend = sBfsar.isStreamSendAvailable();
@@ -829,7 +816,7 @@ void DrawSoundPropertiesUI()
 
                 {
                     u8 biquadType = waveSoundInfo.getBiquadType();
-                    if (ImGui::InputScalar("Biquad Type", ImGuiDataType_U8, &biquadType, &cStepU8))
+                    if (ImGui::InputScalar("Biquad Type", ImGuiDataType_U8, &biquadType, &cStepU8)) // TODO: Combo ?
                     {
                         waveSoundInfo.setBiquadType(biquadType);
                     }
@@ -862,20 +849,109 @@ void Sound::StreamSoundInfo::Track::drawUI()
     const ImU8 cStepU8 = 1;
 
     {
-        u8 volume = mVolume;
-        if (ImGui::InputScalar("Volume", ImGuiDataType_U8, &volume, &cStepU8))
+        Item* waveFile = getWaveFileRef().getItem();
+        if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
         {
-            mVolume = volume;
+            getWaveFileRef().attach(waveFile);
         }
     }
 
     {
-        u8 pan = mPan;
-        if (ImGui::InputScalar("Pan", ImGuiDataType_U8, &pan, &cStepU8))
+        u8 volume = getVolume();
+        if (ImGui::InputScalar("Volume", ImGuiDataType_U8, &volume, &cStepU8))
         {
-            mPan = pan;
+            setVolume(volume);
         }
     }
 
-    // TODO: Finish this
+    {
+        u8 pan = getPan();
+        if (ImGui::InputScalar("Pan", ImGuiDataType_U8, &pan, &cStepU8))
+        {
+            setPan(pan);
+        }
+    }
+
+    {
+        u8 span = getSPan();
+        if (ImGui::InputScalar("Surround Pan", ImGuiDataType_U8, &span, &cStepU8))
+        {
+            setSPan(span);
+        }
+    }
+
+    {
+        bool flags = getFlags();
+        if (ImGui::Checkbox("Front Bypass", &flags))
+        {
+            setFlags(flags);
+        }
+    }
+
+    {
+        bool enableSend = sBfsar.isStreamSendAvailable();
+        if (!enableSend)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        {
+            u8 mainSend = getMainSend();
+            if (ImGui::InputScalar("Main Send", ImGuiDataType_U8, &mainSend, &cStepU8))
+            {
+                setMainSend(mainSend);
+            }
+        }
+
+        for (u32 i = 0; i < 3; i++)
+        {
+            u8 fxSend = getFxSend(i);
+            if (ImGui::InputScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cStepU8))
+            {
+                setFxSend(i, fxSend);
+            }
+        }
+
+        if (!enableSend)
+        {
+            ImGui::EndDisabled();
+        }
+    }
+
+    {
+        bool enableFilter = sBfsar.isFilterSupportedVersion();
+        if (!enableFilter)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        {
+            u8 lpfFreq = getLpfFreq();
+            if (ImGui::InputScalar("LPF Frequency", ImGuiDataType_U8, &lpfFreq, &cStepU8))
+            {
+                setLpfFreq(lpfFreq);
+            }
+        }
+
+        {
+            u8 biquadType = getBiquadType();
+            if (ImGui::InputScalar("Biquad Type", ImGuiDataType_U8, &biquadType, &cStepU8)) // TODO: Combo ?
+            {
+                setBiquadType(biquadType);
+            }
+        }
+
+        {
+            u8 biquadValue = getBiquadValue();
+            if (ImGui::InputScalar("Biquad Value", ImGuiDataType_U8, &biquadValue, &cStepU8))
+            {
+                setBiquadValue(biquadValue);
+            }
+        }
+
+        if (!enableFilter)
+        {
+            ImGui::EndDisabled();
+        }
+    }
 }

@@ -168,6 +168,12 @@ void WaveFile::drawUI()
             //mSampleRate = sampleRate;
         }
 
+        u32 sampleCount = mSampleCount;
+        if (ImGui::InputScalar("Sample Count", ImGuiDataType_U32, &sampleCount, &cStepU32))
+        {
+            //mSampleCount = sampleCount;
+        }
+
         ImGui::EndDisabled();
     }
 
@@ -358,6 +364,7 @@ void WaveFile::doRead(const void* fileAddr)
     mLoopStartFrame = waveInfo.loopStartFrame;
     mLoopEndFrame = waveInfo.loopEndFrame;
     mOriginalLoopStartFrame = waveInfo.originalLoopStartFrame;
+    mOriginalLoopEndFrame = mLoopEndFrame;
 
     mSampleCount = waveInfo.loopEndFrame;
 
@@ -726,8 +733,9 @@ bool WaveFile::readWavFile(const sead::SafeString& path, Encoding encoding)
 
     // TODO: Loop info ?
     mLoopStartFrame = 0;
-    mOriginalLoopStartFrame = 0;
     mLoopEndFrame = mSampleCount;
+    mOriginalLoopStartFrame = mLoopStartFrame;
+    mOriginalLoopEndFrame = mLoopEndFrame;
 
     for (u32 i = 0; i < numChannels; i++)
     {

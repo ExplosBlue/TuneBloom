@@ -110,6 +110,7 @@ bool Bfsar::save()
         return false;
 
     sead::FormatFixedSafeString<512> path("%s.save.bfsar", mFilePath->cstr()); // TODO
+    //sead::SafeString path = *mFilePath;
 
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);
@@ -532,7 +533,7 @@ void Bfsar::open_(sead::Heap* heap)
                 std::string hash = md5(waveFile, waveFileSize);
 
                 u32 globalId = mWaveFileList.size();
-                
+
                 WaveFile* wave = new(heap) WaveFile();
                 wave->mId = globalId;
 
@@ -1405,8 +1406,8 @@ void Bfsar::open_(sead::Heap* heap)
 
             sound->mStreamSoundInfo.mPath = extFileInfo->filePath;
 
-            sound->mStreamSoundInfo.mAllocateTrackFlags = strmSoundInfo.allocateTrackFlags;
-            sound->mStreamSoundInfo.mAllocateChannelCount = strmSoundInfo.allocateChannelCount;
+            //sound->mStreamSoundInfo.mAllocateTrackFlags = strmSoundInfo.allocateTrackFlags;
+            //sound->mStreamSoundInfo.mAllocateChannelCount = strmSoundInfo.allocateChannelCount;
 
             sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
             SEAD_ASSERT(device);
@@ -1441,8 +1442,6 @@ void Bfsar::open_(sead::Heap* heap)
             reader.Initialize(strmFile);
             SEAD_ASSERT(reader.IsAvailable());
 
-            readStreamWaves_(strmFile);
-
             // If track information is embedded in bXstm (up to binary version 0.2.0.0)
             if (reader.IsTrackInfoAvailable())
             {
@@ -1475,17 +1474,12 @@ void Bfsar::open_(sead::Heap* heap)
 
                     for (u8 k = 0; k < channelCount; k++)
                     {
-                        u8& channel = *track->getChannels().birthBack();
+                        u8& channel = *track->mChannels.birthBack();
                         channel = trackInfo.globalChannelIndex[k];
                     }
 
                     sound->mStreamSoundInfo.mTrackList.pushBack(track);
                 }
-            }
-
-            if (loadArg.need_unload)
-            {
-                device->unload(strmFile);
             }
 
             if (isStreamTrackInfoAvailable())
@@ -1518,7 +1512,7 @@ void Bfsar::open_(sead::Heap* heap)
 
                             for (u32 k = 0; k < channelCount; k++)
                             {
-                                u8& channel = *track->getChannels().birthBack();
+                                u8& channel = *track->mChannels.birthBack();
                                 channel = trackInfo->GetGlobalChannelIndex(k);
                             }
 
@@ -1573,6 +1567,14 @@ void Bfsar::open_(sead::Heap* heap)
                         // TODO
                     }
                 }
+            }
+
+            // TODO: Only load the same bfstm file once ?
+            readStreamWaves_(strmFile, sound->mStreamSoundInfo.mTrackList);
+
+            if (loadArg.need_unload)
+            {
+                device->unload(strmFile);
             }
         }
         else if (sound->mSoundType == Sound::SoundType::Wave)
@@ -3836,6 +3838,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                                         {
                                             writer.openReferenceTable("TrackInfoTable", strmInfo.getTrackList().size());
 
+                                            u32 channelIdxStart = 0;
                                             for (u32 i = 0; i < strmInfo.getTrackList().size(); i++)
                                             {
                                                 const Item* trackItem = strmInfo.getTrackList().nth(i)->val();
@@ -3866,11 +3869,11 @@ void Bfsar::save_(sead::FileHandle& handle)
                                                     }
 
                                                     writer.closeReference("GlobalChannelIndexTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
-                                                    stream.writeU32(track.getChannels().size());
+                                                    stream.writeU32(track.getChannelCount());
 
-                                                    for (u32 j = 0; j < track.getChannels().size(); j++)
+                                                    for (u32 j = 0; j < track.getChannelCount(); j++)
                                                     {
-                                                        stream.writeU8(*track.getChannels().nth(j));
+                                                        stream.writeU8(channelIdxStart + j);
                                                     }
 
                                                     writer.align(0x4);
@@ -3891,6 +3894,8 @@ void Bfsar::save_(sead::FileHandle& handle)
                                                     }
                                                 }
                                                 writer.popOffsetBase();
+
+                                                channelIdxStart += track.getChannelCount();
                                             }
 
                                             writer.closeReferenceTable("TrackInfoTable");
@@ -4504,6 +4509,69 @@ void Bfsar::save_(sead::FileHandle& handle)
     }
 
     updateList(mWaveArchiveList);
+
+    //? Stream Files
+    {
+        extern bool CreateDirectoryRecursively(const std::string& directory);
+        extern bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo);
+
+        std::unordered_set<std::string> writenFiles;
+
+        for (const Item* item : mSoundList)
+        {
+            const Sound* sound = static_cast<const Sound*>(item);
+            if (sound->getSoundType() != Sound::SoundType::Strm)
+            {
+                continue;
+            }
+
+            const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
+
+            SEAD_ASSERT(!strmSoundInfo.getPath().isEmpty());
+            const char* path = strmSoundInfo.getPath().cstr();
+
+            if (writenFiles.contains(path))
+            {
+                continue;
+            }
+
+            sead::FixedSafeString<512> dir;
+            bool b = sead::Path::getDirectoryName(&dir, getFilePath());
+            SEAD_ASSERT(b);
+
+            sead::FormatFixedSafeString<512> savePath("%s/%s.save.bfstm", dir.cstr(), path); // TODO
+            //sead::FormatFixedSafeString<512> savePath("%s/%s", dir.cstr(), path);
+            //SEAD_PRINT("%s\n", savePath.cstr());
+
+            b = sead::Path::getDirectoryName(&dir, savePath);
+            SEAD_ASSERT(b);
+
+            if (!CreateDirectoryRecursively(dir.cstr()))
+            {
+                SEAD_ASSERT_MSG(false, "Could not create stream path directory (%s)", dir.cstr());
+            }
+
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            SEAD_ASSERT(device);
+
+            sead::FileHandle strmHandle;
+            device->tryOpen(&strmHandle, savePath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
+
+            if (!strmHandle.getDevice())
+            {
+                device->tryOpen(&strmHandle, savePath, sead::FileDevice::FileOpenFlag::eCreate, 0);
+
+                if (!strmHandle.getDevice())
+                {
+                    SEAD_ASSERT_MSG(false, "Error opening stream file (%s)", savePath.cstr());
+                }
+            }
+
+            WriteBfstmFile(strmHandle, strmSoundInfo);
+
+            writenFiles.emplace(path);
+        }
+    }
 }
 
 void Bfsar::close_()
@@ -4532,11 +4600,143 @@ bool Bfsar::validateName_(const sead::SafeString& name, const Item::List& list) 
     return true;
 }
 
-void Bfsar::readStreamWaves_(const void* strmFile)
+bool Bfsar::readStreamWaves_(const void* strmFile, Sound::StreamSoundInfo::Track::List& tracks)
 {
+    if (tracks.isEmpty())
+    {
+        return false;
+    }
+
     nw::snd::internal::StreamSoundFileReader reader;
     reader.Initialize(strmFile);
-    SEAD_ASSERT(reader.IsAvailable());
 
-    // TODO
+    if (!reader.IsAvailable())
+    {
+        return false;
+    }
+
+    nw::snd::internal::StreamSoundFile::StreamSoundInfo streamSoundInfo;
+    if (!reader.ReadStreamSoundInfo(&streamSoundInfo))
+    {
+        return false;
+    }
+
+    bool channelBuffersUsed[cStrmChannelNum];
+    u8* channelBuffers[cStrmChannelNum];
+    for (u32 i = 0; i < cStrmChannelNum; i++)
+    {
+        channelBuffersUsed[i] = false;
+        channelBuffers[i] = nullptr;
+    }
+
+    WaveFile::Encoding encoding = static_cast<WaveFile::Encoding>(streamSoundInfo.encodeMethod);
+    u32 sampleSize = encoding == WaveFile::Encoding::Pcm16 ? sizeof(s16) : sizeof(u8);
+
+    //u32 channelSize = streamSoundInfo.frameCount * sampleSize;
+    u32 channelSize = streamSoundInfo.oneBlockBytes * (streamSoundInfo.blockCount - 1) + streamSoundInfo.lastBlockPaddedBytes;
+
+    for (u32 i = 0; i < streamSoundInfo.channelCount; i++)
+    {
+        channelBuffers[i] = new u8[channelSize];
+    }
+
+    const u8* sampleData = (u8*)strmFile + reader.GetSampleDataOffset();
+
+    for (u32 blockNo = 0; blockNo < streamSoundInfo.blockCount; blockNo++)
+    {
+        for (u32 channelNo = 0; channelNo < streamSoundInfo.channelCount; channelNo++)
+        {
+            bool isLastBlock = blockNo == streamSoundInfo.blockCount - 1;
+            u32 blockBytes = isLastBlock ? streamSoundInfo.lastBlockPaddedBytes : streamSoundInfo.oneBlockBytes;
+
+            const void* src = sampleData;
+            sampleData += blockBytes;
+
+            void* dst = channelBuffers[channelNo] + (blockNo * streamSoundInfo.oneBlockBytes);
+
+            sead::MemUtil::copy(dst, src, blockBytes);
+        }
+    }
+
+    for (u32 trackNo = 0; trackNo < tracks.size(); trackNo++)
+    {
+        Sound::StreamSoundInfo::Track& track = *static_cast<Sound::StreamSoundInfo::Track*>(tracks.nth(trackNo)->val());
+
+        WaveFile* wave = new WaveFile();
+        wave->mId = mWaveFileList.size();
+
+        wave->mEnableName = true;
+        wave->mName = "Wave";
+
+        wave->mVersion = 0x00010200;
+        wave->mDataEndian = nw::ut::GetFileEndian(*reader.mHeader);
+        wave->mEncoding = encoding;
+        wave->mIsLoop = streamSoundInfo.isLoop;
+        wave->mSampleRate = streamSoundInfo.sampleRate;
+        wave->mLoopStartFrame = streamSoundInfo.loopStart;
+        wave->mLoopEndFrame = streamSoundInfo.frameCount;
+        wave->mOriginalLoopStartFrame = streamSoundInfo.originalLoopStart;
+        wave->mOriginalLoopEndFrame = streamSoundInfo.originalLoopEnd;
+
+        wave->mSampleCount = streamSoundInfo.frameCount;
+
+        wave->mUseOriginalData = false;
+
+        for (s32 ch = 0; ch < track.mChannels.size(); ch++)
+        {
+            if (ch >= snd::cWaveChannelMax)
+            {
+                break;
+            }
+
+            WaveFile::Channel* channel = wave->mChannels.birthBack();
+            SEAD_ASSERT(channel);
+
+            s8 globalChannelIndex = *track.mChannels.nth(ch);
+            SEAD_ASSERT(0 <= globalChannelIndex && globalChannelIndex < cStrmChannelNum);
+
+            channel->mOwnsData = true;
+            channel->mData = channelBuffers[globalChannelIndex];
+            channel->mDataSize = channelSize;
+            channel->mOriginalDataOffset = 0;
+
+            channelBuffersUsed[globalChannelIndex] = true;
+
+            if (wave->mEncoding == WaveFile::Encoding::DspAdpcm)
+            {
+                nw::snd::DspAdpcmParam adpcmParam;
+                nw::snd::internal::DspAdpcmLoopParam adpcmLoopParam;
+                reader.ReadDspAdpcmChannelInfo(&adpcmParam, &adpcmLoopParam, globalChannelIndex);
+
+                for (u32 i = 0; i < 8; i++)
+                {
+                    channel->mAdpcmParam.coef[i][0] = adpcmParam.coef[i][0];
+                    channel->mAdpcmParam.coef[i][1] = adpcmParam.coef[i][1];
+                }
+
+                channel->mAdpcmParam.predScale = adpcmParam.predScale;
+                channel->mAdpcmParam.yn1 = adpcmParam.yn1;
+                channel->mAdpcmParam.yn2 = adpcmParam.yn2;
+
+                channel->mAdpcmLoopParam.loopPredScale = adpcmLoopParam.loopPredScale;
+                channel->mAdpcmLoopParam.loopYn1 = adpcmLoopParam.loopYn1;
+                channel->mAdpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;
+            }
+        }
+
+        mWaveFileList.pushBack(wave);
+
+        track.mWaveFileRef.attach(wave);
+    }
+
+    for (u32 i = 0; i < cStrmChannelNum; i++)
+    {
+        if (!channelBuffersUsed[i] && channelBuffers[i])
+        {
+            delete[] channelBuffers[i];
+            channelBuffers[i] = nullptr;
+        }
+    }
+
+    return true;
 }

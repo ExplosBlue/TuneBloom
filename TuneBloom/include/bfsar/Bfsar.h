@@ -238,10 +238,10 @@ public:
 
     u32 getVersionForBfwsd() const
     {
-        if (mVersion <= 0x00020000)
-            return 0x00010000;
+        if (mVersion > 0x00020000)
+            return 0x00010100;
 
-        return 0x00010100;
+        return 0x00010000;
     }
 
     u32 getVersionForBfbnk() const
@@ -259,6 +259,16 @@ public:
         return 0x00010000;
     }
 
+    u32 getVersionForBfstm() const
+    {
+        if (mVersion >= 0x00020100)
+            return 0x00040000;
+        else if (mVersion >= 0x00020000)
+            return 0x00030000;
+
+        return 0x00010000;
+    }
+
 private:
     void open_(sead::Heap* heap);
     void save_(sead::FileHandle& handle);
@@ -266,7 +276,7 @@ private:
 
     bool validateName_(const sead::SafeString& name, const Item::List& list) const;
 
-    void readStreamWaves_(const void* strmFile);
+    bool readStreamWaves_(const void* strmFile, Sound::StreamSoundInfo::Track::List& tracks);
 
 private:
     bool mOpen;

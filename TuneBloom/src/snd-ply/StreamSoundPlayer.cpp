@@ -131,6 +131,13 @@ void StreamSoundPlayer::setup(const SetupArg& arg)
             return;
         }
 
+        mChannelCount = sead::Mathu::min(arg.allocChannelCount, cStrmChannelNum);
+        if (mChannelCount == 0)
+        {
+            //finalize();
+            return;
+        }
+
         // Reflects track information embedded in sound archive (*.bXsar).
         for (s32 i = 0; i < cStrmTrackNum; i++)
         {
@@ -287,7 +294,7 @@ void StreamSoundPlayer::prepare(const void* strmFile, snd::UpdateType updateType
     waveInfo.sampleRate = streamSoundInfo.sampleRate;
     waveInfo.loopStartFrame = streamSoundInfo.loopStart;
     waveInfo.loopEndFrame = streamSoundInfo.frameCount;
-    waveInfo.originalLoopStartFrame = streamSoundInfo.loopStart;
+    waveInfo.originalLoopStartFrame = streamSoundInfo.originalLoopStart;
 
     nw::snd::internal::WaveInfo waveInfos[cStrmChannelNum];
     for (u32 i = 0; i < waveInfo.channelCount; i++)
@@ -295,17 +302,13 @@ void StreamSoundPlayer::prepare(const void* strmFile, snd::UpdateType updateType
         waveInfos[i] = waveInfo;
     }
 
-    if (waveInfo.sampleFormat != nw::snd::SAMPLE_FORMAT_DSP_ADPCM)
     {
-        SEAD_PRINT("Only DspAdpcm streams are supported atm\n");
-        return;
-    }
+        u32 sampleSize = waveInfo.sampleFormat == nw::snd::SAMPLE_FORMAT_PCM_S16 ? sizeof(s16) : sizeof(u8);
 
-    {
         u8* channelBuffers[cStrmChannelNum];
         for (u32 i = 0; i < waveInfo.channelCount; i++)
         {
-            channelBuffers[i] = new u8[streamSoundInfo.frameCount];
+            channelBuffers[i] = new u8[streamSoundInfo.frameCount * sampleSize];
             mChannels[i].mBufferAddress = channelBuffers[i];
         }
 
@@ -348,7 +351,11 @@ void StreamSoundPlayer::prepare(const void* strmFile, snd::UpdateType updateType
 
             nw::snd::internal::WaveInfo::ChannelParam& channelParam = info.channelParam[0];
             channelParam.dataAddress = channelBuffers[i];
-            reader.ReadDspAdpcmChannelInfo(&channelParam.adpcmParam, &channelParam.adpcmLoopParam, i);
+
+            if (waveInfo.sampleFormat == nw::snd::SAMPLE_FORMAT_DSP_ADPCM)
+            {
+                reader.ReadDspAdpcmChannelInfo(&channelParam.adpcmParam, &channelParam.adpcmLoopParam, i);
+            }
         }
     }
 
@@ -356,6 +363,184 @@ void StreamSoundPlayer::prepare(const void* strmFile, snd::UpdateType updateType
 
     mSampleRate = streamSoundInfo.sampleRate;
     mSampleCount = streamSoundInfo.frameCount;
+
+    mActiveFlag = true;
+    mPrepared = true;
+}
+
+void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, snd::UpdateType updateType)
+{
+    if (!mSetup)
+        return;
+
+    if (!mIsRegisterPlayerCallback)
+    {
+        snd::internal::driver::SoundThread::instance()->registerPlayerCallback(this);
+        mIsRegisterPlayerCallback = true;
+    }
+
+    mUpdateType = updateType;
+
+    // ApplyTrackDataInfo
+    {
+        for (u32 i = 0; i < mTrackCount; i++)
+        {
+            const nw::snd::SoundArchive::StreamTrackInfo& trackInfo = mStreamDataInfoTracks[i];
+            mTracks[i].volume = trackInfo.volume;
+            mTracks[i].pan = trackInfo.pan;
+            mTracks[i].span = trackInfo.span;
+            mTracks[i].mainSend = trackInfo.mainSend;
+            for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
+            {
+                mTracks[i].fxSend[j] = trackInfo.fxSend[j];
+            }
+            mTracks[i].lpfFreq = trackInfo.lpfFreq;
+            mTracks[i].biquadType = trackInfo.biquadType;
+            mTracks[i].biquadValue = trackInfo.biquadValue;
+            mTracks[i].flags = trackInfo.flags;
+            mTracks[i].channelCount = trackInfo.channelCount;
+
+            // Allocates StreamChannel to StreamTrack.
+            for (s32 ch = 0; ch < trackInfo.channelCount; ch++)
+            {
+                s8 globalChannelIndex = trackInfo.globalChannelIndex[ch];
+                SEAD_ASSERT(0 <= globalChannelIndex && globalChannelIndex < cStrmChannelNum);
+
+                mTracks[i].mChannels[ch] = &mChannels[globalChannelIndex];
+            }
+        }
+    }
+
+    for (u32 channelIndex = 0; channelIndex < mChannelCount; channelIndex++)
+    {
+        StreamChannel& channel = mChannels[channelIndex];
+
+        snd::internal::driver::Channel* voice = snd::internal::driver::Channel::allocChannel(1, snd::internal::Voice::cPriorityNoDrop, &channelCallbackFunc, &channel);
+
+        if (!voice)
+        {
+            for (u32 i = 0; i < channelIndex; i++)
+            {
+                StreamChannel& c = mChannels[i];
+                if (c.mVoice)
+                {
+                    c.mVoice->stop();
+                    snd::internal::driver::Channel::detachChannel(c.mVoice);
+                    c.mVoice = nullptr;
+                }
+            }
+
+            return;
+        }
+
+        channel.mVoice = voice;
+    }
+
+    const WaveFile::Channel* channels[cStrmChannelNum];
+    for (u32 i = 0; i < cStrmChannelNum; i++)
+    {
+        channels[i] = nullptr;
+    }
+
+    u32 channelNum = 0;
+    for (s32 i = 0; i < streamSoundInfo.getTrackList().size(); i++)
+    {
+        const Sound::StreamSoundInfo::Track* track = static_cast<const Sound::StreamSoundInfo::Track*>(streamSoundInfo.getTrackList().nth(i)->val());
+
+        SEAD_ASSERT(track->getWaveFileRef().isAttached());
+        const WaveFile& wave = *static_cast<const WaveFile*>(track->getWaveFileRef().getItem());
+        for (s32 ch = 0; ch < wave.getChannels().size(); ch++)
+        {
+            channels[channelNum] = wave.getChannels().nth(ch);
+            channelNum++;
+        }
+    }
+
+    const Sound::StreamSoundInfo::Track& mainTrack = *static_cast<const Sound::StreamSoundInfo::Track*>(streamSoundInfo.getTrackList().front()->val());
+
+    SEAD_ASSERT(mainTrack.getWaveFileRef().isAttached());
+    const WaveFile& mainWave = *static_cast<const WaveFile*>(mainTrack.getWaveFileRef().getItem());
+
+    nw::snd::internal::WaveInfo waveInfo;
+    waveInfo.endian = mainWave.getDataEndian();
+    waveInfo.sampleFormat = nw::snd::internal::WaveFileReader::GetSampleFormat(static_cast<u8>(mainWave.getEncoding()));
+    waveInfo.loopFlag = mainWave.getIsLoop();
+    waveInfo.channelCount = streamSoundInfo.getAllocateChannelCount();
+    waveInfo.sampleRate = mainWave.getSampleRate();
+    waveInfo.loopStartFrame = mainWave.getLoopStartFrame();
+    waveInfo.loopEndFrame = mainWave.getLoopEndFrame();
+    waveInfo.originalLoopStartFrame = mainWave.getOriginalLoopStartFrame();
+
+    nw::snd::internal::WaveInfo waveInfos[cStrmChannelNum];
+    for (u32 i = 0; i < waveInfo.channelCount; i++)
+    {
+        waveInfos[i] = waveInfo;
+    }
+
+    {
+        u32 sampleSize = waveInfo.sampleFormat == nw::snd::SAMPLE_FORMAT_PCM_S16 ? sizeof(s16) : sizeof(u8);
+        u32 bufferSize = mainWave.getLoopEndFrame() * sampleSize;
+
+        u8* channelBuffers[cStrmChannelNum];
+        for (u32 i = 0; i < waveInfo.channelCount; i++)
+        {
+            channelBuffers[i] = new u8[bufferSize];
+            mChannels[i].mBufferAddress = channelBuffers[i];
+
+            const WaveFile::Channel& channel = *channels[i];
+            u32 dataSize = sead::Mathu::min(bufferSize, channel.getDataSize());
+
+            const void* src = channel.getData();
+            u8* dst = channelBuffers[i];
+
+            sead::MemUtil::copy(dst, src, dataSize);
+
+            //? If other channels are smaller pad out
+            if (channel.getDataSize() < bufferSize)
+            {
+                u32 remainSize = bufferSize - dataSize;
+
+                dst += dataSize;
+                sead::MemUtil::fillZero(dst, remainSize);
+            }
+        }
+
+        for (u32 i = 0; i < waveInfo.channelCount; i++)
+        {
+            nw::snd::internal::WaveInfo& info = waveInfos[i];
+            info.channelCount = 1;
+
+            nw::snd::internal::WaveInfo::ChannelParam& channelParam = info.channelParam[0];
+            channelParam.dataAddress = channelBuffers[i];
+
+            if (mainWave.getEncoding() == WaveFile::Encoding::DspAdpcm)
+            {
+                const WaveFile::Channel& channel = *channels[i];
+
+                const snd::DspAdpcmParam& adpcmParam = channel.getAdpcmParam();
+                const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel.getAdpcmLoopParam();
+
+                for (u32 j = 0; j < 8; j++)
+                {
+                    channelParam.adpcmParam.coef[j][0] = adpcmParam.coef[j][0];
+                    channelParam.adpcmParam.coef[j][1] = adpcmParam.coef[j][1];
+                }
+
+                channelParam.adpcmParam.predScale = adpcmParam.predScale;
+                channelParam.adpcmParam.yn1 = adpcmParam.yn1;
+                channelParam.adpcmParam.yn2 = adpcmParam.yn2;
+
+                channelParam.adpcmLoopParam.loopPredScale = adpcmLoopParam.loopPredScale;
+                channelParam.adpcmLoopParam.loopYn1 = adpcmLoopParam.loopYn1;
+                channelParam.adpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;
+            }
+        }
+    }
+
+    startPlayer(waveInfos);
+
+    mSampleRate = mainWave.getSampleRate();
+    mSampleCount = mainWave.getSampleCount();
 
     mActiveFlag = true;
     mPrepared = true;

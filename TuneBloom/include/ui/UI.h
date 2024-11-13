@@ -133,6 +133,7 @@ void PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityR
 bool PlaySeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, u8 volume);
 void StopAllSoundPlayers(bool stop = false);
 void StopAllSoundPlayersWithoutLock(bool stop = false);
+void StopAllVoices();
 
 // Ui Types
 void DrawProjectInfoUI();

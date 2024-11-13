@@ -1,6 +1,7 @@
 #include <ui/UI.h>
 
 #include <snd/ChannelMgr.h>
+#include <snd/MultiVoiceMgr.h>
 #include <snd/SoundSystem.h>
 
 #include <snd/SequenceNoteOnCallback.h>
@@ -226,9 +227,17 @@ void DrawPlayerUI()
 
         ImGui::SameLine();
 
-        if (ImGui::Button(ICON_LC_SQUARE))
+        if (ImGui::ButtonEx(ICON_LC_SQUARE, ImVec2(0.0f, 0.0f), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle))
         {
-            StopAllSoundPlayers();
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
+            {
+                //StopAllSoundPlayers(true);
+                StopAllVoices();
+            }
+            else
+            {
+                StopAllSoundPlayers(false);
+            }
         }
 
         ImGui::SameLine();
@@ -766,4 +775,11 @@ void StopAllSoundPlayersWithoutLock(bool stop)
     sSequencePlayer.deinit(stop);
     sStreamPlayer.deinit();
     sWavePlayer.deinit(stop);
+}
+
+void StopAllVoices()
+{
+    snd::internal::driver::SoundThreadLock lock;
+
+    snd::internal::driver::MultiVoiceMgr::instance()->stopAllVoices();
 }

@@ -632,6 +632,12 @@ void SelectItem(Item* item)
             SetUITab(UIType::BankFiles);
             break;
     }
+
+    ImGuiWindow* w = ImGui::FindWindowByName("###InfoWindow");
+    if (w && w->DockIsActive && w->Hidden)
+    {
+        ImGui::SetWindowFocus("###InfoWindow");
+    }
 }
 
 bool ItemSelector(const char* name, const Item::List& list, Item** itemPtr, bool allowNone)

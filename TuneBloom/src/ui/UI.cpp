@@ -346,8 +346,8 @@ void DrawProjectUI()
 
         if (selected)
         {
-            ImGuiWindow* w = ImGui::FindWindowByName("###FileWindow");
-            if (w && w->DockIsActive && !w->Hidden)
+            ImGuiWindow* w = ImGui::FindWindowByName("###InfoWindow");
+            if (w && w->DockIsActive && w->Hidden)
             {
                 ImGui::SetWindowFocus("###InfoWindow");
             }

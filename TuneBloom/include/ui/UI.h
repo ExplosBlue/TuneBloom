@@ -183,3 +183,46 @@ inline void CenteredTextX(const char* text, f32 sizeX = ImGui::GetWindowSize().x
 }
 
 void HelpMarker(const char* desc);
+
+//? Keyboard
+
+/*
+The MIT License (MIT)
+by https://github.com/frowrik
+Piano keyboard for ImGui v1.1
+example:
+static int PrevNoteActive = -1;
+ImGui_PianoKeyboard("PianoTest", ImVec2(1024, 100), &PrevNoteActive, 21, 108, TestPianoBoardFunct, nullptr, nullptr);
+bool TestPianoBoardFunct(void* UserData, int Msg, int Key, float Vel) {
+		if (Key >= 128) return false; // midi max keys
+		if (Msg == NoteGetStatus) return KeyPresed[Key];
+		if (Msg == NoteOn) { KeyPresed[Key] = true; Send_Midi_NoteOn(Key, Vel*127); }
+		if (Msg == NoteOff) { KeyPresed[Key] = false; Send_Midi_NoteOff(Key, Vel*127);}
+		return false;
+}
+*/
+
+enum ImGuiPianoKeyboardMsg
+{
+    NoteGetStatus,
+    NoteOn,
+    NoteOff,
+};
+
+using ImGuiPianoKeyboardProc = bool (*)(void* UserData, s32 Msg, s32 Key, f32 Vel);
+
+struct ImGuiPianoStyles
+{
+    ImU32 Colors[5] {
+        IM_COL32(255, 255, 255, 255), // light note
+        IM_COL32(0, 0, 0, 255),       // dark note
+        IM_COL32(255, 255, 0, 255),   // active light note
+        IM_COL32(200, 200, 0, 255),   // active dark note
+        IM_COL32(75, 75, 75, 255),    // background
+    };
+
+    f32 NoteDarkHeight = 2.0f / 3.0f; // dark note scale h
+    f32 NoteDarkWidth  = 2.0f / 3.0f; // dark note scale w
+};
+
+void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style = nullptr);

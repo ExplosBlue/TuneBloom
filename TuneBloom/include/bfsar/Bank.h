@@ -7,7 +7,7 @@ class Bank : public Item
 public:
     Bank()
         : Item()
-        , mWaveArchiveType(WaveArchiveType::Invalid)
+        , mWaveArchiveType(WaveArchiveType::AutomaticShared)
         , mWaveArchiveRef(this)
         , mFileRef(this)
     {

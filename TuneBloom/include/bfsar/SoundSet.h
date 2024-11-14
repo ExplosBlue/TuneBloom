@@ -17,7 +17,7 @@ public:
         , mSoundSetType(SoundSetType::Wave)
         , mStartId(0)
         , mEndId(0)
-        , mWaveArchiveType(WaveArchiveType::Invalid)
+        , mWaveArchiveType(WaveArchiveType::AutomaticShared)
         , mWaveArchiveRef(this)
     {
         mItemType = ItemType::SoundSet;

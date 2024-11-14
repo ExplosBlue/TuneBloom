@@ -41,6 +41,7 @@ public:
         }
 
         void read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
+        void drawUI();
 
         u8 getVelocityMin() const
         {
@@ -67,9 +68,20 @@ public:
             return mOriginalKey;
         }
 
+        void setOriginalKey(u8 originalKey)
+        {
+            originalKey = sead::MathCalcCommon<u8>::clampMax(originalKey, 127);
+            mOriginalKey = originalKey;
+        }
+
         u8 getVolume() const
         {
             return mVolume;
+        }
+
+        void setVolume(u8 volume)
+        {
+            mVolume = volume;
         }
 
         u8 getPan() const
@@ -77,9 +89,21 @@ public:
             return mPan;
         }
 
+        void setPan(u8 pan)
+        {
+            pan = sead::MathCalcCommon<u8>::clampMax(pan, 127);
+            mPan = pan;
+        }
+
         f32 getPitch() const
         {
             return mPitch;
+        }
+
+        void setPitch(f32 pitch)
+        {
+            pitch = sead::Mathf::clampMin(pitch, 0.0f);
+            mPitch = pitch;
         }
 
         bool getIsIgnoreNoteOff() const
@@ -87,9 +111,20 @@ public:
             return mIsIgnoreNoteOff;
         }
 
+        void setIsIgnoreNoteOff(bool ignoreNoteOff)
+        {
+            mIsIgnoreNoteOff = ignoreNoteOff;
+        }
+
         u8 getKeyGroup() const
         {
             return mKeyGroup;
+        }
+
+        void setKeyGroup(u8 keyGroup)
+        {
+            keyGroup = sead::MathCalcCommon<u8>::clampMax(keyGroup, 16 - 1);
+            mKeyGroup = keyGroup;
         }
 
         u8 getInterpolationType() const
@@ -97,9 +132,26 @@ public:
             return mInterpolationType;
         }
 
+        void setInterpolationType(u8 type)
+        {
+            type = sead::MathCalcCommon<u8>::clampMax(type, 2 - 1);
+            mInterpolationType = type;
+        }
+
         const snd::AdshrCurve& getAdshrCurve() const
         {
             return mAdshrCurve;
+        }
+
+        void setAdshrCurve(const snd::AdshrCurve& curve)
+        {
+            mAdshrCurve = curve;
+
+            mAdshrCurve.attack = sead::MathCalcCommon<u8>::clampMax(mAdshrCurve.attack, 127);
+            mAdshrCurve.decay = sead::MathCalcCommon<u8>::clampMax(mAdshrCurve.decay, 127);
+            mAdshrCurve.sustain = sead::MathCalcCommon<u8>::clampMax(mAdshrCurve.sustain, 127);
+            mAdshrCurve.hold = sead::MathCalcCommon<u8>::clampMax(mAdshrCurve.hold, 127);
+            mAdshrCurve.release = sead::MathCalcCommon<u8>::clampMax(mAdshrCurve.release, 127);
         }
 
     private:

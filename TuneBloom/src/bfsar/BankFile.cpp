@@ -93,6 +93,117 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
     mAdshrCurve.release = adshrCurveInfo.release;
 }
 
+void BankFile::VelocityRegion::drawUI()
+{
+    static const ImU8 cStepU8 = 1;
+
+    {
+        Item* waveFile = getWaveFileRef().getItem();
+        if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
+        {
+            getWaveFileRef().attach(waveFile);
+        }
+    }
+
+    {
+        u8 originalKey = getOriginalKey();
+        if (ImGui::InputScalar("Original Key", ImGuiDataType_U8, &originalKey, &cStepU8))
+        {
+            setOriginalKey(originalKey);
+        }
+    }
+
+    {
+        u8 volume = getVolume();
+        if (ImGui::InputScalar("Volume", ImGuiDataType_U8, &volume, &cStepU8))
+        {
+            setVolume(volume);
+        }
+    }
+
+    {
+        u8 pan = getPan();
+        if (ImGui::InputScalar("Pan", ImGuiDataType_U8, &pan, &cStepU8))
+        {
+            setPan(pan);
+        }
+    }
+
+    {
+        f32 pitch = getPitch();
+        if (ImGui::SliderFloat("Pitch", &pitch, 0.0f, 8.0f))
+        {
+            setPitch(pitch);
+        }
+    }
+
+    {
+        bool ignoreNoteOff = getIsIgnoreNoteOff();
+        if (ImGui::Checkbox("Ignore Note Off (Percussion Mode)", &ignoreNoteOff))
+        {
+            setIsIgnoreNoteOff(ignoreNoteOff);
+        }
+    }
+
+    {
+        u8 keyGroup = getKeyGroup();
+        if (ImGui::InputScalar("Key Group", ImGuiDataType_U8, &keyGroup, &cStepU8))
+        {
+            setKeyGroup(keyGroup);
+        }
+    }
+
+    {
+        static const char* sInterpolationTypes[] = { 
+          //"Polyphase (4-point) interpolation",
+            "Polyphase (4-point)",
+          //"Linear interpolation",
+            "Linear",
+        };
+
+        u32 interpolationType = getInterpolationType();
+        if (ImGui::Combo("Interpolation Type", (s32*)&interpolationType, sInterpolationTypes, IM_ARRAYSIZE(sInterpolationTypes)))
+        {
+            setInterpolationType(interpolationType);
+        }
+    }
+
+    {
+        snd::AdshrCurve adshrCurve = getAdshrCurve();
+
+        bool edited = false;
+        if (ImGui::InputScalar("Attack", ImGuiDataType_U8, &adshrCurve.attack, &cStepU8))
+        {
+            edited = true;
+        }
+
+        if (ImGui::InputScalar("Decay", ImGuiDataType_U8, &adshrCurve.decay, &cStepU8))
+        {
+            edited = true;
+        }
+
+        if (ImGui::InputScalar("Sustain", ImGuiDataType_U8, &adshrCurve.sustain, &cStepU8))
+        {
+            edited = true;
+        }
+
+        if (ImGui::InputScalar("Hold", ImGuiDataType_U8, &adshrCurve.hold, &cStepU8))
+        {
+            edited = true;
+        }
+
+        if (ImGui::InputScalar("Release", ImGuiDataType_U8, &adshrCurve.release, &cStepU8))
+        {
+            edited = true;
+        }
+
+        if (edited)
+        {
+            setAdshrCurve(adshrCurve);
+        }
+    }
+}
+
 void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable)
 {
     SEAD_ASSERT(keyRegionInfo);
@@ -373,15 +484,7 @@ void BankFile::Instrument::drawUI()
 
                 if (ImGui::TreeNode(sead::FormatFixedSafeString<32>("VelocityRegion (%u, %u)", velocityRegion->getVelocityMin(), velocityRegion->getVelocityMax()).cstr()))
                 {
-                    {
-                        Item* waveFile = velocityRegion->getWaveFileRef().getItem();
-                        if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
-                        {
-                            velocityRegion->getWaveFileRef().attach(waveFile);
-                        }
-
-                        ImGui::Text("Original Key: %u", velocityRegion->getOriginalKey());
-                    }
+                    velocityRegion->drawUI();
 
                     ImGui::TreePop();
                 }

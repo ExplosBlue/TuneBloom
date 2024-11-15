@@ -18,6 +18,7 @@
 
 #include "icons/IconsLucide.h"
 #include "ui/UI.h"
+#include "ui/PopupMgr.h"
 
 BfsarTask::BfsarTask(const sead::TaskConstructArg& arg)
     : sead::Task(arg, "BfsarTask")
@@ -219,6 +220,8 @@ void BfsarTask::prepare()
     }
 */
 
+    PopupMgr::createInstance(nullptr);
+
     adjustHeapAll();
 }
 
@@ -238,6 +241,8 @@ void BfsarTask::exit()
 void BfsarTask::calc()
 {
     sead::CurrentHeapSetter chs(sead::HeapMgr::getUnboundHeap());
+
+    PopupMgr::instance()->update();
 
     DrawMenuBar();
     DrawUI();

@@ -901,6 +901,27 @@ bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** war
     }
     ImGui::PopItemWidth();
 
+    if (ImGui::BeginPopupContextItem())
+    {
+        bool disable = *warcType != WaveArchiveType::Explicit || *warcPtr == nullptr;
+        if (disable)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        if (ImGui::MenuItem(ICON_LC_EXTERNAL_LINK " Go To"))
+        {
+            SelectItem(*warcPtr);
+        }
+
+        if (disable)
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::End();
+    }
+
     ImGuiButtonFlags buttonFlags = ImGuiButtonFlags_Repeat | ImGuiButtonFlags_DontClosePopups;
 
     ImGui::SameLine(0.0f, spacing);

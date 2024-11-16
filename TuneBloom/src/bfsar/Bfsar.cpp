@@ -3784,7 +3784,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                                 writer.closeReference("BankTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
 
                                 u32 numBanks = nw::snd::SoundArchive::SEQ_BANK_MAX;
-                                for (u32 i = numBanks - 1; i >= 0; i--)
+                                for (s32 i = numBanks - 1; i >= 0; i--)
                                 {
                                     if (seqInfo.getBankId(i) == nw::snd::SoundArchive::INVALID_ID)
                                         numBanks--;

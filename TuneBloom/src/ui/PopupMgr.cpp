@@ -38,15 +38,21 @@ void PopupMgr::update()
 
         if (ImGui::BeginPopupModal(sead::FormatFixedSafeString<32>(ICON_LC_ALERT_TRIANGLE " Warning%s", sPopupName).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            Item* item = info.item;
-            SEAD_ASSERT(item);
+            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
 
-            ImGui::Text("Item '%s' is invalid:", item->getFormattedName().cstr());
-            ImGui::Separator();
+            Item* item = info.item;
+            if (item)
+            {
+                ImGui::Text("Item '%s' is invalid:", item->getFormattedName().cstr());
+                ImGui::Separator();
+            }
+            else
+            {
+                buttonSize = ImVec2(ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x, 0);
+            }
+
             ImGui::Text(info.text.c_str());
             ImGui::Separator();
-
-            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
 
             if (ImGui::Button("OK", buttonSize))
             {
@@ -56,16 +62,19 @@ void PopupMgr::update()
                 ImGui::CloseCurrentPopup();
             }
 
-            ImGui::SameLine();
-
-            if (ImGui::Button(ICON_LC_EXTERNAL_LINK " Go To", buttonSize))
+            if (item)
             {
-                mPopups.erase(mPopups.begin()); // Pop front
-                mPopupOpen = false;
+                ImGui::SameLine();
 
-                SelectItem(item);
+                if (ImGui::Button(ICON_LC_EXTERNAL_LINK " Go To", buttonSize))
+                {
+                    mPopups.erase(mPopups.begin()); // Pop front
+                    mPopupOpen = false;
 
-                ImGui::CloseCurrentPopup();
+                    SelectItem(item);
+
+                    ImGui::CloseCurrentPopup();
+                }
             }
 
             ImGui::EndPopup();

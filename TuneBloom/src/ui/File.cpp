@@ -1,5 +1,7 @@
 #include <ui/UI.h>
 
+#include <ui/PopupMgr.h>
+
 #include <snd/SoundThread.h>
 
 #include <basis/win/seadWindows.h>
@@ -188,7 +190,8 @@ void OpenFile()
 
     if (!sBfsar.open(filePath, nullptr))
     {
-        SEAD_PRINT("Not a valid bfsar file\n");
+        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR file", nullptr });
+        //SEAD_PRINT("Not a valid bfsar file\n");
         return;
     }
 
@@ -251,6 +254,8 @@ void CloseFile()
     sSubSelectedItem = nullptr;
     sSelectedItemIsSubWindow = false;
     sFileWindows.clear();
+
+    sLastPlayedSound = nullptr;
 
     sSampleRate = 0;
     sSampleCount = 0;

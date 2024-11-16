@@ -2,14 +2,131 @@
 
 #include <imgui/imgui_custom.h>
 
-extern const Sound* sLastPlayedSound;
-
 Sound::~Sound()
 {
     if (this == sLastPlayedSound)
     {
         sLastPlayedSound = nullptr;
     }
+}
+
+bool Sound::validate(sead::BufferedSafeString& error) const
+{
+    if (!Item::validateName(error))
+    {
+        return false;
+    }
+
+    if (!getPlayerRef().isAttached())
+    {
+        error = "Invalid Player";
+        return false;
+    }
+
+    switch (mSoundType)
+    {
+        case SoundType::Seq:
+        {
+            const Sound::SequenceSoundInfo& seqInfo = getSequenceSoundInfo();
+            if (!seqInfo.getSequenceFileRef().isAttached())
+            {
+                error = "Invalid Sequence File";
+                return false;
+            }
+
+            const SequenceFile& seqFile = *static_cast<const SequenceFile*>(seqInfo.getSequenceFileRef().getItem());
+            if (seqFile.getLabelOffset(seqInfo.getStartLabel()) == SequenceFile::cInvaldOffset)
+            {
+                error = "Invalid Start Label (Is Sequence File compiled ?)";
+                return false;
+            }
+
+            break;
+        }
+
+        case SoundType::Strm:
+        {
+            const Sound::StreamSoundInfo& strmInfo = getStreamSoundInfo();
+            if (strmInfo.getPath().isEmpty())
+            {
+                error = "Path is empty";
+                return false;
+            }
+
+            if (strmInfo.getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+            {
+                error = "Only BFSTM streams are supported";
+                return false;
+            }
+
+            const Sound::StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
+            if (tracks.isEmpty())
+            {
+                error = "Streams must have at least 1 track";
+                return false;
+            }
+
+            if (tracks.size() > 8)
+            {
+                error = "Streams can only have up to 8 tracks";
+                return false;
+            }
+
+            WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
+            u32 mainSampleRate = 0;
+            for (s32 i = 0; i < tracks.size(); i++)
+            {
+                const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
+                if (!track.getWaveFileRef().isAttached())
+                {
+                    error.format("Track %i: Invalid Wave File", i);
+                    return false;
+                }
+
+                const WaveFile& waveFile = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
+
+                if (i == 0)
+                {
+                    mainEncoding = waveFile.getEncoding();
+                    mainSampleRate = waveFile.getSampleRate();
+                }
+                else
+                {
+                    if (mainEncoding != waveFile.getEncoding())
+                    {
+                        error = "All stream tracks must have the same encoding";
+                        return false;
+                    }
+
+                    if (mainSampleRate != waveFile.getSampleRate())
+                    {
+                        error = "All stream tracks must have the same sample rate";
+                        return false;
+                    }
+                }
+            }
+
+            break;
+        }
+
+        case SoundType::Wave:
+        {
+            const Sound::WaveSoundInfo& waveInfo = getWaveSoundInfo();
+            if (!waveInfo.getWaveFileRef().isAttached())
+            {
+                error = "Invalid Wave File";
+                return false;
+            }
+
+            break;
+        }
+
+        default:
+            error = "Invalid Sound Type";
+            return false;
+    }
+
+    return true;
 }
 
 void DrawSoundPropertiesUI()

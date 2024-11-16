@@ -101,6 +101,8 @@ public:
 
     ~WaveFile() override;
 
+    bool validate(sead::BufferedSafeString& error) const override;
+
     void drawUI() override;
 
 private:

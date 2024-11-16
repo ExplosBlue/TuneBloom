@@ -575,55 +575,59 @@ const char* GroupItemPrefixFunc(Item* item)
     Group::ItemInfo* groupItem = (Group::ItemInfo*)item;
 
     const char* icon = ICON_LC_FILE_QUESTION " ";
-    switch (groupItem->getItemRefType())
+
+    if (!groupItem->getIsDisabled())
     {
-        case Item::ItemType::Sound:
-            if (groupItem->getItemRef().isAttached())
-            {
-                Sound* sound = (Sound*)groupItem->getItemRef().getItem();
-                switch (sound->getSoundType())
+        switch (groupItem->getItemRefType())
+        {
+            case Item::ItemType::Sound:
+                if (groupItem->getItemRef().isAttached())
                 {
-                    case Sound::SoundType::Seq:
-                        icon = ICON_LC_MUSIC_3 " ";
-                        break;
+                    Sound* sound = (Sound*)groupItem->getItemRef().getItem();
+                    switch (sound->getSoundType())
+                    {
+                        case Sound::SoundType::Seq:
+                            icon = ICON_LC_MUSIC_3 " ";
+                            break;
 
-                    case Sound::SoundType::Strm:
-                        icon = ICON_LC_DISC_3 " ";
-                        break;
+                        case Sound::SoundType::Strm:
+                            icon = ICON_LC_DISC_3 " ";
+                            break;
 
-                    case Sound::SoundType::Wave:
-                        icon = ICON_LC_AUDIO_LINES " ";
-                        break;
+                        case Sound::SoundType::Wave:
+                            icon = ICON_LC_AUDIO_LINES " ";
+                            break;
+                    }
                 }
-            }
 
-            break;
+                break;
 
-        case Item::ItemType::SoundSet:
-            if (groupItem->getItemRef().isAttached())
-            {
-                SoundSet* soundSet = (SoundSet*)groupItem->getItemRef().getItem();
-                switch (soundSet->getSoundSetType())
+            case Item::ItemType::SoundSet:
+                if (groupItem->getItemRef().isAttached())
                 {
-                    case SoundSet::SoundSetType::Wave:
-                        icon = ICON_LC_AUDIO_LINES " ";
-                        break;
+                    SoundSet* soundSet = (SoundSet*)groupItem->getItemRef().getItem();
+                    switch (soundSet->getSoundSetType())
+                    {
+                        case SoundSet::SoundSetType::Wave:
+                            icon = ICON_LC_AUDIO_LINES " ";
+                            break;
 
-                    case SoundSet::SoundSetType::Seq:
-                        icon = ICON_LC_MUSIC_2 " ";
-                        break;
+                        case SoundSet::SoundSetType::Seq:
+                            icon = ICON_LC_MUSIC_2 " ";
+                            break;
+                    }
                 }
-            }
 
-            break;
+                break;
 
-        case Item::ItemType::Bank:
-            icon = ICON_LC_PIANO " ";
-            break;
+            case Item::ItemType::Bank:
+                icon = ICON_LC_PIANO " ";
+                break;
 
-        case Item::ItemType::WaveArchive:
-            icon = ICON_LC_FILE_MUSIC " ";
-            break;
+            case Item::ItemType::WaveArchive:
+                icon = ICON_LC_FILE_MUSIC " ";
+                break;
+        }
     }
 
     return icon;

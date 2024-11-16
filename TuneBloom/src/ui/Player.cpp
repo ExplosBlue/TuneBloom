@@ -1,5 +1,7 @@
 #include <ui/UI.h>
 
+#include <ui/PopupMgr.h>
+
 #include <snd/ChannelMgr.h>
 #include <snd/MultiVoiceMgr.h>
 #include <snd/SoundSystem.h>
@@ -17,6 +19,16 @@
 #include <heap/seadExpHeap.h>
 
 // Players
+
+bool Player::validate(sead::BufferedSafeString& error) const
+{
+    if (!Item::validateName(error))
+    {
+        return false;
+    }
+
+    return true;
+}
 
 InstanciateItemCallback CreatePlayerFunc(bool clear)
 {
@@ -462,15 +474,16 @@ void DrawPlayerUI()
     ImGui::End();
 }
 
-void PlaySeqSound(const Sound* sound)
+static bool PlaySeqSound(const Sound* sound)
 {
     const Sound::SequenceSoundInfo& seqSoundInfo = sound->getSequenceSoundInfo();
 
     const Item* seqFileItem = seqSoundInfo.getSequenceFileRef().getItem();
     if (!seqFileItem)
     {
-        SEAD_PRINT("No sequence file attached\n");
-        return;
+        PopupMgr::instance()->addPopup({ "No Sequence File attached", nullptr });
+        //SEAD_PRINT("No sequence file attached\n");
+        return false;
     }
 
     SEAD_ASSERT(seqFileItem->getItemType() == Item::ItemType::SequenceFile);
@@ -499,21 +512,36 @@ void PlaySeqSound(const Sound* sound)
 
     if (!PlaySeqFile(seqFile, seqSoundInfo.getStartLabel(), banks, sound->getVolume()))
     {
-        return;
+        return false;
     }
 
     sSelectedItem = const_cast<Sound*>(sound);
+
+    return true;
 }
 
-void PlayStrmSound(const Sound* sound)
+static bool PlayStrmSound(const Sound* sound)
 {
     if (sound->getStreamSoundInfo().getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
     {
-        SEAD_PRINT("Only BFSTM sounds are supported atm\n");
-        return;
+        PopupMgr::instance()->addPopup({ "Only BFSTM streams are supported", nullptr });
+        //SEAD_PRINT("Only BFSTM sounds are supported atm\n");
+        return false;
     }
 
     const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
+
+    if (strmSoundInfo.getTrackList().isEmpty())
+    {
+        PopupMgr::instance()->addPopup({ "Streams must have at least 1 track", nullptr });
+        return false;
+    }
+
+    if (strmSoundInfo.getTrackList().size() > 8)
+    {
+        PopupMgr::instance()->addPopup({ "Streams can only have up to 8 tracks", nullptr });
+        return false;
+    }
 
     StreamSoundPlayer::SetupArg setupArg;
     setupArg.allocChannelCount = strmSoundInfo.getAllocateChannelCount();
@@ -538,6 +566,9 @@ void PlayStrmSound(const Sound* sound)
         }
     }
 
+    WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
+    u32 mainSampleRate = 0;
+
     u32 channelIdxStart = 0;
     for (u32 i = 0; i < strmSoundInfo.getTrackList().size(); i++)
     {
@@ -545,6 +576,34 @@ void PlayStrmSound(const Sound* sound)
 
         const Item* trackItem = strmSoundInfo.getTrackList().nth(i)->val();
         const Sound::StreamSoundInfo::Track& trackInfo = *static_cast<const Sound::StreamSoundInfo::Track*>(trackItem);
+
+        if (!trackInfo.getWaveFileRef().isAttached())
+        {
+            PopupMgr::instance()->addPopup({ "Track " + std::to_string(i) + " has no Wave File attached", nullptr });
+            return false;
+        }
+
+        const WaveFile& waveFile = *static_cast<const WaveFile*>(trackInfo.getWaveFileRef().getItem());
+
+        if (i == 0)
+        {
+            mainEncoding = waveFile.getEncoding();
+            mainSampleRate = waveFile.getSampleRate();
+        }
+        else
+        {
+            if (mainEncoding != waveFile.getEncoding())
+            {
+                PopupMgr::instance()->addPopup({ "All stream tracks must have the same encoding", nullptr });
+                return false;
+            }
+
+            if (mainSampleRate != waveFile.getSampleRate())
+            {
+                PopupMgr::instance()->addPopup({ "All stream tracks must have the same sample rate", nullptr });
+                return false;
+            }
+        }
 
         tmp.volume = trackInfo.getVolume();
         tmp.pan = trackInfo.getPan();
@@ -611,20 +670,25 @@ void PlayStrmSound(const Sound* sound)
     }
 
     sSelectedItem = const_cast<Sound*>(sound);
+
+    return true;
 }
 
-void PlayWaveSound(const Sound* sound)
+static bool PlayWaveSound(const Sound* sound)
 {
     const Item* waveFile = sound->getWaveSoundInfo().getWaveFileRef().getItem();
     if (!waveFile)
     {
-        SEAD_PRINT("No wave file attached\n");
-        return;
+        PopupMgr::instance()->addPopup({ "No Wave File attached", nullptr });
+        //SEAD_PRINT("No wave file attached\n");
+        return false;
     }
 
     PlayWaveFile(*static_cast<const WaveFile*>(waveFile), -1, sound);
 
     sSelectedItem = const_cast<Sound*>(sound);
+
+    return true;
 }
 
 void PlaySound(const Sound* sound)
@@ -649,7 +713,7 @@ void PlaySound(const Sound* sound)
     }
 }
 
-void PlayWaveFile(const WaveFile& wave, s32 channel, const Sound* sound)
+bool PlayWaveFile(const WaveFile& wave, s32 channel, const Sound* sound)
 {
     SEAD_ASSERT(wave.getItemType() == Item::ItemType::WaveFile);
 
@@ -676,14 +740,16 @@ void PlayWaveFile(const WaveFile& wave, s32 channel, const Sound* sound)
     }
 
     sSelectedItem = const_cast<WaveFile*>(&wave);
+
+    return true;
 }
 
-void PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion)
+bool PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion)
 {
     const Item* waveFile = velocityRegion.getWaveFileRef().getItem();
     if (!waveFile)
     {
-        return;
+        return false;
     }
 
     snd::internal::driver::SoundThreadLock lock;
@@ -701,20 +767,24 @@ void PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityR
 
     sSampleCount = sWavePlayer.getSampleCount();
     sSampleRate = sWavePlayer.getSampleRate();
+
+    return true;
 }
 
 bool PlaySeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, u8 volume)
 {
     if (!seqFile.isValid())
     {
-        SEAD_PRINT("SequenceFile is not valid\n");
+        PopupMgr::instance()->addPopup({ "Sequence File is not compiled", nullptr });
+        //SEAD_PRINT("SequenceFile is not valid\n");
         return false;
     }
 
     u32 startOffset = seqFile.getLabelOffset(startLabel);
     if (startOffset == SequenceFile::cInvaldOffset)
     {
-        SEAD_PRINT("Couldn't find label '%s'\n", startLabel.cstr());
+        PopupMgr::instance()->addPopup({ std::string("Couldn't find start label '") + startLabel.cstr() + "' in Sequence File", nullptr });
+        //SEAD_PRINT("Couldn't find start label '%s' in Sequence File\n", startLabel.cstr());
         return false;
     }
 

@@ -2,6 +2,41 @@
 
 // Banks
 
+bool Bank::validate(sead::BufferedSafeString& error) const
+{
+    if (!Item::validateName(error))
+    {
+        return false;
+    }
+
+    switch (getWaveArchiveType())
+    {
+        case WaveArchiveType::AutomaticShared:
+        case WaveArchiveType::AutomaticIndividual:
+            break;
+
+        case WaveArchiveType::Explicit:
+            if (getWaveArchiveRef().isAttached())
+            {
+                break;
+            }
+
+        //! Fallthrough
+
+        default:
+            error = "Invalid Wave Archive";
+            return false;
+    }
+
+    if (!getFileRef().isAttached())
+    {
+        error = "Invalid Bank File";
+        return false;
+    }
+
+    return true;
+}
+
 InstanciateItemCallback CreateBankFunc(bool clear)
 {
     return CreateItemFunc(clear, []() -> Item* { return new Bank(); }, nullptr);
@@ -28,7 +63,7 @@ void DrawBankPropertiesUI()
 
     {
         Item* file = bank->getFileRef().getItem();
-        if (ItemSelector("File", sBfsar.getBankFileList(), &file))
+        if (ItemSelector("Bank File", sBfsar.getBankFileList(), &file))
         {
             bank->getFileRef().attach(file);
         }

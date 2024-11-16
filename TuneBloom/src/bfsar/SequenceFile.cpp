@@ -86,6 +86,23 @@ void SequenceFile::onCloseFileWindow()
     }
 }
 
+bool SequenceFile::validate(sead::BufferedSafeString& error) const
+{
+    if (!isValid())
+    {
+        error = "Sequence File was not successfully compiled";
+        return false;
+    }
+
+    if (!getSeqBytes())
+    {
+        error = "Sequence File was not successfully compiled (Missing bytes ?)";
+        return false;
+    }
+
+    return true;
+}
+
 void SequenceFile::drawUI()
 {
     InnerFile::drawUI();

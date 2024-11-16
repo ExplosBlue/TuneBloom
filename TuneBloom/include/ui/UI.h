@@ -57,6 +57,8 @@ extern const nw::snd::MemorySoundArchive* sSoundArchive;
 
 extern const SoundDataMgr* sSoundDataMgr;
 
+extern const Sound* sLastPlayedSound;
+
 extern u32 sSampleRate;
 extern u32 sSampleCount;
 
@@ -128,8 +130,8 @@ void CloseFile();
 void LoadBfgrp();
 
 void PlaySound(const Sound* sound);
-void PlayWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr);
-void PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
+bool PlayWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr);
+bool PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
 bool PlaySeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, u8 volume);
 void StopAllSoundPlayers(bool stop = false);
 void StopAllSoundPlayersWithoutLock(bool stop = false);

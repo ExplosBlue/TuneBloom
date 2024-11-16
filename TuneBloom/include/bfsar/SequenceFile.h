@@ -30,6 +30,7 @@ public:
         : Item()
         , InnerFile()
         , mIsValid(false)
+
         , mIsDirty(false)
         , mTextEditor(nullptr)
         , mSeqTextInfo()
@@ -55,6 +56,8 @@ public:
 
     void onOpenFileWindow() override;
     void onCloseFileWindow() override;
+
+    bool validate(sead::BufferedSafeString& error) const override;
 
     void drawUI() override;
     void drawFileUI();
@@ -97,6 +100,7 @@ private:
 
 private:
     bool mIsValid;
+
     bool mIsDirty;
     TextEditor* mTextEditor;
     SeqTextInfo mSeqTextInfo;
@@ -108,6 +112,7 @@ private:
     std::vector<std::string> mLabels;
     std::unordered_map<u32, u32> mOffsetToLine;
 
+    //? For player in file window
     ItemReference* mBankRefs[4];
     sead::FixedSafeString<128> mStartLabel;
 };

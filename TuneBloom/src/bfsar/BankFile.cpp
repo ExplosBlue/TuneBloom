@@ -504,6 +504,44 @@ BankFile::~BankFile()
     }
 }
 
+bool BankFile::validate(sead::BufferedSafeString& error) const
+{
+    u32 i = 0;
+    for (const Item* instrumentItem : getInstrumentList())
+    {
+        SEAD_ASSERT(instrumentItem->getItemType() == Item::ItemType::BankFileInstrument);
+        const BankFile::Instrument* instrument = static_cast<const BankFile::Instrument*>(instrumentItem);
+
+        if (instrument->getProgramNo() < 0)
+        {
+            error.format("Instrument %u has a invalid program number", i);
+            return false;
+        }
+
+        for (const Item* keyRegionItem : instrument->getKeyRegionList())
+        {
+            SEAD_ASSERT(keyRegionItem->getItemType() == Item::ItemType::BankFileKeyRegion);
+            const BankFile::KeyRegion* keyRegion = static_cast<const BankFile::KeyRegion*>(keyRegionItem);
+
+            for (const Item* velocityRegionItem : keyRegion->getVelocityRegionList())
+            {
+                SEAD_ASSERT(velocityRegionItem->getItemType() == Item::ItemType::BankFileVelocityRegion);
+                const BankFile::VelocityRegion* velocityRegion = static_cast<const BankFile::VelocityRegion*>(velocityRegionItem);
+
+                if (!velocityRegion->getWaveFileRef().isAttached())
+                {
+                    error.format("Instrument %u: Velocity Region has no Wave File attached", i);
+                    return false;
+                }
+            }
+        }
+
+        i++;
+    }
+
+    return true;
+}
+
 void BankFile::drawUI()
 {
     InnerFile::drawUI();

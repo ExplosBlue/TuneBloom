@@ -70,6 +70,7 @@ public:
     public:
         ItemInfo(Group* owner)
             : Item()
+            , mIsDisabled(false)
             , mItemRefType(ItemType::Invalid)
             , mItemRef(owner)
             //, mLoadFlag(LoadFlag::LoadAll)
@@ -83,7 +84,11 @@ public:
             sead::FixedSafeString<256> name;
             name.appendWithFormat("[%u] ", getId());
 
-            if (mItemRef.isAttached())
+            if (mIsDisabled)
+            {
+                name.append("(disabled)");
+            }
+            else if (mItemRef.isAttached())
             {
                 name.append(mItemRef.getItem()->getNameOrNull());
             }
@@ -96,6 +101,16 @@ public:
         }
 
         void drawUI();
+
+        bool getIsDisabled() const
+        {
+            return mIsDisabled;
+        }
+
+        void setIsDisabled(bool isDisabled)
+        {
+            mIsDisabled = isDisabled;
+        }
 
         ItemType getItemRefType() const
         {
@@ -147,6 +162,7 @@ public:
         bool validateBank_(const Bank& bank, sead::BufferedSafeString& error, u32 loadFlags) const;
 
     private:
+        bool mIsDisabled;
         ItemType mItemRefType;
         ItemReference mItemRef;
         //u32 mLoadFlag;
@@ -170,6 +186,8 @@ public:
     {
         mItemType = ItemType::Group;
     }
+
+    bool validate(sead::BufferedSafeString& error) const override;
 
     OutputType getOutputType() const
     {

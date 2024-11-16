@@ -233,6 +233,8 @@ public:
     bool validName(const sead::SafeString& name) const;
     //? Check if name is duplicated
     bool validateName(const sead::SafeString& name) const;
+    //? Check if name is duplicated (Excluding item)
+    bool validateName(const Item& item) const;
 
     void updateList(Item::List& list);
 
@@ -274,7 +276,10 @@ private:
     void save_(sead::FileHandle& handle);
     void close_();
 
-    bool validateName_(const sead::SafeString& name, const Item::List& list) const;
+    //? Validate every item for saving
+    bool validate_();
+
+    bool validateName_(const sead::SafeString& name, const Item::List& list, const Item* ignoreItem = nullptr) const;
 
     bool readStreamWaves_(const void* strmFile, Sound::StreamSoundInfo::Track::List& tracks);
 

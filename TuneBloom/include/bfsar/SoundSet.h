@@ -15,6 +15,7 @@ public:
     SoundSet()
         : Item()
         , mSoundSetType(SoundSetType::Wave)
+        , mIsEmpty(false)
         , mStartId(0)
         , mEndId(0)
         , mWaveArchiveType(WaveArchiveType::AutomaticShared)
@@ -24,6 +25,8 @@ public:
 
         mWaveArchiveRef.setOnDetachCallback<SoundSet>(&SoundSet::onDetachWaveArchive_); // Temp ? Idk a good solution yet
     }
+
+    bool validate(sead::BufferedSafeString& error) const override;
 
     SoundSetType getSoundSetType() const
     {
@@ -35,8 +38,23 @@ public:
         mSoundSetType = type;
     }
 
+    bool getIsEmpty() const
+    {
+        return mIsEmpty;
+    }
+
+    void setIsEmpty(bool isEmpty)
+    {
+        mIsEmpty = isEmpty;
+    }
+
     u32 getStartId() const
     {
+        if (mIsEmpty)
+        {
+            return cInvalidId;
+        }
+
         return mStartId;
     }
 
@@ -47,6 +65,11 @@ public:
 
     u32 getEndId() const
     {
+        if (mIsEmpty)
+        {
+            return cInvalidId;
+        }
+
         return mEndId;
     }
 
@@ -83,6 +106,7 @@ private:
 
 private:
     SoundSetType mSoundSetType;
+    bool mIsEmpty;
     u32 mStartId;
     u32 mEndId;
     WaveArchiveType mWaveArchiveType;

@@ -221,14 +221,34 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     {
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoExBlock, "INFX");
 
-        writer.openReferenceTable("ItemInfoExTable", mGroup->getItemInfoList().size());
+        const u32 cIncludeDisabledItemsVersion = 0x00020000;
+
+        u32 itemInfoCount = mGroup->getItemInfoList().size();
+        if (sBfsar.getVersion() > cIncludeDisabledItemsVersion)
+        {
+            itemInfoCount = 0;
+            for (const Item* item : mGroup->getItemInfoList())
+            {
+                SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
+                const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
+
+                if (itemInfo->getIsDisabled())
+                {
+                    continue;
+                }
+
+                itemInfoCount++;
+            }
+        }
+
+        writer.openReferenceTable("ItemInfoExTable", itemInfoCount);
 
         auto writeGroupItem = [&](const Group::ItemInfo& itemInfo)
         {
             writer.addReferenceTableReference("ItemInfoExTable", nw::snd::internal::ElementType_GroupFile_GroupItemInfoEx);
 
             u32 itemId = 0; //? Idk why not nw::snd::SoundArchive::INVALID_ID... 
-            if (itemInfo.getItemRef().isAttached())
+            if (!itemInfo.getIsDisabled() && itemInfo.getItemRef().isAttached())
             {
                 nw::snd::internal::ItemType itemType;
                 switch (itemInfo.getItemRefType())
@@ -261,7 +281,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
             stream->writeU32(itemInfo.getLoadFlag());
         };
 
-        if (sBfsar.getVersion() <= 0x00020000)
+        if (sBfsar.getVersion() <= cIncludeDisabledItemsVersion)
         {
             for (const Item* item : mGroup->getItemInfoList())
             {
@@ -280,7 +300,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                 SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
                 const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
 
-                if (!itemInfo->getItemRef().isAttached())
+                if (itemInfo->getIsDisabled())
                 {
                     continue;
                 }

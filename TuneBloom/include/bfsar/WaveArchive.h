@@ -12,6 +12,8 @@ public:
         mItemType = ItemType::WaveArchive;
     }
 
+    bool validate(sead::BufferedSafeString& error) const override;
+
     bool getIsLoadIndividual() const
     {
         return mIsLoadIndividual;

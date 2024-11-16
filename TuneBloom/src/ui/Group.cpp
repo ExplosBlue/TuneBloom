@@ -4,6 +4,49 @@
 
 // Groups
 
+bool Group::validate(sead::BufferedSafeString& error) const
+{
+    if (!Item::validateName(error))
+    {
+        return false;
+    }
+
+    switch (getOutputType())
+    {
+        case OutputType::Embed:
+        case OutputType::Link:
+        // case OutputType::External:
+            break;
+
+        default:
+            error = "Invalid Output Type";
+            return false;
+    }
+
+    sead::FixedSafeString<256> itemError;
+
+    u32 i = 0;
+    for (const Item* item : mItemInfoList)
+    {
+        const ItemInfo& itemInfo = *static_cast<const ItemInfo*>(item);
+
+        if (!itemInfo.getIsDisabled())
+        {
+            if (!itemInfo.validate(itemError))
+            {
+                error.format("Item %u: %s", i, itemError.cstr());
+                return false;
+            }
+        }
+
+        itemError.clear();
+
+        i++;
+    }
+
+    return true;
+}
+
 InstanciateItemCallback CreateGroupFunc(bool clear)
 {
     return CreateItemFunc(clear, []() -> Item* { return new Group(); }, nullptr);
@@ -43,6 +86,19 @@ const char* Group::ItemInfo::sItemIdTypes[4] = {
 
 void Group::ItemInfo::drawUI()
 {
+    bool disabled = mIsDisabled;
+    if (ImGui::Checkbox("Disable", &disabled))
+    {
+        mIsDisabled = disabled;
+    }
+
+    ImGui::Separator();
+
+    if (disabled)
+    {
+        ImGui::BeginDisabled();
+    }
+
     {
         u32 itemRefType = (u32)mItemRefType - 1;
         if (ImGui::Combo("Item Type", (s32*)&itemRefType, sItemIdTypes, IM_ARRAYSIZE(sItemIdTypes)))
@@ -157,6 +213,11 @@ void Group::ItemInfo::drawUI()
     //     {
     //     }
     // }
+
+    if (disabled)
+    {
+        ImGui::EndDisabled();
+    }
 }
 
 u32 Group::ItemInfo::getLoadFlag() const
@@ -465,7 +526,7 @@ bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
 {
     if (mItemRefType != ItemType::Sound && mItemRefType != ItemType::SoundSet && mItemRefType != ItemType::Bank && mItemRefType != ItemType::WaveArchive)
     {
-        error = "Invalid item type";
+        error = "Invalid Item Type";
         return false;
     }
 
@@ -483,6 +544,11 @@ bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
             if (sound->getSoundType() == Sound::SoundType::Seq)
             {
                 return validateSequence_(*sound, error);
+            }
+            else
+            {
+                error = "Sound must be a Sequence";
+                return false;
             }
 
             break;
@@ -520,6 +586,17 @@ bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
         {
             const Bank* bank = static_cast<const Bank*>(mItemRef.getItem());
             return validateBank_(*bank, error, getLoadFlag());
+
+            break;
+        }
+
+        case ItemType::WaveArchive:
+        {
+            if (getLoadFlag() != LoadFlag::LoadAll)
+            {
+                error = "Must select 'All' for Wave Archive";
+                return false;
+            }
 
             break;
         }

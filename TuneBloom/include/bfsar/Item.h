@@ -282,6 +282,8 @@ public:
         return false;
     }
 
+    bool validateName(sead::BufferedSafeString& error) const;
+
 private:
     void addReference_(ItemReference* ref)
     {

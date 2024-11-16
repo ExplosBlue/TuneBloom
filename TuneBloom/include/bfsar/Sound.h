@@ -7,6 +7,8 @@
 
 #include <container/seadObjList.h>
 
+class SoundSet;
+
 class Sound : public Item
 {
 public:
@@ -981,6 +983,8 @@ public:
         , mSequenceSoundInfo(this)
         , mStreamSoundInfo(this)
         , mWaveSoundInfo(this)
+
+        , mOwnerSet(nullptr)
     {
         mItemType = ItemType::Sound;
 
@@ -995,9 +999,16 @@ public:
 
     ~Sound() override;
 
+    bool validate(sead::BufferedSafeString& error) const override;
+
     u32 getPlayerId() const
     {
         return mPlayerRef.getItemId();
+    }
+
+    const ItemReference& getPlayerRef() const
+    {
+        return mPlayerRef;
     }
 
     ItemReference& getPlayerRef()
@@ -1235,5 +1246,8 @@ private:
 
     WaveSoundInfo mWaveSoundInfo;
 
+    mutable const SoundSet* mOwnerSet; //? Used for validation
+
     friend class Bfsar;
+    friend class SoundSet;
 };

@@ -8,6 +8,8 @@
 #include <bfsar/BfwsdFile.h>
 #include <bfsar/File.h>
 
+#include <ui/PopupMgr.h>
+
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
 #include <stream/seadFileDeviceStream.h>
@@ -109,6 +111,9 @@ bool Bfsar::save()
     if (!mOpen)
         return false;
 
+    if (!validate_())
+        return false;
+
     sead::FormatFixedSafeString<512> path("%s.save.bfsar", mFilePath->cstr()); // TODO
     //sead::SafeString path = *mFilePath;
 
@@ -134,6 +139,9 @@ bool Bfsar::save()
 bool Bfsar::saveAs(const sead::SafeString& filePath)
 {
     if (!mOpen)
+        return false;
+
+    if (!validate_())
         return false;
 
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
@@ -236,6 +244,34 @@ bool Bfsar::validateName(const sead::SafeString& name) const
         return false;
 
     if (!validateName_(name, mPlayerList))
+        return false;
+
+    return true;
+}
+
+bool Bfsar::validateName(const Item& item) const
+{
+    sead::SafeString name = item.getName();
+
+    if (name.isEmpty())
+        return false;
+
+    if (!validateName_(name, mSoundList, &item))
+        return false;
+
+    if (!validateName_(name, mSoundSetList, &item))
+        return false;
+
+    if (!validateName_(name, mBankList, &item))
+        return false;
+
+    if (!validateName_(name, mWaveArchiveList, &item))
+        return false;
+
+    if (!validateName_(name, mGroupList, &item))
+        return false;
+
+    if (!validateName_(name, mPlayerList, &item))
         return false;
 
     return true;
@@ -1707,13 +1743,15 @@ void Bfsar::open_(sead::Heap* heap)
 
         SEAD_ASSERT(soundSet->mWaveArchiveType != WaveArchiveType::Invalid);
 
-        soundSet->mStartId = nw::snd::SoundArchive::INVALID_ID;
-        if (soundSetInfo->startId != nw::snd::SoundArchive::INVALID_ID)
+        if (soundSetInfo->startId == nw::snd::SoundArchive::INVALID_ID && soundSetInfo->endId == nw::snd::SoundArchive::INVALID_ID)
+        {
+            soundSet->mIsEmpty = true;
+        }
+        else
+        {
             soundSet->mStartId = nw::snd::internal::Util::GetItemIndex(soundSetInfo->startId);
-
-        soundSet->mEndId = nw::snd::SoundArchive::INVALID_ID;
-        if (soundSetInfo->endId != nw::snd::SoundArchive::INVALID_ID)
             soundSet->mEndId = nw::snd::internal::Util::GetItemIndex(soundSetInfo->endId);
+        }
 
         mSoundSetList.pushBack(soundSet);
     }
@@ -1774,6 +1812,8 @@ void Bfsar::open_(sead::Heap* heap)
 
                 Group::ItemInfo* itemInfo = new(heap) Group::ItemInfo(group);
                 itemInfo->mId = itemIdx;
+
+                itemInfo->mIsDisabled = itemDisabled;
 
                 if (!itemDisabled)
                 {
@@ -3998,8 +4038,16 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 writer.pushOffsetBase();
                 {
-                    stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(soundSet->getStartId(), nw::snd::internal::ItemType_Sound));
-                    stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(soundSet->getEndId(), nw::snd::internal::ItemType_Sound));
+                    if (soundSet->getIsEmpty())
+                    {
+                        stream.writeU32(nw::snd::SoundArchive::INVALID_ID);
+                        stream.writeU32(nw::snd::SoundArchive::INVALID_ID);
+                    }
+                    else
+                    {
+                        stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(soundSet->getStartId(), nw::snd::internal::ItemType_Sound));
+                        stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(soundSet->getEndId(), nw::snd::internal::ItemType_Sound));
+                    }
 
                     writer.openReference("FileIdTable");
                     writer.openReference("DetailSoundGroup");
@@ -4587,14 +4635,104 @@ void Bfsar::close_()
     mBankFileList.clear();
 }
 
-bool Bfsar::validateName_(const sead::SafeString& name, const Item::List& list) const
+bool Bfsar::validate_()
+{
+    sead::FixedSafeString<1024> error;
+
+    auto validateList = [&error](const ItemList& list)
+    {
+        for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+        {
+            const Item* item = (*it).val();
+            SEAD_ASSERT(item);
+
+            if (item->getItemType() == Item::ItemType::Sound)
+            {
+                const Sound* sound = static_cast<const Sound*>(item);
+                sound->mOwnerSet = nullptr; //? Reset for when validating SoundSets
+            }
+
+            if (!item->validate(error))
+            {
+                if (error.isEmpty())
+                {
+                    error = "Unknown";
+                }
+
+                PopupMgr::instance()->addPopup({ error.cstr(), const_cast<Item*>(item) });
+                return false;
+            }
+
+            error.clear();
+        }
+
+        return true;
+    };
+
+    if (!validateList(mSoundList))
+    {
+        return false;
+    }
+
+    if (!validateList(mSoundSetList))
+    {
+        return false;
+    }
+
+    if (!validateList(mBankList))
+    {
+        return false;
+    }
+
+    if (!validateList(mWaveArchiveList))
+    {
+        return false;
+    }
+
+    if (!validateList(mGroupList))
+    {
+        return false;
+    }
+
+    if (!validateList(mPlayerList))
+    {
+        return false;
+    }
+
+    if (!validateList(mWaveFileList))
+    {
+        return false;
+    }
+
+    if (!validateList(mSequenceFileList))
+    {
+        return false;
+    }
+
+    if (!validateList(mBankFileList))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool Bfsar::validateName_(const sead::SafeString& name, const Item::List& list, const Item* ignoreItem) const
 {
     for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
     {
-        Item* item = (*it).val();
+        const Item* item = (*it).val();
+        SEAD_ASSERT(item);
+
+        if (ignoreItem && item == ignoreItem)
+        {
+            continue;
+        }
 
         if (name == item->getName())
+        {
             return false;
+        }
     }
 
     return true;

@@ -311,6 +311,8 @@ public:
 
     ~BankFile() override;
 
+    bool validate(sead::BufferedSafeString& error) const override;
+
     void drawUI() override;
     void drawFileUI();
 

@@ -1,5 +1,84 @@
 #include <ui/UI.h>
 
+bool SoundSet::validate(sead::BufferedSafeString& error) const
+{
+    if (!Item::validateName(error))
+    {
+        return false;
+    }
+
+    switch (getSoundSetType())
+    {
+        case SoundSetType::Wave:
+            switch (getWaveArchiveType())
+            {
+                case WaveArchiveType::AutomaticShared:
+                case WaveArchiveType::AutomaticIndividual:
+                    break;
+
+                case WaveArchiveType::Explicit:
+                    if (getWaveArchiveRef().isAttached())
+                    {
+                        break;
+                    }
+
+                //! Fallthrough
+
+                default:
+                    error = "Invalid Wave Archive";
+                    return false;
+            }
+
+            break;
+
+        case SoundSetType::Seq:
+            break;
+
+        default:
+            error = "Invalid Sound Type";
+            return false;
+    }
+
+    if (getIsEmpty())
+    {
+        return true;
+    }
+
+    if (getEndId() < getStartId())
+    {
+        error = "Invalid Start and End ids";
+        return false;
+    }
+
+    if (getStartId() >= sBfsar.getSoundList().size())
+    {
+        error = "Start Id exceeds sound count";
+        return false;
+    }
+
+    if (getEndId() >= sBfsar.getSoundList().size())
+    {
+        error = "End Id exceeds sound count";
+        return false;
+    }
+
+    for (const Item::ListNode* itemNode = sBfsar.getItem(getStartId(), sBfsar.getSoundList()); itemNode && itemNode->val()->getId() <= getEndId(); itemNode = sBfsar.getSoundList().next(itemNode))
+    {
+        SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
+        const Sound* sound = static_cast<const Sound*>(itemNode->val());
+
+        if (sound->mOwnerSet)
+        {
+            error.format("Sound '%s' is already in Sound Set '%s'", sound->getFormattedName().cstr(), sound->mOwnerSet->getFormattedName().cstr());
+            return false;
+        }
+
+        sound->mOwnerSet = this;
+    }
+
+    return true;
+}
+
 void DrawSoundSetPropertiesUI()
 {
     SoundSet* soundSet = static_cast<SoundSet*>(sSelectedItem);
@@ -38,15 +117,24 @@ void DrawSoundSetPropertiesUI()
     }
 
     {
+        bool isEmpty = soundSet->getIsEmpty();
+        if (ImGui::Checkbox("Is Empty", &isEmpty))
+        {
+            soundSet->setIsEmpty(isEmpty);
+        }
+
+        if (isEmpty)
+        {
+            ImGui::BeginDisabled();
+        }
+
         u32 startId = soundSet->getStartId();
         if (ImGui::InputScalar("Start Id", ImGuiDataType_U32, &startId, &cStepU32))
         {
             if (startId <= soundSet->getEndId())
                 soundSet->setStartId(startId);
         }
-    }
 
-    {
         u32 endId = soundSet->getEndId();
         if (ImGui::InputScalar("End Id", ImGuiDataType_U32, &endId, &cStepU32))
         {
@@ -55,6 +143,11 @@ void DrawSoundSetPropertiesUI()
 
             //if (endId >= sBfsar.getSoundList().size())
             //    soundSet->setEndId(sBfsar.getSoundList().size() - 1);
+        }
+
+        if (isEmpty)
+        {
+            ImGui::EndDisabled();
         }
     }
 

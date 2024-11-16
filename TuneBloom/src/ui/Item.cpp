@@ -4,6 +4,23 @@ bool sSelectedItemIsSubWindow = false;
 
 static Item* sDeleteItem = nullptr;
 
+bool Item::validateName(sead::BufferedSafeString& error) const
+{
+    if (!sBfsar.validName(getName()))
+    {
+        error = "Invalid name:\nCan only contain alphanumeric characters and underscores\nCan't start with a number";
+        return false;
+    }
+
+    if (!sBfsar.validateName(*this))
+    {
+        error = "Duplicated name";
+        return false;
+    }
+
+    return true;
+}
+
 InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback instanciateItemCallback, ItemPropertiesCallback itemPropertiesCallback)
 {
     SEAD_ASSERT(instanciateItemCallback);
@@ -37,7 +54,7 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
         ImGui::EndDisabled();
     }
 
-    WarningPopup("###InvalidName", "Invalid name");
+    WarningPopup("###InvalidName", "Invalid name:\nCan only contain alphanumeric characters and underscores\nCan't start with a number");
     WarningPopup("###EmptyName", "Name can't be empty");
     DupeNamePopup();
 
@@ -579,7 +596,7 @@ void DrawItemPropertiesUI()
     if (!enableName)
         ImGui::EndDisabled();
 
-    WarningPopup("###InvalidName", "Invalid name");
+    WarningPopup("###InvalidName", "Invalid name:\nCan only contain alphanumeric characters and underscores\nCan't start with a number");
     WarningPopup("###EmptyName", "Name can't be empty");
     DupeNamePopup();
 }

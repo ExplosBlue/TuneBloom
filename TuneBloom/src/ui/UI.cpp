@@ -451,6 +451,43 @@ void DrawInfoUI()
     ImGui::End();
 }
 
+InstanciateItemCallback CreateStreamTrackFunc(bool clear)
+{
+    static Item* sWaveFileRef = nullptr;
+
+    if (clear)
+    {
+        //sWaveFileRef = sBfsar.getItem(0, sBfsar.getWaveFileList());
+        sWaveFileRef = nullptr;
+    }
+
+    ItemSelector("Wave File", sBfsar.getWaveFileList(), &sWaveFileRef, false);
+
+    WarningPopup("###WaveFile", "Select a valid Wave File !");
+
+    auto doCreate = []() -> Item*
+    {
+        SEAD_ASSERT(sSelectedItem);
+        SEAD_ASSERT(sSelectedItem->getItemType() == Item::ItemType::Sound);
+
+        if (!sWaveFileRef)
+        {
+            ImGui::OpenPopup("###WaveFile");
+            return nullptr;
+        }
+
+        Sound::StreamSoundInfo::Track* track = new Sound::StreamSoundInfo::Track();
+        track->setEnableName(true);
+        track->getName() = "Track";
+
+        track->getWaveFileRef().attach(sWaveFileRef);
+
+        return track;
+    };
+
+    return doCreate;
+}
+
 InstanciateItemCallback CreateGroupItemFunc(bool clear)
 {
     static Item::ItemType sItemRefType = Item::ItemType::Invalid;
@@ -684,34 +721,37 @@ void DrawSubInfoUI()
     
     if (windowOpen)
     {
-        if (!sSelectedItem)
+        if (sSelectedItem)
+        {
+            switch (sSelectedItem->getItemType())
+            {
+                case Item::ItemType::Sound:
+                {
+                    Sound* sound = static_cast<Sound*>(sSelectedItem);
+
+                    if (sound->getSoundType() == Sound::SoundType::Strm)
+                    {
+                        DrawAllItemsUI("Track", sound->getStreamSoundInfo().getTrackList(), &CreateStreamTrackFunc);
+                    }
+                    else
+                    {
+                        CenteredText("Selected Sound Is Not A Stream");
+                    }
+                    break;
+                }
+
+                case Item::ItemType::Group:
+                {
+                    Group* group = static_cast<Group*>(sSelectedItem);
+
+                    DrawAllItemsUI("Item", group->getItemInfoList(), &CreateGroupItemFunc, &GroupItemPrefixFunc);
+                    break;
+                }
+            }
+        }
+        else
         {
             CenteredText("No Item Selected");
-
-            ImGui::End();
-            return;
-        }
-
-        switch (sSelectedItem->getItemType())
-        {
-            case Item::ItemType::Sound:
-            {
-                Sound* sound = static_cast<Sound*>(sSelectedItem);
-
-                if (sound->getSoundType() == Sound::SoundType::Strm)
-                {
-                    DrawAllItemsUI("Track", sound->getStreamSoundInfo().getTrackList());
-                }
-                break;
-            }
-
-            case Item::ItemType::Group:
-            {
-                Group* group = static_cast<Group*>(sSelectedItem);
-
-                DrawAllItemsUI("Item", group->getItemInfoList(), &CreateGroupItemFunc, &GroupItemPrefixFunc);
-                break;
-            }
         }
     }
 
@@ -1023,6 +1063,11 @@ InstanciateItemCallback CreateSoundFunc(bool clear)
 
             sound->getPlayerRef().attach(sPlayer);
             sound->setSoundType(sSoundType);
+
+            if (sSoundType == Sound::SoundType::Strm)
+            {
+                sound->setPanMode(snd::PanMode::Balance); // Default for streams
+            }
         }
     };
 

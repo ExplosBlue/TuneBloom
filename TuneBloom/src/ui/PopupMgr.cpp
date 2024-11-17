@@ -12,7 +12,7 @@ PopupMgr::PopupMgr()
 
 void PopupMgr::addPopup(const PopupInfo& info)
 {
-    mPopups.push_back(info);
+    mPopups.pushBack(info);
 }
 
 void PopupMgr::update()
@@ -51,12 +51,14 @@ void PopupMgr::update()
                 buttonSize = ImVec2(ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x, 0);
             }
 
-            ImGui::Text(info.text.c_str());
+            ImGui::Text(info.text.cstr());
             ImGui::Separator();
 
             if (ImGui::Button("OK", buttonSize))
             {
-                mPopups.erase(mPopups.begin()); // Pop front
+                PopupInfo dummy;
+                mPopups.popFront(&dummy);
+
                 mPopupOpen = false;
 
                 ImGui::CloseCurrentPopup();
@@ -68,7 +70,9 @@ void PopupMgr::update()
 
                 if (ImGui::Button(ICON_LC_EXTERNAL_LINK " Go To", buttonSize))
                 {
-                    mPopups.erase(mPopups.begin()); // Pop front
+                    PopupInfo dummy;
+                    mPopups.popFront(&dummy);
+
                     mPopupOpen = false;
 
                     SelectItem(item);

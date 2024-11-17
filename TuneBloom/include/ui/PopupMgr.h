@@ -1,9 +1,8 @@
 #pragma once
 
+#include <container/seadRingBuffer.h>
 #include <heap/seadDisposer.h>
-
-#include <vector>
-#include <string>
+#include <prim/seadSafeString.h>
 
 class Item;
 
@@ -14,7 +13,21 @@ class PopupMgr
 public:
     struct PopupInfo
     {
-        std::string text;
+    private:
+        struct Text : public sead::FixedSafeString<1024>
+        {
+            Text()
+            {
+            }
+
+            Text(const char* str)
+                : sead::FixedSafeString<1024>(str)
+            {
+            }
+        };
+
+    public:
+        Text text;
         Item* item;
     };
 
@@ -26,6 +39,6 @@ public:
     void update();
 
 private:
-    std::vector<PopupInfo> mPopups;
+    sead::FixedRingBuffer<PopupInfo, 10> mPopups;
     bool mPopupOpen;
 };

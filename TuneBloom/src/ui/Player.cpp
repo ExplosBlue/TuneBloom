@@ -579,7 +579,7 @@ static bool PlayStrmSound(const Sound* sound)
 
         if (!trackInfo.getWaveFileRef().isAttached())
         {
-            PopupMgr::instance()->addPopup({ "Track " + std::to_string(i) + " has no Wave File attached", nullptr });
+            PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>("Track %u has no Wave File attached", i).cstr(), nullptr });
             return false;
         }
 
@@ -783,7 +783,7 @@ bool PlaySeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel
     u32 startOffset = seqFile.getLabelOffset(startLabel);
     if (startOffset == SequenceFile::cInvaldOffset)
     {
-        PopupMgr::instance()->addPopup({ std::string("Couldn't find start label '") + startLabel.cstr() + "' in Sequence File", nullptr });
+        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>("Couldn't find start label '%s' in Sequence File", startLabel.cstr()).cstr(), nullptr });
         //SEAD_PRINT("Couldn't find start label '%s' in Sequence File\n", startLabel.cstr());
         return false;
     }

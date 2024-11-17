@@ -166,8 +166,8 @@ void InnerFile::drawUI()
 
 Bfsar sBfsar;
 
-const SoundDataMgr* sSoundDataMgr = nullptr;
-const nw::snd::MemorySoundArchive* sSoundArchive = nullptr;
+//const nw::snd::MemorySoundArchive* sSoundArchive = nullptr;
+//const SoundDataMgr* sSoundDataMgr = nullptr;
 
 Item* sSelectedItem = nullptr;
 Item* sSubSelectedItem = nullptr;
@@ -195,8 +195,8 @@ void OpenFile()
         return;
     }
 
-    sSoundArchive = sBfsar.getSoundArchive();
-    sSoundDataMgr = &sBfsar.getSoundDataMgr();
+    //sSoundArchive = sBfsar.getSoundArchive();
+    //sSoundDataMgr = &sBfsar.getSoundDataMgr();
 
     sead::FixedSafeString<512> fileName;
     sead::Path::getFileName(&fileName, filePath);
@@ -264,7 +264,7 @@ void CloseFile()
 
     sBfsar.close();
 
-    sSoundArchive = nullptr;
+    //sSoundArchive = nullptr;
 
     sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
     if (fw)

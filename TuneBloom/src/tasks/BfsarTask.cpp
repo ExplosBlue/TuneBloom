@@ -103,7 +103,6 @@ struct Instrument
     RegionIndex* velocityRegionIndecies; // For each KeyRegion
 };
 
-extern const nw::snd::MemorySoundArchive* sSoundArchive;
 Instrument** bankInstruments = nullptr;
 s32* bankInstrumentCount = nullptr;
 
@@ -249,6 +248,7 @@ void BfsarTask::calc()
 
     //? Code for printing all banks instruments info
 
+/*
     static bool sDo = false;
     if (!sDo)
     {
@@ -385,6 +385,7 @@ void BfsarTask::calc()
     }
 
     SEAD_PRINT("\n");
+*/
 }
 
 void BfsarTask::draw()
@@ -392,6 +393,7 @@ void BfsarTask::draw()
     //? Leftover code from when i started this... fun times
     return;
 
+/*
     if (!sSoundArchive)
         return;
 
@@ -1130,6 +1132,7 @@ void BfsarTask::draw()
         }
     }
     ImGui::End();
+*/
 }
 
 #include <stream/seadFileDeviceStream.h>

@@ -34,9 +34,6 @@
 
 Bfsar::Bfsar()
     : mOpen(false)
-    , mBfsarFile(nullptr)
-    , mSoundArchive(nullptr)
-    , mSoundDataMgr()
     , mFilePath(nullptr)
 
     , mEndian(sead::Endian::eBig)
@@ -80,26 +77,25 @@ bool Bfsar::open(const sead::SafeString& filePath, sead::Heap* heap)
     arg.path = filePath;
     arg.heap = heap;
 
-    mBfsarFile = device->load(arg);
+    u8* bfsarFile = device->load(arg);
 
-    //if (sead::MemUtil::compare(mBfsarFile, "CSAR", 4) != 0)
-    if (sead::MemUtil::compare(mBfsarFile, "FSAR", 4) != 0)
+    //if (sead::MemUtil::compare(bfsarFile, "CSAR", 4) != 0)
+    if (sead::MemUtil::compare(bfsarFile, "FSAR", 4) != 0)
     {
-        device->unload(mBfsarFile);
-        mBfsarFile = nullptr;
-
+        device->unload(bfsarFile);
         return false;
     }
 
     mFilePath = new(heap) sead::HeapSafeString(heap, filePath);
 
-    mSoundArchive = new(heap) nw::snd::MemorySoundArchive();
-    bool success = mSoundArchive->Initialize(mBfsarFile);
+    nw::snd::MemorySoundArchive* soundArchive = new(heap) nw::snd::MemorySoundArchive();
+    bool success = soundArchive->Initialize(bfsarFile);
     SEAD_ASSERT(success);
 
-    mSoundDataMgr.init(mSoundArchive, heap);
+    open_(*soundArchive, heap);
 
-    open_(heap);
+    delete soundArchive;
+    device->unload(bfsarFile);
 
     mOpen = true;
 
@@ -172,20 +168,6 @@ void Bfsar::close()
         return;
 
     close_();
-
-    mSoundDataMgr.deinit();
-
-    if (mSoundArchive)
-    {
-        delete mSoundArchive;
-        mSoundArchive = nullptr;
-    }
-
-    if (mBfsarFile)
-    {
-        sead::FileDeviceMgr::instance()->unload(mBfsarFile);
-        mBfsarFile = nullptr;
-    }
 
     if (mFilePath)
     {
@@ -288,16 +270,16 @@ void Bfsar::updateList(Item::List& list)
     }
 }
 
-void Bfsar::open_(sead::Heap* heap)
+void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap)
 {
-    mEndian = nw::ut::GetFileEndian(mSoundArchive->mHeader);
+    mEndian = nw::ut::GetFileEndian(soundArchive.mHeader);
 
-    mVersion = mSoundArchive->mHeader.version;
+    mVersion = soundArchive.mHeader.version;
 
-    mIncludeStringTable = mSoundArchive->mStringBlockBody != nullptr;
+    mIncludeStringTable = soundArchive.mStringBlockBody != nullptr;
 
     {
-        const nw::snd::internal::SoundArchiveFile::SoundArchivePlayerInfo* playerInfo = mSoundArchive->GetSoundArchivePlayerInfo();
+        const nw::snd::internal::SoundArchiveFile::SoundArchivePlayerInfo* playerInfo = soundArchive.GetSoundArchivePlayerInfo();
 
         mSoundArchivePlayerInfo.sequenceSoundMax = playerInfo->sequenceSoundMax;
         mSoundArchivePlayerInfo.sequenceTrackMax = playerInfo->sequenceTrackMax;
@@ -320,7 +302,7 @@ void Bfsar::open_(sead::Heap* heap)
             continue;
         }
 
-        const nw::snd::internal::SoundArchiveFile::FileInfo* fileInfo = mSoundArchive->detail_GetFileInfo(file->getId());
+        const nw::snd::internal::SoundArchiveFile::FileInfo* fileInfo = soundArchive.detail_GetFileInfo(file->getId());
         const nw::snd::internal::SoundArchiveFile::InternalFileInfo* internalFileInfo = fileInfo->GetInternalFileInfo();
 
         if (internalFileInfo->GetOffsetFromFileBlockHead() == nw::snd::internal::SoundArchiveFile::InternalFileInfo::INVALID_OFFSET)
@@ -341,7 +323,7 @@ void Bfsar::open_(sead::Heap* heap)
         {
             u32 groupFileId = 0xFFFFFFFF;
             u32 fileSize = 0xFFFFFFFF;
-            const void* fileAddr = mSoundArchive->detail_GetFileAddress(file->getId(), &fileSize, variationId, &groupFileId);
+            const void* fileAddr = soundArchive.detail_GetFileAddress(file->getId(), &fileSize, variationId, &groupFileId);
             if (!fileAddr)
                 break;
 
@@ -465,9 +447,9 @@ void Bfsar::open_(sead::Heap* heap)
 */
 
     //? Load Players first so Sounds can reference them
-    for (u32 i = 0; i < mSoundArchive->GetPlayerCount(); i++)
+    for (u32 i = 0; i < soundArchive.GetPlayerCount(); i++)
     {
-        const nw::snd::internal::SoundArchiveFile::PlayerInfo* playerInfo = mSoundArchive->GetPlayerInfo(mSoundArchive->GetPlayerIdFromIndex(i));
+        const nw::snd::internal::SoundArchiveFile::PlayerInfo* playerInfo = soundArchive.GetPlayerInfo(soundArchive.GetPlayerIdFromIndex(i));
 
         Player* player = new(heap) Player();
         player->mId = i;
@@ -475,7 +457,7 @@ void Bfsar::open_(sead::Heap* heap)
         player->mEnableName = playerInfo->optionParameter.GetTrueCount(nw::snd::internal::PLAYER_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && playerInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
-            player->mName = mSoundArchive->GetString(playerInfo->GetStringId());
+            player->mName = soundArchive.GetString(playerInfo->GetStringId());
         }
         else
         {
@@ -500,10 +482,10 @@ void Bfsar::open_(sead::Heap* heap)
 
     std::unordered_map<u32, u32> seqFileIdxMap;
 
-    for (u32 i = 0; i < mSoundArchive->detail_GetFileCount(); i++)
+    for (u32 i = 0; i < soundArchive.detail_GetFileCount(); i++)
     {
         u32 seqFileSize = 0;
-        const void* seqFile = mSoundArchive->detail_GetFileAddress(i, &seqFileSize);
+        const void* seqFile = soundArchive.detail_GetFileAddress(i, &seqFileSize);
 
         //if (!seqFile || sead::MemUtil::compare(seqFile, "CSEQ", 4) != 0)
         if (!seqFile || sead::MemUtil::compare(seqFile, "FSEQ", 4) != 0)
@@ -527,8 +509,8 @@ void Bfsar::open_(sead::Heap* heap)
     }
 
     // {
-    //     u32 bankFileId = mSoundArchive->GetBankInfo(mSoundArchive->GetBankIdFromIndex(29))->fileId;
-    //     nw::snd::internal::BankFileReader reader(mSoundArchive->detail_GetFileAddressGroup(bankFileId, mSoundArchive->GetGroupIdFromIndex(5)));
+    //     u32 bankFileId = soundArchive.GetBankInfo(soundArchive.GetBankIdFromIndex(29))->fileId;
+    //     nw::snd::internal::BankFileReader reader(soundArchive.detail_GetFileAddressGroup(bankFileId, soundArchive.GetGroupIdFromIndex(5)));
     //     SEAD_ASSERT(reader.IsInitialized());
 
     //     const nw::snd::internal::Util::WaveIdTable& table = *reader.GetWaveIdTable();
@@ -549,17 +531,17 @@ void Bfsar::open_(sead::Heap* heap)
         u32 fileDataSize;
     };
 
-    const u32 warcNum = mSoundArchive->GetWaveArchiveCount();
+    const u32 warcNum = soundArchive.GetWaveArchiveCount();
     std::vector< std::vector<WaveTempFile> > warcFileCache(warcNum);
     std::vector< std::unordered_set<u32> > waveIdMapSet(warcNum);
     if (warcNum > 0)
     {
         // Process warc 0
         {
-            const u32 waveArchiveId = mSoundArchive->GetWaveArchiveIdFromIndex(0);
-            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(waveArchiveId);
+            const u32 waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(0);
+            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(waveArchiveId);
 
-            nw::snd::internal::WaveArchiveFileReader reader(mSoundArchive->detail_GetFileAddress(warcInfo->fileId));
+            nw::snd::internal::WaveArchiveFileReader reader(soundArchive.detail_GetFileAddress(warcInfo->fileId));
             const u32 waveFileCount = reader.GetWaveFileCount();
             for (u32 j = 0; j < waveFileCount; j++)
             {
@@ -588,10 +570,10 @@ void Bfsar::open_(sead::Heap* heap)
 
         for (u32 i = 1; i < warcNum; i++)
         {
-            const u32 waveArchiveId = mSoundArchive->GetWaveArchiveIdFromIndex(i);
-            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(waveArchiveId);
+            const u32 waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(i);
+            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(waveArchiveId);
 
-            nw::snd::internal::WaveArchiveFileReader reader(mSoundArchive->detail_GetFileAddress(warcInfo->fileId));
+            nw::snd::internal::WaveArchiveFileReader reader(soundArchive.detail_GetFileAddress(warcInfo->fileId));
             const u32 waveFileCount = reader.GetWaveFileCount();
             for (u32 j = 0; j < waveFileCount; j++)
             {
@@ -603,7 +585,7 @@ void Bfsar::open_(sead::Heap* heap)
                 bool found = false;
                 for (u32 other_i = 0; other_i < i; other_i++)
                 {
-                    const u32 other_waveArchiveId = mSoundArchive->GetWaveArchiveIdFromIndex(other_i);
+                    const u32 other_waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(other_i);
                     const std::vector<WaveTempFile>& fileCache = warcFileCache[other_i];
                     for (u32 other_j = 0, other_fileNum = fileCache.size(); other_j < other_fileNum; other_j++)
                     {
@@ -645,8 +627,8 @@ void Bfsar::open_(sead::Heap* heap)
 
         for (u32 i = 0; i < warcNum; i++)
         {
-            const u32 waveArchiveId = mSoundArchive->GetWaveArchiveIdFromIndex(i);
-            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(waveArchiveId);
+            const u32 waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(i);
+            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(waveArchiveId);
 
             if (warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) == 0)
             {
@@ -659,7 +641,7 @@ void Bfsar::open_(sead::Heap* heap)
             warc->mEnableName = warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) != 0;
             if (mIncludeStringTable && warcInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
             {
-                warc->mName = mSoundArchive->GetString(warcInfo->GetStringId());
+                warc->mName = soundArchive.GetString(warcInfo->GetStringId());
             }
             else
             {
@@ -687,15 +669,15 @@ void Bfsar::open_(sead::Heap* heap)
 
     std::unordered_map<u64, u32> bankFileWarcId;
 
-    for (u32 i = 0; i < mSoundArchive->GetBankCount(); i++)
+    for (u32 i = 0; i < soundArchive.GetBankCount(); i++)
     {
-        const u32 bankId = mSoundArchive->GetBankIdFromIndex(i);
-        const nw::snd::internal::SoundArchiveFile::BankInfo* bank = mSoundArchive->GetBankInfo(bankId);
+        const u32 bankId = soundArchive.GetBankIdFromIndex(i);
+        const nw::snd::internal::SoundArchiveFile::BankInfo* bank = soundArchive.GetBankInfo(bankId);
         SEAD_ASSERT(bank);
 
         const u32 fileId = bank->fileId;
         u32 groupId;
-        const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, 0, nullptr, &groupId);
+        const void* file = soundArchive.detail_GetFileAddress(fileId, nullptr, 0, nullptr, &groupId);
         if (!file)
             continue;
 
@@ -748,7 +730,7 @@ void Bfsar::open_(sead::Heap* heap)
             variationId = 1;
             while (true)
             {
-                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                const void* file = soundArchive.detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
                 if (!file)
                     break;
 
@@ -863,7 +845,7 @@ void Bfsar::open_(sead::Heap* heap)
             variationId = 1;
             while (true)
             {
-                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                const void* file = soundArchive.detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
                 if (!file)
                     break;
 
@@ -894,10 +876,10 @@ void Bfsar::open_(sead::Heap* heap)
 
     std::unordered_map<u64, u32> wsdFileWarcId;
 
-    for (u32 i = 0; i < mSoundArchive->GetSoundGroupCount(); i++)
+    for (u32 i = 0; i < soundArchive.GetSoundGroupCount(); i++)
     {
-        const u32 sndGroupId = mSoundArchive->GetSoundGroupIdFromIndex(i);
-        const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = mSoundArchive->detail_GetSoundGroupInfo(sndGroupId);
+        const u32 sndGroupId = soundArchive.GetSoundGroupIdFromIndex(i);
+        const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = soundArchive.detail_GetSoundGroupInfo(sndGroupId);
         SEAD_ASSERT(soundSetInfo);
         const nw::snd::internal::SoundArchiveFile::WaveSoundGroupInfo* waveSoundSetInfo = soundSetInfo->GetWaveSoundGroupInfo();
         if (!waveSoundSetInfo)
@@ -906,7 +888,7 @@ void Bfsar::open_(sead::Heap* heap)
         SEAD_ASSERT(soundSetInfo->GetFileIdTable()->count == 1);
         const u32 fileId = soundSetInfo->GetFileIdTable()->item[0];
         u32 groupId;
-        const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, 0, nullptr, &groupId);
+        const void* file = soundArchive.detail_GetFileAddress(fileId, nullptr, 0, nullptr, &groupId);
         if (!file)
             continue;
 
@@ -957,7 +939,7 @@ void Bfsar::open_(sead::Heap* heap)
             variationId = 1;
             while (true)
             {
-                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                const void* file = soundArchive.detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
                 if (!file)
                     break;
 
@@ -1068,7 +1050,7 @@ void Bfsar::open_(sead::Heap* heap)
             variationId = 1;
             while (true)
             {
-                const void* file = mSoundArchive->detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
+                const void* file = soundArchive.detail_GetFileAddress(fileId, nullptr, variationId, nullptr, &groupId);
                 if (!file)
                     break;
 
@@ -1096,8 +1078,8 @@ void Bfsar::open_(sead::Heap* heap)
     }
 
     // {
-    //     u32 bankFileId = mSoundArchive->GetBankInfo(mSoundArchive->GetBankIdFromIndex(29))->fileId;
-    //     nw::snd::internal::BankFileReader reader(mSoundArchive->detail_GetFileAddressGroup(bankFileId, mSoundArchive->GetGroupIdFromIndex(5)));
+    //     u32 bankFileId = soundArchive.GetBankInfo(soundArchive.GetBankIdFromIndex(29))->fileId;
+    //     nw::snd::internal::BankFileReader reader(soundArchive.detail_GetFileAddressGroup(bankFileId, soundArchive.GetGroupIdFromIndex(5)));
     //     SEAD_ASSERT(reader.IsInitialized());
 
     //     const nw::snd::internal::Util::WaveIdTable& table = *reader.GetWaveIdTable();
@@ -1110,9 +1092,9 @@ void Bfsar::open_(sead::Heap* heap)
     //     }
     // }
 
-    // for (u32 i = 0; i < mSoundArchive->detail_GetFileCount(); i++)
+    // for (u32 i = 0; i < soundArchive.detail_GetFileCount(); i++)
     // {
-    //     const void* file = mSoundArchive->detail_GetFileAddress(i);
+    //     const void* file = soundArchive.detail_GetFileAddress(i);
     //     if (!file)
     //     {
     //         continue;
@@ -1170,12 +1152,12 @@ void Bfsar::open_(sead::Heap* heap)
     // std::unordered_map<std::string, TempFile> waveFileCache;
     // std::unordered_map<u64, u32> waveFileIdxMap;
 
-    // for (u32 i = 0; i < mSoundArchive->GetWaveArchiveCount(); i++)
+    // for (u32 i = 0; i < soundArchive.GetWaveArchiveCount(); i++)
     // {
-    //     u32 waveArchiveId = mSoundArchive->GetWaveArchiveIdFromIndex(i);
-    //     const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(waveArchiveId);
+    //     u32 waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(i);
+    //     const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(waveArchiveId);
 
-    //     nw::snd::internal::WaveArchiveFileReader reader(mSoundArchive->detail_GetFileAddress(warcInfo->fileId));
+    //     nw::snd::internal::WaveArchiveFileReader reader(soundArchive.detail_GetFileAddress(warcInfo->fileId));
 
     //     for (u32 j = 0; j < reader.GetWaveFileCount(); j++)
     //     {
@@ -1233,7 +1215,7 @@ void Bfsar::open_(sead::Heap* heap)
     //     warc->mEnableName = warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) != 0;
     //     if (mIncludeStringTable && warcInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
     //     {
-    //         warc->mName = mSoundArchive->GetString(warcInfo->GetStringId());
+    //         warc->mName = soundArchive.GetString(warcInfo->GetStringId());
     //     }
 
     //     warc->mIsLoadIndividual = warcInfo->isLoadIndividual;
@@ -1248,10 +1230,10 @@ void Bfsar::open_(sead::Heap* heap)
     std::unordered_map<std::string, TempFile> bankFileCache;
     std::unordered_map<u32, u32> bankFileIdxMap;
 
-    for (u32 i = 0; i < mSoundArchive->detail_GetFileCount(); i++)
+    for (u32 i = 0; i < soundArchive.detail_GetFileCount(); i++)
     {
         u32 bankFileSize = 0;
-        const void* bankFile = mSoundArchive->detail_GetFileAddress(i, &bankFileSize);
+        const void* bankFile = soundArchive.detail_GetFileAddress(i, &bankFileSize);
 
         //if (!bankFile || sead::MemUtil::compare(bankFile, "CBNK", 4) != 0)
         if (!bankFile || sead::MemUtil::compare(bankFile, "FBNK", 4) != 0)
@@ -1299,9 +1281,9 @@ void Bfsar::open_(sead::Heap* heap)
         bankFileIdxMap.try_emplace(i, globalId);
     }
 
-    for (u32 i = 0; i < mSoundArchive->GetBankCount(); i++)
+    for (u32 i = 0; i < soundArchive.GetBankCount(); i++)
     {
-        const nw::snd::internal::SoundArchiveFile::BankInfo* bankInfo = mSoundArchive->GetBankInfo(mSoundArchive->GetBankIdFromIndex(i));
+        const nw::snd::internal::SoundArchiveFile::BankInfo* bankInfo = soundArchive.GetBankInfo(soundArchive.GetBankIdFromIndex(i));
 
         Bank* bank = new(heap) Bank();
         bank->mId = i;
@@ -1309,7 +1291,7 @@ void Bfsar::open_(sead::Heap* heap)
         bank->mEnableName = bankInfo->optionParameter.GetTrueCount(nw::snd::internal::BANK_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && bankInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
-            bank->mName = mSoundArchive->GetString(bankInfo->GetStringId());
+            bank->mName = soundArchive.GetString(bankInfo->GetStringId());
         }
         else
         {
@@ -1345,9 +1327,9 @@ void Bfsar::open_(sead::Heap* heap)
         mBankList.pushBack(bank);
     }
 
-    for (u32 i = 0; i < mSoundArchive->GetSoundCount(); i++)
+    for (u32 i = 0; i < soundArchive.GetSoundCount(); i++)
     {
-        const nw::snd::internal::SoundArchiveFile::SoundInfo* soundInfo = mSoundArchive->GetSoundInfo(mSoundArchive->GetSoundIdFromIndex(i));
+        const nw::snd::internal::SoundArchiveFile::SoundInfo* soundInfo = soundArchive.GetSoundInfo(soundArchive.GetSoundIdFromIndex(i));
 
         Sound* sound = new(heap) Sound();
         sound->mId = i;
@@ -1355,7 +1337,7 @@ void Bfsar::open_(sead::Heap* heap)
         sound->mEnableName = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && soundInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
-            sound->mName = mSoundArchive->GetString(soundInfo->GetStringId());
+            sound->mName = soundArchive.GetString(soundInfo->GetStringId());
         }
         else
         {
@@ -1440,7 +1422,7 @@ void Bfsar::open_(sead::Heap* heap)
         {
             const nw::snd::internal::SoundArchiveFile::StreamSoundInfo& strmSoundInfo = soundInfo->GetStreamSoundInfo();
 
-            const nw::snd::internal::SoundArchiveFile::ExternalFileInfo* extFileInfo = mSoundArchive->detail_GetFileInfo(soundInfo->fileId)->GetExternalFileInfo();
+            const nw::snd::internal::SoundArchiveFile::ExternalFileInfo* extFileInfo = soundArchive.detail_GetFileInfo(soundInfo->fileId)->GetExternalFileInfo();
             SEAD_ASSERT(extFileInfo);
 
             sound->mStreamSoundInfo.mPath = extFileInfo->filePath;
@@ -1629,7 +1611,7 @@ void Bfsar::open_(sead::Heap* heap)
                 sound->mWaveSoundInfo.mIsReleasePriorityFix = waveSoundInfo.GetIsReleasePriorityFix();
             }
 
-            const void* wsdFile = mSoundArchive->detail_GetFileAddress(soundInfo->fileId);
+            const void* wsdFile = soundArchive.detail_GetFileAddress(soundInfo->fileId);
             if (wsdFile)
             {
                 nw::snd::internal::WaveSoundFileReader reader(wsdFile);
@@ -1693,9 +1675,9 @@ void Bfsar::open_(sead::Heap* heap)
         mSoundList.pushBack(sound);
     }
 
-    for (u32 i = 0; i < mSoundArchive->GetSoundGroupCount(); i++)
+    for (u32 i = 0; i < soundArchive.GetSoundGroupCount(); i++)
     {
-        const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = mSoundArchive->detail_GetSoundGroupInfo(mSoundArchive->GetSoundGroupIdFromIndex(i));
+        const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = soundArchive.detail_GetSoundGroupInfo(soundArchive.GetSoundGroupIdFromIndex(i));
 
         SoundSet* soundSet = new(heap) SoundSet();
         soundSet->mId = i;
@@ -1703,7 +1685,7 @@ void Bfsar::open_(sead::Heap* heap)
         soundSet->mEnableName = soundSetInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_GROUP_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && soundSetInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
-            soundSet->mName = mSoundArchive->GetString(soundSetInfo->GetStringId());
+            soundSet->mName = soundArchive.GetString(soundSetInfo->GetStringId());
         }
         else
         {
@@ -1763,10 +1745,10 @@ void Bfsar::open_(sead::Heap* heap)
         mSoundSetList.pushBack(soundSet);
     }
 
-    for (u32 i = 0; i < mSoundArchive->GetGroupCount(); i++)
+    for (u32 i = 0; i < soundArchive.GetGroupCount(); i++)
     {
-        u32 groupId = mSoundArchive->GetGroupIdFromIndex(i);
-        const nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = mSoundArchive->GetGroupInfo(groupId);
+        u32 groupId = soundArchive.GetGroupIdFromIndex(i);
+        const nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = soundArchive.GetGroupInfo(groupId);
 
         Group* group = new(heap) Group();
         group->mId = i;
@@ -1774,7 +1756,7 @@ void Bfsar::open_(sead::Heap* heap)
         group->mEnableName = groupInfo->optionParameter.GetTrueCount(nw::snd::internal::GROUP_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && groupInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
-            group->mName = mSoundArchive->GetString(groupInfo->GetStringId());
+            group->mName = soundArchive.GetString(groupInfo->GetStringId());
         }
         else
         {
@@ -1783,7 +1765,7 @@ void Bfsar::open_(sead::Heap* heap)
 
         if (groupInfo->fileId != nw::snd::SoundArchive::INVALID_ID)
         {
-            nw::snd::internal::GroupFileReader reader(mSoundArchive->detail_GetFileAddress(groupInfo->fileId));
+            nw::snd::internal::GroupFileReader reader(soundArchive.detail_GetFileAddress(groupInfo->fileId));
             if (reader.GetGroupItemCount() > 0)
             {
                 nw::snd::internal::GroupItemLocationInfo locationInfo;
@@ -1875,7 +1857,7 @@ void Bfsar::open_(sead::Heap* heap)
 
                     auto addBankFiles = [&](u32 bankId)
                     {
-                        const nw::snd::internal::SoundArchiveFile::BankInfo* bankInfo = mSoundArchive->GetBankInfo(bankId);
+                        const nw::snd::internal::SoundArchiveFile::BankInfo* bankInfo = soundArchive.GetBankInfo(bankId);
                         SEAD_ASSERT(bankInfo);
 
                         if (itemInfoEx.loadFlag & Group::ItemInfo::LoadFlag::LoadBank)
@@ -1893,11 +1875,11 @@ void Bfsar::open_(sead::Heap* heap)
                             {
                                 case WaveArchiveType::AutomaticShared:
                                 {
-                                    const void* bankFile = mSoundArchive->detail_GetFileAddressGroup(bankInfo->fileId, groupId);
+                                    const void* bankFile = soundArchive.detail_GetFileAddressGroup(bankInfo->fileId, groupId);
                                     if (!bankFile)
                                     {
                                         SEAD_ASSERT(group->mOutputType == Group::OutputType::Link);
-                                        bankFile = mSoundArchive->detail_GetFileAddressSimple(bankInfo->fileId);
+                                        bankFile = soundArchive.detail_GetFileAddressSimple(bankInfo->fileId);
                                         SEAD_ASSERT(bankFile);
                                     }
 
@@ -1912,7 +1894,7 @@ void Bfsar::open_(sead::Heap* heap)
 
                                         u32 warcId = it->second;
 
-                                        const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                        const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(warcId);
                                         SEAD_ASSERT(warcInfo);
 
                                         itemFileMap[j].insert(warcInfo->fileId);
@@ -1926,7 +1908,7 @@ void Bfsar::open_(sead::Heap* heap)
                                     SEAD_ASSERT(bankInfo->GetWaveArchiveItemIdTable()->count == 1);
                                     u32 warcId = bankInfo->GetWaveArchiveItemIdTable()->item[0];
 
-                                    const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                    const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(warcId);
                                     SEAD_ASSERT(warcInfo);
 
                                     itemFileMap[j].insert(warcInfo->fileId);
@@ -1938,7 +1920,7 @@ void Bfsar::open_(sead::Heap* heap)
 
                     auto addSoundFiles = [&](u32 soundId, bool assertSeq)
                     {
-                        const nw::snd::internal::SoundArchiveFile::SoundInfo* soundInfo = mSoundArchive->GetSoundInfo(soundId);
+                        const nw::snd::internal::SoundArchiveFile::SoundInfo* soundInfo = soundArchive.GetSoundInfo(soundId);
                         SEAD_ASSERT(soundInfo);
                         if (soundInfo->GetSoundType() != nw::snd::SoundArchive::SOUND_TYPE_SEQ)
                         {
@@ -1980,7 +1962,7 @@ void Bfsar::open_(sead::Heap* heap)
 
                         case nw::snd::internal::ItemType_SoundGroup:
                         {
-                            const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = mSoundArchive->detail_GetSoundGroupInfo(itemInfoEx.itemId);
+                            const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = soundArchive.detail_GetSoundGroupInfo(itemInfoEx.itemId);
                             SEAD_ASSERT(soundSetInfo);
 
                             const nw::snd::internal::SoundArchiveFile::WaveSoundGroupInfo* waveSoundSetInfo = soundSetInfo->GetWaveSoundGroupInfo();
@@ -2004,11 +1986,11 @@ void Bfsar::open_(sead::Heap* heap)
                                     {
                                         case WaveArchiveType::AutomaticShared:
                                         {
-                                            const void* waveSoundFile = mSoundArchive->detail_GetFileAddressGroup(waveSoundFileId, groupId);
+                                            const void* waveSoundFile = soundArchive.detail_GetFileAddressGroup(waveSoundFileId, groupId);
                                             if (!waveSoundFile)
                                             {
                                                 SEAD_ASSERT(group->mOutputType == Group::OutputType::Link);
-                                                waveSoundFile = mSoundArchive->detail_GetFileAddressSimple(waveSoundFileId);
+                                                waveSoundFile = soundArchive.detail_GetFileAddressSimple(waveSoundFileId);
                                                 SEAD_ASSERT(waveSoundFile);
                                             }
 
@@ -2023,7 +2005,7 @@ void Bfsar::open_(sead::Heap* heap)
 
                                                 u32 warcId = it->second;
 
-                                                const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                                const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(warcId);
                                                 SEAD_ASSERT(warcInfo);
 
                                                 itemFileMap[j].insert(warcInfo->fileId);
@@ -2037,7 +2019,7 @@ void Bfsar::open_(sead::Heap* heap)
                                             SEAD_ASSERT(waveSoundSetInfo->GetWaveArchiveItemIdTable()->count == 1);
                                             u32 warcId = waveSoundSetInfo->GetWaveArchiveItemIdTable()->item[0];
 
-                                            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(warcId);
+                                            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(warcId);
                                             SEAD_ASSERT(warcInfo);
 
                                             itemFileMap[j].insert(warcInfo->fileId);
@@ -2069,7 +2051,7 @@ void Bfsar::open_(sead::Heap* heap)
                         {
                             SEAD_ASSERT(itemInfoEx.loadFlag == Group::ItemInfo::LoadFlag::LoadAll);
 
-                            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(itemInfoEx.itemId);
+                            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(itemInfoEx.itemId);
                             SEAD_ASSERT(warcInfo);
 
                             itemFileMap[j].insert(warcInfo->fileId);
@@ -2080,9 +2062,9 @@ void Bfsar::open_(sead::Heap* heap)
 
                 auto isAnonWarc = [&](u32 fileId)
                 {
-                    for (u32 j = 0; j < mSoundArchive->GetWaveArchiveCount(); j++)
+                    for (u32 j = 0; j < soundArchive.GetWaveArchiveCount(); j++)
                     {
-                        const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = mSoundArchive->GetWaveArchiveInfo(mSoundArchive->GetWaveArchiveIdFromIndex(j));
+                        const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(soundArchive.GetWaveArchiveIdFromIndex(j));
                         SEAD_ASSERT(warcInfo);
 
                         if (warcInfo->fileId == fileId)

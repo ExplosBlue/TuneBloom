@@ -50,21 +50,6 @@ public:
         return mOpen;
     }
 
-    const nw::snd::MemorySoundArchive* getSoundArchive() const
-    {
-        return mSoundArchive;
-    }
-
-    const SoundDataMgr& getSoundDataMgr() const
-    {
-        return mSoundDataMgr;
-    }
-
-    SoundDataMgr& getSoundDataMgr()
-    {
-        return mSoundDataMgr;
-    }
-
     const sead::SafeString& getFilePath() const
     {
         if (mFilePath)
@@ -272,7 +257,7 @@ public:
     }
 
 private:
-    void open_(sead::Heap* heap);
+    void open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap);
     void save_(sead::FileHandle& handle);
     void close_();
 
@@ -285,9 +270,6 @@ private:
 
 private:
     bool mOpen;
-    u8* mBfsarFile;
-    nw::snd::MemorySoundArchive* mSoundArchive;
-    SoundDataMgr mSoundDataMgr;
     sead::HeapSafeString* mFilePath;
 
     sead::Endian::Types mEndian;

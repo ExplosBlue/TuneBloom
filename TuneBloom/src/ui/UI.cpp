@@ -373,7 +373,7 @@ void DrawInfoUI()
 
     if (windowOpen)
     {
-        if (!sBfsar.getSoundArchive())
+        if (!sBfsar.isOpen())
         {
             CenteredText("No File Open");
 

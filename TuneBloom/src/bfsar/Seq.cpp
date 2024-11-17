@@ -17,7 +17,6 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     SEAD_ASSERT(outLines);
     SEAD_ASSERT(offsetToLine);
 
-    //const void* file = sBfsar.getSoundDataMgr().detail_GetFileAddress(fileId);
     const void* file = seqFile;
     if (!file)
         return false;

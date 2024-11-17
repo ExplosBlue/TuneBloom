@@ -53,9 +53,8 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title = nullp
 
 extern Bfsar sBfsar;
 
-extern const nw::snd::MemorySoundArchive* sSoundArchive;
-
-extern const SoundDataMgr* sSoundDataMgr;
+//extern const nw::snd::MemorySoundArchive* sSoundArchive;
+//extern const SoundDataMgr* sSoundDataMgr;
 
 extern const Sound* sLastPlayedSound;
 

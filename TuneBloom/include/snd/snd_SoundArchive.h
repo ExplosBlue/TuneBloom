@@ -79,6 +79,10 @@ public:
     {
     }
 
+    virtual ~SoundArchive()
+    {
+    }
+
     static ItemId GetSoundIdFromIndex(u32 index)
     {
         return internal::Util::GetMaskedItemId(index, internal::ItemType_Sound);

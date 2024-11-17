@@ -9,6 +9,7 @@
 #include <bfsar/File.h>
 
 #include <ui/PopupMgr.h>
+#include <ui/UI.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
@@ -290,6 +291,62 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         mSoundArchivePlayerInfo.waveTrackMax = playerInfo->waveTrackMax;
         mSoundArchivePlayerInfo.streamBufferTimes = isStreamPrefetchAvailable() ? playerInfo->streamBufferTimes : 1;
         mSoundArchivePlayerInfo.options = playerInfo->options;
+    }
+
+    //? Load Groups first in case there are external ones
+    for (u32 i = 0; i < soundArchive.GetGroupCount(); i++)
+    {
+        u32 groupId = soundArchive.GetGroupIdFromIndex(i);
+        nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = const_cast<nw::snd::internal::SoundArchiveFile::GroupInfo*>(soundArchive.GetGroupInfo(groupId));
+
+        Group* group = new(heap) Group();
+        group->mId = i;
+
+        group->mEnableName = groupInfo->optionParameter.GetTrueCount(nw::snd::internal::GROUP_INFO_STRING_ID) != 0;
+        if (mIncludeStringTable && groupInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
+        {
+            group->mName = soundArchive.GetString(groupInfo->GetStringId());
+        }
+        else
+        {
+            group->mName.format("GROUP_%u", i);
+        }
+
+        if (groupInfo->fileId == nw::snd::SoundArchive::INVALID_ID)
+        {
+            //? Group is external
+            const void* bfgrpFile = nullptr;
+
+            {
+                sead::FixedSafeString<512> filePath;
+
+                const u32 filterCount = 1;
+                FileFilter filters[filterCount] = {
+                    { "Group File (*.bfgrp)", "*.bfgrp" }
+                };
+
+                if (OpenFileDialog(&filePath, sead::FormatFixedSafeString<512>("Open group file for '%s'", group->getFormattedName().cstr()).cstr(), filterCount, filters))
+                {
+                    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+                    SEAD_ASSERT(device);
+
+                    sead::FileDevice::LoadArg arg;
+                    arg.path = filePath;
+
+                    bfgrpFile = device->load(arg);
+                }
+            }
+
+            if (bfgrpFile)
+            {
+                //? Patch file id
+                groupInfo->fileId = soundArchive.detail_GetFileCount() + static_cast<u32>(soundArchive.mExternalGroups.size());
+
+                soundArchive.mExternalGroups.push_back(bfgrpFile);
+            }
+        }
+
+        mGroupList.pushBack(group);
     }
 
 /*
@@ -1745,28 +1802,22 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         mSoundSetList.pushBack(soundSet);
     }
 
+    //? Read Bfgrp file
     for (u32 i = 0; i < soundArchive.GetGroupCount(); i++)
     {
         u32 groupId = soundArchive.GetGroupIdFromIndex(i);
         const nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = soundArchive.GetGroupInfo(groupId);
 
-        Group* group = new(heap) Group();
-        group->mId = i;
-
-        group->mEnableName = groupInfo->optionParameter.GetTrueCount(nw::snd::internal::GROUP_INFO_STRING_ID) != 0;
-        if (mIncludeStringTable && groupInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
-        {
-            group->mName = soundArchive.GetString(groupInfo->GetStringId());
-        }
-        else
-        {
-            group->mName.format("GROUP_%u", i);
-        }
+        Group* group = static_cast<Group*>(mGroupList.nth(i)->val());
 
         if (groupInfo->fileId != nw::snd::SoundArchive::INVALID_ID)
         {
             nw::snd::internal::GroupFileReader reader(soundArchive.detail_GetFileAddress(groupInfo->fileId));
-            if (reader.GetGroupItemCount() > 0)
+            if (groupInfo->fileId >= soundArchive.detail_GetFileCount())
+            {
+                group->mOutputType = Group::OutputType::External;
+            }
+            else if (reader.GetGroupItemCount() > 0)
             {
                 nw::snd::internal::GroupItemLocationInfo locationInfo;
                 bool success = reader.ReadGroupItemLocationInfo(&locationInfo, 0);
@@ -2216,10 +2267,8 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         }
         else
         {
-            SEAD_ASSERT_MSG(false, "External group died");
+            //SEAD_ASSERT_MSG(false, "No group file");
         }
-
-        mGroupList.pushBack(group);
     }
 
     //? Remove unused WaveFiles

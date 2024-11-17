@@ -272,38 +272,3 @@ void CloseFile()
         fw->setCaption(util::cAppName);
     }
 }
-
-void OpenGroupFile(const char* file)
-{
-    if (!sSoundArchive)
-        return;
-
-    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-    SEAD_ASSERT(device);
-
-    sead::FileDevice::LoadArg arg;
-    //arg.path = "native://" + file;
-    arg.path = file;
-
-    u8* groupFile = device->load(arg);
-
-    sBfsar.getSoundDataMgr().SetFileAddressInGroupFile(groupFile);
-}
-
-void LoadBfgrp()
-{
-    if (sSoundArchive)
-    {
-        sead::FixedSafeString<512> filePath;
-
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = {
-            { "Group File (*.bfgrp)", "*.bfgrp" }
-        };
-
-        if (OpenFileDialog(&filePath, nullptr, filterCount, filters))
-        {
-            OpenGroupFile(filePath.cstr());
-        }
-    }
-}

@@ -175,7 +175,7 @@ public:
     {
         Embed,
         Link,
-        // External
+        External
     };
 
 public:

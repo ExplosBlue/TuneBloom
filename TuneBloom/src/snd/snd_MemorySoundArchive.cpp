@@ -14,6 +14,17 @@ MemorySoundArchive::MemorySoundArchive()
 {
 }
 
+MemorySoundArchive::~MemorySoundArchive()
+{
+    for (u32 i = 0; i < mExternalGroups.size(); i++)
+    {
+        if (mExternalGroups[i])
+        {
+            delete mExternalGroups[i];
+        }
+    }
+}
+
 bool MemorySoundArchive::Initialize(const void* soundArchiveData)
 {
     SEAD_ASSERT(soundArchiveData);
@@ -164,17 +175,39 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
         const internal::SoundArchiveFile::GroupInfo* info = GetGroupInfo(groupId);
         if (info)
         {
-            const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
-            if (groupFileInfo && groupFileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_NONE)
+            const void* groupFile = nullptr;
+
+            if (info->fileId >= detail_GetFileCount())
             {
-                const internal::SoundArchiveFile::InternalFileInfo* groupInternalFileInfo = groupFileInfo->GetInternalFileInfo();
-                SEAD_ASSERT(groupInternalFileInfo);
+                u32 externalFileId = info->fileId - detail_GetFileCount();
+                if (externalFileId < mExternalGroups.size())
+                {
+                    groupFile = mExternalGroups[externalFileId];
+                    SEAD_ASSERT(groupFile);
 
-                u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
-                SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
+                    if (fileId == info->fileId)
+                    {
+                        return groupFile;
+                    }
+                }
+            }
+            else
+            {
+                const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
+                if (groupFileInfo && groupFileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_NONE)
+                {
+                    const internal::SoundArchiveFile::InternalFileInfo* groupInternalFileInfo = groupFileInfo->GetInternalFileInfo();
+                    SEAD_ASSERT(groupInternalFileInfo);
 
-                const void* groupFile = sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+                    u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
+                    SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
 
+                    groupFile = sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+                }
+            }
+
+            if (groupFile)
+            {
                 internal::GroupFileReader reader(groupFile);
                 u32 groupItemCount = reader.GetGroupItemCount();
                 for (u32 j = 0; j < groupItemCount; j++)
@@ -238,17 +271,39 @@ const void* MemorySoundArchive::detail_GetFileAddressGroup(FileId fileId, u32 gr
     const internal::SoundArchiveFile::GroupInfo* info = GetGroupInfo(groupId);
     if (info)
     {
-        const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
-        if (groupFileInfo && groupFileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_NONE)
+        const void* groupFile = nullptr;
+
+        if (info->fileId >= detail_GetFileCount())
         {
-            const internal::SoundArchiveFile::InternalFileInfo* groupInternalFileInfo = groupFileInfo->GetInternalFileInfo();
-            SEAD_ASSERT(groupInternalFileInfo);
+            u32 externalFileId = info->fileId - detail_GetFileCount();
+            if (externalFileId < mExternalGroups.size())
+            {
+                groupFile = mExternalGroups[externalFileId];
+                SEAD_ASSERT(groupFile);
 
-            u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
-            SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
+                if (fileId == info->fileId)
+                {
+                    return groupFile;
+                }
+            }
+        }
+        else
+        {
+            const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
+            if (groupFileInfo && groupFileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_NONE)
+            {
+                const internal::SoundArchiveFile::InternalFileInfo* groupInternalFileInfo = groupFileInfo->GetInternalFileInfo();
+                SEAD_ASSERT(groupInternalFileInfo);
 
-            const void* groupFile = sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+                u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
+                SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
 
+                groupFile = sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+            }
+        }
+
+        if (groupFile)
+        {
             internal::GroupFileReader reader(groupFile);
             u32 groupItemCount = reader.GetGroupItemCount();
             for (u32 j = 0; j < groupItemCount; j++)

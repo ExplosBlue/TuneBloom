@@ -3,12 +3,15 @@
 #include <snd/snd_SoundArchive.h>
 #include <snd/snd_SoundArchiveFile.h>
 
+#include <vector>
+
 namespace nw { namespace snd {
 
 class MemorySoundArchive : public SoundArchive
 {
 public:
     MemorySoundArchive();
+    ~MemorySoundArchive() override;
 
     bool Initialize(const void* soundArchiveData);
 
@@ -188,6 +191,9 @@ public:
     const internal::SoundArchiveFile::FileBlockBody* mFileBlockBody;
 
     const void* mData;
+
+    //? For external groups
+    mutable std::vector<const void*> mExternalGroups;
 };
 
 } } // namespace nw::snd

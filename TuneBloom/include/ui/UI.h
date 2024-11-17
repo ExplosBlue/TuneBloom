@@ -126,7 +126,6 @@ void OpenFile();
 void SaveFile();
 void SaveFileAs();
 void CloseFile();
-void LoadBfgrp();
 
 void PlaySound(const Sound* sound);
 bool PlayWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr);

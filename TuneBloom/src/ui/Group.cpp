@@ -65,7 +65,7 @@ void DrawGroupPropertiesUI()
         static const char* sOutputTypes[] = {
             "Embed",
             "Link",
-            // "External"
+            "External"
         };
 
         u32 outputType = (u32)group->getOutputType();

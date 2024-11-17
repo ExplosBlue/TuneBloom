@@ -126,11 +126,6 @@ void DrawMenuBar()
                 CloseFile();
             }
 
-            //if (ImGui::MenuItem("Load External BFGRP"))
-            //{
-            //    LoadBfgrp();
-            //}
-
             if (!bfsarOpen)
             {
                 ImGui::EndDisabled();

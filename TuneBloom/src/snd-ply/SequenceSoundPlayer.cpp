@@ -23,7 +23,12 @@ SequenceSoundPlayer::SequenceSoundPlayer()
     , mSkipTimeCounter(0.0f)
     , mIsRegisterPlayerCallback(false)
 {
-    for (u32 i = 0; i < cTrackNumPerPlayer; i++)
+    for (s32 varNo = 0; varNo < cPlayerVariableNum; varNo++)
+    {
+        mLocalVariable[varNo] = cVariableDefaultValue;
+    }
+
+    for (s32 i = 0; i < cTrackNumPerPlayer; i++)
     {
         mTracks[i] = nullptr;
     }
@@ -411,5 +416,13 @@ void SequenceSoundPlayer::invalidateData(const void* start, const void* end)
                 mBankFileReader[i].Finalize();
             }
         }
+    }
+}
+
+void SequenceSoundPlayer::initSequenceSoundPlayer()
+{
+    for (s32 variableNo = 0; variableNo < cGlobalVariableNum; variableNo++)
+    {
+        sGlobalVariable[variableNo] = cVariableDefaultValue;
     }
 }

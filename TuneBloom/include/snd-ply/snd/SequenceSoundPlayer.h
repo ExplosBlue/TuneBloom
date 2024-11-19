@@ -238,11 +238,20 @@ public:
     f32 calcTickPerMinute() const { return mParserParam.timebase * mParserParam.tempo * mTempoRatio; }
     f32 calcTickPerMsec() const { return calcTickPerMinute() / (60.0f * 1000.0f); }
 
+    static void initSequenceSoundPlayer();
+
     static volatile s16 sGlobalVariable[cGlobalVariableNum];
     static volatile s32 sSkipIntervalTickPerFrame;
 
     //? Get track reference even if it's not active
     const SequenceTrack& getTrack_(s32 trackNo) const
+    {
+        SEAD_ASSERT(0 <= trackNo && trackNo < cTrackNumPerPlayer);
+        return mTrackInstances[trackNo];
+    }
+
+    //? Get track reference even if it's not active
+    SequenceTrack& getTrack_(s32 trackNo)
     {
         SEAD_ASSERT(0 <= trackNo && trackNo < cTrackNumPerPlayer);
         return mTrackInstances[trackNo];

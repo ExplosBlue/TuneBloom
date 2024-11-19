@@ -17,11 +17,10 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     SEAD_ASSERT(outLines);
     SEAD_ASSERT(offsetToLine);
 
-    const void* file = seqFile;
-    if (!file)
+    if (!seqFile)
         return false;
 
-    nw::snd::internal::SequenceSoundFileReader reader(file);
+    nw::snd::internal::SequenceSoundFileReader reader(seqFile);
     reader.createLabelCache();
 
     const void* seqData = reader.GetSequenceData();

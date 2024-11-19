@@ -11,6 +11,8 @@
 #include "snd/CurveLfo.h"
 #include "snd/FFT.h"
 
+#include "snd/SequenceSoundPlayer.h"
+
 #include <heap/seadHeapMgr.h>
 #include <thread/seadThreadUtil.h>
 
@@ -108,7 +110,7 @@ void SoundSystem::initialize(const SoundSystemParam& param, sead::Heap* heap)
     }
 
     // Initializes SequenceSoundPlayer.
-    //internal::driver::SequenceSoundPlayer::initSequenceSoundPlayer();
+    SequenceSoundPlayer::initSequenceSoundPlayer();
 
     u16 attribute = 0;
 

@@ -456,7 +456,7 @@ u16 Util::calcLpfFreq(f32 scale)
     {
         freq = cCalcLpfFreqTable[0];
     }
-    else if (scale >= 0.9f)
+    else if (scale >= cCalcLpfFreqThreshold)
     {
         freq = cCalcLpfFreqTable[cCalcLpfFreqTableSize - 1];
     }

@@ -51,6 +51,7 @@ private:
     // CalcLpfFreq Table
     static const s32 cCalcLpfFreqTableSize = 24;
     static constexpr f32 cCalcLpfFreqIntercept = 0.135614381f;
+    static constexpr float cCalcLpfFreqThreshold = 0.9f;
     static const u16 cCalcLpfFreqTable[cCalcLpfFreqTableSize];
 
 private:

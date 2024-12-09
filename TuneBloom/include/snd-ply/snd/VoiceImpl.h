@@ -112,6 +112,20 @@ public:
 
     void updateVoiceInfo(VoiceInfo* voiceInfo) const;
 
+    struct FilterContext
+    {
+        s16 b0;
+        s16 b1;
+        s16 b2;
+        s16 a1;
+        s16 a2;
+
+        s16 xn1;
+        s16 xn2;
+        s16 yn1;
+        s16 yn2;
+    };
+
 private:
     static const u32 cHistoryWaveSamples = 4;
     static const u32 cDecodeWaveSamples = 2048;
@@ -125,23 +139,13 @@ private:
     struct Lpf
     {
         bool on;
-        u16 a0;
-        u16 b0;
-        u16 yn1;
+        FilterContext context;
     };
 
     struct Biquad
     {
         bool on;
-        s16 b0;
-        s16 b1;
-        s16 b2;
-        s16 a1;
-        s16 a2;
-        s16 xn1;
-        s16 xn2;
-        s16 yn1;
-        s16 yn2;
+        FilterContext context;
     };
 
     void initialize(DisposeCallbackFunc func, void* arg);

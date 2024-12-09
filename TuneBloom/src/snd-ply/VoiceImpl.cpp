@@ -46,20 +46,27 @@ u16 getVolumeU16(f32 vol)
     return static_cast<u16>(sead::Mathf::clamp2(cVolumeMin, vol * cBaseVolume, cVolumeMax));
 }
 
-//? From Cemu
-void AXComputeLpfCoefs(u16 freq, u16* a0, u16* b0)
+void CalcLowPassFilterCoefficients(u32 frequency, u32 sampleRate, VoiceImpl::FilterContext* outContext)
 {
-    f32 t1 = sead::Mathf::cos((static_cast<f32>(freq) * 6.2831855f) / 32000.0f);
-    f32 t2 = 2.0f - t1;
+    SEAD_ASSERT(frequency > 0);
+    SEAD_ASSERT(sampleRate > 0);
+    SEAD_ASSERT(outContext);
 
-    t1 = sead::Mathf::sqrt(t2 * t2 - 1.0f);
-    t1 = t1 - t2;
-    t1 = t1 * 32768.0f;
-    t1 = -t1;
+    u32 angle = static_cast<u32>(0x100000000 * frequency / sampleRate);
 
-    u32 r = static_cast<u16>(t1);
-    *a0 = 0x7FFF - r;
-    *b0 = r;
+    auto idx2rad = [](u32 idx)
+    {
+        return idx * sead::Mathf::pi() / sead::Mathf::cHalfRoundIdx;
+    };
+
+    f32 coef = 2.0f - sead::Mathf::cos(idx2rad(angle)); // TODO: Use sead::Mathf::cosIdx
+    f32 filterParam = sead::Mathf::sqrt(coef * coef - 1.0f) - coef;
+
+    outContext->a1 = static_cast<s16>(-filterParam * 16384.0f);
+    outContext->a2 = 0;
+    outContext->b0 = static_cast<s16>(16384 - outContext->a1);
+    outContext->b1 = 0;
+    outContext->b2 = 0;
 }
 
 } // anonymous namespace
@@ -736,22 +743,20 @@ void VoiceImpl::updateMonoFilter(const VoiceParam& voiceParam, bool initialFlag)
 
         if (monoFilterOn)
         {
-            AXComputeLpfCoefs(voiceParam.monoFilterCutoff, &mLpf.a0, &mLpf.b0);
+            CalcLowPassFilterCoefficients(voiceParam.monoFilterCutoff, mSampleRate, &mLpf.context);
 
-            mLpf.yn1 = 0;
+            mLpf.context.xn1 = 0;
+            mLpf.context.xn2 = 0;
+            mLpf.context.yn1 = 0;
+            mLpf.context.yn2 = 0;
         }
     }
     else
     {
         if (monoFilterOn)
         {
-            AXComputeLpfCoefs(voiceParam.monoFilterCutoff, &mLpf.a0, &mLpf.b0);
+            CalcLowPassFilterCoefficients(voiceParam.monoFilterCutoff, mSampleRate, &mLpf.context);
         }
-    }
-
-    if (monoFilterOn)
-    {
-        //SEAD_PRINT("LPF: %u, a0: %u, b0: %u, yn1: %u\n", (u32)voiceParam.monoFilterCutoff, (u32)mLpf.a0, (u32)mLpf.b0, (u32)mLpf.yn1);
     }
 }
 
@@ -765,27 +770,27 @@ void VoiceImpl::updateBiquadFilter(const VoiceParam& voiceParam, bool initialFla
 
         if (biquadFilterOn)
         {
-            mBiquad.b0 = voiceParam.biquadFilterCoefficients.b0;
-            mBiquad.b1 = voiceParam.biquadFilterCoefficients.b1;
-            mBiquad.b2 = voiceParam.biquadFilterCoefficients.b2;
-            mBiquad.a1 = voiceParam.biquadFilterCoefficients.a1;
-            mBiquad.a2 = voiceParam.biquadFilterCoefficients.a2;
+            mBiquad.context.b0 = voiceParam.biquadFilterCoefficients.b0;
+            mBiquad.context.b1 = voiceParam.biquadFilterCoefficients.b1;
+            mBiquad.context.b2 = voiceParam.biquadFilterCoefficients.b2;
+            mBiquad.context.a1 = voiceParam.biquadFilterCoefficients.a1;
+            mBiquad.context.a2 = voiceParam.biquadFilterCoefficients.a2;
 
-            mBiquad.xn1 = 0;
-            mBiquad.xn2 = 0;
-            mBiquad.yn1 = 0;
-            mBiquad.yn2 = 0;
+            mBiquad.context.xn1 = 0;
+            mBiquad.context.xn2 = 0;
+            mBiquad.context.yn1 = 0;
+            mBiquad.context.yn2 = 0;
         }
     }
     else
     {
         if (biquadFilterOn)
         {
-            mBiquad.b0 = voiceParam.biquadFilterCoefficients.b0;
-            mBiquad.b1 = voiceParam.biquadFilterCoefficients.b1;
-            mBiquad.b2 = voiceParam.biquadFilterCoefficients.b2;
-            mBiquad.a1 = voiceParam.biquadFilterCoefficients.a1;
-            mBiquad.a2 = voiceParam.biquadFilterCoefficients.a2;
+            mBiquad.context.b0 = voiceParam.biquadFilterCoefficients.b0;
+            mBiquad.context.b1 = voiceParam.biquadFilterCoefficients.b1;
+            mBiquad.context.b2 = voiceParam.biquadFilterCoefficients.b2;
+            mBiquad.context.a1 = voiceParam.biquadFilterCoefficients.a1;
+            mBiquad.context.a2 = voiceParam.biquadFilterCoefficients.a2;
         }
     }
 }
@@ -1057,19 +1062,18 @@ void VoiceImpl::synthesize(VoiceSynthesizeBuffer* buffer, f32* workBuffer, u32 s
             mLastSamples[i] = refpos[i];
         }
 
-        // Biquad filter
-        if (mBiquad.on)
+        auto doFilter = [&](FilterContext& context)
         {
-            f32 b0 = mBiquad.b0 / 16384.0f;
-            f32 b1 = mBiquad.b1 / 16384.0f;
-            f32 b2 = mBiquad.b2 / 16384.0f;
-            f32 a1 = mBiquad.a1 / 16384.0f;
-            f32 a2 = mBiquad.a2 / 16384.0f;
+            f32 b0 = context.b0 / 16384.0f;
+            f32 b1 = context.b1 / 16384.0f;
+            f32 b2 = context.b2 / 16384.0f;
+            f32 a1 = context.a1 / 16384.0f;
+            f32 a2 = context.a2 / 16384.0f;
 
-            f32 xn1 = mBiquad.xn1;
-            f32 xn2 = mBiquad.xn2;
-            f32 yn1 = mBiquad.yn1;
-            f32 yn2 = mBiquad.yn2;
+            f32 xn1 = context.xn1;
+            f32 xn2 = context.xn2;
+            f32 yn1 = context.yn1;
+            f32 yn2 = context.yn2;
 
             for (u32 i = 0; i < samples; i++)
             {
@@ -1088,38 +1092,22 @@ void VoiceImpl::synthesize(VoiceSynthesizeBuffer* buffer, f32* workBuffer, u32 s
                 yn1 = temp;
             }
 
-            mBiquad.xn1 = xn1;
-            mBiquad.xn2 = xn2;
-            mBiquad.yn1 = yn1;
-            mBiquad.yn2 = yn2;
+            context.xn1 = xn1;
+            context.xn2 = xn2;
+            context.yn1 = yn1;
+            context.yn2 = yn2;
+        };
+
+        // Biquad filter
+        if (mBiquad.on)
+        {
+            doFilter(mBiquad.context);
         }
 
-        // Fucking broken
         // LPF
-        //if (mLpf.on)
-        if (false)
+        if (mLpf.on)
         {
-            f32 a0 = mLpf.a0 / 32767.0f;
-            f32 b0 = mLpf.b0 / 32767.0f;
-
-            f32 yn1 = mLpf.yn1 / 32767.0f;
-
-            //SEAD_PRINT("a0: %f, b0: %f, yn1: %f\n", a0, b0, yn1);
-
-            for (u32 i = 0; i < samples; i++)
-            {
-                f32 inputSample = workBuffer[i];
-                //SEAD_PRINT("inputSample: %f\n", inputSample);
-                f32 temp = a0 * inputSample - b0 * yn1;
-
-                workBuffer[i] = temp;
-
-                //temp = sead::Mathf::clamp2(-32768.0f, temp, 32767.0f);
-
-                yn1 = temp;
-            }
-
-            mLpf.yn1 = yn1 * 32767.0f;
+            doFilter(mLpf.context);
         }
     }
 

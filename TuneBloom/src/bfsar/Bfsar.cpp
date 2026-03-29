@@ -1385,27 +1385,6 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             {
                 bankFile->mName.format("GUESS_%s", bank->mName.cstr());
             }
-
-            for (Item* instrItem : bankFile->getInstrumentList())
-            {
-                BankFile::Instrument& instr = *static_cast<BankFile::Instrument*>(instrItem);
-                for (Item* keyRegionItem : instr.getKeyRegionList())
-                {
-                    BankFile::KeyRegion& keyRegion = *static_cast<BankFile::KeyRegion*>(keyRegionItem);
-                    for (Item* velRegionItem : keyRegion.getVelocityRegionList())
-                    {
-                        BankFile::VelocityRegion& velRegion = *static_cast<BankFile::VelocityRegion*>(velRegionItem);
-                        if (velRegion.getWaveFileRef().isAttached())
-                        {
-                            Item* waveFile = velRegion.getWaveFileRef().getItem();
-                            if (waveFile->mName == "Wave")
-                            {
-                                waveFile->mName.format("GUESS_%s_INSTR_%u", bank->mName.cstr(), instr.mId);
-                            }
-                        }
-                    }
-                }
-            }
         }
         else
         {
@@ -1794,6 +1773,39 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         }
 
         mSoundList.pushBack(sound);
+    }
+
+    //? Guess Bank Wave File names after Wave Sounds because they reference them directly
+    for (Item* bankItem : mBankList)
+    {
+        Bank* bank = static_cast<Bank*>(bankItem);
+        if (!bank->mFileRef.isAttached())
+        {
+            continue;
+        }
+
+        BankFile* bankFile = static_cast<BankFile*>(bank->mFileRef.getItem());
+
+        for (Item* instrItem : bankFile->getInstrumentList())
+        {
+            BankFile::Instrument& instr = *static_cast<BankFile::Instrument*>(instrItem);
+            for (Item* keyRegionItem : instr.getKeyRegionList())
+            {
+                BankFile::KeyRegion& keyRegion = *static_cast<BankFile::KeyRegion*>(keyRegionItem);
+                for (Item* velRegionItem : keyRegion.getVelocityRegionList())
+                {
+                    BankFile::VelocityRegion& velRegion = *static_cast<BankFile::VelocityRegion*>(velRegionItem);
+                    if (velRegion.getWaveFileRef().isAttached())
+                    {
+                        Item* waveFile = velRegion.getWaveFileRef().getItem();
+                        if (waveFile->mName == "Wave")
+                        {
+                            waveFile->mName.format("GUESS_%s_INSTR_%u", bank->mName.cstr(), instr.mId);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     for (u32 i = 0; i < soundArchive.GetSoundGroupCount(); i++)

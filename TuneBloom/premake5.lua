@@ -55,7 +55,7 @@ project "TuneBloom"
     filter "configurations:Dist"
         defines { "NDEBUG" }
         runtime "Release"
-        symbols "off"
+        symbols "on"
         optimize "speed"
         flags { "LinkTimeOptimization" }
 

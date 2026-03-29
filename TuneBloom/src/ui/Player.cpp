@@ -130,9 +130,6 @@ void DrawPlayerUI()
     // {
     //     if (ImGui::Begin("FSEQ"))
     //     {
-    //         static bool sFollowSeq = true;
-    //         static u32 sFollowTrack = 0;
-
     //         //if (sSequencePlayer.isActive())
     //         {
     //             // s32 wait = 0;
@@ -160,48 +157,6 @@ void DrawPlayerUI()
     //             //ImGui::Text("Offset: %d", sTrack0Offset);
     //             //ImGui::Text("Line:   %d", line);
     //             //ImGui::SameLine();
-
-    //             ImGui::Checkbox("Follow", &sFollowSeq);
-
-    //             ImGui::SameLine();
-
-    //             static const char* sTrackNames[] = {
-    //                 "Track 0",
-    //                 "Track 1",
-    //                 "Track 2",
-    //                 "Track 3",
-    //                 "Track 4",
-    //                 "Track 5",
-    //                 "Track 6",
-    //                 "Track 7",
-    //                 "Track 8",
-    //                 "Track 9",
-    //                 "Track 10",
-    //                 "Track 11",
-    //                 "Track 12",
-    //                 "Track 13",
-    //                 "Track 14",
-    //                 "Track 15"
-    //             };
-
-    //             ImGui::Combo("Track", (s32*)&sFollowTrack, sTrackNames, IM_ARRAYSIZE(sTrackNames));
-    //         }
-
-    //         if (sTextEditor)
-    //         {
-    //             sSeqTextKeeper.update(sSequencePlayer, *sTextEditor);
-
-    //             sTextEditor->SetReadOnly(true);
-    //             sTextEditor->Render("Editor");
-
-    //             if (sFollowSeq)
-    //             {
-    //                 const SeqTextKeeper::Track& track = sSeqTextKeeper.mTracks[sFollowTrack];
-    //                 if (track.active && track.line > 0)
-    //                 {
-    //                     sTextEditor->SetCursorPosition({ track.line - 1, 0 });
-    //                 }
-    //             }
     //         }
     //     }
     //     ImGui::End();

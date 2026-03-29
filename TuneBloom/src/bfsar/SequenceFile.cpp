@@ -182,10 +182,6 @@ void SequenceFile::drawFileUI()
             }
 
             PlaySeqFile(*this, mStartLabel, banks, 127);
-
-            u32 offset = getLabelOffset(mStartLabel);
-            mTextEditor->SetCursorPosition({ s32(mOffsetToLine[offset]) - 1, 0 });
-            mTextEditor->EnsureCursorVisible();
         }
     }
 
@@ -202,6 +198,48 @@ void SequenceFile::drawFileUI()
     if (mIsValid && sSequencePlayer.isPlayingFile(*this))
     {
         mSeqTextInfo.update(sSequencePlayer, *mTextEditor, mOffsetToLine);
+    }
+
+    //if (false)
+    {
+        ImGui::SameLine();
+
+        static bool sFollowSeq = true;
+        static u32 sFollowTrack = 0;
+
+        ImGui::Checkbox("Follow", &sFollowSeq);
+
+        ImGui::SameLine();
+
+        static const char* sTrackNames[] = {
+            "Track 0",
+            "Track 1",
+            "Track 2",
+            "Track 3",
+            "Track 4",
+            "Track 5",
+            "Track 6",
+            "Track 7",
+            "Track 8",
+            "Track 9",
+            "Track 10",
+            "Track 11",
+            "Track 12",
+            "Track 13",
+            "Track 14",
+            "Track 15"
+        };
+
+        ImGui::Combo("Track", (s32*)&sFollowTrack, sTrackNames, IM_ARRAYSIZE(sTrackNames));
+
+        if (sFollowSeq)
+        {
+            const SeqTextInfo::Track& track = mSeqTextInfo.mTracks[sFollowTrack];
+            if (track.active && track.line > 0)
+            {
+                mTextEditor->SetCursorPosition({ track.line - 1, 0 });
+            }
+        }
     }
 
     mTextEditor->Render("SeqText");

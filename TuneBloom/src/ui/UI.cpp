@@ -1,7 +1,8 @@
 #include <ui/UI.h>
 
-#include <snd/SoundThread.h>
+//#include <snd/SoundThread.h>
 
+#include <filedevice/seadPath.h>
 #include <framework/seadProcessMeter.h>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
@@ -1246,6 +1247,67 @@ void DrawSequenceSoundSetsUI()
     );
 }
 
+InstanciateItemCallback CreateWaveFileFunc(bool clear)
+{
+    static sead::FixedSafeString<512> sWavFilePath;
+    static sead::FixedSafeString<512> sFileName;
+    static bool sAskForPath = true;
+    static WaveFile::Encoding sEncoding = WaveFile::Encoding::DspAdpcm;
+
+    if (clear)
+    {
+        sWavFilePath.clear();
+        sFileName.clear();
+        sAskForPath = true;
+        sEncoding = WaveFile::Encoding::DspAdpcm;
+    }
+
+    if (sAskForPath)
+    {
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { "Wave (*.wav)", "*.wav" }
+        };
+
+        sAskForPath = false;
+
+        if (OpenFileDialog(&sWavFilePath, nullptr, filterCount, filters))
+        {
+            sEncoding = WaveFile::Encoding::DspAdpcm;
+            sead::Path::getFileName(&sFileName, sWavFilePath);
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
+
+    ImGui::Text("Import '%s'", sFileName.cstr());
+
+    if (ImGui::Combo("Encoding", (s32*)&sEncoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes)))
+    {
+    }
+
+    auto doCreate = []() -> Item*
+    {
+        WaveFile* waveFile = new WaveFile();
+        waveFile->setEnableName(true);
+        waveFile->getName() = sFileName;
+
+        bool success = waveFile->readWavFile(sWavFilePath, sEncoding);
+        SEAD_PRINT("Wav Import: %d\n", success);
+        if (!success)
+        {
+            delete waveFile;
+            return nullptr;
+        }
+
+        return waveFile;
+    };
+
+    return doCreate;
+}
+
 static const char* WaveFileNamePrefixFunc(Item* item)
 {
     WaveFile* wave = static_cast<WaveFile*>(item);
@@ -1263,6 +1325,7 @@ static const char* WaveFileNamePrefixFunc(Item* item)
 static WaveFile::Encoding sEncoding = WaveFile::Encoding::DspAdpcm;
 static WaveFile* sImportWaveFile = nullptr;
 static sead::FixedSafeString<512> sWavFilePath;
+static sead::FixedSafeString<512> sWavFileName;
 
 void WaveFileContextMenuFunc(Item* item)
 {
@@ -1284,6 +1347,7 @@ void WaveFileContextMenuFunc(Item* item)
     {
         sImportWaveFile = nullptr;
         sWavFilePath.clear();
+        sWavFileName.clear();
 
         const u32 filterCount = 1;
         FileFilter filters[filterCount] = {
@@ -1294,6 +1358,7 @@ void WaveFileContextMenuFunc(Item* item)
         {
             sEncoding = WaveFile::Encoding::DspAdpcm;
             sImportWaveFile = wave;
+            sead::Path::getFileName(&sWavFileName, sWavFilePath);
         }
     }
 
@@ -1320,7 +1385,7 @@ void WaveFileContextMenuFunc(Item* item)
 
 void DrawWaveFilesUI()
 {
-    DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(), nullptr, &WaveFileNamePrefixFunc, &WaveFileContextMenuFunc);
+    DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(), &CreateWaveFileFunc, &WaveFileNamePrefixFunc, &WaveFileContextMenuFunc);
 
     if (sImportWaveFile && !sWavFilePath.isEmpty())
     {
@@ -1332,7 +1397,7 @@ void DrawWaveFilesUI()
 
     if (ImGui::BeginPopupModal("WavImport", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
     {
-        ImGui::Text("Select the Encoding");
+        ImGui::Text("Replace with '%s'", sWavFileName.cstr());
 
         if (ImGui::Combo("Encoding", (s32*)&sEncoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes)))
         {
@@ -1342,13 +1407,15 @@ void DrawWaveFilesUI()
 
         ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
 
-        if (ImGui::Button("Import", buttonSize))
+        if (ImGui::Button("Replace", buttonSize))
         {
             bool success = sImportWaveFile->readWavFile(sWavFilePath, sEncoding);
             SEAD_PRINT("Wav Import: %d\n", success);
+            sImportWaveFile->getName() = sWavFileName;
 
             sImportWaveFile = nullptr;
             sWavFilePath.clear();
+            sWavFileName.clear();
 
             ImGui::CloseCurrentPopup();
         }
@@ -1359,6 +1426,7 @@ void DrawWaveFilesUI()
         {
             sImportWaveFile = nullptr;
             sWavFilePath.clear();
+            sWavFileName.clear();
 
             ImGui::CloseCurrentPopup();
         }

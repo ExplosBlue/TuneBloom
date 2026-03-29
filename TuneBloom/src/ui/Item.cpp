@@ -420,6 +420,10 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         {
             SEAD_ASSERT(createCallback);
             InstanciateItemCallback instanciateItemCallback = createCallback(ImGui::IsWindowAppearing());
+            if (!instanciateItemCallback)
+            {
+                ImGui::CloseCurrentPopup();
+            }
 
             ImGui::Separator();
 

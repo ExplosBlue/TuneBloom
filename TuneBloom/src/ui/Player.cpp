@@ -93,35 +93,140 @@ const Sound* sLastPlayedSound = nullptr;
 u32 sSampleRate = 0;
 u32 sSampleCount = 0;
 
-static s16 sGlobalVars[SequenceSoundPlayer::cGlobalVariableNum] = { -1 };
-static s16 sPlayerVars[SequenceSoundPlayer::cPlayerVariableNum] = { -1 };
-static s16 sTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer][SequenceTrack::cTrackVariableNum] = { -1 };
+struct SeqVarInfo
+{
+    SeqVarInfo()
+        : enable(false), value(-1)
+    {
+    }
+
+    bool enable;
+    s16 value;
+};
+
+static SeqVarInfo sGlobalVars[SequenceSoundPlayer::cGlobalVariableNum];
+static SeqVarInfo sPlayerVars[SequenceSoundPlayer::cPlayerVariableNum];
+static SeqVarInfo sTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer][SequenceTrack::cTrackVariableNum];
 
 void DrawPlayerUI()
 {
-    //return;
+    if (false)
+    {
+        static volatile s16* sCurrentGlobalVars = sSequencePlayer.getVariablePtr(16);
+        static volatile s16* sCurrentPlayerVars = sSequencePlayer.getVariablePtr(0);
+        static volatile s16* sCurrentTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer] = { nullptr };
+
+        static bool sInitVars = true;
+        if (sInitVars)
+        {
+            sInitVars = false;
+
+            for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+            {
+                sCurrentTrackVars[trackNo] = sSequencePlayer.getTrack_(trackNo).getVariablePtr(0);
+            }
+        }
+
+        auto varUI = [](const char* name, u32 i, SeqVarInfo& varInfo, volatile s16& current)
+        {
+            static const ImS16 cStepS16 = 1;
+
+            ImGui::Text("%2u", i);
+
+            ImGui::SameLine();
+
+            bool updateVar = false;
+
+            bool enable = varInfo.enable;
+            if (ImGui::Checkbox(sead::FormatFixedSafeString<32>("Enable##%s%u", name, i).cstr(), &enable))
+            {
+                varInfo.enable = enable;
+                updateVar = true;
+            }
+
+            ImGui::SameLine();
+
+            if (!enable)
+            {
+                ImGui::BeginDisabled();
+            }
+
+            ImGui::SetNextItemWidth(200.0f);
+
+            s16 var = varInfo.value;
+            if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("###%s%u", name, i).cstr(), ImGuiDataType_S16, &var, &cStepS16))
+            {
+                varInfo.value = var;
+                updateVar = true;
+            }
+
+            if (!enable)
+            {
+                ImGui::EndDisabled();
+            }
+
+            ImGui::SameLine();
+
+            if (enable && updateVar)
+            {
+                current = var;
+            }
+
+            ImGui::Text("Current: %i", current);
+        };
+
+        if (ImGui::Begin("Seq Var"))
+        {
+            if (ImGui::BeginTabBar("Vars"))
+            {
+                if (ImGui::BeginTabItem("Global"))
+                {
+                    for (u32 i = 0; i < SequenceSoundPlayer::cGlobalVariableNum; i++)
+                    {
+                        varUI("Global", i, sGlobalVars[i], sCurrentGlobalVars[i]);
+                    }
+
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("Player"))
+                {
+                    for (u32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
+                    {
+                        varUI("Local", i, sPlayerVars[i], sCurrentPlayerVars[i]);
+                    }
+
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("Track"))
+                {
+                    for (u32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+                    {
+                        for (u32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
+                        {
+                            varUI(sead::FormatFixedSafeString<32>("Track_%u", trackNo).cstr(), i, sTrackVars[trackNo][i], sCurrentTrackVars[trackNo][i]);
+                        }
+                    }
+
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
+            }
+        }
+        ImGui::End();
+    }
 
     if (false)
     {
-        if (ImGui::Begin("Seq Var"))
+        if (ImGui::Begin("Wave"))
         {
-            for (u32 i = 0; i < SequenceSoundPlayer::cGlobalVariableNum; i++)
-            {
-                ImGui::DragScalar(sead::FormatFixedSafeString<32>("Global_%u", i).cstr(), ImGuiDataType_S16, &sGlobalVars[i]);
-            }
+            f32* buf = snd::SoundSystem::getWave();
+            f32* fft = snd::SoundSystem::calcFFT();
 
-            for (u32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
-            {
-                ImGui::DragScalar(sead::FormatFixedSafeString<32>("Local_%u", i).cstr(), ImGuiDataType_S16, &sPlayerVars[i]);
-            }
-
-            for (u32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-            {
-                for (u32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
-                {
-                    ImGui::DragScalar(sead::FormatFixedSafeString<32>("Track%u_%u", trackNo, i).cstr(), ImGuiDataType_S16, &sTrackVars[trackNo][i]);
-                }
-            }
+            ImGui::PlotLines("##Wave", buf, snd::SoundSystem::cSamplePerFrame, 0, "Wave", -1, 1, ImVec2(264, 80));
+            ImGui::PlotHistogram("##FFT", fft, snd::SoundSystem::cSamplePerFrame / 2, 0, "FFT", 0, 10, ImVec2(264, 80), 8);
         }
         ImGui::End();
     }
@@ -320,15 +425,6 @@ void DrawPlayerUI()
 
         ImGui::SeparatorText("Temp");
 
-        if (false)
-        {
-            f32* buf = snd::SoundSystem::getWave();
-            f32* fft = snd::SoundSystem::calcFFT();
-
-            ImGui::PlotLines("##Wave", buf, snd::SoundSystem::cSamplePerFrame, 0, "Wave", -1, 1, ImVec2(264, 80));
-            ImGui::PlotHistogram("##FFT", fft, snd::SoundSystem::cSamplePerFrame / 2, 0, "FFT", 0, 10, ImVec2(264, 80), 8);
-        }
-
         //if (false)
         {
             snd::internal::driver::SoundThreadLock lock;
@@ -400,27 +496,6 @@ void DrawPlayerUI()
                     if (ImGui::DragFloat(sead::FormatFixedSafeString<32>("Track%d Volume", i).cstr(), &volume, 0.01f, 0.0f, 2.0f))
                     {
                         track->setVolume(volume);
-                    }
-
-                    if (false)
-                    {
-                        for (u32 varNo = 0; varNo < SequenceTrack::cTrackVariableNum; varNo++)
-                        {
-                            track->setTrackVariable(varNo, sTrackVars[i][varNo]);
-                        }
-                    }
-                }
-
-                if (false)
-                {
-                    for (u32 i = 0; i < SequenceSoundPlayer::cGlobalVariableNum; i++)
-                    {
-                        sSequencePlayer.setGlobalVariable(i, sGlobalVars[i]);
-                    }
-
-                    for (u32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
-                    {
-                        sSequencePlayer.setLocalVariable(i, sPlayerVars[i]);
                     }
                 }
             }
@@ -791,6 +866,28 @@ bool PlaySeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel
 
         sSampleCount = 0;
         sSampleRate = 0;
+
+        //? Init vars
+        for (s32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
+        {
+            const SeqVarInfo& varInfo = sPlayerVars[i];
+            if (varInfo.enable)
+            {
+                sSequencePlayer.setLocalVariable(i, varInfo.value);
+            }
+        }
+
+        for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+        {
+            for (s32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
+            {
+                const SeqVarInfo& varInfo = sTrackVars[trackNo][i];
+                if (varInfo.enable)
+                {
+                    sSequencePlayer.getTrack_(trackNo).setTrackVariable(i, varInfo.value);
+                }
+            }
+        }
     }
 
     return true;

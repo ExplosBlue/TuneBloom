@@ -43,7 +43,8 @@ void PopupMgr::update()
             Item* item = info.item;
             if (item)
             {
-                ImGui::Text("Item '%s' is invalid:", item->getFormattedName().cstr());
+                const char* name = info.super ? info.super->getFormattedName().cstr() : item->getFormattedName().cstr();
+                ImGui::Text("Item '%s' is invalid:", name);
                 ImGui::Separator();
             }
             else
@@ -75,7 +76,24 @@ void PopupMgr::update()
 
                     mPopupOpen = false;
 
-                    SelectItem(item);
+                    if (info.super)
+                    {
+                        if (item->getItemType() == Item::ItemType::BankFileInstrument)
+                        {
+                            SelectItem(item);
+                            OpenFileWindow(info.super);
+                        }
+                        else
+                        {
+                            SelectItem(info.super);
+                            sSubSelectedItem = item;
+                            sSelectedItemIsSubWindow = true;
+                        }
+                    }
+                    else
+                    {
+                        SelectItem(item);
+                    }
 
                     ImGui::CloseCurrentPopup();
                 }

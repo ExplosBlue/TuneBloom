@@ -26,7 +26,7 @@ public:
         mWaveArchiveRef.setOnDetachCallback<SoundSet>(&SoundSet::onDetachWaveArchive_); // Temp ? Idk a good solution yet
     }
 
-    bool validate(sead::BufferedSafeString& error) const override;
+    const Item* validate(sead::BufferedSafeString& error) const override;
 
     SoundSetType getSoundSetType() const
     {

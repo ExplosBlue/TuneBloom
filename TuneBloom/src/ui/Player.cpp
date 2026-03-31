@@ -20,14 +20,14 @@
 
 // Players
 
-bool Player::validate(sead::BufferedSafeString& error) const
+const Item* Player::validate(sead::BufferedSafeString& error) const
 {
     if (!Item::validateName(error))
     {
-        return false;
+        return this;
     }
 
-    return true;
+    return nullptr;
 }
 
 InstanciateItemCallback CreatePlayerFunc(bool clear)

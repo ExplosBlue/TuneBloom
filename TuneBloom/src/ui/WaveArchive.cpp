@@ -2,14 +2,14 @@
 
 // Wave Archives
 
-bool WaveArchive::validate(sead::BufferedSafeString& error) const
+const Item* WaveArchive::validate(sead::BufferedSafeString& error) const
 {
     if (!Item::validateName(error))
     {
-        return false;
+        return this;
     }
 
-    return true;
+    return nullptr;
 }
 
 InstanciateItemCallback CreateWaveArchiveFunc(bool clear)

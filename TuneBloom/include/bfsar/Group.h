@@ -144,7 +144,7 @@ public:
 
         void setLoadItems(u32 loadFlags);
 
-        bool validate(sead::BufferedSafeString& error) const override;
+        const Item* validate(sead::BufferedSafeString& error) const override;
 
     private:
         u32 getLoadFlagForSequence_() const;
@@ -187,7 +187,7 @@ public:
         mItemType = ItemType::Group;
     }
 
-    bool validate(sead::BufferedSafeString& error) const override;
+    const Item* validate(sead::BufferedSafeString& error) const override;
 
     OutputType getOutputType() const
     {

@@ -504,7 +504,7 @@ BankFile::~BankFile()
     }
 }
 
-bool BankFile::validate(sead::BufferedSafeString& error) const
+const Item* BankFile::validate(sead::BufferedSafeString& error) const
 {
     std::unordered_set<s16> programNos;
 
@@ -517,13 +517,13 @@ bool BankFile::validate(sead::BufferedSafeString& error) const
         if (instrument->getProgramNo() < 0)
         {
             error.format("Instrument %u has a invalid program number", i);
-            return false;
+            return instrument;
         }
 
         if (programNos.count(instrument->getProgramNo()) > 0)
         {
             error.format("Instrument %u: Program number '%d' already exists", i, instrument->getProgramNo());
-            return false;
+            return instrument;
         }
 
         programNos.insert(instrument->getProgramNo());
@@ -541,7 +541,7 @@ bool BankFile::validate(sead::BufferedSafeString& error) const
                 if (!velocityRegion->getWaveFileRef().isAttached())
                 {
                     error.format("Instrument %u: Velocity Region has no Wave File attached", i);
-                    return false;
+                    return instrument;
                 }
             }
         }
@@ -549,7 +549,7 @@ bool BankFile::validate(sead::BufferedSafeString& error) const
         i++;
     }
 
-    return true;
+    return nullptr;
 }
 
 void BankFile::drawUI()

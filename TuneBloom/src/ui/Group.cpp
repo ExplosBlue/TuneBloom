@@ -4,23 +4,26 @@
 
 // Groups
 
-bool Group::validate(sead::BufferedSafeString& error) const
+const Item* Group::validate(sead::BufferedSafeString& error) const
 {
     if (!Item::validateName(error))
     {
-        return false;
+        return this;
     }
 
     switch (getOutputType())
     {
         case OutputType::Embed:
         case OutputType::Link:
-        // case OutputType::External:
             break;
+
+        case OutputType::External: // TODO
+            error = "External Group saving is not supported yet";
+            return this;
 
         default:
             error = "Invalid Output Type";
-            return false;
+            return this;
     }
 
     sead::FixedSafeString<256> itemError;
@@ -32,10 +35,10 @@ bool Group::validate(sead::BufferedSafeString& error) const
 
         if (!itemInfo.getIsDisabled())
         {
-            if (!itemInfo.validate(itemError))
+            if (itemInfo.validate(itemError))
             {
-                error.format("Item %u: %s", i, itemError.cstr());
-                return false;
+                error.format("'%s': %s", itemInfo.getFormattedName().cstr(), itemError.cstr());
+                return &itemInfo;
             }
         }
 
@@ -44,7 +47,7 @@ bool Group::validate(sead::BufferedSafeString& error) const
         i++;
     }
 
-    return true;
+    return nullptr;
 }
 
 InstanciateItemCallback CreateGroupFunc(bool clear)
@@ -171,7 +174,7 @@ void Group::ItemInfo::drawUI()
         {
             mLoadItem = loadItem;
 
-            if (!validate(sError))
+            if (validate(sError))
             {
                 ImGui::OpenPopup("###LoadItem");
                 mLoadItem = oldLoadItem;
@@ -522,18 +525,18 @@ void Group::ItemInfo::setLoadItemsForWaveArchive_(u32 loadFlags)
     }
 }
 
-bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
+const Item* Group::ItemInfo::validate(sead::BufferedSafeString& error) const
 {
     if (mItemRefType != ItemType::Sound && mItemRefType != ItemType::SoundSet && mItemRefType != ItemType::Bank && mItemRefType != ItemType::WaveArchive)
     {
         error = "Invalid Item Type";
-        return false;
+        return this;
     }
 
     if (!mItemRef.isAttached())
     {
         error = "Item not attached";
-        return false;
+        return this;
     }
 
     switch (mItemRefType)
@@ -543,12 +546,19 @@ bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
             const Sound* sound = static_cast<const Sound*>(mItemRef.getItem());
             if (sound->getSoundType() == Sound::SoundType::Seq)
             {
-                return validateSequence_(*sound, error);
+                if (validateSequence_(*sound, error))
+                {
+                    return nullptr;
+                }
+                else
+                {
+                    return this;
+                }
             }
             else
             {
                 error = "Sound must be a Sequence";
-                return false;
+                return this;
             }
 
             break;
@@ -568,15 +578,22 @@ bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
                     {
                         if (!validateSequence_(*sound, error))
                         {
-                            error = "Must select 'All', 'Bank and Wave Archive' or 'Sequence Set'\nif the Wave Archive of the bank referenced by any sequence sound in the set is either\n'Automatic (Shared)' or 'Automatic (Individual)'";
-                            return false;
+                            error = "Must select 'All', 'Bank and Wave Archive' or 'Sequence Set'\nif the Wave Archive of the Bank referenced by any Sequence Sound in the set is either\n'Automatic (Shared)' or 'Automatic (Individual)'";
+                            return this;
                         }
                     }
                 }
             }
             else if (soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave)
             {
-                return validateWaveSoundSet_(*soundSet, error, getLoadFlag());
+                if (validateWaveSoundSet_(*soundSet, error, getLoadFlag()))
+                {
+                    return nullptr;
+                }
+                else
+                {
+                    return this;
+                }
             }
 
             break;
@@ -585,7 +602,14 @@ bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
         case ItemType::Bank:
         {
             const Bank* bank = static_cast<const Bank*>(mItemRef.getItem());
-            return validateBank_(*bank, error, getLoadFlag());
+            if (validateBank_(*bank, error, getLoadFlag()))
+            {
+                return nullptr;
+            }
+            else
+            {
+                return this;
+            }
 
             break;
         }
@@ -595,14 +619,14 @@ bool Group::ItemInfo::validate(sead::BufferedSafeString& error) const
             if (getLoadFlag() != LoadFlag::LoadAll)
             {
                 error = "Must select 'All' for Wave Archive";
-                return false;
+                return this;
             }
 
             break;
         }
     }
 
-    return true;
+    return nullptr;
 }
 
 bool Group::ItemInfo::validateSequence_(const Sound& sound, sead::BufferedSafeString& error) const
@@ -624,7 +648,7 @@ bool Group::ItemInfo::validateSequence_(const Sound& sound, sead::BufferedSafeSt
 
         if (!validateBank_(*bank, error, getLoadFlag()))
         {
-            error = "Must select 'All', 'Bank and Wave Archive' or 'Sequence'\nif the Wave Archive of the bank referenced by the sequence sound is either\n'Automatic (Shared)' or 'Automatic (Individual)'";
+            error = "Must select 'All', 'Bank and Wave Archive' or 'Sequence'\nif the Wave Archive of the Bank referenced by the Sequence Sound is either\n'Automatic (Shared)' or 'Automatic (Individual)'";
             return false;
         }
     }

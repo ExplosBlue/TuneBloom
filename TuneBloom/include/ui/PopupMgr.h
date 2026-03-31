@@ -28,7 +28,8 @@ public:
 
     public:
         Text text;
-        Item* item;
+        Item* item = nullptr;
+        Item* super = nullptr;
     };
 
 private:

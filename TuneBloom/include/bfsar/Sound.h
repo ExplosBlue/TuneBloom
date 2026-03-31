@@ -999,7 +999,7 @@ public:
 
     ~Sound() override;
 
-    bool validate(sead::BufferedSafeString& error) const override;
+    const Item* validate(sead::BufferedSafeString& error) const override;
 
     u32 getPlayerId() const
     {

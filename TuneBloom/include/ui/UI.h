@@ -119,6 +119,8 @@ private:
 
 extern ItemList sFileWindows;
 
+FileWindow* OpenFileWindow(Item* item);
+
 void DrawMenuBar();
 void DrawUI();
 

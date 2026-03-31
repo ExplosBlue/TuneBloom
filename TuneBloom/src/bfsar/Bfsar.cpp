@@ -4760,7 +4760,7 @@ bool Bfsar::validate_()
             const Item* item = (*it).val();
             SEAD_ASSERT(item);
 
-            bool valid = true;
+            const Item* problemItem = nullptr;
             if (!validateWaveSoundSet)
             {
                 if (item->getItemType() == Item::ItemType::Sound)
@@ -4769,7 +4769,7 @@ bool Bfsar::validate_()
                     sound->mOwnerSet = nullptr; //? Reset for when validating SoundSets
                 }
 
-                valid = item->validate(error);
+                problemItem = item->validate(error);
             }
             else
             {
@@ -4781,25 +4781,32 @@ bool Bfsar::validate_()
                     if (!soundSet)
                     {
                         error = "Sound of type Wave must be in a SoundSet";
-                        valid = false;
+                        problemItem = item;
                     }
                     else if (soundSet->getSoundSetType() != SoundSet::SoundSetType::Wave)
                     {
                         error = "Sound of type Wave must be in a SoundSet of type Wave";
-                        valid = false;
-                        item = soundSet; //? Set error item to SoundSet since it's the one with the issue
+                        problemItem = soundSet; //? Set error item to SoundSet since it's the one with the issue
                     }
                 }
             }
 
-            if (!valid)
+            if (problemItem)
             {
                 if (error.isEmpty())
                 {
                     error = "Unknown";
                 }
 
-                PopupMgr::instance()->addPopup({ error.cstr(), const_cast<Item*>(item) });
+                PopupMgr::PopupInfo info = { error.cstr(), const_cast<Item*>(problemItem) };
+                if (problemItem->getItemType() == Item::ItemType::StreamTrack ||
+                    problemItem->getItemType() == Item::ItemType::GroupItemInfo ||
+                    problemItem->getItemType() == Item::ItemType::BankFileInstrument)
+                {
+                    info.super = const_cast<Item*>(item);
+                }
+
+                PopupMgr::instance()->addPopup(info);
                 return false;
             }
 

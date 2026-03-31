@@ -2,11 +2,11 @@
 
 // Banks
 
-bool Bank::validate(sead::BufferedSafeString& error) const
+const Item* Bank::validate(sead::BufferedSafeString& error) const
 {
     if (!Item::validateName(error))
     {
-        return false;
+        return this;
     }
 
     switch (getWaveArchiveType())
@@ -25,16 +25,16 @@ bool Bank::validate(sead::BufferedSafeString& error) const
 
         default:
             error = "Invalid Wave Archive";
-            return false;
+            return this;
     }
 
     if (!getFileRef().isAttached())
     {
         error = "Invalid Bank File";
-        return false;
+        return this;
     }
 
-    return true;
+    return nullptr;
 }
 
 InstanciateItemCallback CreateBankFunc(bool clear)

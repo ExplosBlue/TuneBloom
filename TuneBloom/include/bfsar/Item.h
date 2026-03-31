@@ -276,10 +276,10 @@ public:
     {
     }
 
-    virtual bool validate(sead::BufferedSafeString& error) const
+    virtual const Item* validate(sead::BufferedSafeString& error) const
     {
         error = "Not implemented";
-        return false;
+        return this;
     }
 
     bool validateName(sead::BufferedSafeString& error) const;

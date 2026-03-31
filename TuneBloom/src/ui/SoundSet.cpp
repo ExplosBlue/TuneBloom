@@ -1,10 +1,10 @@
 #include <ui/UI.h>
 
-bool SoundSet::validate(sead::BufferedSafeString& error) const
+const Item* SoundSet::validate(sead::BufferedSafeString& error) const
 {
     if (!Item::validateName(error))
     {
-        return false;
+        return this;
     }
 
     switch (getSoundSetType())
@@ -26,7 +26,7 @@ bool SoundSet::validate(sead::BufferedSafeString& error) const
 
                 default:
                     error = "Invalid Wave Archive";
-                    return false;
+                    return this;
             }
 
             break;
@@ -36,30 +36,30 @@ bool SoundSet::validate(sead::BufferedSafeString& error) const
 
         default:
             error = "Invalid Sound Type";
-            return false;
+            return this;
     }
 
     if (getIsEmpty())
     {
-        return true;
+        return nullptr;
     }
 
     if (getEndId() < getStartId())
     {
         error = "Invalid Start and End ids";
-        return false;
+        return this;
     }
 
     if (getStartId() >= sBfsar.getSoundList().size())
     {
         error = "Start Id exceeds sound count";
-        return false;
+        return this;
     }
 
     if (getEndId() >= sBfsar.getSoundList().size())
     {
         error = "End Id exceeds sound count";
-        return false;
+        return this;
     }
 
     for (const Item::ListNode* itemNode = sBfsar.getItem(getStartId(), sBfsar.getSoundList()); itemNode && itemNode->val()->getId() <= getEndId(); itemNode = sBfsar.getSoundList().next(itemNode))
@@ -70,13 +70,13 @@ bool SoundSet::validate(sead::BufferedSafeString& error) const
         if (sound->mOwnerSet)
         {
             error.format("Sound '%s' is already in Sound Set '%s'", sound->getFormattedName().cstr(), sound->mOwnerSet->getFormattedName().cstr());
-            return false;
+            return this;
         }
 
         sound->mOwnerSet = this;
     }
 
-    return true;
+    return nullptr;
 }
 
 void DrawSoundSetPropertiesUI()

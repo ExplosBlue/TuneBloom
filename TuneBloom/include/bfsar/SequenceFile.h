@@ -57,7 +57,7 @@ public:
     void onOpenFileWindow() override;
     void onCloseFileWindow() override;
 
-    bool validate(sead::BufferedSafeString& error) const override;
+    const Item* validate(sead::BufferedSafeString& error) const override;
 
     void drawUI() override;
     void drawFileUI();

@@ -595,7 +595,7 @@ InstanciateItemCallback CreateGroupItemFunc(bool clear)
         info->getItemRef().attach(sItemRef);
         info->setLoadItem_(sLoadItem);
 
-        if (!info->validate(sError))
+        if (info->validate(sError))
         {
             ImGui::OpenPopup("###LoadItemAdd");
             delete info;

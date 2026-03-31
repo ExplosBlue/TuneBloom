@@ -46,7 +46,7 @@ WaveFile::~WaveFile()
     invalidateOriginalData_();
 }
 
-bool WaveFile::validate(sead::BufferedSafeString& error) const
+const Item* WaveFile::validate(sead::BufferedSafeString& error) const
 {
     switch (getEncoding())
     {
@@ -57,34 +57,34 @@ bool WaveFile::validate(sead::BufferedSafeString& error) const
 
         default:
             error = "Invalid Encoding";
-            return false;
+            return this;
     }
 
     if (getLoopEndFrame() <= getLoopStartFrame())
     {
         error = "Invalid loop start/end";
-        return false;
+        return this;
     }
 
     if (getLoopEndFrame() < 1)
     {
         error = "No data to write";
-        return false;
+        return this;
     }
 
     if (getChannels().isEmpty())
     {
         error = "Wave File must have at least 1 channel";
-        return false;
+        return this;
     }
 
     if (getChannels().size() > 2)
     {
         error = "Wave File can only have up to 2 channels";
-        return false;
+        return this;
     }
 
-    return true;
+    return nullptr;
 }
 
 void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam)

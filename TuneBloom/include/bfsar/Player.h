@@ -14,7 +14,7 @@ public:
         mItemType = ItemType::Player;
     }
 
-    bool validate(sead::BufferedSafeString& error) const override;
+    const Item* validate(sead::BufferedSafeString& error) const override;
 
     u32 getPlayableSoundMax() const
     {

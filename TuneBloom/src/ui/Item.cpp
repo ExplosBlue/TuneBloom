@@ -253,6 +253,9 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 {
                     selectedItem = prev->val();
                     sScrollItem = selectedItem;
+
+                    sSubSelectedItem = nullptr;
+                    sSelectedItemIsSubWindow = false;
                 }
             }
 
@@ -263,10 +266,13 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 {
                     selectedItem = next->val();
                     sScrollItem = selectedItem;
+
+                    sSubSelectedItem = nullptr;
+                    sSelectedItemIsSubWindow = false;
                 }
             }
 
-            if (canEdit && ImGui::IsKeyPressed(ImGuiKey_Delete))
+            if (canEdit && ImGui::IsKeyPressed(ImGuiKey_Delete) && sSubSelectedItem == nullptr && sSelectedItemIsSubWindow == false)
             {
                 sDeleteItem = selectedItem;
             }

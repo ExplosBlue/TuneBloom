@@ -506,6 +506,8 @@ BankFile::~BankFile()
 
 bool BankFile::validate(sead::BufferedSafeString& error) const
 {
+    std::unordered_set<s16> programNos;
+
     u32 i = 0;
     for (const Item* instrumentItem : getInstrumentList())
     {
@@ -517,6 +519,14 @@ bool BankFile::validate(sead::BufferedSafeString& error) const
             error.format("Instrument %u has a invalid program number", i);
             return false;
         }
+
+        if (programNos.count(instrument->getProgramNo()) > 0)
+        {
+            error.format("Instrument %u: Program number '%d' already exists", i, instrument->getProgramNo());
+            return false;
+        }
+
+        programNos.insert(instrument->getProgramNo());
 
         for (const Item* keyRegionItem : instrument->getKeyRegionList())
         {

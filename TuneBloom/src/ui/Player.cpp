@@ -269,7 +269,7 @@ void DrawPlayerUI()
     //     ImGui::End();
     // }
 
-    if (true)
+    if (false)
     {
         if (ImGui::Begin("Voices"))
         {

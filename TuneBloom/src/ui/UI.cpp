@@ -95,41 +95,59 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
     return dockspace_id;
 }
 
+static bool sWantsNew = false;
+static bool sWantsOpen = false;
+static bool sWantsClose = false;
+
 void DrawMenuBar()
 {
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("New"))
-            {
-                NewFile();
-            }
-
-            if (ImGui::MenuItem("Open"))
-            {
-                OpenFile();
-            }
-
             bool bfsarOpen = sBfsar.isOpen();
+            if (ImGui::MenuItem(ICON_LC_FILE " New"))
+            {
+                if (bfsarOpen)
+                {
+                    sWantsNew = true;
+                }
+                else
+                {
+                    NewFile();
+                }
+            }
+
+            if (ImGui::MenuItem(ICON_LC_FOLDER_OPEN " Open"))
+            {
+                if (bfsarOpen)
+                {
+                    sWantsOpen = true;
+                }
+                else
+                {
+                    OpenFile();
+                }
+            }
+
             if (!bfsarOpen)
             {
                 ImGui::BeginDisabled();
             }
 
-            if (ImGui::MenuItem("Save"))
+            if (ImGui::MenuItem(ICON_LC_SAVE " Save"))
             {
                 SaveFile();
             }
 
-            if (ImGui::MenuItem("Save As"))
+            if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As"))
             {
                 SaveFileAs();
             }
 
-            if (ImGui::MenuItem("Close"))
+            if (ImGui::MenuItem(ICON_LC_FILE_OUTPUT " Close"))
             {
-                CloseFile();
+                sWantsClose = true;
             }
 
             if (!bfsarOpen)
@@ -162,6 +180,63 @@ void DrawUI()
     DrawFileUI(dockspaceId);
     DrawPropertiesUI();
     DrawPlayerUI();
+
+    static void (*fileAction)() = nullptr;
+    if (sWantsNew)
+    {
+        ImGui::OpenPopup("###Save");
+        sWantsNew = false;
+        fileAction = &NewFile;
+    }
+    else if (sWantsOpen)
+    {
+        ImGui::OpenPopup("###Save");
+        sWantsOpen = false;
+        fileAction = &OpenFile;
+    }
+    else if (sWantsClose)
+    {
+        ImGui::OpenPopup("###Save");
+        sWantsClose = false;
+        fileAction = &CloseFile;
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal(ICON_LC_SAVE " Save ?###Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Do you want to save the current file ?");
+        ImGui::Separator();
+
+        ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 3.0f) / 3.0f, 0.0f);
+
+        if (ImGui::Button("Yes", buttonSize))
+        {
+            if (SaveFile())
+            {
+                fileAction();
+            }
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("No", buttonSize))
+        {
+            fileAction();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", buttonSize))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
 
     if (sShowSystemWindow)
     {

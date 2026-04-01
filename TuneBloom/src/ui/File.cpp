@@ -214,12 +214,14 @@ void OpenFile()
     fw->setCaption(title);
 }
 
-void SaveFile()
+bool SaveFile()
 {
     if (sBfsar.isOpen())
     {
-        sBfsar.save();
+        return sBfsar.save();
     }
+
+    return false;
 }
 
 void SaveFileAs()
@@ -271,6 +273,7 @@ void CloseFile()
     sSampleCount = 0;
 
     StopAllSoundPlayers(true);
+    StopAllVoices();
 
     sBfsar.close();
 

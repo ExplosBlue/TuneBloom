@@ -126,7 +126,7 @@ void DrawUI();
 
 void NewFile();
 void OpenFile();
-void SaveFile();
+bool SaveFile();
 void SaveFileAs();
 void CloseFile();
 

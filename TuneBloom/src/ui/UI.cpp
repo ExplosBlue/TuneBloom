@@ -1,9 +1,13 @@
+#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/UI.h>
 
 //#include <snd/SoundThread.h>
 
 #include <filedevice/seadPath.h>
 #include <framework/seadProcessMeter.h>
+#include <gfx/gl/seadTextureGL.h>
+
+#include <Utilll.h>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -98,6 +102,7 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
 static bool sWantsNew = false;
 static bool sWantsOpen = false;
 static bool sWantsClose = false;
+static bool sWantsAbout = false;
 
 void DrawMenuBar()
 {
@@ -166,8 +171,158 @@ void DrawMenuBar()
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("Help"))
+        {
+            if (ImGui::MenuItem(ICON_LC_INFO " About"))
+            {
+                sWantsAbout = true;
+            }
+
+            ImGui::EndMenu();
+        }
+
         ImGui::EndMainMenuBar();
     }
+}
+
+void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
+{
+    ImGuiIO& io = ImGui::GetIO();
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 8.0f));
+
+    if (ImGui::BeginPopupModal("##TuneBloomSplash",
+        nullptr,
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_AlwaysAutoResize
+    ))
+    {
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        ImVec2 winPos = ImGui::GetWindowPos();
+        ImVec2 winSize = ImGui::GetWindowSize();
+
+        ImU32 topCol    = IM_COL32(15, 15, 20, 255);
+        ImU32 bottomCol = IM_COL32(30, 30, 45, 255);
+        ImVec4 hyperCol = ImVec4(0.3f, 0.6f, 1.0f, 1.0f);
+
+        s32 vtxIdxBegin = draw->VtxBuffer.Size;
+        draw->AddRectFilled(winPos, winPos + winSize, IM_COL32_WHITE, 12.0f);
+        s32 vtxIdxEnd = draw->VtxBuffer.Size;
+
+        ImGui::ShadeVertsLinearColorGradientKeepAlpha(draw,
+            vtxIdxBegin, vtxIdxEnd,
+            winPos, winPos + winSize,
+            topCol, bottomCol
+        );
+
+        auto CenterText = [](const char* text)
+        {
+            f32 width = ImGui::CalcTextSize(text).x;
+            ImGui::SetCursorPosX((ImGui::GetWindowSize().x - width) * 0.5f);
+            ImGui::TextUnformatted(text);
+        };
+
+        auto CenterItem = [](f32 width)
+        {
+            ImGui::SetCursorPosX((ImGui::GetWindowSize().x - width) * 0.5f);
+        };
+
+        CenterItem(logoSize.x);
+        ImGui::Image(logoTex, logoSize);
+
+        // ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        ImGui::PushFont(io.Fonts->Fonts[0]); // Big font
+        CenterText("TuneBloom");
+        ImGui::PopFont();
+
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f), " v%s", util::cAppVersion.cstr());
+
+        ImGui::Dummy(ImVec2(0.0f, 5.0f));
+
+        CenterItem(ImGui::CalcTextSize("by stupidestmodder & more").x);
+
+        ImGui::Text("by");
+        ImGui::SameLine();
+
+        ImGui::TextColored(hyperCol, "stupidestmodder");
+        if (ImGui::IsItemHovered())
+        {
+            ImVec2 min = ImGui::GetItemRectMin();
+            ImVec2 max = ImGui::GetItemRectMax();
+            min.y = max.y;
+            draw->AddLine(min, max, ImGui::GetColorU32(hyperCol));
+
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                system("start https://github.com/stupidestmodder");
+            }
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 5.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+            ImGui::SetTooltip("https://github.com/stupidestmodder");
+            ImGui::PopStyleVar(2);
+        }
+
+        ImGui::SameLine();
+        ImGui::Text("& more");
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        CenterText("A NintendoWare sound archive editor");
+
+        CenterItem(ImGui::CalcTextSize("Made in Brazil").x);
+        ImGui::Text("Made in");
+        ImGui::SameLine();
+        ImGui::Text("Brazil");
+
+        ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+        const char* linkFull = "   Support: https://go.nsmbu.net/discord   ";
+        const char* link = "https://go.nsmbu.net/discord   ";
+        CenterItem(ImGui::CalcTextSize(linkFull).x);
+
+        ImGui::Text("   Support:");
+        ImGui::SameLine();
+        ImGui::TextColored(hyperCol, "%s", link);
+        if (ImGui::IsItemHovered())
+        {
+            ImVec2 min = ImGui::GetItemRectMin();
+            ImVec2 max = ImGui::GetItemRectMax();
+            max.x -= ImGui::CalcTextSize("   ").x;
+            min.y = max.y;
+            draw->AddLine(min, max, ImGui::GetColorU32(hyperCol));
+
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                system(sead::FormatFixedSafeString<64>("start %s", link).cstr());
+            }
+        }
+
+        ImGui::Separator();
+        f32 buttonSize = 100.0f;
+        CenterItem(buttonSize);
+
+        if (ImGui::Button("Close", ImVec2(buttonSize, 0.0f)))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    ImGui::PopStyleVar(2);
 }
 
 void DrawUI()
@@ -256,6 +411,27 @@ void DrawUI()
 
     if (sShowDemoWindow)
         ImGui::ShowDemoWindow(&sShowDemoWindow);
+
+    if (sWantsAbout)
+    {
+        ImGui::OpenPopup("##TuneBloomSplash");
+        sWantsAbout = false;
+    }
+
+    if (ImGui::IsPopupOpen("##TuneBloomSplash"))
+    {
+        ImTextureID icon = 0;
+        if (util::getIcon())
+        {
+            sead::TextureGL* tex = sead::DynamicCast<sead::TextureGL>(util::getIcon());
+            if (tex)
+            {
+                icon = (ImTextureID)tex->getID();
+            }
+        }
+
+        DrawTuneBloomSplash(icon, ImVec2(130, 130));
+    }
 }
 
 void DrawProjectUI()

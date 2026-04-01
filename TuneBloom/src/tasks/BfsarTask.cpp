@@ -1,6 +1,8 @@
 #include "tasks/BfsarTask.h"
 
 #include <filedevice/seadFileDeviceMgr.h>
+#include <gfx/gl/seadTextureGL.h>
+#include <gfx/seadTextureUtil.h>
 #include <heap/seadExpHeap.h>
 
 #include "imgui/imgui.h"
@@ -19,6 +21,9 @@
 #include "icons/IconsLucide.h"
 #include "ui/UI.h"
 #include "ui/PopupMgr.h"
+
+#include <Utilll.h>
+#include <stb/stb_image.h>
 
 BfsarTask::BfsarTask(const sead::TaskConstructArg& arg)
     : sead::Task(arg, "BfsarTask")
@@ -141,6 +146,25 @@ void BfsarTask::prepare()
         heap->adjust();
     }
 
+    PopupMgr::createInstance(nullptr);
+
+    s32 width = 0;
+    s32 height = 0;
+    s32 channels = 0;
+    u8* data = stbi_load("content/icon.png", &width, &height, &channels, 4);
+    if (data && channels == 4)
+    {
+        sead::TextureGL* icon = new sead::TextureGL();
+        bool r = sead::TextureUtil::createTextureImage2DGL(icon, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        SEAD_ASSERT(r);
+
+        util::setIcon_(icon);
+    }
+    else
+    {
+        PopupMgr::instance()->addPopup({ "Failed to load icon image" });
+    }
+
 /*
     {
         static snd::WaveBuffer waveBuffers[2];
@@ -218,8 +242,6 @@ void BfsarTask::prepare()
         }
     }
 */
-
-    PopupMgr::createInstance(nullptr);
 
     adjustHeapAll();
 }

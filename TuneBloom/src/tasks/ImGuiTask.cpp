@@ -170,7 +170,9 @@ void ImGuiTask::prepare()
         //config.OversampleV = 2;
         //config.GlyphMinAdvanceX = 20.0f;
 
-        io.Fonts->AddFontFromMemoryTTF(font, arg.read_size, 20.0f, &config);
+        io.Fonts->AddFontFromMemoryTTF(font, arg.read_size, 32.0f, &config);
+        ImFont* smallFont = io.Fonts->AddFontFromMemoryTTF(font, arg.read_size, 20.0f, &config);
+        io.FontDefault = smallFont;
     }
 
     {

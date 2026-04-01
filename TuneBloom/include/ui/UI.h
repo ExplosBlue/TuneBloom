@@ -127,7 +127,7 @@ void DrawUI();
 void NewFile();
 void OpenFile();
 bool SaveFile();
-void SaveFileAs();
+bool SaveFileAs();
 void CloseFile();
 
 void PlaySound(const Sound* sound);

@@ -67,6 +67,27 @@ Bfsar::~Bfsar()
     close();
 }
 
+void Bfsar::create()
+{
+    close();
+
+    // TODO: Ask user for those defaults
+    mEndian = sead::Endian::eBig;
+    mVersion = 0x00010000;
+    mIncludeStringTable = true;
+    mSoundArchivePlayerInfo.sequenceSoundMax = 64;
+    mSoundArchivePlayerInfo.sequenceTrackMax = 64;
+    mSoundArchivePlayerInfo.streamSoundMax = 4;
+    mSoundArchivePlayerInfo.streamTrackMax = 4;
+    mSoundArchivePlayerInfo.streamChannelMax = 8;
+    mSoundArchivePlayerInfo.waveSoundMax = 64;
+    mSoundArchivePlayerInfo.waveTrackMax = 64;
+    mSoundArchivePlayerInfo.streamBufferTimes = 1;
+    mSoundArchivePlayerInfo.options = 0;
+
+    mOpen = true;
+}
+
 bool Bfsar::open(const sead::SafeString& filePath, sead::Heap* heap)
 {
     close();
@@ -107,6 +128,11 @@ bool Bfsar::save()
 {
     if (!mOpen)
         return false;
+
+    if (!mFilePath)
+    {
+        return SaveFileAs();
+    }
 
     if (!validate_())
         return false;

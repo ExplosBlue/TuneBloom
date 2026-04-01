@@ -174,7 +174,16 @@ Item* sSubSelectedItem = nullptr;
 
 void NewFile()
 {
-    PopupMgr::instance()->addPopup({ "TODO", nullptr });
+    CloseFile();
+
+    sBfsar.create();
+
+    sead::FormatFixedSafeString<512> title("%s - %s", util::cAppName.cstr(), "*New.bfsar");
+
+    sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+    SEAD_ASSERT(fw);
+
+    fw->setCaption(title);
 }
 
 void OpenFile()
@@ -224,16 +233,16 @@ bool SaveFile()
     return false;
 }
 
-void SaveFileAs()
+bool SaveFileAs()
 {
     if (!sBfsar.isOpen())
     {
-        return;
+        return false;
     }
 
     if (!sBfsar.validate_())
     {
-        return;
+        return false;
     }
 
     sead::FixedSafeString<512> path;
@@ -256,8 +265,12 @@ void SaveFileAs()
             SEAD_ASSERT(fw);
 
             fw->setCaption(title);
+
+            return true;
         }
     }
+
+    return false;
 }
 
 void CloseFile()

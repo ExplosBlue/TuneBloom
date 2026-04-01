@@ -40,6 +40,7 @@ public:
     Bfsar();
     ~Bfsar();
 
+    void create();
     bool open(const sead::SafeString& filePath, sead::Heap* heap);
     bool save();
     bool saveAs(const sead::SafeString& filePath);

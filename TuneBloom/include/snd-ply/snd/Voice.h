@@ -100,6 +100,7 @@ public:
     }
 
     static void detail_setVoiceMgr(VoiceMgr* voiceMgr);
+    static VoiceMgr* detail_getVoiceMgr() { return sVoiceMgr; }
 
 private:
     void initialize_(u32 priority);

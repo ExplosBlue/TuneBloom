@@ -4,6 +4,8 @@
 
 #include <snd/ChannelMgr.h>
 #include <snd/MultiVoiceMgr.h>
+#include <snd/Voice.h>
+#include <snd/VoiceImpl.h>
 #include <snd/SoundSystem.h>
 
 #include <snd/SequenceNoteOnCallback.h>
@@ -267,14 +269,21 @@ void DrawPlayerUI()
     //     ImGui::End();
     // }
 
-    if (ImGui::Begin(ICON_LC_MUSIC " Player###PlayerWindow"))
+    if (true)
     {
-        if (false)
+        if (ImGui::Begin("Voices"))
         {
             snd::internal::driver::SoundThreadLock lock;
             ImGui::Text("Channel Count: %d", snd::internal::driver::ChannelMgr::instance()->getChannelCount());
+            ImGui::Text("MultiVoice Count: %d", snd::internal::driver::MultiVoiceMgr::instance()->getVoiceCount());
+            ImGui::Text("MultiVoice Active Count: %d", snd::internal::driver::MultiVoiceMgr::instance()->getActiveCount());
+            ImGui::Text("Voice Count: %d", snd::internal::Voice::detail_getVoiceMgr()->getActiveVoiceCount());
         }
+        ImGui::End();
+    }
 
+    if (ImGui::Begin(ICON_LC_MUSIC " Player###PlayerWindow"))
+    {
         bool isPause = true;
         if (sCurrentSoundPlayer && sCurrentSoundPlayer->isActive())
         {

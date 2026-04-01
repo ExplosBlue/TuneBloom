@@ -138,8 +138,9 @@ bool Bfsar::saveAs(const sead::SafeString& filePath)
     if (!mOpen)
         return false;
 
-    if (!validate_())
-        return false;
+    //? Should already be called even before dialog appears
+    // if (!validate_())
+    //     return false;
 
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);

@@ -256,13 +256,13 @@ public:
         return 0x00010000;
     }
 
+    //? Validate every item for saving
+    bool validate_();
+
 private:
     void open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap);
     void save_(sead::FileHandle& handle);
     void close_();
-
-    //? Validate every item for saving
-    bool validate_();
 
     bool validateName_(const sead::SafeString& name, const Item::List& list, const Item* ignoreItem = nullptr) const;
 

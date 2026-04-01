@@ -229,6 +229,11 @@ void SaveFileAs()
         return;
     }
 
+    if (!sBfsar.validate_())
+    {
+        return;
+    }
+
     sead::FixedSafeString<512> path;
 
     const u32 filterCount = 1;

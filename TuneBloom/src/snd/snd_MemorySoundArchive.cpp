@@ -44,7 +44,7 @@ bool MemorySoundArchive::Initialize(const void* soundArchiveData)
     }
 
     // if (false)
-    if (!(0x00010000 <= header.version && header.version <= 0x00020000))
+    if (!(0x00010000 <= header.version && header.version <= 0x00020200))
     {
         SEAD_ASSERT_MSG(false, "BFSAR version not supported (0x%08X)", (u32)header.version);
         return false;

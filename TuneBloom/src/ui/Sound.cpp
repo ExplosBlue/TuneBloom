@@ -656,7 +656,7 @@ void DrawSoundPropertiesUI()
                         ImGui::BeginDisabled();
 
                     {
-                        static const char* sStreamTypes[] = { "BFSTM", "ADTS" };
+                        static const char* sStreamTypes[] = { "BFSTM", "ADTS (AAC)" };
 
                         u32 streamType = (enableSend ? strmSoundInfo.getStreamType() : Sound::StreamSoundInfo::StreamType::NwStreamBinary) - 1;
                         if (ImGui::Combo("Stream Type", (s32*)&streamType, sStreamTypes, IM_ARRAYSIZE(sStreamTypes)))

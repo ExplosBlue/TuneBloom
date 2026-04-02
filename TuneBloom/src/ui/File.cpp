@@ -200,6 +200,27 @@ void OpenFile()
         return;
     }
 
+    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+    SEAD_ASSERT(device);
+
+    sead::FileHandle handle;
+    if (!device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eReadOnly, 0))
+    {
+        PopupMgr::instance()->addPopup({ "Couldn't open the selected file" });
+        return;
+    }
+
+    u8 magic[4];
+    handle.read(magic, 4);
+    handle.close();
+
+    //if (sead::MemUtil::compare(magic, "CSAR", 4) != 0)
+    if (sead::MemUtil::compare(magic, "FSAR", 4) != 0)
+    {
+        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR file", nullptr });
+        return;
+    }
+
     CloseFile();
 
     if (!sBfsar.open(filePath, nullptr))

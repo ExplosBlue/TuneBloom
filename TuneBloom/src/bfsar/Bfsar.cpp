@@ -101,13 +101,6 @@ bool Bfsar::open(const sead::SafeString& filePath, sead::Heap* heap)
 
     u8* bfsarFile = device->load(arg);
 
-    //if (sead::MemUtil::compare(bfsarFile, "CSAR", 4) != 0)
-    if (sead::MemUtil::compare(bfsarFile, "FSAR", 4) != 0)
-    {
-        device->unload(bfsarFile);
-        return false;
-    }
-
     mFilePath = new(heap) sead::HeapSafeString(heap, filePath);
 
     nw::snd::MemorySoundArchive* soundArchive = new(heap) nw::snd::MemorySoundArchive();
@@ -138,7 +131,7 @@ bool Bfsar::save()
         return false;
 
     sead::FormatFixedSafeString<512> path("%s.save.bfsar", mFilePath->cstr()); // TODO
-    //sead::SafeString path = *mFilePath;
+    // sead::SafeString path = *mFilePath;
 
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);
@@ -151,7 +144,10 @@ bool Bfsar::save()
         device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
 
         if (!handle.getDevice())
+        {
+            PopupMgr::instance()->addPopup({ "Coundn't open output file" });
             return false;
+        }
     }
 
     save_(handle);
@@ -179,7 +175,10 @@ bool Bfsar::saveAs(const sead::SafeString& filePath)
         device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eCreate, 0);
 
         if (!handle.getDevice())
+        {
+            PopupMgr::instance()->addPopup({ "Coundn't open output file" });
             return false;
+        }
     }
 
     delete mFilePath;
@@ -2083,6 +2082,7 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                                 SEAD_ASSERT_MSG(false, "Sound is not a sequence.");
                             }
 
+                            // itemFileMap[j].insert(soundInfo->fileId);
                             return;
                         }
 
@@ -2111,6 +2111,7 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                         case nw::snd::internal::ItemType_Sound:
                         {
                             addSoundFiles(itemInfoEx.itemId, true);
+                            // addSoundFiles(itemInfoEx.itemId, false);
                             break;
                         }
 
@@ -4729,7 +4730,7 @@ void Bfsar::save_(sead::FileHandle& handle)
             SEAD_ASSERT(b);
 
             sead::FormatFixedSafeString<512> savePath("%s/%s.save.bfstm", dir.cstr(), path); // TODO
-            //sead::FormatFixedSafeString<512> savePath("%s/%s", dir.cstr(), path);
+            // sead::FormatFixedSafeString<512> savePath("%s/%s", dir.cstr(), path);
             //SEAD_PRINT("%s\n", savePath.cstr());
 
             b = sead::Path::getDirectoryName(&dir, savePath);

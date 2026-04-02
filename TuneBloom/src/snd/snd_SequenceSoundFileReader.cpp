@@ -14,14 +14,14 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(sequenceFile);
 
-        //if (sead::MemUtil::compare(header->signature, "CSEQ", 4) != 0)
+        // if (sead::MemUtil::compare(header->signature, "CSEQ", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FSEQ", 4) != 0)
         {
             SEAD_ASSERT_MSG(false, "not a SEQUENCE file");
             return;
         }
 
-        //if (false)
+        // if (false)
         if (!(0x00010000 <= header->version && header->version <= 0x00020000))
         {
             SEAD_ASSERT_MSG(false, "SEQUENCE version not supported (0x%08X)", (u32)header->version);

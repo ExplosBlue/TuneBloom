@@ -28,14 +28,14 @@ void BankFileReader::Initialize(const void* bankFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(bankFile);
 
-        //if (sead::MemUtil::compare(header->signature, "CBNK", 4) != 0)
+        // if (sead::MemUtil::compare(header->signature, "CBNK", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FBNK", 4) != 0)
         {
             SEAD_ASSERT_MSG(false, "not a BANK file");
             return;
         }
 
-        //if (false)
+        // if (false)
         if (header->version != 0x00010000)
         {
             SEAD_ASSERT_MSG(false, "BANK version not supported (0x%08X)", (u32)header->version);

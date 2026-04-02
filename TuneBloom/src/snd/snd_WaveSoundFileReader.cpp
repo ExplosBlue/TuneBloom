@@ -13,14 +13,14 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveSoundFile);
 
-        //if (sead::MemUtil::compare(header->signature, "CWSD", 4) != 0)
+        // if (sead::MemUtil::compare(header->signature, "CWSD", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FWSD", 4) != 0)
         {
             SEAD_ASSERT_MSG(false, "not a WAVE SOUND file");
             return;
         }
 
-        //if (false)
+        // if (false)
         if (!(0x00010000 <= header->version && header->version <= 0x00010100))
         {
             SEAD_ASSERT_MSG(false, "WAVE SOUND version not supported (0x%08X)", (u32)header->version);

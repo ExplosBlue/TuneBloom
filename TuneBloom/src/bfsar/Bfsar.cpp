@@ -570,7 +570,7 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         u32 seqFileSize = 0;
         const void* seqFile = soundArchive.detail_GetFileAddress(i, &seqFileSize);
 
-        //if (!seqFile || sead::MemUtil::compare(seqFile, "CSEQ", 4) != 0)
+        // if (!seqFile || sead::MemUtil::compare(seqFile, "CSEQ", 4) != 0)
         if (!seqFile || sead::MemUtil::compare(seqFile, "FSEQ", 4) != 0)
         {
             continue;
@@ -1318,7 +1318,7 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         u32 bankFileSize = 0;
         const void* bankFile = soundArchive.detail_GetFileAddress(i, &bankFileSize);
 
-        //if (!bankFile || sead::MemUtil::compare(bankFile, "CBNK", 4) != 0)
+        // if (!bankFile || sead::MemUtil::compare(bankFile, "CBNK", 4) != 0)
         if (!bankFile || sead::MemUtil::compare(bankFile, "FBNK", 4) != 0)
         {
             continue;
@@ -1560,7 +1560,7 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             u8* strmFile = device->tryLoad(loadArg);
             if (strmFile)
             {
-                //if (sead::MemUtil::compare(strmFile, "CSTM", 4) == 0)
+                // if (sead::MemUtil::compare(strmFile, "CSTM", 4) == 0)
                 if (sead::MemUtil::compare(strmFile, "FSTM", 4) == 0)
                 {
                     validStrmFile = true;

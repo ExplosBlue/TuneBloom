@@ -33,14 +33,14 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
             {
                 const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveFile);
 
-                //if (sead::MemUtil::compare(header->signature, "CWAV", 4) != 0)
+                // if (sead::MemUtil::compare(header->signature, "CWAV", 4) != 0)
                 if (sead::MemUtil::compare(header->signature, "FWAV", 4) != 0)
                 {
                     SEAD_ASSERT_MSG(false, "not a WAVE file");
                     return;
                 }
 
-                //if (false)
+                // if (false)
                 if (!(0x00010000 <= header->version && header->version <= 0x00010200))
                 {
                     SEAD_ASSERT_MSG(false, "WAVE version not supported (0x%08X)", (u32)header->version);

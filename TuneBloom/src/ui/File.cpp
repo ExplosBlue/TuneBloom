@@ -214,7 +214,7 @@ void OpenFile()
     handle.read(magic, 4);
     handle.close();
 
-    //if (sead::MemUtil::compare(magic, "CSAR", 4) != 0)
+    // if (sead::MemUtil::compare(magic, "CSAR", 4) != 0)
     if (sead::MemUtil::compare(magic, "FSAR", 4) != 0)
     {
         PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR file", nullptr });

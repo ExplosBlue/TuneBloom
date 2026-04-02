@@ -1016,39 +1016,41 @@ void MmlParser::noteOnCommandProc(SequenceTrack* track, s32 key, s32 velocity, s
     track->noteOn(key, velocity, length, tieFlag);
 }
 
+bool sSwapLittleSeqArgs = true; //? For future BCSAR support
+
 u16 MmlParser::Read16(const u8** ptr)
 {
-    if (sFileEndian == sead::Endian::eBig)
+    if (sFileEndian == sead::Endian::eLittle && sSwapLittleSeqArgs)
     {
         u16 ret = ReadByte(ptr);
-        ret <<= 8;
-        ret |= ReadByte(ptr);
+        ret |= (ReadByte(ptr) << 8);
         return ret;
     }
     else
     {
         u16 ret = ReadByte(ptr);
-        ret |= (ReadByte(ptr) << 8);
+        ret <<= 8;
+        ret |= ReadByte(ptr);
         return ret;
     }
 }
 
 u32 MmlParser::Read24(const u8** ptr)
 {
-    if (sFileEndian == sead::Endian::eBig)
+    if (sFileEndian == sead::Endian::eLittle && sSwapLittleSeqArgs)
     {
         u32 ret = ReadByte(ptr);
-        ret <<= 8;
-        ret |= ReadByte(ptr);
-        ret <<= 8;
-        ret |= ReadByte(ptr);
+        ret |= (ReadByte(ptr) << 8);
+        ret |= (ReadByte(ptr) << 16);
         return ret;
     }
     else
     {
         u32 ret = ReadByte(ptr);
-        ret |= (ReadByte(ptr) << 8);
-        ret |= (ReadByte(ptr) << 16);
+        ret <<= 8;
+        ret |= ReadByte(ptr);
+        ret <<= 8;
+        ret |= ReadByte(ptr);
         return ret;
     }
 }

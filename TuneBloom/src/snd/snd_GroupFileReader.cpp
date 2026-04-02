@@ -14,14 +14,14 @@ GroupFileReader::GroupFileReader(const void* groupFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(groupFile);
 
-        //if (sead::MemUtil::compare(header->signature, "CGRP", 4) != 0)
+        // if (sead::MemUtil::compare(header->signature, "CGRP", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FGRP", 4) != 0)
         {
             SEAD_ASSERT_MSG(false, "not a GROUP file");
             return;
         }
 
-        //if (false)
+        // if (false)
         if (header->version != 0x00010000)
         {
             SEAD_ASSERT_MSG(false, "GROUP version not supported (0x%08X)", (u32)header->version);

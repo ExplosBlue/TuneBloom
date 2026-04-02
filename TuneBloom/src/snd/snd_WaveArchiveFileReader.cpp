@@ -32,14 +32,14 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(pWaveArchiveFile);
 
-        //if (sead::MemUtil::compare(header->signature, "CWAR", 4) != 0)
+        // if (sead::MemUtil::compare(header->signature, "CWAR", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FWAR", 4) != 0)
         {
             SEAD_ASSERT_MSG(false, "not a WAVE ARCHIVE file");
             return;
         }
 
-        //if (false)
+        // if (false)
         if (header->version != 0x00010000)
         {
             SEAD_ASSERT_MSG(false, "WAVE ARCHIVE version not supported (0x%08X)", (u32)header->version);

@@ -1,6 +1,7 @@
 #include <bfsar/BfwarFile.h>
 
 #include <bfsar/WaveFile.h>
+#include <ui/UI.h>
 
 #include <snd/snd_WaveArchiveFile.h>
 
@@ -36,6 +37,7 @@ u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
             u32 pos = writer.getPosition();
             {
+                wave->setup(mEndian, sBfsar.getVersionForBfwav());
                 wave->write(handle, stream, mEndian, i == mWaveFiles.size() - 1);
             }
             u32 size = writer.getPosition() - pos;

@@ -242,6 +242,16 @@ public:
         return 0x00010000;
     }
 
+    u32 getVersionForBfwav() const
+    {
+        if (mVersion >= 0x00020200)
+            return 0x00010200;
+        else if (mVersion >= 0x00020000)
+            return 0x00010100;
+
+        return 0x00010000;
+    }
+
     u32 getVersionForBfgrp() const
     {
         return 0x00010000;

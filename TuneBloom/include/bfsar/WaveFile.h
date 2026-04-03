@@ -105,6 +105,12 @@ public:
 
     void drawUI() override;
 
+    void setup(sead::Endian::Types endian, u32 version) const
+    {
+        mEndian = endian;
+        mVersion = version;
+    }
+
 private:
     void doRead(const void* fileAddr) override;
     u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const override;
@@ -113,9 +119,9 @@ public:
     bool readWavFile(const sead::SafeString& path, Encoding encoding);
     bool writeWavFile(const sead::SafeString& path, s32 channelIdx = -1);
 
-    bool isOriginalLoopAvailable() const
+    static bool isOriginalLoopAvailable(u32 version)
     {
-        return mVersion >= 0x00010200;
+        return version >= 0x00010200;
     }
 
     sead::Endian::Types getDataEndian() const

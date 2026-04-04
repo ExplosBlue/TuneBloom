@@ -367,7 +367,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
 
                 if (keyRegionRef->offset == nw::snd::internal::Util::Reference::INVALID_OFFSET)
                 {
-                    SEAD_ASSERT(keyRegionRef->typeId == nw::snd::internal::ElementType_BankFile_NullInfo);
+                    SEAD_ASSERT(keyRegionRef->typeId == nw::snd::internal::ElementType_BankFile_NullInfo); //? BFSARs saved with Citric break this assertion...
 
                     keyMin = keyMax + 1;
                     continue;
@@ -470,27 +470,12 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
 
 void BankFile::Instrument::drawUI()
 {
-    ImGui::Text("ProgramNo: %u", mProgramNo);
-
-    for (Item* keyRegionItem : mKeyRegionList)
+    static ImS16 cStepS16 = 1;
     {
-        KeyRegion* keyRegion = static_cast<KeyRegion*>(keyRegionItem);
-
-        if (ImGui::TreeNode(sead::FormatFixedSafeString<32>("KeyRegion (%u, %u)", keyRegion->getKeyMin(), keyRegion->getKeyMax()).cstr()))
+        s16 program = getProgramNo();
+        if (ImGui::InputScalar("Program", ImGuiDataType_S16, &program, &cStepS16))
         {
-            for (Item* velocityRegionItem : keyRegion->getVelocityRegionList())
-            {
-                VelocityRegion* velocityRegion = static_cast<VelocityRegion*>(velocityRegionItem);
-
-                if (ImGui::TreeNode(sead::FormatFixedSafeString<32>("VelocityRegion (%u, %u)", velocityRegion->getVelocityMin(), velocityRegion->getVelocityMax()).cstr()))
-                {
-                    velocityRegion->drawUI();
-
-                    ImGui::TreePop();
-                }
-            }
-
-            ImGui::TreePop();
+            setProgramNo(program);
         }
     }
 }
@@ -557,28 +542,730 @@ void BankFile::drawUI()
     InnerFile::drawUI();
 }
 
+static BankFile::KeyRegion* sContextKeyRegion = nullptr;
+
+void DeleteVeloctity(BankFile::KeyRegion* keyRegion, BankFile::VelocityRegion* velocityRegion)
+{
+    sSubSelectedItem = nullptr;
+    sSelectedItemIsSubWindow = false;
+    sContextKeyRegion = nullptr;
+
+    snd::internal::driver::SoundThreadLock lock;
+
+    if (keyRegion->getVelocityRegionList().size() == 1) //? Deleted last VelocityRegion, this KeyRegion can die now
+    {
+        delete keyRegion;
+    }
+    else
+    {
+        //? VelocityRegions can't contain gaps, so handle that
+
+        if (velocityRegion == keyRegion->getVelocityRegionList().front()) //? VelocityRegion is the bottom one, extend the one above to cover it
+        {
+            velocityRegion->getNext(*keyRegion)->setVelocityMin(0);
+        }
+        else if (velocityRegion == keyRegion->getVelocityRegionList().back()) //? VelocityRegion is the top one, extend the one below to cover it
+        {
+            velocityRegion->getPrev(*keyRegion)->setVelocityMax(127);
+        }
+        else //? VelocityRegion is sandwiched, extend the one below to cover it
+        {
+            velocityRegion->getPrev(*keyRegion)->setVelocityMax(velocityRegion->getVelocityMax());
+        }
+
+        delete velocityRegion;
+    }
+}
+
+void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* keyRegion, BankFile::VelocityRegion* velocityRegion)
+{
+    auto copyVel = [](BankFile::VelocityRegion* dst, BankFile::VelocityRegion* src)
+    {
+        dst->getWaveFileRef().attach(src->getWaveFileRef().getItem());
+        dst->setOriginalKey(src->getOriginalKey());
+        dst->setVolume(src->getVolume());
+        dst->setPan(src->getPan());
+        dst->setPitch(src->getPitch());
+        dst->setIsIgnoreNoteOff(src->getIsIgnoreNoteOff());
+        dst->setKeyGroup(src->getKeyGroup());
+        dst->setInterpolationType(src->getInterpolationType());
+        dst->setAdshrCurve(src->getAdshrCurve());
+    };
+
+    if (ImGui::BeginPopup("VelocityRegionContextMenu"))
+    {
+        bool disable = false;
+        if (keyRegion->getVelocityRegionList().size() > 1)
+        {
+            disable = true;
+            ImGui::BeginDisabled();
+        }
+
+        if (ImGui::MenuItem("Split Key Region") && keyRegion->getKeyNum() > 1)
+        {
+            snd::internal::driver::SoundThreadLock lock;
+
+            u8 newKeyMax = keyRegion->getKeyMax();
+            u8 newKeyMin = (keyRegion->getKeyMax() + keyRegion->getKeyMin()) / 2 + 1;
+
+            keyRegion->setKeyMax(newKeyMin - 1, *instrument);
+
+            BankFile::KeyRegion* newKeyRegion = new BankFile::KeyRegion(newKeyMin, newKeyMax);
+            newKeyRegion->setId(0);
+            newKeyRegion->setEnableName(true);
+            newKeyRegion->getName() = "KeyRegion";
+
+            keyRegion->insertBack(newKeyRegion);
+
+            sBfsar.updateList(instrument->getKeyRegionList());
+
+            BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(0, 127);
+            newVelRegion->setId(0);
+            newVelRegion->setEnableName(true);
+            newVelRegion->getName() = "VelocityRegion";
+            copyVel(newVelRegion, velocityRegion);
+
+            newKeyRegion->getVelocityRegionList().pushBack(newVelRegion);
+        }
+
+        if (disable)
+        {
+            ImGui::EndDisabled();
+        }
+
+        if (ImGui::MenuItem("Split Velocity Region") && velocityRegion->getVelocityNum() > 1)
+        {
+            snd::internal::driver::SoundThreadLock lock;
+
+            u8 newVelMax = velocityRegion->getVelocityMax();
+            u8 newVelMin = (velocityRegion->getVelocityMax() + velocityRegion->getVelocityMin()) / 2 + 1;
+
+            velocityRegion->setVelocityMax(newVelMin - 1);
+
+            BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(newVelMin, newVelMax);
+            newVelRegion->setId(0);
+            newVelRegion->setEnableName(true);
+            newVelRegion->getName() = "VelocityRegion";
+            copyVel(newVelRegion, velocityRegion);
+
+            velocityRegion->insertBack(newVelRegion);
+
+            sBfsar.updateList(keyRegion->getVelocityRegionList());
+        }
+
+        if (ImGui::MenuItem("Delete"))
+        {
+            DeleteVeloctity(keyRegion, velocityRegion);
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+// YEAHH i clanked it so what
+
+enum class DragMode
+{
+    None,
+    ResizeL,
+    ResizeR
+};
+
+struct DragState
+{
+    DragMode mode = DragMode::None;
+    BankFile::KeyRegion* region = nullptr;
+    BankFile::KeyRegion* prev = nullptr;
+    BankFile::KeyRegion* next = nullptr;
+
+    ImVec2 initialCanvasPos;
+};
+
+static DragState sDrag;
+
+static const s32 NoteIsDark[12] = { 0,1,0,1,0,0,1,0,1,0,1,0 };
+static const s32 NoteLightNumber[12] = { 1,1,2,2,3,4,4,5,5,6,6,7 };
+static const f32 NoteDarkOffset[12] = {
+    0.0f, -2.0f/3.0f, 0.0f, -1.0f/3.0f, 0.0f, 0.0f,
+    -2.0f/3.0f, 0.0f, -0.5f, 0.0f, -1.0f/3.0f, 0.0f
+};
+
+#define IM_ROUND(x) ((f32)(s32)((x) + 0.5f))
+
+void DrawKeyboardWithRegions(
+    f32 width,
+    f32 keyboardHeight,
+    f32 regionHeight,
+    s32 beginNote,
+    s32 endNote,
+    BankFile::Instrument* instrument
+)
+{
+    ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+    ImVec2 canvasSize(width, regionHeight + keyboardHeight);
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+
+    if (sDrag.mode != DragMode::None)
+    {
+        canvasPos = sDrag.initialCanvasPos;
+    }
+
+    s32 fixedBegin = beginNote;
+    if (NoteIsDark[fixedBegin % 12] > 0)
+        fixedBegin++;
+
+    s32 fixedEnd = endNote;
+    if (NoteIsDark[fixedEnd % 12] > 0)
+        fixedEnd--;
+
+    s32 countWhite = 0;
+    for (s32 i = fixedBegin; i <= fixedEnd; i++)
+    {
+        if (NoteIsDark[i % 12] == 0)
+            countWhite++;
+    }
+    
+    f32 noteWidth = width / (f32)countWhite;
+    f32 noteWidth2 = noteWidth * 0.6f;
+
+    auto GetWhiteIndex = [&](s32 key) -> s32
+    {
+        s32 absWhite = (key / 12) * 7 + NoteLightNumber[key % 12] - 1;
+        s32 baseAbsWhite = (fixedBegin / 12) * 7 + NoteLightNumber[fixedBegin % 12] - 1;
+        return absWhite - baseAbsWhite;
+    };
+
+    auto GetKeyRect = [&](s32 key, f32& outMin, f32& outMax)
+    {
+        s32 note = key % 12;
+        if (NoteIsDark[note])
+        {
+            f32 baseX = IM_ROUND(GetWhiteIndex(key + 1) * noteWidth);
+            f32 offset = NoteDarkOffset[note] * noteWidth2;
+            outMin = IM_ROUND(baseX + offset);
+            outMax = IM_ROUND(baseX + offset + noteWidth2);
+        }
+        else
+        {
+            s32 wIndex = GetWhiteIndex(key);
+            outMin = IM_ROUND(wIndex * noteWidth);
+            outMax = IM_ROUND((wIndex + 1) * noteWidth);
+        }
+    };
+
+    auto XToKey = [&](f32 x) -> s32
+    {
+        f32 local = x - canvasPos.x;
+        s32 bestKey = beginNote;
+        f32 minDist = 99999.0f;
+        for (s32 k = fixedBegin; k <= fixedEnd; k++)
+        {
+            f32 kMin, kMax;
+            GetKeyRect(k, kMin, kMax);
+
+            f32 center = (kMin + kMax) * 0.5f;
+            f32 d = fabsf(local - center);
+            if (d < minDist)
+            {
+                minDist = d; bestKey = k;
+            }
+        }
+
+        return bestKey;
+    };
+
+    ImVec2 mouse = ImGui::GetIO().MousePos;
+    bool mouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    bool mouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+
+    // BG
+    draw->AddRectFilled(
+        canvasPos,
+        ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+        IM_COL32(20, 20, 30, 255)
+    );
+
+    if (instrument)
+    {
+        f32 edgeSize = 6.0f;
+        static f32 edgeOffset = 0.0f;
+
+        ImDrawListSplitter splitter;
+        splitter.Split(draw, 2);
+
+        enum class AddMode
+        {
+            None,
+            Front,
+            Back,
+            After
+        };
+
+        AddMode addMode = AddMode::None;
+        BankFile::KeyRegion* addNode = nullptr;
+
+        if (instrument->getKeyRegionList().size() == 0)
+        {
+            ImVec2 n0(canvasPos.x, canvasPos.y);
+            ImVec2 n1(canvasPos.x + canvasSize.x, canvasPos.y + regionHeight);
+
+            draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+            ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(instrument));
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            {
+                addMode = AddMode::Front;
+                addNode = nullptr;
+            }
+        }
+
+        bool drawGrabBar = false;
+        for (Item* keyRegionItem : instrument->getKeyRegionList())
+        {
+            splitter.SetCurrentChannel(draw, 0);
+
+            BankFile::KeyRegion* keyRegion = static_cast<BankFile::KeyRegion*>(keyRegionItem);
+
+            BankFile::KeyRegion* prev = keyRegion->getPrevNeighbor(*instrument);
+            BankFile::KeyRegion* next = keyRegion->getNextNeighbor(*instrument);
+
+            f32 x0, ignored_max;
+            GetKeyRect(keyRegion->getKeyMin(), x0, ignored_max);
+
+            f32 ignored_min, x1;
+            if (keyRegion->getKeyMax() == 127)
+            {
+                x1 = canvasSize.x; //? Special case for the last key to fill to the end
+            }
+            else
+            {
+                GetKeyRect(keyRegion->getKeyMax() + 1, x1, ignored_min);
+            }
+
+            ImVec2 r0(canvasPos.x + x0, canvasPos.y);
+            ImVec2 r1(canvasPos.x + x1, canvasPos.y + regionHeight);
+
+            if (keyRegion == instrument->getKeyRegionList().front())
+            {
+                if (keyRegion->getKeyMin() != 0)
+                {
+                    ImVec2 n0(canvasPos.x, canvasPos.y);
+                    ImVec2 n1(canvasPos.x + x0, canvasPos.y + regionHeight);
+
+                    draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+                    ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(keyRegion));
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                    {
+                        addMode = AddMode::Front;
+                        addNode = keyRegion;
+                    }
+                }
+            }
+
+            if (keyRegion == instrument->getKeyRegionList().back())
+            {
+                if (keyRegion->getKeyMax() != 127)
+                {
+                    ImVec2 n0(canvasPos.x + x1, canvasPos.y);
+                    ImVec2 n1(canvasPos.x + canvasSize.x, canvasPos.y + regionHeight);
+
+                    draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+                    ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(keyRegion));
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                    {
+                        addMode = AddMode::Back;
+                        addNode = keyRegion;
+                    }
+                }
+            }
+
+            {
+                BankFile::KeyRegion* next = keyRegion->getNext(*instrument);
+                if (next && keyRegion->getKeyMax() + 1 != next->getKeyMin())
+                {
+                    f32 next_x0;
+                    GetKeyRect(next->getKeyMin(), next_x0, ignored_max);
+
+                    ImVec2 n0(canvasPos.x + x1, canvasPos.y);
+                    ImVec2 n1(canvasPos.x + next_x0, canvasPos.y + regionHeight);
+
+                    draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+                    ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(keyRegion));
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                    {
+                        addMode = AddMode::After;
+                        addNode = keyRegion;
+                    }
+                }
+            }
+
+            bool hoveredRegionY = mouse.y >= r0.y && mouse.y <= r1.y;
+
+            bool onLeftEdge  = hoveredRegionY && (mouse.x <= r0.x + edgeSize) && (mouse.x >= r0.x - edgeSize);
+            bool onRightEdge = hoveredRegionY && (mouse.x >= r1.x - edgeSize) && (mouse.x <= r1.x + edgeSize);
+
+            for (Item* velRegionItem : keyRegion->getVelocityRegionList())
+            {
+                BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(velRegionItem);
+
+                s32 velMin = velRegion->getVelocityMin();
+                s32 velMax = velRegion->getVelocityMax();
+
+                //? Map velocity (0–127) to Y
+                f32 y0 = regionHeight * (1.0f - (velMax + 1) / 128.0f);
+                f32 y1 = regionHeight * (1.0f - velMin / 128.0f);
+
+                ImVec2 p0 = ImVec2(canvasPos.x + x0, canvasPos.y + y0);
+                ImVec2 p1 = ImVec2(canvasPos.x + x1, canvasPos.y + y1);
+
+                ImGui::ItemAdd(ImRect(p0, p1), ImGui::GetID(velRegion));
+
+                if (ImGui::IsItemHovered())
+                {
+                    drawGrabBar = true;
+                }
+
+                ImU32 color = IM_COL32(140, 140, 140, 255);
+                if (sSubSelectedItem == velRegion)
+                {
+                    color = ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_Header));
+                }
+
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+                {
+                    //? Select VelocityRegion
+                    sSubSelectedItem = velRegion;
+                    sSelectedItemIsSubWindow = true;
+                    sContextKeyRegion = keyRegion;
+
+                    if (sDrag.mode == DragMode::None)
+                    {
+                        if (onLeftEdge)
+                        {
+                            sDrag.mode = DragMode::ResizeL;
+                            edgeOffset = r0.x - mouse.x;
+                        }
+                        else if (onRightEdge)
+                        {
+                            sDrag.mode = DragMode::ResizeR;
+                            edgeOffset = r1.x - mouse.x;
+                        }
+
+                        sDrag.region = keyRegion;
+                        sDrag.prev = prev;
+                        sDrag.next = next;
+                        sDrag.initialCanvasPos = canvasPos;
+                    }
+                }
+                else if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                {
+                    ImGui::OpenPopup("VelocityRegionContextMenu");
+                    sSubSelectedItem = velRegion;
+                    sSelectedItemIsSubWindow = true;
+                    sContextKeyRegion = keyRegion;
+                }
+
+                draw->AddRectFilled(p0, p1, color);
+                draw->AddRect(p0, p1, IM_COL32(0,0,0,255));
+
+                const char* name = "(null)";
+                if (velRegion->getWaveFileRef().isAttached())
+                {
+                    name = velRegion->getWaveFileRef().getItem()->getName().cstr();
+                }
+
+                draw->PushClipRect(p0, p1, true);
+                draw->AddText(
+                    nullptr,
+                    0,
+                    ImVec2(p0.x + 3, p0.y + 2),
+                    IM_COL32(255, 255, 255, 255),
+                    name,
+                    nullptr,
+                    p1.x - p0.x - 6
+                );
+                draw->PopClipRect();
+            }
+
+            splitter.SetCurrentChannel(draw, 1);
+
+            if (drawGrabBar)
+            {
+                if (sDrag.mode == DragMode::None)
+                {
+                    if (onLeftEdge)
+                    {
+                        draw->AddLine(
+                            ImVec2(r0.x, r0.y),
+                            ImVec2(r0.x, r1.y),
+                            IM_COL32(255, 255, 0, 255),
+                            2.0f
+                        );
+
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                    }
+                    else if (onRightEdge)
+                    {
+                        draw->AddLine(
+                            ImVec2(r1.x, r0.y),
+                            ImVec2(r1.x, r1.y),
+                            IM_COL32(255, 255, 0, 255),
+                            2.0f
+                        );
+
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                    }
+                }
+            }
+        }
+
+        splitter.Merge(draw);
+
+        if (addMode != AddMode::None)
+        {
+            snd::internal::driver::SoundThreadLock lock;
+
+            BankFile::KeyRegion* newRegion = nullptr;
+            if (addMode == AddMode::Front)
+            {
+                if (addNode)
+                {
+                    newRegion = new BankFile::KeyRegion(0, addNode->getKeyMin() - 1);
+                    addNode->insertFront(newRegion);
+                }
+                else
+                {
+                    newRegion = new BankFile::KeyRegion(0, 127);
+                    instrument->getKeyRegionList().pushBack(newRegion);
+                }
+            }
+            else if (addMode == AddMode::Back)
+            {
+                SEAD_ASSERT(addNode);
+                newRegion = new BankFile::KeyRegion(addNode->getKeyMax() + 1, 127);
+                addNode->insertBack(newRegion);
+            }
+            else if (addMode == AddMode::After)
+            {
+                SEAD_ASSERT(addNode);
+                BankFile::KeyRegion* next = addNode->getNext(*instrument);
+                u8 newMin = addNode->getKeyMax() + 1;
+                u8 newMax = next ? next->getKeyMin() - 1 : 127;
+
+                newRegion = new BankFile::KeyRegion(newMin, newMax);
+                addNode->insertBack(newRegion);
+            }
+
+            newRegion->setId(0);
+            newRegion->setEnableName(true);
+            newRegion->getName() = "KeyRegion";
+
+            sBfsar.updateList(instrument->getKeyRegionList());
+
+            BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(0, 127);
+            newVelRegion->setId(0);
+            newVelRegion->setEnableName(true);
+            newVelRegion->getName() = "VelocityRegion";
+
+            newRegion->getVelocityRegionList().pushBack(newVelRegion);
+        }
+
+        static s32 mouseKey = 0;
+        if (sDrag.mode != DragMode::None && mouseDown)
+        {
+            mouseKey = XToKey(mouse.x + edgeOffset + (sDrag.mode == DragMode::ResizeL ? 1.0f : -1.0f));
+            // draw->AddLine(
+            //     ImVec2(mouse.x + edgeOffset, canvasPos.y),
+            //     ImVec2(mouse.x + edgeOffset, canvasPos.y + regionHeight),
+            //     IM_COL32(255, 0, 0, 255),
+            //     1.0f
+            // );
+
+            BankFile::KeyRegion* region = sDrag.region;
+
+            if (sDrag.mode == DragMode::ResizeL)
+            {
+                if (mouseKey > region->getKeyMax())
+                {
+                    mouseKey = region->getKeyMax();
+                }
+
+                if (region->getPrev(*instrument))
+                {
+                    BankFile::KeyRegion* prev = region->getPrev(*instrument);
+                    if (mouseKey < prev->getKeyMin() + 1)
+                    {
+                        mouseKey = prev->getKeyMin() + 1;
+                    }
+                }
+
+                if (sDrag.prev == nullptr && region->getPrev(*instrument))
+                {
+                    mouseKey = std::clamp(mouseKey, region->getPrev(*instrument)->getKeyMax() + 1, (s32)region->getKeyMax());
+                }
+            }
+            else if (sDrag.mode == DragMode::ResizeR)
+            {
+                if (mouseKey < region->getKeyMin())
+                {
+                    mouseKey = region->getKeyMin();
+                }
+
+                if (region->getNext(*instrument))
+                {
+                    BankFile::KeyRegion* next = region->getNext(*instrument);
+                    if (mouseKey > next->getKeyMax() - 1)
+                    {
+                        mouseKey = next->getKeyMax() - 1;
+                    }
+                }
+
+                if (sDrag.next == nullptr && region->getNext(*instrument))
+                {
+                    mouseKey = std::clamp(mouseKey, (s32)region->getKeyMin(), region->getNext(*instrument)->getKeyMin() - 1);
+                }
+            }
+
+            if (sDrag.mode == DragMode::ResizeL)
+            {
+                snd::internal::driver::SoundThreadLock lock;
+
+                s32 newMin = mouseKey;
+
+                if (sDrag.prev)
+                {
+                    sDrag.prev->setKeyMax(newMin - 1, *instrument);
+                }
+
+                region->setKeyMin(newMin, *instrument);
+
+                if (sDrag.prev)
+                {
+                    sDrag.prev->setKeyMax(region->getKeyMin() - 1, *instrument);
+                }
+            }
+            else if (sDrag.mode == DragMode::ResizeR)
+            {
+                snd::internal::driver::SoundThreadLock lock;
+
+                s32 newMax = mouseKey;
+
+                if (sDrag.next)
+                {
+                    sDrag.next->setKeyMin(newMax + 1, *instrument);
+                }
+
+                region->setKeyMax(newMax, *instrument);
+
+                if (sDrag.next)
+                {
+                    sDrag.next->setKeyMin(region->getKeyMax() + 1, *instrument);
+                }
+            }
+
+            f32 xEdge, dummy;
+            if (sDrag.mode == DragMode::ResizeL)
+                GetKeyRect(mouseKey, xEdge, dummy);
+            else
+                GetKeyRect(mouseKey + 1, xEdge, dummy);
+
+            if (sDrag.mode != DragMode::ResizeL && mouseKey >= 127)
+            {
+                xEdge = canvasSize.x; //? Special case for the last key to fill to the end
+            }
+            
+            f32 lx = canvasPos.x + xEdge;
+            draw->AddLine(ImVec2(lx, canvasPos.y), ImVec2(lx, canvasPos.y + regionHeight), IM_COL32(255, 255, 0, 255), 2.0f);
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        }
+
+        if (sDrag.mode != DragMode::None && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            sDrag = {};
+        }
+
+        if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Delete) && sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
+        {
+            BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
+            BankFile::KeyRegion* keyRegion = sContextKeyRegion;
+            DeleteVeloctity(keyRegion, velRegion);
+        }
+
+        if (ImGui::IsPopupOpen("VelocityRegionContextMenu") && sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
+        {
+            BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
+            BankFile::KeyRegion* keyRegion = sContextKeyRegion;
+            VelocityContextMenu(instrument, keyRegion, velRegion);
+        }
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + regionHeight));
+
+    static s32 prevNote = -1;
+
+    ImGui_PianoKeyboard(
+        "Keyboard",
+        ImVec2(width, keyboardHeight),
+        &prevNote,
+        beginNote,
+        endNote,
+        &KeyboardFunc,
+        instrument,
+        nullptr
+    );
+}
+
+InstanciateItemCallback CreateInstrumentFunc(bool clear)
+{
+    auto doCreate = []() -> Item*
+    {
+        BankFile::Instrument* instr = new BankFile::Instrument();
+        instr->setEnableName(true);
+        instr->getName() = "Instrument";
+
+        BankFile::KeyRegion* keyRegion = new BankFile::KeyRegion(0, 127);
+        keyRegion->setId(0);
+        keyRegion->setEnableName(true);
+        keyRegion->getName() = "KeyRegion";
+
+        instr->getKeyRegionList().pushBack(keyRegion);
+
+        BankFile::VelocityRegion* velRegion = new BankFile::VelocityRegion(0, 127);
+        velRegion->setId(0);
+        velRegion->setEnableName(true);
+        velRegion->getName() = "VelocityRegion";
+
+        keyRegion->getVelocityRegionList().pushBack(velRegion);
+
+        return instr;
+    };
+
+    return doCreate;
+}
+
 void BankFile::drawFileUI()
 {
     if (ImGui::BeginChild("Instruments", ImVec2(0.0f, ImGui::GetWindowHeight() / 2.0f), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeY))
     {
-        DrawAllItemsUI("Instrument", mInstrumentList);
+        DrawAllItemsUI("Instrument", mInstrumentList, &CreateInstrumentFunc, nullptr, nullptr, nullptr, true);
     }
     ImGui::EndChild();
 
     if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
     {
-        static s32 sPrevNoteActive = -1;
+        f32 width = ImGui::GetContentRegionAvail().x;
 
-        ImVec2 size(
-            ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x,
-            sead::Mathf::min(70, ImGui::GetWindowContentRegionMax().y - ImGui::GetStyle().WindowPadding.y)
+        DrawKeyboardWithRegions(
+            width,
+            70.0f, // keyboard height
+            128.0f,  // region height
+            0,
+            127,
+            (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::BankFileInstrument)
+                ? static_cast<Instrument*>(sSelectedItem)
+                : nullptr
         );
-
-        //ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        //drawList->AddRectFilled(ImVec2(0.0f, 0.0f), ImVec2(50.0f, 50.0f), ImColor(1.0f, 0.0f, 1.0f));
-
-        ImGui_PianoKeyboard("Keyboard", size, &sPrevNoteActive, 0, 127, &KeyboardFunc, sSelectedItem, nullptr);
     }
     ImGui::EndChild();
 }

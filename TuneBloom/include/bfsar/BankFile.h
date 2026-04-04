@@ -16,6 +16,9 @@ class BankFile : public Item, public InnerFile
     SEAD_RTTI_OVERRIDE(BankFile, InnerFile);
 
 public:
+    class Instrument;
+    class KeyRegion;
+
     class VelocityRegion : public Item
     {
     public:
@@ -32,7 +35,7 @@ public:
             , mIsIgnoreNoteOff(false)
             , mKeyGroup(0)
             , mInterpolationType(0)
-            , mAdshrCurve()
+            , mAdshrCurve(127, 127, 127, 0, 127)
         {
             mItemType = ItemType::BankFileVelocityRegion;
 
@@ -48,9 +51,29 @@ public:
             return mVelocityMin;
         }
 
+        // TODO: Check ranges
+        void setVelocityMin(u8 velocityMin)
+        {
+            mVelocityMin = velocityMin;
+        }
+
         u8 getVelocityMax() const
         {
             return mVelocityMax;
+        }
+
+        // TODO: Check ranges
+        void setVelocityMax(u8 velocityMax)
+        {
+            mVelocityMax = velocityMax;
+        }
+
+        VelocityRegion* getPrev(const KeyRegion& parentRegion);
+        VelocityRegion* getNext(const KeyRegion& parentRegion);
+
+        u8 getVelocityNum() const
+        {
+            return mVelocityMax - mVelocityMin + 1;
         }
 
         const ItemReference& getWaveFileRef() const
@@ -209,9 +232,23 @@ public:
             return mKeyMin;
         }
 
+        void setKeyMin(u8 keyMin, const Instrument& parentInstrument);
+
         u8 getKeyMax() const
         {
             return mKeyMax;
+        }
+
+        void setKeyMax(u8 keyMax, const Instrument& parentInstrument);
+
+        KeyRegion* getPrev(const Instrument& parentInstrument);
+        KeyRegion* getNext(const Instrument& parentInstrument);
+        KeyRegion* getPrevNeighbor(const Instrument& parentInstrument);
+        KeyRegion* getNextNeighbor(const Instrument& parentInstrument);
+
+        u8 getKeyNum() const
+        {
+            return mKeyMax - mKeyMin + 1;
         }
 
         const VelocityRegion::List& getVelocityRegionList() const
@@ -249,6 +286,12 @@ public:
         s16 getProgramNo() const
         {
             return mProgramNo;
+        }
+
+        void setProgramNo(s16 programNo)
+        {
+            programNo = sead::MathCalcCommon<s16>::clamp2(0, programNo, 32767);
+            mProgramNo = programNo;
         }
 
         const KeyRegion* getKeyRegion(u8 key) const
@@ -385,3 +428,103 @@ private:
     mutable const std::unordered_map<const WaveFile*, u32>* mWaveArchiveWaveFilesIndexes;
     mutable bool mUpdateWriteInfo;
 };
+
+inline void BankFile::KeyRegion::setKeyMin(u8 keyMin, const Instrument& parentInstrument)
+{
+    if (keyMin > 127)
+    {
+        keyMin = 127;
+    }
+
+    if (keyMin > mKeyMax)
+    {
+        mKeyMin = mKeyMax;
+        return;
+    }
+
+    u8 min = 0;
+    const KeyRegion* prev = getPrev(parentInstrument);
+    if (prev)
+    {
+        min = prev->getKeyMax() + 1;
+    }
+
+    mKeyMin = sead::MathCalcCommon<u8>::clampMin(keyMin, min);
+}
+
+inline void BankFile::KeyRegion::setKeyMax(u8 keyMax, const Instrument& parentInstrument)
+{
+    if (keyMax > 127)
+    {
+        keyMax = 127;
+    }
+
+    if (keyMax < mKeyMin)
+    {
+        mKeyMax = mKeyMin;
+        return;
+    }
+
+    u8 max = 127;
+    const KeyRegion* next = getNext(parentInstrument);
+    if (next)
+    {
+        max = next->getKeyMin() - 1;
+    }
+
+    mKeyMax = sead::MathCalcCommon<u8>::clampMax(keyMax, max);
+}
+
+inline BankFile::KeyRegion* BankFile::KeyRegion::getPrev(const Instrument& parentInstrument)
+{
+    auto* node = parentInstrument.getKeyRegionList().prev(this);
+    if (node)
+    {
+        return static_cast<KeyRegion*>(node->val());
+    }
+
+    return nullptr;
+}
+
+inline BankFile::KeyRegion* BankFile::KeyRegion::getNext(const Instrument& parentInstrument)
+{
+    auto* node = parentInstrument.getKeyRegionList().next(this);
+    if (node)
+    {
+        return static_cast<KeyRegion*>(node->val());
+    }
+
+    return nullptr;
+}
+
+inline BankFile::KeyRegion* BankFile::KeyRegion::getPrevNeighbor(const Instrument& parentInstrument)
+{
+    return const_cast<BankFile::KeyRegion*>(parentInstrument.getKeyRegion(getKeyMin() - 1));
+}
+
+inline BankFile::KeyRegion* BankFile::KeyRegion::getNextNeighbor(const Instrument& parentInstrument)
+{
+    return const_cast<BankFile::KeyRegion*>(parentInstrument.getKeyRegion(getKeyMax() + 1));
+}
+
+inline BankFile::VelocityRegion* BankFile::VelocityRegion::getPrev(const KeyRegion& parentRegion)
+{
+    auto* node = parentRegion.getVelocityRegionList().prev(this);
+    if (node)
+    {
+        return static_cast<VelocityRegion*>(node->val());
+    }
+
+    return nullptr;
+}
+
+inline BankFile::VelocityRegion* BankFile::VelocityRegion::getNext(const KeyRegion& parentRegion)
+{
+    auto* node = parentRegion.getVelocityRegionList().next(this);
+    if (node)
+    {
+        return static_cast<VelocityRegion*>(node->val());
+    }
+
+    return nullptr;
+}

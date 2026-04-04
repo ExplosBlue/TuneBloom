@@ -1043,6 +1043,13 @@ void DrawPropertiesUI()
 
             switch (sSubSelectedItem->getItemType())
             {
+                case Item::ItemType::BankFileVelocityRegion:
+                {
+                    BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
+                    velRegion->drawUI();
+                    break;
+                }
+
                 case Item::ItemType::StreamTrack:
                 {
                     Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(sSubSelectedItem);

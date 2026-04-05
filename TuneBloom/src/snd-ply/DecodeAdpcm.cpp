@@ -58,8 +58,11 @@ void DecodeDspAdpcm(
         context.yn2 = context.yn1;
         context.yn1 = smp;
 
-        *dest = smp;
-        ++dest;
+        if (dest)
+        {
+            *dest = smp;
+            ++dest;
+        }
 
         frameFrac++;
         if (frameFrac == 14)

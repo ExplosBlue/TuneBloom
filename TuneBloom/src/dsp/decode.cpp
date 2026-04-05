@@ -69,7 +69,7 @@ void getLoopContext(uint8_t* src, ADPCMINFO* cxt, uint32_t samples)
 	short hist1 = cxt->yn1;
 	short hist2 = cxt->yn2;
 	short* coefs = cxt->coef;
-	char ps = 0;
+	char ps = *src; //? Match official N's encoder
 	int frameCount = DivideByRoundUp(samples, SAMPLES_PER_FRAME);
 	int samplesRemaining = samples;
 

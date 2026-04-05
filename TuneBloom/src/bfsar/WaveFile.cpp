@@ -241,7 +241,7 @@ void WaveFile::drawUI()
 
             mLoopStartFrame = loopStartFrame;
 
-            updateLoopInfo_(false);
+            updateLoopInfo_(true, true);
         }
 
         //ImGui::Text("Loop Start: %u", (mLoopStartFrame / 14) * 14);
@@ -477,12 +477,16 @@ void WaveFile::doRead(const void* fileAddr)
             channel->mAdpcmParam.predScale = channelParam.adpcmParam.predScale;
             channel->mAdpcmParam.yn1 = channelParam.adpcmParam.yn1;
             channel->mAdpcmParam.yn2 = channelParam.adpcmParam.yn2;
+            sead::MemUtil::copy(&channel->mAdpcmParamStream, &channel->mAdpcmParam, sizeof(snd::DspAdpcmParam));
 
             channel->mAdpcmLoopParam.loopPredScale = channelParam.adpcmLoopParam.loopPredScale;
             channel->mAdpcmLoopParam.loopYn1 = channelParam.adpcmLoopParam.loopYn1;
             channel->mAdpcmLoopParam.loopYn2 = channelParam.adpcmLoopParam.loopYn2;
+            sead::MemUtil::copy(&channel->mAdpcmLoopParamStream, &channel->mAdpcmLoopParam, sizeof(snd::internal::DspAdpcmLoopParam));
         }
     }
+
+    updateLoopInfo_(false, true);
 }
 
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
@@ -1066,7 +1070,7 @@ void WaveFile::buildSeekTable_(const void* samples, u32 sampleCount, snd::Sample
     }
 }
 
-void WaveFile::updateLoopInfo_(bool skipStream)
+void WaveFile::updateLoopInfo_(bool update, bool updateStream)
 {
     if (mEncoding != Encoding::DspAdpcm)
     {
@@ -1080,14 +1084,17 @@ void WaveFile::updateLoopInfo_(bool skipStream)
         ADPCMINFO adpcmInfo;
         sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
 
-        FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(), channel->getAdpcmLoopParam());
-        getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, getLoopStartFrame(false));
+        if (update)
+        {
+            FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(), channel->getAdpcmLoopParam());
+            getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, getLoopStartFrame(false));
 
-        channel->mAdpcmLoopParam.loopPredScale = adpcmInfo.loop_pred_scale;
-        channel->mAdpcmLoopParam.loopYn1 = adpcmInfo.loop_yn1;
-        channel->mAdpcmLoopParam.loopYn2 = adpcmInfo.loop_yn2;
+            channel->mAdpcmLoopParam.loopPredScale = adpcmInfo.loop_pred_scale;
+            channel->mAdpcmLoopParam.loopYn1 = adpcmInfo.loop_yn1;
+            channel->mAdpcmLoopParam.loopYn2 = adpcmInfo.loop_yn2;
+        }
 
-        if (!skipStream)
+        if (updateStream)
         {
             FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(true), channel->getAdpcmLoopParam(true));
             getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, getLoopStartFrame(true));

@@ -5063,6 +5063,11 @@ bool Bfsar::readStreamWaves_(const Sound* sound, const void* strmFile, Sound::St
             }
         }
 
+        if (encoding == WaveFile::Encoding::DspAdpcm)
+        {
+            wave->updateLoopInfo_(true, false); //? Update as the ones in the BFSTM can differ
+        }
+
         mWaveFileList.pushBack(wave);
 
         track.mWaveFileRef.attach(wave);

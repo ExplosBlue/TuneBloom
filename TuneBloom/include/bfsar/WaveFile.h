@@ -231,7 +231,7 @@ private:
 
     void buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel& channel);
 
-    void updateLoopInfo_(bool skipStream);
+    void updateLoopInfo_(bool update, bool updateStream);
 
     static void* convert_(
         void* data, sead::Endian::Types dataEndian, u32 samples,

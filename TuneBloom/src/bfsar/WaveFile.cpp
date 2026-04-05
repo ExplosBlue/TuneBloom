@@ -1058,7 +1058,10 @@ void WaveFile::buildSeekTable_(const void* samples, u32 sampleCount, snd::Sample
 
         if (sampleFormat == snd::SampleFormat::PcmS8)
         {
-            // TODO
+            const s8* samples8 = (const s8*)samples;
+
+            seekInfo.yn1 = s16(samples8[blockNo * cSamplesPerBlock - 1] << 8);
+            seekInfo.yn2 = s16(samples8[blockNo * cSamplesPerBlock - 2] << 8);
         }
         else if (sampleFormat == snd::SampleFormat::PcmS16)
         {

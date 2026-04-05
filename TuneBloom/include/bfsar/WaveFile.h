@@ -9,6 +9,10 @@
 
 #include <dsp/dsp.h>
 
+void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam);
+void FillAdpcmParam(snd::DspAdpcmParam* param, snd::internal::DspAdpcmLoopParam* loopParam, const ADPCMINFO& adpcmInfo);
+void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo);
+
 class WaveFile : public Item, public InnerFile
 {
 public:
@@ -217,6 +221,8 @@ public:
         return mSampleCount;
     }
 
+    static void buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel& channel);
+
 private:
     void invalidateOriginalData_()
     {
@@ -228,8 +234,6 @@ private:
 
         mUseOriginalData = false;
     }
-
-    void buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel& channel);
 
     void updateLoopInfo_(bool update, bool updateStream);
 

@@ -361,7 +361,7 @@ void WaveFile::drawUI()
                 if (mEncoding == Encoding::Pcm16 || mEncoding == Encoding::Pcm8 &&
                     sEncoding == Encoding::DspAdpcm)
                 {
-                    buildSeekTable_(
+                    WaveFile::buildSeekTable_(
                         channel->getData(), getSampleCount(),
                         mEncoding == Encoding::Pcm16 ? snd::SampleFormat::PcmS16 : snd::SampleFormat::PcmS8,
                         *channel
@@ -828,7 +828,7 @@ bool WaveFile::readWavFile(const sead::SafeString& path, Encoding encoding)
 
         if (encoding == Encoding::DspAdpcm)
         {
-            buildSeekTable_(channels[i], sampleCount, sampleFormat, *channel);
+            WaveFile::buildSeekTable_(channels[i], sampleCount, sampleFormat, *channel);
         }
 
         channel->mOwnsData = true;

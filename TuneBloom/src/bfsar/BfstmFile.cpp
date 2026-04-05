@@ -28,9 +28,11 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
 
     u32 channelNum = 0;
     const WaveFile::Channel* channels[cStrmChannelNum];
+    const WaveFile* channelOwners[cStrmChannelNum];
     for (u32 i = 0; i < cStrmChannelNum; i++)
     {
         channels[i] = nullptr;
+        channelOwners[i] = nullptr;
     }
 
     u32 trackNum = soundInfo.getTrackList().size();
@@ -47,6 +49,7 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
             for (s32 ch = 0; ch < wave.getChannels().size(); ch++)
             {
                 channels[channelNum] = wave.getChannels().nth(ch);
+                channelOwners[channelNum] = &wave;
                 channelNum++;
             }
         }
@@ -258,6 +261,25 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
             for (u32 ch = 0; ch < channelNum; ch++)
             {
                 const WaveFile::Channel& channel = *channels[ch];
+                if (channel.getSeekInfoBlocks() == 0)
+                {
+                    // TODO: This needs to be spooled
+
+                    WaveFile* currentWave = (WaveFile*)channelOwners[ch];
+
+                    u32 samplesPcm = currentWave->getLoopEndFrame(true);
+
+                    ADPCMINFO adpcmInfo;
+                    sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
+                    FillAdpcmInfo(&adpcmInfo, channel.getAdpcmParam(true), channel.getAdpcmLoopParam(true));
+
+                    s16* samples = new s16[samplesPcm];
+                    decode((u8*)channel.getData(), samples, &adpcmInfo, samplesPcm);
+
+                    WaveFile::buildSeekTable_(samples, samplesPcm, snd::SampleFormat::PcmS16, (WaveFile::Channel&)channel);
+
+                    delete[] samples;
+                }
 
                 s16 s1 = sead::Endian::fromHostS16(sead::Endian::eLittle, channel.getSeekInfo(blockNo).yn1);
                 s16 s2 = sead::Endian::fromHostS16(sead::Endian::eLittle, channel.getSeekInfo(blockNo).yn2);

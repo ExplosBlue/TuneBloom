@@ -58,6 +58,7 @@ static void DockBuilder(ImGuiID dockspaceId, const ImVec2& dockspaceSize)
     ImGui::DockBuilderDockWindow("###InfoWindow", mainDockId);
     ImGui::DockBuilderDockWindow("###PropertiesWindow", dock2);
     ImGui::DockBuilderDockWindow("###PlayerParamWindow", dock2);
+    ImGui::DockBuilderDockWindow("###SequenceVarWindow", dock2);
     ImGui::DockBuilderDockWindow("###PlayerWindow", dockDown);
 
     ImGui::DockBuilderFinish(dockspaceId);

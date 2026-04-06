@@ -94,9 +94,21 @@ public:
     }
 
     void drawParameters();
+    void drawSeqVars();
 
 private:
     void initPlayerParam_();
+
+    struct SeqVarInfo
+    {
+        SeqVarInfo()
+            : enable(false), value(-1)
+        {
+        }
+
+        bool enable;
+        s16 value;
+    };
 
 private:
     f32 mVolume;
@@ -107,6 +119,10 @@ private:
     f32 mBiquadValue;
     f32 mTrackVolume[cMaxTracks];
     f32 mSeqTempoRatio;
+
+    SeqVarInfo mGlobalVars[SequenceSoundPlayer::cGlobalVariableNum];
+    SeqVarInfo mPlayerVars[SequenceSoundPlayer::cPlayerVariableNum];
+    SeqVarInfo mTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer][SequenceTrack::cTrackVariableNum];
 
     const Sound* mLastPlayedSound;
     BasicSoundPlayer* mCurrentPlayer;

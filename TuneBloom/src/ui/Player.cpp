@@ -78,131 +78,8 @@ void DrawPlayerPropertiesUI()
 
 SoundPlayer sSoundPlayer;
 
-struct SeqVarInfo
-{
-    SeqVarInfo()
-        : enable(false), value(-1)
-    {
-    }
-
-    bool enable;
-    s16 value;
-};
-
-static SeqVarInfo sGlobalVars[SequenceSoundPlayer::cGlobalVariableNum];
-static SeqVarInfo sPlayerVars[SequenceSoundPlayer::cPlayerVariableNum];
-static SeqVarInfo sTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer][SequenceTrack::cTrackVariableNum];
-
 void DrawPlayerUI()
 {
-    // if (false)
-    // {
-    //     static volatile s16* sCurrentGlobalVars = sSequencePlayer.getVariablePtr(16);
-    //     static volatile s16* sCurrentPlayerVars = sSequencePlayer.getVariablePtr(0);
-    //     static volatile s16* sCurrentTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer] = { nullptr };
-
-    //     static bool sInitVars = true;
-    //     if (sInitVars)
-    //     {
-    //         sInitVars = false;
-
-    //         for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-    //         {
-    //             sCurrentTrackVars[trackNo] = sSequencePlayer.getTrack_(trackNo).getVariablePtr(0);
-    //         }
-    //     }
-
-    //     auto varUI = [](const char* name, u32 i, SeqVarInfo& varInfo, volatile s16& current)
-    //     {
-    //         static const ImS16 cStepS16 = 1;
-
-    //         ImGui::Text("%2u", i);
-
-    //         ImGui::SameLine();
-
-    //         bool updateVar = false;
-
-    //         bool enable = varInfo.enable;
-    //         if (ImGui::Checkbox(sead::FormatFixedSafeString<32>("Enable##%s%u", name, i).cstr(), &enable))
-    //         {
-    //             varInfo.enable = enable;
-    //             updateVar = true;
-    //         }
-
-    //         ImGui::SameLine();
-
-    //         if (!enable)
-    //         {
-    //             ImGui::BeginDisabled();
-    //         }
-
-    //         ImGui::SetNextItemWidth(200.0f);
-
-    //         s16 var = varInfo.value;
-    //         if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("###%s%u", name, i).cstr(), ImGuiDataType_S16, &var, &cStepS16))
-    //         {
-    //             varInfo.value = var;
-    //             updateVar = true;
-    //         }
-
-    //         if (!enable)
-    //         {
-    //             ImGui::EndDisabled();
-    //         }
-
-    //         ImGui::SameLine();
-
-    //         if (enable && updateVar)
-    //         {
-    //             current = var;
-    //         }
-
-    //         ImGui::Text("Current: %i", current);
-    //     };
-
-    //     if (ImGui::Begin("Seq Var"))
-    //     {
-    //         if (ImGui::BeginTabBar("Vars"))
-    //         {
-    //             if (ImGui::BeginTabItem("Global"))
-    //             {
-    //                 for (u32 i = 0; i < SequenceSoundPlayer::cGlobalVariableNum; i++)
-    //                 {
-    //                     varUI("Global", i, sGlobalVars[i], sCurrentGlobalVars[i]);
-    //                 }
-
-    //                 ImGui::EndTabItem();
-    //             }
-
-    //             if (ImGui::BeginTabItem("Player"))
-    //             {
-    //                 for (u32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
-    //                 {
-    //                     varUI("Local", i, sPlayerVars[i], sCurrentPlayerVars[i]);
-    //                 }
-
-    //                 ImGui::EndTabItem();
-    //             }
-
-    //             if (ImGui::BeginTabItem("Track"))
-    //             {
-    //                 for (u32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-    //                 {
-    //                     for (u32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
-    //                     {
-    //                         varUI(sead::FormatFixedSafeString<32>("Track_%u", trackNo).cstr(), i, sTrackVars[trackNo][i], sCurrentTrackVars[trackNo][i]);
-    //                     }
-    //                 }
-
-    //                 ImGui::EndTabItem();
-    //             }
-
-    //             ImGui::EndTabBar();
-    //         }
-    //     }
-    //     ImGui::End();
-    // }
-
     if (false)
     {
         if (ImGui::Begin("Wave"))
@@ -436,6 +313,12 @@ void DrawPlayerUI()
     if (ImGui::Begin(ICON_LC_SETTINGS_2 " Player Parameters###PlayerParamWindow"))
     {
         sSoundPlayer.drawParameters();
+    }
+    ImGui::End();
+
+    if (ImGui::Begin(ICON_LC_BINARY " Sequence Variables###SequenceVarWindow"))
+    {
+        sSoundPlayer.drawSeqVars();
     }
     ImGui::End();
 }

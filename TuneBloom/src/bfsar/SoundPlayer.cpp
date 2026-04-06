@@ -335,28 +335,6 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
 
         mSampleCount = 0;
         mSampleRate = 0;
-
-        // //? Init vars
-        // for (s32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
-        // {
-        //     const SeqVarInfo& varInfo = sPlayerVars[i];
-        //     if (varInfo.enable)
-        //     {
-        //         sSequencePlayer.setLocalVariable(i, varInfo.value);
-        //     }
-        // }
-
-        // for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-        // {
-        //     for (s32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
-        //     {
-        //         const SeqVarInfo& varInfo = sTrackVars[trackNo][i];
-        //         if (varInfo.enable)
-        //         {
-        //             sSequencePlayer.getTrack_(trackNo).setTrackVariable(i, varInfo.value);
-        //         }
-        //     }
-        // }
     }
 
     return true;
@@ -633,6 +611,120 @@ void SoundPlayer::drawParameters()
     }
 }
 
+void SoundPlayer::drawSeqVars()
+{
+    HelpMarker("Those are not reset when you play a Sound !");
+
+    static volatile s16* sCurrentGlobalVars = mSequencePlayer.getVariablePtr(16);
+    static volatile s16* sCurrentPlayerVars = mSequencePlayer.getVariablePtr(0);
+    static volatile s16* sCurrentTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer] = { nullptr };
+
+    static bool sInitVars = true;
+    if (sInitVars)
+    {
+        sInitVars = false;
+
+        for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+        {
+            sCurrentTrackVars[trackNo] = mSequencePlayer.getTrack_(trackNo).getVariablePtr(0);
+        }
+    }
+
+    auto varUI = [](const char* name, u32 i, SeqVarInfo& varInfo, volatile s16& current)
+    {
+        static const ImS16 cStepS16 = 1;
+
+        ImGui::Text("%2u", i);
+
+        ImGui::SameLine();
+
+        bool updateVar = false;
+
+        bool enable = varInfo.enable;
+        if (ImGui::Checkbox(sead::FormatFixedSafeString<32>("Enable##%s%u", name, i).cstr(), &enable))
+        {
+            varInfo.enable = enable;
+            updateVar = true;
+        }
+
+        ImGui::SameLine();
+
+        if (!enable)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        ImGui::SetNextItemWidth(200.0f);
+
+        s16 var = varInfo.value;
+        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("###%s%u", name, i).cstr(), ImGuiDataType_S16, &var, &cStepS16))
+        {
+            varInfo.value = var;
+            updateVar = true;
+        }
+
+        if (!enable)
+        {
+            ImGui::EndDisabled();
+        }
+
+        ImGui::SameLine();
+
+        if (enable && updateVar)
+        {
+            current = var;
+        }
+
+        ImGui::Text("Current: %i", current);
+    };
+
+    if (ImGui::BeginTabBar("Vars"))
+    {
+        if (ImGui::BeginTabItem("Global"))
+        {
+            for (u32 i = 0; i < SequenceSoundPlayer::cGlobalVariableNum; i++)
+            {
+                varUI("Global", i, mGlobalVars[i], sCurrentGlobalVars[i]);
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Player"))
+        {
+            for (u32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
+            {
+                varUI("Local", i, mPlayerVars[i], sCurrentPlayerVars[i]);
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Track"))
+        {
+            if (ImGui::BeginTabBar("Tracks"))
+            {
+                for (u32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+                {
+                    if (ImGui::BeginTabItem(sead::FormatFixedSafeString<16>("%02u", trackNo).cstr()))
+                    {
+                        for (u32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
+                        {
+                            varUI(sead::FormatFixedSafeString<32>("Track_%u", trackNo).cstr(), i, mTrackVars[trackNo][i], sCurrentTrackVars[trackNo][i]);
+                        }
+                        ImGui::EndTabItem();
+                    }
+                }
+                ImGui::EndTabBar();
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+}
+
 void SoundPlayer::initPlayerParam_()
 {
     SEAD_ASSERT(mCurrentPlayer);
@@ -662,5 +754,27 @@ void SoundPlayer::initPlayerParam_()
         }
 
         mSequencePlayer.setTempoRatio(mSeqTempoRatio);
+
+        //? Init vars
+        for (s32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
+        {
+            const SeqVarInfo& varInfo = mPlayerVars[i];
+            if (varInfo.enable)
+            {
+                mSequencePlayer.setLocalVariable(i, varInfo.value);
+            }
+        }
+
+        for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+        {
+            for (s32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
+            {
+                const SeqVarInfo& varInfo = mTrackVars[trackNo][i];
+                if (varInfo.enable)
+                {
+                    mSequencePlayer.getTrack_(trackNo).setTrackVariable(i, varInfo.value);
+                }
+            }
+        }
     }
 }

@@ -95,7 +95,7 @@ public:
             volume = static_cast<f32>(track->volume) / 127.0f;
 
             // lpf freq
-            lpfFreq = static_cast<f32>(track->lpfFreq) / 64.0f;
+            lpfFreq = static_cast<f32>(track->lpfFreq - 64) / 64.0f;
 
             // biquad filter;
             biquadType = static_cast<s32>(track->biquadType);

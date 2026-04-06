@@ -492,6 +492,8 @@ bool StreamSoundPlayer::seek(u32 offsetSample)
         }
     }
 
+    pause(false);
+
     if (!allocVoices())
     {
         SEAD_PRINT("Failed to alloc voices\n");

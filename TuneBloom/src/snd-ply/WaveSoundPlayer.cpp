@@ -180,6 +180,7 @@ bool WaveSoundPlayer::seek(u32 offsetSample)
         mChannel = nullptr;
     }
 
+    pause(false);
     doStartChannel_(offsetSample);
 
     return true;

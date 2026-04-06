@@ -19,7 +19,7 @@ public:
 
     ~SoundPlayer()
     {
-        reset();
+        // reset();
     }
 
     void stopAllPlayers(bool stop);

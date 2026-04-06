@@ -233,6 +233,8 @@ void DrawPlayerUI()
 
             ImGui::ProgressBar(progress, ImVec2(adjustSize, 0.0f), "");
 
+            f32 barYSize = ImGui::GetItemRectSize().y;
+
             static bool sCanSeek = false;
 
             if (ImGui::IsItemHovered() && !sSoundPlayer.isCurrentPlayerSequence() && sSoundPlayer.isActive())
@@ -265,6 +267,54 @@ void DrawPlayerUI()
 
             if (sSoundPlayer.isCurrentPlayerSequence())
                 ImGui::PopStyleColor();
+            
+            //? Draw loop points
+            {
+                const WaveFile* wave = nullptr;
+                if (sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile())
+                {
+                    wave = sSoundPlayer.getPlayingWaveFile();
+                }
+                else if (sSelectedItem)
+                {
+                    if (sSelectedItem->getItemType() == Item::ItemType::WaveFile)
+                    {
+                        wave = static_cast<WaveFile*>(sSelectedItem);
+                    }
+                    else if (sSelectedItem->getItemType() == Item::ItemType::Sound)
+                    {
+                        Sound* sound = static_cast<Sound*>(sSelectedItem);
+                        if (sound->getSoundType() == Sound::SoundType::Wave)
+                        {
+                            wave = static_cast<WaveFile*>(sound->getWaveSoundInfo().getWaveFileRef().getItem());
+                        }
+                        else if (sound->getSoundType() == Sound::SoundType::Strm && !sound->getStreamSoundInfo().getTrackList().isEmpty())
+                        {
+                            Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(sound->getStreamSoundInfo().getTrackList().front()->val());
+                            wave = static_cast<WaveFile*>(track->getWaveFileRef().getItem());
+                        }
+                    }
+                }
+
+                if (wave && wave->getIsLoop())
+                {
+                    sampleCount = wave->getSampleCount();
+
+                    ImDrawList* draw = ImGui::GetWindowDrawList();
+                    f32 loopStartX = wave->getOriginalLoopStartFrame() / static_cast<f32>(sampleCount);
+                    f32 loopEndX = wave->getOriginalLoopEndFrame() / static_cast<f32>(sampleCount);
+
+                    draw->AddLine(
+                        ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y),
+                        ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y + barYSize), IM_COL32(0, 255, 0, 255), 2.0f
+                    );
+
+                    draw->AddLine(
+                        ImVec2(barStartScreenPos.x + loopEndX * adjustSize, barStartScreenPos.y),
+                        ImVec2(barStartScreenPos.x + loopEndX * adjustSize, barStartScreenPos.y + barYSize), IM_COL32(255, 0, 0, 255), 2.0f
+                    );
+                }
+            }
         }
 
         ImGui::SameLine();

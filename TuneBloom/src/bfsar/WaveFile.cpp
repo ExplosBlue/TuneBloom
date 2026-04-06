@@ -56,6 +56,11 @@ WaveFile::~WaveFile()
     }
 
     invalidateOriginalData_();
+
+    if (this == sSoundPlayer.getPlayingWaveFile())
+    {
+        sSoundPlayer.resetPlayingWaveFile();
+    }
 }
 
 const Item* WaveFile::validate(sead::BufferedSafeString& error) const

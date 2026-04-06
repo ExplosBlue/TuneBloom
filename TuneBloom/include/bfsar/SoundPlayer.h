@@ -21,6 +21,7 @@ public:
         , mSeqTempoRatio(1.0f)
 
         , mLastPlayedSound(nullptr)
+        , mPlayingWaveFile(nullptr)
         , mCurrentPlayer(nullptr)
         , mSampleRate(0)
         , mSampleCount(0)
@@ -60,6 +61,8 @@ public:
 
     const Sound* getLastPlayedSound() const { return mLastPlayedSound; }
     void resetLastPlayedSound() { mLastPlayedSound = nullptr; }
+    const WaveFile* getPlayingWaveFile() const { return mPlayingWaveFile; }
+    void resetPlayingWaveFile() { mPlayingWaveFile = nullptr; }
 
     void invalidateBankFile(const BankFile& bankFile);
 
@@ -125,6 +128,7 @@ private:
     SeqVarInfo mTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer][SequenceTrack::cTrackVariableNum];
 
     const Sound* mLastPlayedSound;
+    const WaveFile* mPlayingWaveFile;
     BasicSoundPlayer* mCurrentPlayer;
     u32 mSampleRate;
     u32 mSampleCount;

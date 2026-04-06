@@ -149,6 +149,7 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
         }
     }
 
+    const WaveFile* mainWave = nullptr;
     WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
     u32 mainSampleRate = 0;
 
@@ -170,6 +171,7 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
 
         if (i == 0)
         {
+            mainWave = &waveFile;
             mainEncoding = waveFile.getEncoding();
             mainSampleRate = waveFile.getSampleRate();
         }
@@ -248,6 +250,8 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
 
         mSampleCount = mStreamPlayer.getSampleCount();
         mSampleRate = mStreamPlayer.getSampleRate();
+
+        mPlayingWaveFile = mainWave;
     }
 
     sSelectedItem = const_cast<Sound*>(sound);
@@ -335,6 +339,8 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
 
         mSampleCount = 0;
         mSampleRate = 0;
+
+        mPlayingWaveFile = nullptr;
     }
 
     return true;
@@ -368,6 +374,8 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
 
         mSampleCount = mWavePlayer.getSampleCount();
         mSampleRate = mWavePlayer.getSampleRate();
+
+        mPlayingWaveFile = &wave;
     }
 
     sSelectedItem = const_cast<WaveFile*>(&wave);
@@ -377,7 +385,7 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
 
 bool SoundPlayer::playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion)
 {
-    const Item* waveFile = velocityRegion.getWaveFileRef().getItem();
+    const WaveFile* waveFile = static_cast<const WaveFile*>(velocityRegion.getWaveFileRef().getItem());
     if (!waveFile)
     {
         return false;
@@ -391,11 +399,13 @@ bool SoundPlayer::playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegi
 
     initPlayerParam_();
 
-    mWavePlayer.prepare(*static_cast<const WaveFile*>(waveFile));
+    mWavePlayer.prepare(*waveFile);
     mWavePlayer.setBankNoteInfo(key, velocity, velocityRegion);
 
     mSampleCount = mWavePlayer.getSampleCount();
     mSampleRate = mWavePlayer.getSampleRate();
+
+    mPlayingWaveFile = waveFile;
 
     return true;
 }
@@ -435,6 +445,7 @@ bool SoundPlayer::seek(f32 progress)
 void SoundPlayer::reset()
 {
     resetLastPlayedSound();
+    resetPlayingWaveFile();
 
     mSampleRate = 0;
     mSampleCount = 0;

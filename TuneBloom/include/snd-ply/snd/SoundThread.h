@@ -60,7 +60,7 @@ public:
         sead::ListNode mListNode;
     };
 
-private:
+public:
     class SoundThreadImpl : public sead::Thread
     {
     public:
@@ -153,6 +153,11 @@ public:
     }
 
     void forceWakeup();
+
+    SoundThreadImpl* getThreadImpl_()
+    {
+        return mThread;
+    }
 
 private:
     bool prepareForCreate_(bool enableGetTick);

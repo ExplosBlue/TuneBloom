@@ -301,17 +301,9 @@ void CloseFile()
     sSelectedItemIsSubWindow = false;
     sFileWindows.clear();
 
-    sLastPlayedSound = nullptr;
-
-    sSampleRate = 0;
-    sSampleCount = 0;
-
-    StopAllSoundPlayers(true);
-    StopAllVoices();
+    sSoundPlayer.reset();
 
     sBfsar.close();
-
-    //sSoundArchive = nullptr;
 
     sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
     if (fw)

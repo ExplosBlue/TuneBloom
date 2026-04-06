@@ -16,8 +16,6 @@
 
 extern bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u32, u32>* offsetToLine, const void* seqFile);
 
-extern SequenceSoundPlayer sSequencePlayer;
-
 SequenceFile::~SequenceFile()
 {
     invalidatePlayer_();
@@ -181,7 +179,7 @@ void SequenceFile::drawFileUI()
                 banks[i] = bank;
             }
 
-            PlaySeqFile(*this, mStartLabel, banks, 127);
+            sSoundPlayer.playSeqFile(*this, mStartLabel, banks, 127);
         }
     }
 
@@ -195,9 +193,9 @@ void SequenceFile::drawFileUI()
         }
     }
 
-    if (mIsValid && sSequencePlayer.isPlayingFile(*this))
+    if (mIsValid && sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
     {
-        mSeqTextInfo.update(sSequencePlayer, *mTextEditor, mOffsetToLine);
+        mSeqTextInfo.update(sSoundPlayer.getSequencePlayer(), *mTextEditor, mOffsetToLine);
     }
 
     //if (false)
@@ -252,9 +250,9 @@ void SequenceFile::drawFileUI()
         mIsValid = false;
         mIsDirty = true;
 
-        if (sSequencePlayer.isPlayingFile(*this))
+        if (sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
         {
-            StopAllSoundPlayers();
+            sSoundPlayer.stopAllPlayers(false);
         }
 
         if (sAutoCompile)
@@ -319,9 +317,9 @@ std::string SequenceFile::getLabelFromParsedOffset(u32 offset, u32 allocTrackFla
 
 void SequenceFile::invalidatePlayer_() const
 {
-    if (sSequencePlayer.isPlayingFile(*this))
+    if (sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
     {
-        sSequencePlayer.clearPlayingFile();
+        sSoundPlayer.getSequencePlayer().clearPlayingFile();
     }
 
     if (mSeqBytes)

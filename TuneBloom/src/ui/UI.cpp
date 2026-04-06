@@ -1367,7 +1367,7 @@ const char* SoundNamePrefixFunc(Item* item)
             sSelectedItemIsSubWindow = false;
         }
 
-        PlaySound(sound);
+        sSoundPlayer.playSound(sound);
     }
 
     ImGui::SameLine();
@@ -1408,7 +1408,7 @@ const char* SoundNamePrefixFunc2(Item* item)
             sSelectedItemIsSubWindow = false;
         }
 
-        PlaySound(sound);
+        sSoundPlayer.playSound(sound);
     }
 
     ImGui::SameLine();
@@ -1594,7 +1594,7 @@ static const char* WaveFileNamePrefixFunc(Item* item)
 
     if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", wave->getId()).cstr()))
     {
-        PlayWaveFile(*wave);
+        sSoundPlayer.playWaveFile(*wave);
     }
 
     ImGui::SameLine();

@@ -309,7 +309,7 @@ void WaveFile::drawUI()
 
             if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", i).cstr()))
             {
-                PlayWaveFile(*this, i);
+                sSoundPlayer.playWaveFile(*this, i);
             }
 
             ImGui::SameLine();

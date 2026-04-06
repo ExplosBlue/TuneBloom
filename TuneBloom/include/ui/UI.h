@@ -7,6 +7,8 @@
 #include <bfsar/Bfsar.h>
 #include <bfsar/IdTable.h>
 
+#include <bfsar/SoundPlayer.h>
+
 enum class UIType
 {
     Min = 0,
@@ -52,14 +54,7 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title = nullp
 bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title = nullptr, u32 filterCount = 0, FileFilter* filters = nullptr, const char* defaultExt = nullptr);
 
 extern Bfsar sBfsar;
-
-//extern const nw::snd::MemorySoundArchive* sSoundArchive;
-//extern const SoundDataMgr* sSoundDataMgr;
-
-extern const Sound* sLastPlayedSound;
-
-extern u32 sSampleRate;
-extern u32 sSampleCount;
+extern SoundPlayer sSoundPlayer;
 
 
 
@@ -129,14 +124,6 @@ void OpenFile();
 bool SaveFile();
 bool SaveFileAs();
 void CloseFile();
-
-void PlaySound(const Sound* sound, u32 startOffsetSample = 0);
-bool PlayWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0);
-bool PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
-bool PlaySeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, u8 volume);
-void StopAllSoundPlayers(bool stop = false);
-void StopAllSoundPlayersWithoutLock(bool stop = false);
-void StopAllVoices();
 
 // Ui Types
 void DrawProjectInfoUI();

@@ -8,8 +8,6 @@
 #include <functional>
 #include <vector>
 
-extern SequenceSoundPlayer sSequencePlayer;
-
 static bool KeyPresed[128] = { false };
 
 static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
@@ -49,7 +47,7 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
             const BankFile::VelocityRegion* velocityRegion = keyRegion->getVelocityRegion(vel);
             SEAD_ASSERT(velocityRegion);
 
-            PlayBankNote(static_cast<u8>(Key), vel, *velocityRegion);
+            sSoundPlayer.playBankNote(static_cast<u8>(Key), vel, *velocityRegion);
 
             break;
         }
@@ -58,7 +56,7 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
         {
             KeyPresed[Key] = false;
 
-            StopAllSoundPlayers();
+            sSoundPlayer.stopAllPlayers(false);
 
             break;
         }
@@ -482,10 +480,9 @@ void BankFile::Instrument::drawUI()
 
 BankFile::~BankFile()
 {
-    if (sSequencePlayer.isActive())
+    if (sSoundPlayer.isCurrentPlayerSequence() && sSoundPlayer.isActive())
     {
-        snd::internal::driver::SoundThreadLock lock;
-        sSequencePlayer.invalidateBankFile(*this);
+        sSoundPlayer.invalidateBankFile(*this);
     }
 }
 

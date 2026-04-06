@@ -2,16 +2,13 @@
 
 #include <ui/PopupMgr.h>
 
+#include <bfsar/SoundPlayer.h>
+
 #include <snd/ChannelMgr.h>
 #include <snd/MultiVoiceMgr.h>
 #include <snd/Voice.h>
 #include <snd/VoiceImpl.h>
 #include <snd/SoundSystem.h>
-
-#include <snd/SequenceNoteOnCallback.h>
-#include <snd/SequenceSoundPlayer.h>
-#include <snd/StreamSoundPlayer.h>
-#include <snd/WaveSoundPlayer.h>
 
 #include <snd/snd_SequenceSoundFileReader.h>
 
@@ -79,23 +76,7 @@ void DrawPlayerPropertiesUI()
 
 // Runtime Player
 
-static bool SeekPlayer(f32 progress);
-
-SequenceSoundPlayer sSequencePlayer;
-StreamSoundPlayer sStreamPlayer;
-WaveSoundPlayer sWavePlayer;
-
-SequenceNoteOnCallback sSequenceNoteOnCallback;
-SequenceNoteOnCallback2 sSequenceNoteOnCallback2;
-
-BasicSoundPlayer* sCurrentSoundPlayer = nullptr;
-bool sLoop = true;
-static f32 sVolume = 0.5f;
-
-const Sound* sLastPlayedSound = nullptr;
-
-u32 sSampleRate = 0;
-u32 sSampleCount = 0;
+SoundPlayer sSoundPlayer;
 
 struct SeqVarInfo
 {
@@ -114,113 +95,113 @@ static SeqVarInfo sTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer][SequenceTr
 
 void DrawPlayerUI()
 {
-    if (false)
-    {
-        static volatile s16* sCurrentGlobalVars = sSequencePlayer.getVariablePtr(16);
-        static volatile s16* sCurrentPlayerVars = sSequencePlayer.getVariablePtr(0);
-        static volatile s16* sCurrentTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer] = { nullptr };
+    // if (false)
+    // {
+    //     static volatile s16* sCurrentGlobalVars = sSequencePlayer.getVariablePtr(16);
+    //     static volatile s16* sCurrentPlayerVars = sSequencePlayer.getVariablePtr(0);
+    //     static volatile s16* sCurrentTrackVars[SequenceSoundPlayer::cTrackNumPerPlayer] = { nullptr };
 
-        static bool sInitVars = true;
-        if (sInitVars)
-        {
-            sInitVars = false;
+    //     static bool sInitVars = true;
+    //     if (sInitVars)
+    //     {
+    //         sInitVars = false;
 
-            for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-            {
-                sCurrentTrackVars[trackNo] = sSequencePlayer.getTrack_(trackNo).getVariablePtr(0);
-            }
-        }
+    //         for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+    //         {
+    //             sCurrentTrackVars[trackNo] = sSequencePlayer.getTrack_(trackNo).getVariablePtr(0);
+    //         }
+    //     }
 
-        auto varUI = [](const char* name, u32 i, SeqVarInfo& varInfo, volatile s16& current)
-        {
-            static const ImS16 cStepS16 = 1;
+    //     auto varUI = [](const char* name, u32 i, SeqVarInfo& varInfo, volatile s16& current)
+    //     {
+    //         static const ImS16 cStepS16 = 1;
 
-            ImGui::Text("%2u", i);
+    //         ImGui::Text("%2u", i);
 
-            ImGui::SameLine();
+    //         ImGui::SameLine();
 
-            bool updateVar = false;
+    //         bool updateVar = false;
 
-            bool enable = varInfo.enable;
-            if (ImGui::Checkbox(sead::FormatFixedSafeString<32>("Enable##%s%u", name, i).cstr(), &enable))
-            {
-                varInfo.enable = enable;
-                updateVar = true;
-            }
+    //         bool enable = varInfo.enable;
+    //         if (ImGui::Checkbox(sead::FormatFixedSafeString<32>("Enable##%s%u", name, i).cstr(), &enable))
+    //         {
+    //             varInfo.enable = enable;
+    //             updateVar = true;
+    //         }
 
-            ImGui::SameLine();
+    //         ImGui::SameLine();
 
-            if (!enable)
-            {
-                ImGui::BeginDisabled();
-            }
+    //         if (!enable)
+    //         {
+    //             ImGui::BeginDisabled();
+    //         }
 
-            ImGui::SetNextItemWidth(200.0f);
+    //         ImGui::SetNextItemWidth(200.0f);
 
-            s16 var = varInfo.value;
-            if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("###%s%u", name, i).cstr(), ImGuiDataType_S16, &var, &cStepS16))
-            {
-                varInfo.value = var;
-                updateVar = true;
-            }
+    //         s16 var = varInfo.value;
+    //         if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("###%s%u", name, i).cstr(), ImGuiDataType_S16, &var, &cStepS16))
+    //         {
+    //             varInfo.value = var;
+    //             updateVar = true;
+    //         }
 
-            if (!enable)
-            {
-                ImGui::EndDisabled();
-            }
+    //         if (!enable)
+    //         {
+    //             ImGui::EndDisabled();
+    //         }
 
-            ImGui::SameLine();
+    //         ImGui::SameLine();
 
-            if (enable && updateVar)
-            {
-                current = var;
-            }
+    //         if (enable && updateVar)
+    //         {
+    //             current = var;
+    //         }
 
-            ImGui::Text("Current: %i", current);
-        };
+    //         ImGui::Text("Current: %i", current);
+    //     };
 
-        if (ImGui::Begin("Seq Var"))
-        {
-            if (ImGui::BeginTabBar("Vars"))
-            {
-                if (ImGui::BeginTabItem("Global"))
-                {
-                    for (u32 i = 0; i < SequenceSoundPlayer::cGlobalVariableNum; i++)
-                    {
-                        varUI("Global", i, sGlobalVars[i], sCurrentGlobalVars[i]);
-                    }
+    //     if (ImGui::Begin("Seq Var"))
+    //     {
+    //         if (ImGui::BeginTabBar("Vars"))
+    //         {
+    //             if (ImGui::BeginTabItem("Global"))
+    //             {
+    //                 for (u32 i = 0; i < SequenceSoundPlayer::cGlobalVariableNum; i++)
+    //                 {
+    //                     varUI("Global", i, sGlobalVars[i], sCurrentGlobalVars[i]);
+    //                 }
 
-                    ImGui::EndTabItem();
-                }
+    //                 ImGui::EndTabItem();
+    //             }
 
-                if (ImGui::BeginTabItem("Player"))
-                {
-                    for (u32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
-                    {
-                        varUI("Local", i, sPlayerVars[i], sCurrentPlayerVars[i]);
-                    }
+    //             if (ImGui::BeginTabItem("Player"))
+    //             {
+    //                 for (u32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
+    //                 {
+    //                     varUI("Local", i, sPlayerVars[i], sCurrentPlayerVars[i]);
+    //                 }
 
-                    ImGui::EndTabItem();
-                }
+    //                 ImGui::EndTabItem();
+    //             }
 
-                if (ImGui::BeginTabItem("Track"))
-                {
-                    for (u32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-                    {
-                        for (u32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
-                        {
-                            varUI(sead::FormatFixedSafeString<32>("Track_%u", trackNo).cstr(), i, sTrackVars[trackNo][i], sCurrentTrackVars[trackNo][i]);
-                        }
-                    }
+    //             if (ImGui::BeginTabItem("Track"))
+    //             {
+    //                 for (u32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+    //                 {
+    //                     for (u32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
+    //                     {
+    //                         varUI(sead::FormatFixedSafeString<32>("Track_%u", trackNo).cstr(), i, sTrackVars[trackNo][i], sCurrentTrackVars[trackNo][i]);
+    //                     }
+    //                 }
 
-                    ImGui::EndTabItem();
-                }
+    //                 ImGui::EndTabItem();
+    //             }
 
-                ImGui::EndTabBar();
-            }
-        }
-        ImGui::End();
-    }
+    //             ImGui::EndTabBar();
+    //         }
+    //     }
+    //     ImGui::End();
+    // }
 
     if (false)
     {
@@ -286,33 +267,25 @@ void DrawPlayerUI()
 
     if (ImGui::Begin(ICON_LC_MUSIC " Player###PlayerWindow"))
     {
-        bool isPause = true;
-        if (sCurrentSoundPlayer && sCurrentSoundPlayer->isActive())
-        {
-            isPause = sCurrentSoundPlayer->isPause();
-        }
+        bool isPause = sSoundPlayer.isPause();
 
-        if (ImGui::Button(isPause ? ICON_LC_PLAY : ICON_LC_PAUSE) && sCurrentSoundPlayer)
+        if (ImGui::Button(isPause ? ICON_LC_PLAY : ICON_LC_PAUSE) && sSoundPlayer.isCurrentPlayer())
         {
-            if (!sCurrentSoundPlayer->isActive())
+            if (!sSoundPlayer.isActive())
             {
-                if (sLastPlayedSound)
-                {
-                    PlaySound(sLastPlayedSound);
-                }
+                sSoundPlayer.playLastSound();
             }
             else
             {
-                snd::internal::driver::SoundThreadLock lock;
-                sCurrentSoundPlayer->pause(!isPause);
+                sSoundPlayer.pause(!isPause);
             }
         }
 
-        if (sCurrentSoundPlayer && !sCurrentSoundPlayer->isActive() && sLastPlayedSound)
+        if (sSoundPlayer.isCurrentPlayer() && !sSoundPlayer.isActive() && sSoundPlayer.getLastPlayedSound())
         {
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
             {
-                ImGui::SetTooltip("Last Sound '%s'", sLastPlayedSound->getFormattedName().cstr());
+                ImGui::SetTooltip("Last Sound '%s'", sSoundPlayer.getLastPlayedSound()->getFormattedName().cstr());
             }
         }
 
@@ -322,12 +295,12 @@ void DrawPlayerUI()
         {
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
             {
-                StopAllSoundPlayers(true);
-                StopAllVoices();
+                sSoundPlayer.stopAllPlayers(true);
+                sSoundPlayer.stopAllVoices();
             }
             else
             {
-                StopAllSoundPlayers(false);
+                sSoundPlayer.stopAllPlayers(false);
             }
         }
     
@@ -342,19 +315,9 @@ void DrawPlayerUI()
         f32 playingSample = 0.0f;
         f32 seconds = 0.0f;
 
-        u32 sampleCount = sSampleCount;
-        u32 sampleRate = sSampleRate;
-        s32 currentSample = 0;
-
-        if (sStreamPlayer.isActive())
-        {
-            currentSample = sStreamPlayer.getPlaySamplePosition(true);
-        }
-
-        if (sWavePlayer.isActive())
-        {
-            currentSample = sWavePlayer.getPlaySamplePosition(true);
-        }
+        u32 sampleCount = sSoundPlayer.getSampleCount();
+        u32 sampleRate = sSoundPlayer.getSampleRate();
+        s32 currentSample = sSoundPlayer.getPlaySamplePosition();
 
         playingSample = static_cast<f32>(currentSample);
         progress = sampleCount != 0 ? playingSample / static_cast<f32>(sampleCount) : 0.0f;
@@ -369,12 +332,12 @@ void DrawPlayerUI()
         f32 adjustSize = ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize("00:00.000").x - 257.0f + 57.0f;
         if (adjustSize > 0.0f)
         {
-            if (sCurrentSoundPlayer == &sSequencePlayer)
+            if (sSoundPlayer.isCurrentPlayerSequence())
             {
                 static f32 col = 0.0f;
                 static f32 step = 0.003f;
 
-                if (!sCurrentSoundPlayer->isPause())
+                if (!sSoundPlayer.isPause())
                 {
                     col += step;
                     if (col > 0.1f)
@@ -384,7 +347,7 @@ void DrawPlayerUI()
                 }
 
                 ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.5f - col, 0.5f - col, 0.5f - col, 1.0f));
-                if (sSequencePlayer.isActive())
+                if (sSoundPlayer.isActive())
                     progress = 1.0f;
             }
 
@@ -395,7 +358,7 @@ void DrawPlayerUI()
 
             static bool sCanSeek = false;
 
-            if (ImGui::IsItemHovered() && sCurrentSoundPlayer != &sSequencePlayer && (sStreamPlayer.isActive() || sWavePlayer.isActive()))
+            if (ImGui::IsItemHovered() && !sSoundPlayer.isCurrentPlayerSequence() && sSoundPlayer.isActive())
             {
                 sCanSeek = true;
                 ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -414,7 +377,7 @@ void DrawPlayerUI()
 
                 progress = normalize(barStartX, mouseX, barEndX);
 
-                SeekPlayer(progress);
+                sSoundPlayer.seek(progress);
             }
             else
             {
@@ -423,7 +386,7 @@ void DrawPlayerUI()
 
             //ImGui::ProgressBar(progress, ImVec2(adjustSize, 0.0f), "");
 
-            if (sCurrentSoundPlayer == &sSequencePlayer)
+            if (sSoundPlayer.isCurrentPlayerSequence())
                 ImGui::PopStyleColor();
         }
 
@@ -433,32 +396,28 @@ void DrawPlayerUI()
         minutes = static_cast<u32>(seconds) / 60;
 
         ImGui::Text("%02d:%02d.%03d", minutes, static_cast<u32>(seconds) % 60, static_cast<u32>(fmodf(seconds * 1000.0f, 1000.0f)));
-        //ImGui::SameLine();
-        //ImGui::Checkbox(ICON_LC_REPEAT, &sLoop);
         ImGui::SameLine();
 
         {
+            f32 volume = sSoundPlayer.getVolume();
+
             const char* icon = ICON_LC_VOLUME_2;
-            if (sVolume <= 0.5f)
+            if (volume <= 0.5f)
                 icon = ICON_LC_VOLUME_1;
-            if (sVolume <= 0.0f)
+            if (volume <= 0.0f)
                 icon = ICON_LC_VOLUME_X;
 
             if (ImGui::BeginPopup("volume"))
             {
                 ImGui::Text(icon);
 
-                sead::FormatFixedSafeString<8> str("%d", static_cast<s32>(sVolume * 100.0f));
+                sead::FormatFixedSafeString<8> str("%d", static_cast<s32>(volume * 100.0f));
 
                 ImGui::SameLine();
                 ImGui::SetNextItemWidth(150.0f);
-                if (ImGui::SliderFloat("##", &sVolume, 0.0f, 1.0f, str.cstr(), ImGuiSliderFlags_NoInput))
+                if (ImGui::SliderFloat("##", &volume, 0.0f, 1.0f, str.cstr(), ImGuiSliderFlags_NoInput))
                 {
-                    if (sCurrentSoundPlayer)
-                    {
-                        snd::internal::driver::SoundThreadLock lock;
-                        sCurrentSoundPlayer->setVolume(sVolume);
-                    }
+                    sSoundPlayer.setVolume(volume);
                 }
 
                 ImGui::EndPopup();
@@ -472,522 +431,83 @@ void DrawPlayerUI()
             ImGui::PopStyleColor();
         }
 
-        ImGui::SeparatorText("Temp");
+        // ImGui::SeparatorText("Temp");
 
-        //if (false)
-        {
-            snd::internal::driver::SoundThreadLock lock;
+        // //if (false)
+        // {
+        //     snd::internal::driver::SoundThreadLock lock;
 
-            if (sCurrentSoundPlayer)
-            {
-                f32 pitch = sCurrentSoundPlayer->getPitch();
-                if (ImGui::DragFloat("Pitch", &pitch, 0.01f, 0.01f, 4.0f))
-                {
-                    sCurrentSoundPlayer->setPitch(pitch);
-                }
+        //     if (sCurrentSoundPlayer)
+        //     {
+        //         f32 pitch = sCurrentSoundPlayer->getPitch();
+        //         if (ImGui::DragFloat("Pitch", &pitch, 0.01f, 0.01f, 4.0f))
+        //         {
+        //             sCurrentSoundPlayer->setPitch(pitch);
+        //         }
 
-                f32 lpf = sCurrentSoundPlayer->getLpfFreq();
-                if (ImGui::DragFloat("LPF", &lpf, 0.01f, -1.0f, 0.0f))
-                {
-                    sCurrentSoundPlayer->setLpfFreq(lpf);
-                }
+        //         f32 lpf = sCurrentSoundPlayer->getLpfFreq();
+        //         if (ImGui::DragFloat("LPF", &lpf, 0.01f, -1.0f, 0.0f))
+        //         {
+        //             sCurrentSoundPlayer->setLpfFreq(lpf);
+        //         }
 
-                static const char* sBiquadTypes[] = {
-                    "Inherit",
-                    "None",
-                    "Lpf",
-                    "Hpf",
-                    "Bpf512",
-                    "Bpf1024",
-                    "Bpf2048"
-                };
+        //         static const char* sBiquadTypes[] = {
+        //             "Inherit",
+        //             "None",
+        //             "Lpf",
+        //             "Hpf",
+        //             "Bpf512",
+        //             "Bpf1024",
+        //             "Bpf2048"
+        //         };
 
-                s32 biquadType = sCurrentSoundPlayer->getBiquadFilterType() + 1;
-                if (ImGui::Combo("Biquad Type", (s32*)&biquadType, sBiquadTypes, IM_ARRAYSIZE(sBiquadTypes)))
-                {
-                    sCurrentSoundPlayer->setBiquadFilter(biquadType - 1, sCurrentSoundPlayer->getBiquadFilterValue());
-                }
+        //         s32 biquadType = sCurrentSoundPlayer->getBiquadFilterType() + 1;
+        //         if (ImGui::Combo("Biquad Type", (s32*)&biquadType, sBiquadTypes, IM_ARRAYSIZE(sBiquadTypes)))
+        //         {
+        //             sCurrentSoundPlayer->setBiquadFilter(biquadType - 1, sCurrentSoundPlayer->getBiquadFilterValue());
+        //         }
 
-                f32 biquadValue = sCurrentSoundPlayer->getBiquadFilterValue();
-                if (ImGui::DragFloat("Biquad Value", &biquadValue, 0.01f, 0.0f, 1.0f))
-                {
-                    sCurrentSoundPlayer->setBiquadFilter(sCurrentSoundPlayer->getBiquadFilterType(), biquadValue);
-                }
-            }
+        //         f32 biquadValue = sCurrentSoundPlayer->getBiquadFilterValue();
+        //         if (ImGui::DragFloat("Biquad Value", &biquadValue, 0.01f, 0.0f, 1.0f))
+        //         {
+        //             sCurrentSoundPlayer->setBiquadFilter(sCurrentSoundPlayer->getBiquadFilterType(), biquadValue);
+        //         }
+        //     }
 
-            if (sStreamPlayer.isActive())
-            {
-                for (u32 i = 0; i < sStreamPlayer.getTrackCount(); i++)
-                {
-                    f32 volume = sStreamPlayer.getPlayerTrack(i)->mVolume;
-                    if (ImGui::DragFloat(sead::FormatFixedSafeString<32>("Track%d Volume", i).cstr(), &volume, 0.01f, 0.0f, 2.0f))
-                    {
-                        sStreamPlayer.setTrackVolume(1 << i, volume);
-                    }
-                }
-            }
+        //     if (sStreamPlayer.isActive())
+        //     {
+        //         for (u32 i = 0; i < sStreamPlayer.getTrackCount(); i++)
+        //         {
+        //             f32 volume = sStreamPlayer.getPlayerTrack(i)->mVolume;
+        //             if (ImGui::DragFloat(sead::FormatFixedSafeString<32>("Track%d Volume", i).cstr(), &volume, 0.01f, 0.0f, 2.0f))
+        //             {
+        //                 sStreamPlayer.setTrackVolume(1 << i, volume);
+        //             }
+        //         }
+        //     }
 
-            if (sSequencePlayer.isActive())
-            {
-                f32 tempoRatio = sSequencePlayer.getTempoRatio();
-                if (ImGui::DragFloat("TempoRatio", &tempoRatio, 0.01f, 0.0f, sead::Mathf::maxNumber()))
-                {
-                    sSequencePlayer.setTempoRatio(tempoRatio);
-                }
+        //     if (sSequencePlayer.isActive())
+        //     {
+        //         f32 tempoRatio = sSequencePlayer.getTempoRatio();
+        //         if (ImGui::DragFloat("TempoRatio", &tempoRatio, 0.01f, 0.0f, sead::Mathf::maxNumber()))
+        //         {
+        //             sSequencePlayer.setTempoRatio(tempoRatio);
+        //         }
 
-                for (u32 i = 0; i < SequenceSoundPlayer::cTrackNumPerPlayer; i++)
-                {
-                    SequenceTrack* track = sSequencePlayer.getPlayerTrack(i);
-                    if (!track)
-                        continue;
+        //         for (u32 i = 0; i < SequenceSoundPlayer::cTrackNumPerPlayer; i++)
+        //         {
+        //             SequenceTrack* track = sSequencePlayer.getPlayerTrack(i);
+        //             if (!track)
+        //                 continue;
 
-                    f32 volume = track->getVolume();
-                    if (ImGui::DragFloat(sead::FormatFixedSafeString<32>("Track%d Volume", i).cstr(), &volume, 0.01f, 0.0f, 2.0f))
-                    {
-                        track->setVolume(volume);
-                    }
-                }
-            }
-        }
+        //             f32 volume = track->getVolume();
+        //             if (ImGui::DragFloat(sead::FormatFixedSafeString<32>("Track%d Volume", i).cstr(), &volume, 0.01f, 0.0f, 2.0f))
+        //             {
+        //                 track->setVolume(volume);
+        //             }
+        //         }
+        //     }
+        // }
     }
     ImGui::End();
-}
-
-static bool PlaySeqSound(const Sound* sound)
-{
-    const Sound::SequenceSoundInfo& seqSoundInfo = sound->getSequenceSoundInfo();
-
-    const Item* seqFileItem = seqSoundInfo.getSequenceFileRef().getItem();
-    if (!seqFileItem)
-    {
-        PopupMgr::instance()->addPopup({ "No Sequence File attached", nullptr });
-        //SEAD_PRINT("No sequence file attached\n");
-        return false;
-    }
-
-    SEAD_ASSERT(seqFileItem->getItemType() == Item::ItemType::SequenceFile);
-
-    const SequenceFile& seqFile = *static_cast<const SequenceFile*>(seqFileItem);
-
-    const Bank* banks[nw::snd::SoundArchive::SEQ_BANK_MAX];
-    for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
-    {
-        banks[i] = nullptr;
-    }
-
-    for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
-    {
-        const Item* item = seqSoundInfo.getBankRef(i).getItem();
-        if (!item)
-        {
-            continue;
-        }
-
-        SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
-        const Bank* bank = static_cast<const Bank*>(item);
-
-        banks[i] = bank;
-    }
-
-    if (!PlaySeqFile(seqFile, seqSoundInfo.getStartLabel(), banks, sound->getVolume()))
-    {
-        return false;
-    }
-
-    sSelectedItem = const_cast<Sound*>(sound);
-
-    return true;
-}
-
-static bool PlayStrmSound(const Sound* sound)
-{
-    if (sound->getStreamSoundInfo().getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
-    {
-        PopupMgr::instance()->addPopup({ "Only BFSTM streams are supported", nullptr });
-        //SEAD_PRINT("Only BFSTM sounds are supported atm\n");
-        return false;
-    }
-
-    const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
-
-    if (strmSoundInfo.getTrackList().isEmpty())
-    {
-        PopupMgr::instance()->addPopup({ "Streams must have at least 1 track", nullptr });
-        return false;
-    }
-
-    if (strmSoundInfo.getTrackList().size() > 8)
-    {
-        PopupMgr::instance()->addPopup({ "Streams can only have up to 8 tracks", nullptr });
-        return false;
-    }
-
-    StreamSoundPlayer::SetupArg setupArg;
-    setupArg.allocChannelCount = strmSoundInfo.getAllocateChannelCount();
-    setupArg.allocTrackFlag = strmSoundInfo.getAllocateTrackFlags();
-
-    if (sBfsar.isStreamSendAvailable())
-    {
-        setupArg.pitch = strmSoundInfo.getPitch();
-        setupArg.mainSend = strmSoundInfo.getMainSend();
-        for (u32 i = 0; i < nw::snd::AUX_BUS_NUM; i++)
-        {
-            setupArg.fxSend[i] = strmSoundInfo.getFxSend(i);
-        }
-    }
-    else
-    {
-        setupArg.pitch = 1.0f;
-        setupArg.mainSend = 127;
-        for (u32 i = 0; i < nw::snd::AUX_BUS_NUM; i++)
-        {
-            setupArg.fxSend[i] = 0;
-        }
-    }
-
-    WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
-    u32 mainSampleRate = 0;
-
-    u32 channelIdxStart = 0;
-    for (u32 i = 0; i < strmSoundInfo.getTrackList().size(); i++)
-    {
-        nw::snd::SoundArchive::StreamTrackInfo& tmp = setupArg.tracks[i];
-
-        const Item* trackItem = strmSoundInfo.getTrackList().nth(i)->val();
-        const Sound::StreamSoundInfo::Track& trackInfo = *static_cast<const Sound::StreamSoundInfo::Track*>(trackItem);
-
-        if (!trackInfo.getWaveFileRef().isAttached())
-        {
-            PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>("Track %u has no Wave File attached", i).cstr(), nullptr });
-            return false;
-        }
-
-        const WaveFile& waveFile = *static_cast<const WaveFile*>(trackInfo.getWaveFileRef().getItem());
-
-        if (i == 0)
-        {
-            mainEncoding = waveFile.getEncoding();
-            mainSampleRate = waveFile.getSampleRate();
-        }
-        else
-        {
-            if (mainEncoding != waveFile.getEncoding())
-            {
-                PopupMgr::instance()->addPopup({ "All stream tracks must have the same encoding", nullptr });
-                return false;
-            }
-
-            if (mainSampleRate != waveFile.getSampleRate())
-            {
-                PopupMgr::instance()->addPopup({ "All stream tracks must have the same sample rate", nullptr });
-                return false;
-            }
-        }
-
-        tmp.volume = trackInfo.getVolume();
-        tmp.pan = trackInfo.getPan();
-        tmp.span = trackInfo.getSPan();
-        tmp.flags = trackInfo.getFlags();
-        tmp.channelCount = static_cast<u8>(trackInfo.getChannelCount());
-
-        if (sBfsar.isStreamSendAvailable())
-        {
-            tmp.mainSend = trackInfo.getMainSend();
-            for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
-            {
-                tmp.fxSend[j] = trackInfo.getFxSend(j);
-            }
-        }
-        else
-        {
-            tmp.mainSend = 127;
-            for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
-            {
-                tmp.fxSend[j] = 0;
-            }
-        }
-
-        if (sBfsar.isFilterSupportedVersion())
-        {
-            tmp.lpfFreq = trackInfo.getLpfFreq();
-            tmp.biquadType = trackInfo.getBiquadType();
-            tmp.biquadValue = trackInfo.getBiquadValue();
-        }
-        else
-        {
-            tmp.lpfFreq = 64;
-            tmp.biquadType = 0;
-            tmp.biquadValue = 0;
-        }
-
-        u32 count = sead::Mathu::min(static_cast<u32>(tmp.channelCount), nw::snd::WAVE_CHANNEL_MAX);
-        for (u32 ch = 0; ch < count; ch++)
-        {
-            tmp.globalChannelIndex[ch] = channelIdxStart + ch;
-        }
-
-        channelIdxStart += count;
-    }
-
-    {
-        snd::internal::driver::SoundThreadLock lock;
-
-        StopAllSoundPlayersWithoutLock();
-
-        sStreamPlayer.init();
-
-        sStreamPlayer.setInitialVolume(static_cast<f32>(sound->getVolume()) / 127.0f);
-        sStreamPlayer.setVolume(sVolume);
-
-        sStreamPlayer.setup(setupArg);
-        sStreamPlayer.prepare(strmSoundInfo);
-
-        sCurrentSoundPlayer = &sStreamPlayer;
-
-        sSampleCount = sStreamPlayer.getSampleCount();
-        sSampleRate = sStreamPlayer.getSampleRate();
-    }
-
-    sSelectedItem = const_cast<Sound*>(sound);
-
-    return true;
-}
-
-static bool PlayWaveSound(const Sound* sound, u32 startOffsetSample)
-{
-    const Item* waveFile = sound->getWaveSoundInfo().getWaveFileRef().getItem();
-    if (!waveFile)
-    {
-        PopupMgr::instance()->addPopup({ "No Wave File attached", nullptr });
-        //SEAD_PRINT("No wave file attached\n");
-        return false;
-    }
-
-    PlayWaveFile(*static_cast<const WaveFile*>(waveFile), -1, sound, startOffsetSample);
-
-    sSelectedItem = const_cast<Sound*>(sound);
-
-    return true;
-}
-
-void PlaySound(const Sound* sound, u32 startOffsetSample)
-{
-    SEAD_ASSERT(sound);
-
-    sLastPlayedSound = sound;
-
-    switch (sound->getSoundType())
-    {
-        case Sound::SoundType::Seq:
-            PlaySeqSound(sound);
-            break;
-
-        case Sound::SoundType::Strm:
-            PlayStrmSound(sound);
-            break;
-
-        case Sound::SoundType::Wave:
-            PlayWaveSound(sound, startOffsetSample);
-            break;
-    }
-}
-
-bool PlayWaveFile(const WaveFile& wave, s32 channel, const Sound* sound, u32 startOffsetSample)
-{
-    SEAD_ASSERT(wave.getItemType() == Item::ItemType::WaveFile);
-
-    if (wave.getChannels().isEmpty())
-    {
-        PopupMgr::instance()->addPopup({ "Wave File has no channels", nullptr });
-        return false;
-    }
-
-    {
-        snd::internal::driver::SoundThreadLock lock;
-
-        StopAllSoundPlayersWithoutLock();
-
-        sWavePlayer.init();
-
-        if (sound)
-        {
-            sWavePlayer.setInitialVolume(static_cast<f32>(sound->getVolume()) / 127.0f);
-        }
-
-        sWavePlayer.setVolume(sVolume);
-
-        sWavePlayer.prepare(wave, channel, sound, startOffsetSample);
-
-        sCurrentSoundPlayer = &sWavePlayer;
-
-        sSampleCount = sWavePlayer.getSampleCount();
-        sSampleRate = sWavePlayer.getSampleRate();
-    }
-
-    sSelectedItem = const_cast<WaveFile*>(&wave);
-
-    return true;
-}
-
-bool PlayBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion)
-{
-    const Item* waveFile = velocityRegion.getWaveFileRef().getItem();
-    if (!waveFile)
-    {
-        return false;
-    }
-
-    snd::internal::driver::SoundThreadLock lock;
-
-    StopAllSoundPlayersWithoutLock();
-
-    sWavePlayer.init();
-
-    sWavePlayer.setVolume(sVolume);
-
-    sWavePlayer.prepare(*static_cast<const WaveFile*>(waveFile));
-    sWavePlayer.setBankNoteInfo(key, velocity, velocityRegion);
-
-    sCurrentSoundPlayer = &sWavePlayer;
-
-    sSampleCount = sWavePlayer.getSampleCount();
-    sSampleRate = sWavePlayer.getSampleRate();
-
-    return true;
-}
-
-bool PlaySeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, u8 volume)
-{
-    if (!seqFile.isValid())
-    {
-        PopupMgr::instance()->addPopup({ "Sequence File is not compiled", nullptr });
-        //SEAD_PRINT("SequenceFile is not valid\n");
-        return false;
-    }
-
-    u32 startOffset = seqFile.getLabelOffset(startLabel);
-    if (startOffset == SequenceFile::cInvaldOffset)
-    {
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>("Couldn't find start label '%s' in Sequence File", startLabel.cstr()).cstr(), nullptr });
-        //SEAD_PRINT("Couldn't find start label '%s' in Sequence File\n", startLabel.cstr());
-        return false;
-    }
-
-    u32 allocTracks = seqFile.getLabelAllocTracks(startLabel);
-
-    const BankFile* banks[nw::snd::SoundArchive::SEQ_BANK_MAX];
-    for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
-    {
-        banks[i] = nullptr;
-    }
-
-    for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
-    {
-        const Item* item = bankArray[i];
-        if (!item)
-        {
-            continue;
-        }
-
-        SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
-        const Bank* bank = static_cast<const Bank*>(item);
-
-        item = bank->getFileRef().getItem();
-        if (!item)
-        {
-            continue;
-        }
-
-        SEAD_ASSERT(item->getItemType() == Item::ItemType::BankFile);
-        const BankFile* bankFile = static_cast<const BankFile*>(item);
-
-        banks[i] = bankFile;
-    }
-
-    {
-        snd::internal::driver::SoundThreadLock lock;
-
-        StopAllSoundPlayersWithoutLock();
-
-        sSequencePlayer.init();
-
-        sSequencePlayer.setInitialVolume(static_cast<f32>(volume) / 127.0f);
-        sSequencePlayer.setVolume(sVolume);
-
-        sSequencePlayer.setup(allocTracks, &sSequenceNoteOnCallback2);
-        sSequencePlayer.prepare(seqFile, startOffset, banks);
-
-        sCurrentSoundPlayer = &sSequencePlayer;
-
-        sSampleCount = 0;
-        sSampleRate = 0;
-
-        //? Init vars
-        for (s32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
-        {
-            const SeqVarInfo& varInfo = sPlayerVars[i];
-            if (varInfo.enable)
-            {
-                sSequencePlayer.setLocalVariable(i, varInfo.value);
-            }
-        }
-
-        for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-        {
-            for (s32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
-            {
-                const SeqVarInfo& varInfo = sTrackVars[trackNo][i];
-                if (varInfo.enable)
-                {
-                    sSequencePlayer.getTrack_(trackNo).setTrackVariable(i, varInfo.value);
-                }
-            }
-        }
-    }
-
-    return true;
-}
-
-void StopAllSoundPlayers(bool stop)
-{
-    snd::internal::driver::SoundThreadLock lock;
-
-    StopAllSoundPlayersWithoutLock(stop);
-}
-
-void StopAllSoundPlayersWithoutLock(bool stop)
-{
-    sSequencePlayer.deinit(stop);
-    sStreamPlayer.deinit();
-    sWavePlayer.deinit(stop);
-}
-
-void StopAllVoices()
-{
-    snd::internal::driver::SoundThreadLock lock;
-
-    snd::internal::driver::MultiVoiceMgr::instance()->stopAllVoices();
-}
-
-static bool SeekPlayer(f32 progress)
-{
-    progress = sead::Mathf::clamp2(0.0f, progress, 1.0f);
-
-    Item* selectedItem = sSelectedItem;
-
-    if (sWavePlayer.isActive())
-    {
-        snd::internal::driver::SoundThreadLock lock;
-        sWavePlayer.seek(sSampleCount * progress);
-    }
-
-    if (sStreamPlayer.isActive())
-    {
-        snd::internal::driver::SoundThreadLock lock;
-        sStreamPlayer.seek(sSampleCount * progress);
-    }
-
-    sSelectedItem = selectedItem;
-
-    return true;
 }

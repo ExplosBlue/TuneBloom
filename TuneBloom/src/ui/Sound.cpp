@@ -4,9 +4,9 @@
 
 Sound::~Sound()
 {
-    if (this == sLastPlayedSound)
+    if (this == sSoundPlayer.getLastPlayedSound())
     {
-        sLastPlayedSound = nullptr;
+        sSoundPlayer.resetLastPlayedSound();
     }
 }
 

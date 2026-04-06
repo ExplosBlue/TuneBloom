@@ -160,7 +160,7 @@ void DrawSoundSetPropertiesUI()
 
             if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", sound->getId()).cstr()))
             {
-                PlaySound(sound);
+                sSoundPlayer.playSound(sound);
                 sSelectedItem = soundSet;
             }
 

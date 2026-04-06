@@ -536,7 +536,14 @@ const Item* BankFile::validate(sead::BufferedSafeString& error) const
 
 void BankFile::drawUI()
 {
+    mVersion = sBfsar.getVersionForBfbnk();
+    mEndian = sBfsar.getEndian();
+
+    HelpMarker("Those are derived from the BFSAR");
+
+    ImGui::BeginDisabled();
     InnerFile::drawUI();
+    ImGui::EndDisabled();
 }
 
 static BankFile::KeyRegion* sContextKeyRegion = nullptr;

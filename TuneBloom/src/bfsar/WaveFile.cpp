@@ -189,7 +189,19 @@ void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo)
 
 void WaveFile::drawUI()
 {
+    mVersion = sBfsar.getVersionForBfwav();
+    mEndian = sBfsar.getEndian();
+
+    HelpMarker("Those are derived from the BFSAR");
+
+    ImGui::BeginDisabled();
     InnerFile::drawUI();
+
+    CenteredTextX("Version (For Stream)");
+
+    u32 version = sBfsar.getVersionForBfstm();
+    DrawVersionUI(&version);
+    ImGui::EndDisabled();
 
     ImGui::SeparatorText("");
 
@@ -304,7 +316,7 @@ void WaveFile::drawUI()
 
     ImGui::SeparatorText("");
 
-    ImGui::Text("Channels (%d) - %s", mChannels.size(), mChannels.size() == 1 ? "Mono" : "Stereo");
+    ImGui::SeparatorText(sead::FormatFixedSafeString<32>("Channels (%d) - %s", mChannels.size(), mChannels.size() == 1 ? "Mono" : "Stereo").cstr());
 
     if (ImGui::BeginChild("Channels", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
     {

@@ -103,7 +103,14 @@ const Item* SequenceFile::validate(sead::BufferedSafeString& error) const
 
 void SequenceFile::drawUI()
 {
+    mVersion = sBfsar.getVersionForBfseq();
+    mEndian = sBfsar.getEndian();
+
+    HelpMarker("Those are derived from the BFSAR");
+
+    ImGui::BeginDisabled();
     InnerFile::drawUI();
+    ImGui::EndDisabled();
 }
 
 void SequenceFile::drawFileUI()

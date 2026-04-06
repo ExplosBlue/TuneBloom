@@ -247,6 +247,14 @@ public:
         return 0x00010000;
     }
 
+    u32 getVersionForBfseq() const
+    {
+        if (mVersion >= 0x00020100)
+            return 0x00020000;
+
+        return 0x00010000;
+    }
+
     u32 getVersionForBfwav() const
     {
         if (mVersion >= 0x00020200)

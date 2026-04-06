@@ -1,5 +1,7 @@
 #include <bfsar/BankFile.h>
 
+#include <bfsar/SeqCommand.h>
+
 #include <ui/UI.h>
 
 #include <VectorSet.h>
@@ -121,7 +123,7 @@ void BankFile::VelocityRegion::drawUI()
 
     {
         u8 volume = getVolume();
-        if (ImGui::InputScalar("Volume", ImGuiDataType_U8, &volume, &cStepU8))
+        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
         {
             setVolume(volume);
         }
@@ -835,6 +837,12 @@ void DrawKeyboardWithRegions(
                 addMode = AddMode::Front;
                 addNode = nullptr;
             }
+            else if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                sSubSelectedItem = nullptr;
+                sSelectedItemIsSubWindow = false;
+                sContextKeyRegion = nullptr;
+            }
             else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             {
                 ImGui::SetTooltip("Double click to add");
@@ -881,6 +889,12 @@ void DrawKeyboardWithRegions(
                         addMode = AddMode::Front;
                         addNode = keyRegion;
                     }
+                    else if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                        sContextKeyRegion = nullptr;
+                    }
                     else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
                     {
                         ImGui::SetTooltip("Double click to add");
@@ -901,6 +915,12 @@ void DrawKeyboardWithRegions(
                     {
                         addMode = AddMode::Back;
                         addNode = keyRegion;
+                    }
+                    else if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                        sContextKeyRegion = nullptr;
                     }
                     else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
                     {
@@ -925,6 +945,12 @@ void DrawKeyboardWithRegions(
                     {
                         addMode = AddMode::After;
                         addNode = keyRegion;
+                    }
+                    else if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                        sContextKeyRegion = nullptr;
                     }
                     else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
                     {
@@ -1131,6 +1157,10 @@ void DrawKeyboardWithRegions(
             newVelRegion->getName() = "VelocityRegion";
 
             newRegion->getVelocityRegionList().pushBack(newVelRegion);
+
+            sSubSelectedItem = newVelRegion;
+            sSelectedItemIsSubWindow = true;
+            sContextKeyRegion = newRegion;
         }
 
         static s32 mouseKey = 0;
@@ -1261,6 +1291,16 @@ void DrawKeyboardWithRegions(
             VelocityContextMenu(instrument, keyRegion, velRegion);
         }
     }
+    else
+    {
+        const char* text = "Select an Instrument";
+        ImVec2 ts = ImGui::CalcTextSize(text);
+
+        f32 x = canvasPos.x + canvasSize.x / 2.0f - ts.x / 2.0f;
+        f32 y = canvasPos.y + regionHeight / 2.0f - ts.y / 2.0f;
+
+        draw->AddText(ImVec2(x, y), IM_COL32_WHITE, text);
+    }
 
     ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + regionHeight));
 
@@ -1284,6 +1324,48 @@ void DrawKeyboardWithRegions(
         nullptr,
         originalKey
     );
+
+    s32 key[2] = { -1, -1 };
+    s32 vel[2] = { -1, -1 };
+    if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
+    {
+        BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
+        BankFile::KeyRegion* keyRegion = sContextKeyRegion;
+        key[0] = keyRegion->getKeyMin();
+        key[1] = keyRegion->getKeyMax();
+        vel[0] = velRegion->getVelocityMin();
+        vel[1] = velRegion->getVelocityMax();
+    }
+
+    ImGui::Text("Key         ");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(200.0f);
+
+    ImGui::BeginDisabled();
+    ImGui::InputInt2("###Key", key);
+    ImGui::EndDisabled();
+
+    ImGui::Text("Velocity    ");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(200.0f);
+
+    ImGui::BeginDisabled();
+    ImGui::InputInt2("###Velocity", vel);
+    ImGui::EndDisabled();
+
+    sead::FixedSafeString<16> origKey;
+    if (originalKey >= 0 && originalKey < MmlCommandNote::sKeysNum)
+    {
+        origKey = MmlCommandNote::sKeys[originalKey];
+    }
+
+    ImGui::Text("Original Key");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(200.0f);
+
+    ImGui::BeginDisabled();
+    ImGui::InputText("###Orig", origKey.getBuffer(), origKey.getBufferSize());
+    ImGui::EndDisabled();
 }
 
 InstanciateItemCallback CreateInstrumentFunc(bool clear)
@@ -1316,12 +1398,22 @@ InstanciateItemCallback CreateInstrumentFunc(bool clear)
 
 void BankFile::drawFileUI()
 {
-    if (ImGui::BeginChild("Instruments", ImVec2(0.0f, ImGui::GetWindowHeight() / 2.0f), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeY))
+    static f32 sKeyboardHeight = 200.0f; // initial guess
+    f32 totalHeight = ImGui::GetContentRegionAvail().y;
+
+    f32 topHeight = totalHeight - sKeyboardHeight;
+    if (topHeight < 0.0f)
+    {
+        topHeight = 0.0f;
+    }
+
+    if (ImGui::BeginChild("Instruments", ImVec2(0.0f, topHeight), ImGuiChildFlags_Border))
     {
         DrawAllItemsUI("Instrument", mInstrumentList, &CreateInstrumentFunc, nullptr, nullptr, nullptr, true);
     }
     ImGui::EndChild();
 
+    f32 startY = ImGui::GetCursorScreenPos().y;
     if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
     {
         f32 width = ImGui::GetContentRegionAvail().x;
@@ -1336,6 +1428,9 @@ void BankFile::drawFileUI()
                 ? static_cast<Instrument*>(sSelectedItem)
                 : nullptr
         );
+
+        f32 endY = ImGui::GetCursorScreenPos().y;
+        sKeyboardHeight = endY - startY + ImGui::GetStyle().WindowPadding.y;
     }
     ImGui::EndChild();
 }

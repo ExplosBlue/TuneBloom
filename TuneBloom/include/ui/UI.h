@@ -203,16 +203,20 @@ using ImGuiPianoKeyboardProc = bool (*)(void* UserData, s32 Msg, s32 Key, f32 Ve
 
 struct ImGuiPianoStyles
 {
-    ImU32 Colors[5] {
+    ImU32 Colors[9] {
         IM_COL32(255, 255, 255, 255), // light note
         IM_COL32(0, 0, 0, 255),       // dark note
         IM_COL32(255, 255, 0, 255),   // active light note
         IM_COL32(200, 200, 0, 255),   // active dark note
         IM_COL32(75, 75, 75, 255),    // background
+        IM_COL32(26, 210, 77, 255),   // original light note
+        IM_COL32(26, 161, 62, 255),   // original dark note
+        IM_COL32(59, 237, 107, 255),  // original active light note
+        IM_COL32(31, 207, 78, 255),   // original active dark note
     };
 
     f32 NoteDarkHeight = 2.0f / 3.0f; // dark note scale h
     f32 NoteDarkWidth  = 2.0f / 3.0f; // dark note scale w
 };
 
-void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style = nullptr);
+void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style = nullptr, s32 OriginalKey = -1);

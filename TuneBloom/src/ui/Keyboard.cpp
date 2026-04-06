@@ -16,7 +16,7 @@ bool TestPianoBoardFunct(void* UserData, int Msg, int Key, float Vel) {
 
 #include <ui/UI.h>
 
-void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style)
+void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style, s32 OriginalKey)
 {
     // const
     static const s32 NoteIsDark[12] = { 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0 };
@@ -124,14 +124,38 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
 
         bool isActive = Callback(UserData, NoteGetStatus, RealNum, 0.0f);
 
-        draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[isActive ? 2 : 0], 0.0f);
+        u32 colIdx;
+        if (isActive)
+        {
+            if (RealNum == OriginalKey)
+            {
+                colIdx = 7;
+            }
+            else
+            {
+                colIdx = 2;
+            }
+        }
+        else
+        {
+            if (RealNum == OriginalKey)
+            {
+                colIdx = 5;
+            }
+            else
+            {
+                colIdx = 0;
+            }
+        }
+
+        draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[colIdx], 0.0f);
 
         draw_list->AddRect(NoteRect.Min, NoteRect.Max, Style->Colors[4], 0.0f);
 
         if (Octave > 0 && i == 0)
         {
             draw_list->AddText(
-                ImVec2(NoteRect.Min.x + NoteWidth / 2.0f - 4, NoteRect.Min.y + 50),
+                ImVec2(NoteRect.Min.x + NoteWidth / 2.0f - 3, NoteRect.Min.y + 50),
                 IM_COL32(0, 0, 255, 255),
                 sead::FormatFixedSafeString<8>("%d", Octave - 1).cstr()
             );
@@ -171,7 +195,31 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
 
         bool isActive = Callback(UserData, NoteGetStatus, RealNum, 0.0f);
 
-        draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[isActive ? 3 : 1], 0.0f);
+        u32 colIdx;
+        if (isActive)
+        {
+            if (RealNum == OriginalKey)
+            {
+                colIdx = 8;
+            }
+            else
+            {
+                colIdx = 3;
+            }
+        }
+        else
+        {
+            if (RealNum == OriginalKey)
+            {
+                colIdx = 6;
+            }
+            else
+            {
+                colIdx = 1;
+            }
+        }
+
+        draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[colIdx], 0.0f);
 
         draw_list->AddRect(NoteRect.Min, NoteRect.Max, Style->Colors[4], 0.0f);
     }

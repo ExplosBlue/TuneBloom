@@ -95,6 +95,14 @@ void BankFile::VelocityRegion::drawUI()
 {
     static const ImU8 cStepU8 = 1;
 
+    if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::BankFileInstrument)
+    {
+        Instrument* instr = static_cast<Instrument*>(sSelectedItem);
+        instr->drawUI();
+
+        ImGui::SeparatorText("");
+    }
+
     {
         Item* waveFile = getWaveFileRef().getItem();
         if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
@@ -1256,17 +1264,25 @@ void DrawKeyboardWithRegions(
 
     ImGui::SetCursorScreenPos(ImVec2(canvasPos.x, canvasPos.y + regionHeight));
 
-    static s32 prevNote = -1;
+    static s32 sPrevNote = -1;
+
+    s32 originalKey = -1;
+    if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
+    {
+        BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
+        originalKey = velRegion->getOriginalKey();
+    }
 
     ImGui_PianoKeyboard(
         "Keyboard",
         ImVec2(width, keyboardHeight),
-        &prevNote,
+        &sPrevNote,
         beginNote,
         endNote,
         &KeyboardFunc,
         instrument,
-        nullptr
+        nullptr,
+        originalKey
     );
 }
 

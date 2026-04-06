@@ -53,9 +53,11 @@ static void DockBuilder(ImGuiID dockspaceId, const ImVec2& dockspaceSize)
 
     ImGuiID dock1 = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Left, 0.20f, nullptr, &mainDockId);
     ImGuiID dock2 = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Right, 0.50f, nullptr, &mainDockId);
+    ImGuiID dockDownMain = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Down, 0.35f, nullptr, &mainDockId);
 
     ImGui::DockBuilderDockWindow("###ProjectWindow", dock1);
     ImGui::DockBuilderDockWindow("###InfoWindow", mainDockId);
+    ImGui::DockBuilderDockWindow("###SubInfoWindow", dockDownMain);
     ImGui::DockBuilderDockWindow("###PropertiesWindow", dock2);
     ImGui::DockBuilderDockWindow("###PlayerParamWindow", dock2);
     ImGui::DockBuilderDockWindow("###SequenceVarWindow", dock2);

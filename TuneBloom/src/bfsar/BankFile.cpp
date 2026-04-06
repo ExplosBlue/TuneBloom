@@ -682,6 +682,10 @@ struct DragState
     BankFile::KeyRegion* region = nullptr;
     BankFile::KeyRegion* prev = nullptr;
     BankFile::KeyRegion* next = nullptr;
+    bool onLeftEdge = false;
+    bool onRightEdge = false;
+    ImVec2 r0;
+    ImVec2 r1;
 
     ImVec2 initialCanvasPos;
 };
@@ -809,22 +813,27 @@ void DrawKeyboardWithRegions(
 
         AddMode addMode = AddMode::None;
         BankFile::KeyRegion* addNode = nullptr;
+        ImU32 emptyAreaColor = IM_COL32(255, 0, 0, 255);
 
         if (instrument->getKeyRegionList().size() == 0)
         {
             ImVec2 n0(canvasPos.x, canvasPos.y);
             ImVec2 n1(canvasPos.x + canvasSize.x, canvasPos.y + regionHeight);
 
-            draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+            draw->AddRect(n0, n1, emptyAreaColor);
             ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(instrument));
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             {
                 addMode = AddMode::Front;
                 addNode = nullptr;
             }
+            else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            {
+                ImGui::SetTooltip("Double click to add");
+            }
         }
 
-        bool drawGrabBar = false;
+        bool drawGrabBar = sDrag.mode != DragMode::None;
         for (Item* keyRegionItem : instrument->getKeyRegionList())
         {
             splitter.SetCurrentChannel(draw, 0);
@@ -857,12 +866,16 @@ void DrawKeyboardWithRegions(
                     ImVec2 n0(canvasPos.x, canvasPos.y);
                     ImVec2 n1(canvasPos.x + x0, canvasPos.y + regionHeight);
 
-                    draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+                    draw->AddRect(n0, n1, emptyAreaColor);
                     ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(keyRegion));
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                     {
                         addMode = AddMode::Front;
                         addNode = keyRegion;
+                    }
+                    else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                    {
+                        ImGui::SetTooltip("Double click to add");
                     }
                 }
             }
@@ -874,12 +887,16 @@ void DrawKeyboardWithRegions(
                     ImVec2 n0(canvasPos.x + x1, canvasPos.y);
                     ImVec2 n1(canvasPos.x + canvasSize.x, canvasPos.y + regionHeight);
 
-                    draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+                    draw->AddRect(n0, n1, emptyAreaColor);
                     ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(keyRegion));
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                     {
                         addMode = AddMode::Back;
                         addNode = keyRegion;
+                    }
+                    else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                    {
+                        ImGui::SetTooltip("Double click to add");
                     }
                 }
             }
@@ -894,12 +911,16 @@ void DrawKeyboardWithRegions(
                     ImVec2 n0(canvasPos.x + x1, canvasPos.y);
                     ImVec2 n1(canvasPos.x + next_x0, canvasPos.y + regionHeight);
 
-                    draw->AddRect(n0, n1, IM_COL32(255, 255, 0, 255));
+                    draw->AddRect(n0, n1, emptyAreaColor);
                     ImGui::ItemAdd(ImRect(n0, n1), ImGui::GetID(keyRegion));
                     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                     {
                         addMode = AddMode::After;
                         addNode = keyRegion;
+                    }
+                    else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                    {
+                        ImGui::SetTooltip("Double click to add");
                     }
                 }
             }
@@ -908,6 +929,12 @@ void DrawKeyboardWithRegions(
 
             bool onLeftEdge  = hoveredRegionY && (mouse.x <= r0.x + edgeSize) && (mouse.x >= r0.x - edgeSize);
             bool onRightEdge = hoveredRegionY && (mouse.x >= r1.x - edgeSize) && (mouse.x <= r1.x + edgeSize);
+
+            if (keyRegion == sDrag.region)
+            {
+                sDrag.r0 = r0;
+                sDrag.r1 = r1;
+            }
 
             for (Item* velRegionItem : keyRegion->getVelocityRegionList())
             {
@@ -948,11 +975,13 @@ void DrawKeyboardWithRegions(
                         if (onLeftEdge)
                         {
                             sDrag.mode = DragMode::ResizeL;
+                            sDrag.onLeftEdge = true;
                             edgeOffset = r0.x - mouse.x;
                         }
                         else if (onRightEdge)
                         {
                             sDrag.mode = DragMode::ResizeR;
+                            sDrag.onRightEdge = true;
                             edgeOffset = r1.x - mouse.x;
                         }
 
@@ -996,29 +1025,50 @@ void DrawKeyboardWithRegions(
 
             if (drawGrabBar)
             {
+                auto drawGrabLeft = [&draw](ImVec2 r0, ImVec2 r1)
+                {
+                    draw->AddLine(
+                        ImVec2(r0.x, r0.y),
+                        ImVec2(r0.x, r1.y),
+                        IM_COL32(255, 255, 0, 255),
+                        2.0f
+                    );
+
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                };
+
+                auto drawGrabRight = [&draw](ImVec2 r0, ImVec2 r1)
+                {
+                    draw->AddLine(
+                        ImVec2(r1.x, r0.y),
+                        ImVec2(r1.x, r1.y),
+                        IM_COL32(255, 255, 0, 255),
+                        2.0f
+                    );
+
+                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                };
+
                 if (sDrag.mode == DragMode::None)
                 {
                     if (onLeftEdge)
                     {
-                        draw->AddLine(
-                            ImVec2(r0.x, r0.y),
-                            ImVec2(r0.x, r1.y),
-                            IM_COL32(255, 255, 0, 255),
-                            2.0f
-                        );
-
-                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                        drawGrabLeft(r0, r1);
                     }
                     else if (onRightEdge)
                     {
-                        draw->AddLine(
-                            ImVec2(r1.x, r0.y),
-                            ImVec2(r1.x, r1.y),
-                            IM_COL32(255, 255, 0, 255),
-                            2.0f
-                        );
-
-                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                        drawGrabRight(r0, r1);
+                    }
+                }
+                else if (sDrag.mode == DragMode::ResizeL || sDrag.mode == DragMode::ResizeR)
+                {
+                    if (sDrag.onLeftEdge)
+                    {
+                        drawGrabLeft(sDrag.r0, sDrag.r1);
+                    }
+                    else if (sDrag.onRightEdge)
+                    {
+                        drawGrabRight(sDrag.r0, sDrag.r1);
                     }
                 }
             }
@@ -1168,20 +1218,20 @@ void DrawKeyboardWithRegions(
                 }
             }
 
-            f32 xEdge, dummy;
-            if (sDrag.mode == DragMode::ResizeL)
-                GetKeyRect(mouseKey, xEdge, dummy);
-            else
-                GetKeyRect(mouseKey + 1, xEdge, dummy);
+            // f32 xEdge, dummy;
+            // if (sDrag.mode == DragMode::ResizeL)
+            //     GetKeyRect(mouseKey, xEdge, dummy);
+            // else
+            //     GetKeyRect(mouseKey + 1, xEdge, dummy);
 
-            if (sDrag.mode != DragMode::ResizeL && mouseKey >= 127)
-            {
-                xEdge = canvasSize.x; //? Special case for the last key to fill to the end
-            }
+            // if (sDrag.mode != DragMode::ResizeL && mouseKey >= 127)
+            // {
+            //     xEdge = canvasSize.x; //? Special case for the last key to fill to the end
+            // }
             
-            f32 lx = canvasPos.x + xEdge;
-            draw->AddLine(ImVec2(lx, canvasPos.y), ImVec2(lx, canvasPos.y + regionHeight), IM_COL32(255, 255, 0, 255), 2.0f);
-            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            // f32 lx = canvasPos.x + xEdge;
+            // draw->AddLine(ImVec2(lx, canvasPos.y), ImVec2(lx, canvasPos.y + regionHeight), IM_COL32(255, 255, 0, 255), 2.0f);
+            // ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
         }
 
         if (sDrag.mode != DragMode::None && ImGui::IsMouseReleased(ImGuiMouseButton_Left))

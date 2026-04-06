@@ -132,8 +132,8 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
         {
             draw_list->AddText(
                 ImVec2(NoteRect.Min.x + NoteWidth / 2.0f - 4, NoteRect.Min.y + 50),
-                IM_COL32(0,0,255,255),
-                std::to_string(Octave - 1).c_str()
+                IM_COL32(0, 0, 255, 255),
+                sead::FormatFixedSafeString<8>("%d", Octave - 1).cstr()
             );
         }
 

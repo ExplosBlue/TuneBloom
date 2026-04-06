@@ -296,7 +296,7 @@ void DrawPlayerUI()
                     }
                 }
 
-                if (wave && wave->getIsLoop())
+                if (wave)
                 {
                     sampleCount = wave->getSampleCount();
 
@@ -304,10 +304,13 @@ void DrawPlayerUI()
                     f32 loopStartX = wave->getOriginalLoopStartFrame() / static_cast<f32>(sampleCount);
                     f32 loopEndX = wave->getOriginalLoopEndFrame() / static_cast<f32>(sampleCount);
 
-                    draw->AddLine(
-                        ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y),
-                        ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y + barYSize), IM_COL32(0, 255, 0, 255), 2.0f
-                    );
+                    if (wave->getIsLoop())
+                    {
+                        draw->AddLine(
+                            ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y),
+                            ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y + barYSize), IM_COL32(0, 255, 0, 255), 2.0f
+                        );
+                    }
 
                     draw->AddLine(
                         ImVec2(barStartScreenPos.x + loopEndX * adjustSize, barStartScreenPos.y),

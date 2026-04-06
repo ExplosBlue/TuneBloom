@@ -1134,7 +1134,7 @@ void DrawKeyboardWithRegions(
         }
 
         static s32 mouseKey = 0;
-        if (sDrag.mode != DragMode::None && mouseDown)
+        if (sDrag.mode != DragMode::None && mouseDown && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
         {
             mouseKey = XToKey(mouse.x + edgeOffset + (sDrag.mode == DragMode::ResizeL ? 1.0f : -1.0f));
             // draw->AddLine(

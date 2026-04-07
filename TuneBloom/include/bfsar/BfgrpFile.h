@@ -18,6 +18,9 @@ class BfgrpFile : public InnerFile
     SEAD_RTTI_OVERRIDE(BfgrpFile, InnerFile);
 
 public:
+    static const u32 cIncludeDisabledItemsVersion = 0x00020000;
+
+public:
     BfgrpFile(sead::Endian::Types endian, u32 version)
         : InnerFile()
         , mGroup(nullptr)

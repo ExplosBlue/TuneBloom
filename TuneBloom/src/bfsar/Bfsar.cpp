@@ -1991,7 +1991,7 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 group->mItemInfoList.pushBack(itemInfo);
             };
 
-            if (mVersion <= 0x00020000)
+            if (mVersion <= BfgrpFile::cIncludeDisabledItemsVersion)
             {
                 for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
                 {
@@ -2715,7 +2715,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                 SEAD_ASSERT(groupItem->getItemType() == Item::ItemType::GroupItemInfo);
                 const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(groupItem);
 
-                if (!itemInfo->getItemRef().isAttached())
+                if (itemInfo->getIsDisabled() || !itemInfo->getItemRef().isAttached())
                 {
                     continue;
                 }
@@ -2785,7 +2785,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                     SEAD_ASSERT(groupItem->getItemType() == Item::ItemType::GroupItemInfo);
                     const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(groupItem);
 
-                    if (!itemInfo->getItemRef().isAttached())
+                    if (itemInfo->getIsDisabled() || !itemInfo->getItemRef().isAttached())
                     {
                         continue;
                     }
@@ -3660,7 +3660,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                 SEAD_ASSERT(groupItem->getItemType() == Item::ItemType::GroupItemInfo);
                 const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(groupItem);
 
-                if (!itemInfo->getItemRef().isAttached())
+                if (itemInfo->getIsDisabled() || !itemInfo->getItemRef().isAttached())
                 {
                     continue;
                 }

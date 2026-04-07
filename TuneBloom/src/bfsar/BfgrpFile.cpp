@@ -221,8 +221,6 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     {
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoExBlock, "INFX");
 
-        const u32 cIncludeDisabledItemsVersion = 0x00020000;
-
         u32 itemInfoCount = mGroup->getItemInfoList().size();
         if (sBfsar.getVersion() > cIncludeDisabledItemsVersion)
         {

@@ -36,17 +36,19 @@ project "TuneBloom"
     }
 
     filter "system:windows"
-        defines "SEAD_PLATFORM_WINDOWS"
-        links "winmm.lib"
+        defines {
+            "SEAD_PLATFORM_WINDOWS",
+            "SEAD_USE_GL"
+        }
 
     filter "configurations:Debug"
-        defines { "SEAD_DEBUG" }
+        defines { "SEAD_TARGET_DEBUG" }
         runtime "Debug"
         symbols "on"
         optimize "off"
 
     filter "configurations:Release"
-        defines { "SEAD_DEBUG" }
+        defines { "SEAD_TARGET_DEBUG" }
         runtime "Release"
         symbols "on"
         optimize "speed"

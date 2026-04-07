@@ -481,7 +481,7 @@ void BankFile::Instrument::drawUI()
     static ImS16 cStepS16 = 1;
     {
         s16 program = getProgramNo();
-        if (ImGui::InputScalar("Program", ImGuiDataType_S16, &program, &cStepS16))
+        if (ImGui::InputScalar("Program Number", ImGuiDataType_S16, &program, &cStepS16))
         {
             setProgramNo(program);
         }
@@ -506,9 +506,9 @@ const Item* BankFile::validate(sead::BufferedSafeString& error) const
         SEAD_ASSERT(instrumentItem->getItemType() == Item::ItemType::BankFileInstrument);
         const BankFile::Instrument* instrument = static_cast<const BankFile::Instrument*>(instrumentItem);
 
-        if (instrument->getProgramNo() < 0)
+        if (instrument->getProgramNo() < 0 || instrument->getProgramNo() > 32766)
         {
-            error.format("Instrument %u has a invalid program number", i);
+            error.format("Instrument %u has an invalid program number. corrent range is [0, 32766]", i);
             return instrument;
         }
 

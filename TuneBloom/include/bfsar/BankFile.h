@@ -290,7 +290,7 @@ public:
 
         void setProgramNo(s16 programNo)
         {
-            programNo = sead::MathCalcCommon<s16>::clamp2(0, programNo, 32767);
+            programNo = sead::MathCalcCommon<s16>::clamp2(0, programNo, 32766);
             mProgramNo = programNo;
         }
 

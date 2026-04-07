@@ -575,6 +575,7 @@ void SoundPlayer::drawParameters()
             {
                 bool isStream = mStreamPlayer.isActive();
                 bool isSequence = mSequencePlayer.isActive();
+                bool isWave = mWavePlayer.isActive();
                 bool disable = false;
                 if (isStream)
                 {
@@ -584,6 +585,10 @@ void SoundPlayer::drawParameters()
                 {
                     snd::internal::driver::SoundThreadLock lock;
                     disable = mSequencePlayer.getPlayerTrack(i) == nullptr;
+                }
+                else if (isWave)
+                {
+                    disable = true;
                 }
 
                 if (disable)

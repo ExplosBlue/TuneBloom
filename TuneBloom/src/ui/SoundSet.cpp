@@ -171,12 +171,14 @@ void DrawSoundSetPropertiesUI()
                 (sound->getSoundType() == Sound::SoundType::Wave && soundSet->getSoundSetType() != SoundSet::SoundSetType::Wave) ||
                 (sound->getSoundType() == Sound::SoundType::Strm);
 
+            sead::FixedSafeString<516> name(sound->getFormattedName().cstr());
             if (isError)
             {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+                name.format("%s " ICON_LC_CIRCLE_QUESTION_MARK, sound->getFormattedName().cstr());
             }
 
-            if (ImGui::Selectable(sound->getFormattedName().cstr()))
+            if (ImGui::Selectable(name.cstr()))
             {
             }
 
@@ -186,10 +188,11 @@ void DrawSoundSetPropertiesUI()
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
                 {
                     ImGui::SetTooltip(
-                        "This Sound's type does not match the SoundSet type\n"
-                        "we allow this except for Wave Sounds\n"
-                        "but please note that if your game tries to explicitly load this SoundSet\n"
-                        "this and all Sounds after will NOT get loaded !!!"
+                        "The type of this Sound does not match the Sound Set type.\n"
+                        "The tool allows this case, except for Wave Sounds.\n"
+                        "However, please note that if your game tries to explicitly\n"
+                        "load this Sound Set, then all following Sounds will NOT load,\n"
+                        "including this one!"
                     );
                 }
             }

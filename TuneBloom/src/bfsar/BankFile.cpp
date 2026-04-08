@@ -588,15 +588,15 @@ void DeleteVeloctity(BankFile::KeyRegion* keyRegion, BankFile::VelocityRegion* v
 
         if (velocityRegion == keyRegion->getVelocityRegionList().front()) //? VelocityRegion is the bottom one, extend the one above to cover it
         {
-            velocityRegion->getNext(*keyRegion)->setVelocityMin(0);
+            velocityRegion->getNext(*keyRegion)->setVelocityMin(0, *keyRegion);
         }
         else if (velocityRegion == keyRegion->getVelocityRegionList().back()) //? VelocityRegion is the top one, extend the one below to cover it
         {
-            velocityRegion->getPrev(*keyRegion)->setVelocityMax(127);
+            velocityRegion->getPrev(*keyRegion)->setVelocityMax(127, *keyRegion);
         }
         else //? VelocityRegion is sandwiched, extend the one below to cover it
         {
-            velocityRegion->getPrev(*keyRegion)->setVelocityMax(velocityRegion->getVelocityMax());
+            velocityRegion->getPrev(*keyRegion)->setVelocityMax(velocityRegion->getVelocityMax(), *keyRegion);
         }
 
         delete velocityRegion;
@@ -666,7 +666,7 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             u8 newVelMax = velocityRegion->getVelocityMax();
             u8 newVelMin = (velocityRegion->getVelocityMax() + velocityRegion->getVelocityMin()) / 2 + 1;
 
-            velocityRegion->setVelocityMax(newVelMin - 1);
+            velocityRegion->setVelocityMax(newVelMin - 1, *keyRegion);
 
             BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(newVelMin, newVelMax);
             newVelRegion->setId(0);
@@ -1391,7 +1391,7 @@ void DrawKeyboardWithRegions(
     ImGui::InputInt2("###Velocity", vel);
     ImGui::EndDisabled();
 
-    sead::FixedSafeString<16> origKey;
+    sead::FixedSafeString<16> origKey("-");
     if (originalKey >= 0 && originalKey < MmlCommandNote::sKeysNum)
     {
         origKey = MmlCommandNote::sKeys[originalKey];

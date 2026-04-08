@@ -51,22 +51,14 @@ public:
             return mVelocityMin;
         }
 
-        // TODO: Check ranges
-        void setVelocityMin(u8 velocityMin)
-        {
-            mVelocityMin = velocityMin;
-        }
+        void setVelocityMin(u8 velocityMin, const KeyRegion& parentRegion);
 
         u8 getVelocityMax() const
         {
             return mVelocityMax;
         }
 
-        // TODO: Check ranges
-        void setVelocityMax(u8 velocityMax)
-        {
-            mVelocityMax = velocityMax;
-        }
+        void setVelocityMax(u8 velocityMax, const KeyRegion& parentRegion);
 
         VelocityRegion* getPrev(const KeyRegion& parentRegion);
         VelocityRegion* getNext(const KeyRegion& parentRegion);
@@ -505,6 +497,62 @@ inline BankFile::KeyRegion* BankFile::KeyRegion::getPrevNeighbor(const Instrumen
 inline BankFile::KeyRegion* BankFile::KeyRegion::getNextNeighbor(const Instrument& parentInstrument)
 {
     return const_cast<BankFile::KeyRegion*>(parentInstrument.getKeyRegion(getKeyMax() + 1));
+}
+
+inline void BankFile::VelocityRegion::setVelocityMin(u8 velocityMin, const KeyRegion& parentRegion)
+{
+    if (velocityMin > 127)
+    {
+        velocityMin = 127;
+    }
+
+    // if (velocityMin > mVelocityMax)
+    // {
+    //     mVelocityMin = mVelocityMax;
+    //     return;
+    // }
+
+    // u8 min = 0;
+    // const VelocityRegion* prev = getPrev(parentRegion);
+    // if (prev)
+    // {
+    //     min = prev->getVelocityMax() + 1;
+    // }
+    // else
+    // {
+    //     velocityMin = 0;
+    // }
+
+    // mVelocityMin = sead::MathCalcCommon<u8>::clampMin(velocityMin, min);
+    mVelocityMin = velocityMin;
+}
+
+inline void BankFile::VelocityRegion::setVelocityMax(u8 velocityMax, const KeyRegion& parentRegion)
+{
+    if (velocityMax > 127)
+    {
+        velocityMax = 127;
+    }
+
+    // if (velocityMax < mVelocityMin)
+    // {
+    //     mVelocityMax = mVelocityMin;
+    //     return;
+    // }
+
+    // u8 max = 127;
+    // const VelocityRegion* next = getNext(parentRegion);
+    // if (next)
+    // {
+    //     max = next->getVelocityMin() - 1;
+    // }
+    // else
+    // {
+    //     velocityMax = 127;
+    // }
+
+    // mVelocityMax = sead::MathCalcCommon<u8>::clampMax(velocityMax, max);
+    mVelocityMax = velocityMax;
 }
 
 inline BankFile::VelocityRegion* BankFile::VelocityRegion::getPrev(const KeyRegion& parentRegion)

@@ -995,7 +995,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
 
     {
         u8 volume = getVolume();
-        if (ImGui::InputScalar("Volume", ImGuiDataType_U8, &volume, &cStepU8))
+        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
         {
             setVolume(volume);
         }

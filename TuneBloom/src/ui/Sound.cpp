@@ -303,7 +303,7 @@ void DrawSoundPropertiesUI()
         if (isStrm)
         {
             ImGui::SameLine();
-            HelpMarker("For Stream Sounds this field is specified in each track");
+            HelpMarker("For Stream Sounds this field is specified in each Track");
         }
     }
 

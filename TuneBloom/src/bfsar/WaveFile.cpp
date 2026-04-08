@@ -77,13 +77,13 @@ const Item* WaveFile::validate(sead::BufferedSafeString& error) const
             return this;
     }
 
-    if (getLoopEndFrame() <= getLoopStartFrame())
+    if (getLoopEndFrame(false) <= getLoopStartFrame(false))
     {
         error = "Invalid loop start/end";
         return this;
     }
 
-    if (getLoopEndFrame() < 1)
+    if (getLoopEndFrame(false) < 1)
     {
         error = "No data to write";
         return this;
@@ -210,10 +210,10 @@ void WaveFile::drawUI()
     static Encoding sEncoding = Encoding::DspAdpcm;
 
     {
-        u32 encoding = (u32)mEncoding;
+        u32 encoding = (u32)getEncoding();
         if (ImGui::Combo("Encoding", (s32*)&encoding, sEncodingTypes, IM_ARRAYSIZE(sEncodingTypes)))
         {
-            if (encoding != (u32)mEncoding)
+            if (encoding != (u32)getEncoding())
             {
                 sEncoding = Encoding(encoding);
                 ImGui::OpenPopup("###ENCODING");
@@ -222,23 +222,15 @@ void WaveFile::drawUI()
     }
 
     {
-        bool isLoop = mIsLoop;
-        if (ImGui::Checkbox("Is Loop", &isLoop))
-        {
-            mIsLoop = isLoop;
-        }
-    }
-
-    {
         ImGui::BeginDisabled();
 
-        u32 sampleRate = mSampleRate;
+        u32 sampleRate = getSampleRate();
         if (ImGui::InputScalar("Sample Rate", ImGuiDataType_U32, &sampleRate, &cStepU32))
         {
             //mSampleRate = sampleRate;
         }
 
-        u32 sampleCount = mSampleCount;
+        u32 sampleCount = getSampleCount();
         if (ImGui::InputScalar("Sample Count", ImGuiDataType_U32, &sampleCount, &cStepU32))
         {
             //mSampleCount = sampleCount;
@@ -248,7 +240,18 @@ void WaveFile::drawUI()
     }
 
     {
-        u32 loopStartFrame = mLoopStartFrame;
+        bool isLoop = getIsLoop();
+        if (ImGui::Checkbox("Is Loop", &isLoop))
+        {
+            mIsLoop = isLoop;
+        }
+
+        if (!isLoop)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        u32 loopStartFrame = getOriginalLoopStartFrame();
         if (ImGui::InputScalar("Loop Start Frame", ImGuiDataType_U32, &loopStartFrame, &cStepU32))
         {
             if (loopStartFrame >= mLoopEndFrame)
@@ -261,11 +264,12 @@ void WaveFile::drawUI()
             updateLoopInfo_(true, true);
         }
 
-        //ImGui::Text("Loop Start: %u", (mLoopStartFrame / 14) * 14);
-    }
+        if (!isLoop)
+        {
+            ImGui::EndDisabled();
+        }
 
-    {
-        u32 loopEndFrame = mLoopEndFrame;
+        u32 loopEndFrame = getOriginalLoopEndFrame();
         if (ImGui::InputScalar("Loop End Frame", ImGuiDataType_U32, &loopEndFrame, &cStepU32))
         {
             if (loopEndFrame > mSampleCount)
@@ -282,39 +286,35 @@ void WaveFile::drawUI()
                 mLoopStartFrame = loopEndFrame - 1;
             }
 
-            if (mOriginalLoopStartFrame >= loopEndFrame)
-            {
-                mOriginalLoopStartFrame = loopEndFrame - 1;
-            }
-
             mLoopEndFrame = loopEndFrame;
         }
-
-        //ImGui::Text("Loop End: %u", (mLoopEndFrame / 14) * 14);
     }
 
     {
-        bool enableOriginalLoop = isOriginalLoopAvailable();
+        ImGui::BeginDisabled();
 
-        if (!enableOriginalLoop)
-            ImGui::BeginDisabled();
-
-        u32 originalLoopStartFrame = mOriginalLoopStartFrame;
-        if (ImGui::InputScalar("Original Loop Start Frame", ImGuiDataType_U32, &originalLoopStartFrame, &cStepU32))
+        u32 realLoopStartFrame = getLoopStartFrame(false);
+        if (ImGui::InputScalar("Real Loop Start Frame", ImGuiDataType_U32, &realLoopStartFrame, &cStepU32))
         {
-            if (originalLoopStartFrame >= mLoopEndFrame)
-            {
-                originalLoopStartFrame = mLoopEndFrame - 1;
-            }
-
-            mOriginalLoopStartFrame = originalLoopStartFrame;
         }
 
-        if (!enableOriginalLoop)
-            ImGui::EndDisabled();
-    }
+        u32 realLoopEndFrame = getLoopEndFrame(false);
+        if (ImGui::InputScalar("Real Loop End Frame", ImGuiDataType_U32, &realLoopEndFrame, &cStepU32))
+        {
+        }
 
-    ImGui::SeparatorText("");
+        realLoopStartFrame = getLoopStartFrame(true);
+        if (ImGui::InputScalar("Real Loop Start Frame (For Stream)", ImGuiDataType_U32, &realLoopStartFrame, &cStepU32))
+        {
+        }
+
+        realLoopEndFrame = getLoopEndFrame(true);
+        if (ImGui::InputScalar("Real Loop End Frame (For Stream)", ImGuiDataType_U32, &realLoopEndFrame, &cStepU32))
+        {
+        }
+
+        ImGui::EndDisabled();
+    }
 
     ImGui::SeparatorText(sead::FormatFixedSafeString<32>("Channels (%d) - %s", mChannels.size(), mChannels.size() == 1 ? "Mono" : "Stereo").cstr());
 
@@ -452,12 +452,23 @@ void WaveFile::doRead(const void* fileAddr)
     mEncoding = static_cast<Encoding>(reader.mInfoBlockBody->encoding);
     mIsLoop = waveInfo.loopFlag;
     mSampleRate = waveInfo.sampleRate;
-    mLoopStartFrame = waveInfo.loopStartFrame;
-    mLoopEndFrame = waveInfo.loopEndFrame;
-    mOriginalLoopStartFrame = waveInfo.originalLoopStartFrame;
-    mOriginalLoopEndFrame = mLoopEndFrame;
+    mLoopStartFrame = waveInfo.originalLoopStartFrame;
+    mLoopEndFrame = waveInfo.loopEndFrame - (waveInfo.loopStartFrame - waveInfo.originalLoopStartFrame);
+    SEAD_ASSERT(getLoopStartFrame(false) == waveInfo.loopStartFrame);
+    SEAD_ASSERT(getLoopEndFrame(false) == waveInfo.loopEndFrame);
 
-    mSampleCount = waveInfo.loopEndFrame;
+    // if (getLoopStartFrame(false) != waveInfo.loopStartFrame)
+    // {
+    //     SEAD_PRINT("Wave(%u) LoopStart mismatch. %u != %u\n", getId(), getLoopStartFrame(false), waveInfo.loopStartFrame);
+    // }
+    // if (getLoopEndFrame(false) != waveInfo.loopEndFrame)
+    // {
+    //     SEAD_PRINT("Wave(%u) LoopEnd mismatch. %u != %u\n", getId(), getLoopEndFrame(false), waveInfo.loopEndFrame);
+    // }
+
+    mSampleCount = mLoopEndFrame;
+
+    // TODO: Handle spool frames
 
     mUseOriginalData = true;
     mOriginalDataSize = reader.mHeader->GetDataBlock()->header.size - 0x20;
@@ -503,7 +514,7 @@ void WaveFile::doRead(const void* fileAddr)
         }
     }
 
-    updateLoopInfo_(false, true);
+    // updateLoopInfo_(false, true);
 }
 
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
@@ -519,8 +530,8 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         stream->writeU8(mIsLoop);
         stream->writeU16(0); // Padding
         stream->writeU32(mSampleRate);
-        stream->writeU32(mLoopStartFrame);
-        stream->writeU32(mLoopEndFrame);
+        stream->writeU32(getLoopStartFrame(false));
+        stream->writeU32(getLoopEndFrame(false));
         stream->writeU32(isOriginalLoopAvailable(mVersion) ? getOriginalLoopStartFrame() : 0);
 
         writer.pushOffsetBase();
@@ -610,7 +621,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         }
         else
         {
-            u32 sampleBytes = nw::snd::internal::Util::GetByteBySample(mSampleCount, nw::snd::internal::WaveFileReader::GetSampleFormat((u8)mEncoding));
+            u32 sampleBytes = nw::snd::internal::Util::GetByteBySample(getLoopEndFrame(false), nw::snd::internal::WaveFileReader::GetSampleFormat((u8)mEncoding));
 
             for (u32 i = 0; i < mChannels.size(); i++)
             {
@@ -829,8 +840,6 @@ bool WaveFile::readWavFile(const sead::SafeString& path, Encoding encoding)
     // TODO: Loop info ?
     mLoopStartFrame = 0;
     mLoopEndFrame = mSampleCount;
-    mOriginalLoopStartFrame = mLoopStartFrame;
-    mOriginalLoopEndFrame = mLoopEndFrame;
 
     for (u32 i = 0; i < numChannels; i++)
     {

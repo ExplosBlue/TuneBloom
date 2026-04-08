@@ -372,8 +372,8 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
     waveInfo.loopFlag = mainWave.getIsLoop();
     waveInfo.channelCount = streamSoundInfo.getAllocateChannelCount();
     waveInfo.sampleRate = mainWave.getSampleRate();
-    waveInfo.loopStartFrame = mainWave.getLoopStartFrame();
-    waveInfo.loopEndFrame = mainWave.getLoopEndFrame();
+    waveInfo.loopStartFrame = mainWave.getLoopStartFrame(false);
+    waveInfo.loopEndFrame = mainWave.getLoopEndFrame(false);
     waveInfo.originalLoopStartFrame = mainWave.getOriginalLoopStartFrame();
 
     for (u32 i = 0; i < waveInfo.channelCount; i++)

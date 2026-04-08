@@ -15,8 +15,8 @@ void GetWaveInfoFromWaveFile(WaveInfo* out, const ::WaveFile& waveFile, s32 chan
     out->loopFlag = waveFile.getIsLoop();
     out->channelCount = channelIdx == -1 ? waveFile.getChannels().size() : 1;
     out->sampleRate = waveFile.getSampleRate();
-    out->loopStartFrame = waveFile.getLoopStartFrame();
-    out->loopEndFrame = waveFile.getLoopEndFrame();
+    out->loopStartFrame = waveFile.getLoopStartFrame(false);
+    out->loopEndFrame = waveFile.getLoopEndFrame(false);
     out->originalLoopStartFrame = waveFile.getOriginalLoopStartFrame();
 
     for (u32 i = 0; i < out->channelCount; i++)

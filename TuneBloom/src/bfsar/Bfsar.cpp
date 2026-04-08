@@ -4993,17 +4993,17 @@ bool Bfsar::readStreamWaves_(const Sound* sound, const void* strmFile, Sound::St
             wave->mName.format("GUESS_%s_TRACK_%u", sound->getName().cstr(), trackNo);
         }
 
-        wave->mVersion = 0x00010200;
+        wave->mVersion = getVersionForBfwav();
         wave->mDataEndian = nw::ut::GetFileEndian(*reader.mHeader);
         wave->mEncoding = encoding;
         wave->mIsLoop = streamSoundInfo.isLoop;
         wave->mSampleRate = streamSoundInfo.sampleRate;
-        wave->mLoopStartFrame = streamSoundInfo.loopStart;
-        wave->mLoopEndFrame = streamSoundInfo.frameCount;
-        wave->mOriginalLoopStartFrame = streamSoundInfo.originalLoopStart;
-        wave->mOriginalLoopEndFrame = streamSoundInfo.originalLoopEnd;
+        wave->mLoopStartFrame = streamSoundInfo.originalLoopStart;
+        wave->mLoopEndFrame = streamSoundInfo.originalLoopEnd;
+        SEAD_ASSERT(wave->getLoopStartFrame(true) == streamSoundInfo.loopStart);
+        SEAD_ASSERT(wave->getLoopEndFrame(true) == streamSoundInfo.frameCount);
 
-        wave->mSampleCount = streamSoundInfo.frameCount;
+        wave->mSampleCount = wave->mLoopEndFrame;
 
         wave->mUseOriginalData = false;
 

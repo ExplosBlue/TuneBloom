@@ -114,6 +114,10 @@ public:
 
     static const char* sEncodingTypes[3];
 
+    static const u32 cSamplesPerFrame = 14;
+    static const u32 cStreamLoopStartAlignmentFramesAdpcm = 0x3800;
+    static const u32 cStreamMinimumLoopFrames = 0x480;
+
 public:
     WaveFile()
         : Item()
@@ -124,8 +128,6 @@ public:
         , mSampleRate(0)
         , mLoopStartFrame(0)
         , mLoopEndFrame(0)
-        , mOriginalLoopStartFrame(0)
-        , mOriginalLoopEndFrame(0)
 
         , mSampleCount(0)
 
@@ -185,30 +187,64 @@ public:
         return mSampleRate;
     }
 
-    u32 getLoopStartFrame() const
+    u32 getLoopStartFrame(bool forStream) const
     {
-        return mLoopStartFrame;
+        return getOriginalLoopStartFrame() + getSpoolFrames(getLoopStartAlignmentFrames(forStream));
     }
 
-    u32 getLoopEndFrame() const
+    u32 getLoopEndFrame(bool forStream) const
     {
-        return mLoopEndFrame;
+        u32 loopFrames = getLoopFrames();
+        u32 endFrame = getLoopStartFrame(forStream) + loopFrames;
+        if (forStream && cStreamMinimumLoopFrames > loopFrames)
+            endFrame += loopFrames * (cStreamMinimumLoopFrames / loopFrames);
+
+        return endFrame;
     }
 
     u32 getOriginalLoopStartFrame() const
     {
-        if (isOriginalLoopAvailable())
-            return mOriginalLoopStartFrame;
+        if (getIsLoop())
+            return mLoopStartFrame;
 
-        return mLoopStartFrame;
+        return 0;
     }
 
     u32 getOriginalLoopEndFrame() const
     {
-        if (isOriginalLoopAvailable())
-            return mOriginalLoopEndFrame;
-
         return mLoopEndFrame;
+    }
+
+    u32 getLoopFrames() const
+    {
+        return getOriginalLoopEndFrame() - getOriginalLoopStartFrame();
+    }
+
+    u32 getSpoolFrames(u32 loopStartAlignmentFrames) const
+    {
+        if (loopStartAlignmentFrames > 0)
+        {
+            u32 skipped = getOriginalLoopStartFrame() % loopStartAlignmentFrames;
+            if (skipped > 0)
+                return loopStartAlignmentFrames - skipped;
+        }
+        
+        return 0;
+    }
+
+    u32 getLoopStartAlignmentFrames(bool forStream) const
+    {
+        switch (mEncoding)
+        {
+            case Encoding::DspAdpcm:
+                return forStream ? cStreamLoopStartAlignmentFramesAdpcm : cSamplesPerFrame;
+            case Encoding::Pcm16:
+                return forStream ? 8192 / sizeof(s16) : 0;
+            case Encoding::Pcm8:
+                return forStream ? 8192 / sizeof(u8) : 0;
+        }
+
+        return 0;
     }
 
     const sead::ObjList<Channel>& getChannels() const
@@ -250,8 +286,6 @@ private:
     u32 mSampleRate;
     u32 mLoopStartFrame;
     u32 mLoopEndFrame;
-    u32 mOriginalLoopStartFrame;
-    u32 mOriginalLoopEndFrame; //? Only used for streams
 
     u32 mSampleCount;
 

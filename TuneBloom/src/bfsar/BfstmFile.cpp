@@ -70,7 +70,7 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
     const u32 cDefaultBytesPerSeekTableEntry = 2 * sizeof(s16);
     //const u32 cDefaultSamplesPerSeekTableEntry = nw::snd::internal::Util::GetSampleByByte(cDefaultBytesPerBlock, sampleFormat);
 
-    u32 sampleCount = mainWave.getLoopEndFrame();
+    u32 sampleCount = mainWave.getLoopEndFrame(true);
     u32 samplePerBlock = nw::snd::internal::Util::GetSampleByByte(cDefaultBytesPerBlock, sampleFormat);
     u32 blockNum = sampleCount / samplePerBlock + (sampleCount % samplePerBlock != 0); // Divide sampleCount by samplePerBlock and ceil
 
@@ -112,7 +112,7 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
             stream.writeU8(static_cast<u8>(channelNum));
             stream.writeU8(0); // TODO: ? Region count
             stream.writeU32(mainWave.getSampleRate());
-            stream.writeU32(mainWave.getLoopStartFrame());
+            stream.writeU32(mainWave.getLoopStartFrame(true));
             stream.writeU32(sampleCount);
             stream.writeU32(blockNum);
             stream.writeU32(cDefaultBytesPerBlock);
@@ -323,10 +323,12 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
                 // u32 pos = writer.getPosition();
 
                 const WaveFile::Channel& channel = *channels[ch];
+                const WaveFile& currentWave = *channelOwners[ch];
 
                 u32 offset = blockNo * cDefaultBytesPerBlock;
 
-                u32 dataSize = channel.getDataSize();
+                u32 dataSize = nw::snd::internal::Util::GetByteBySample(currentWave.getLoopEndFrame(false), sampleFormat);
+                // u32 dataSize = channel.getDataSize();
                 const u8* data = static_cast<const u8*>(channel.getData()) + offset;
 
                 bool isLastBlock = blockNo == blockNum - 1;
@@ -353,6 +355,7 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
                     stream.writeMemBlock(cPad, padSize);
                 }
 
+                //? Debug
                 // {
                 //     u32 prevPos = writer.getPosition();
                 //     writer.seek(pos);

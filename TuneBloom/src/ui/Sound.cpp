@@ -62,13 +62,13 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
             const Sound::StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
             if (tracks.isEmpty())
             {
-                error = "Streams must have at least 1 track";
+                error = "Streams must have at least 1 Track";
                 return this;
             }
 
             if (tracks.size() > 8)
             {
-                error = "Streams can only have up to 8 tracks";
+                error = "Streams can only have up to 8 Tracks";
                 return this;
             }
 
@@ -94,13 +94,13 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
                 {
                     if (mainEncoding != waveFile.getEncoding())
                     {
-                        error = "All stream tracks must have the same encoding";
+                        error = "All Stream Tracks must have the same encoding";
                         return this;
                     }
 
                     if (mainSampleRate != waveFile.getSampleRate())
                     {
-                        error = "All stream tracks must have the same sample rate";
+                        error = "All Stream Tracks must have the same sample rate";
                         return this;
                     }
                 }
@@ -303,7 +303,7 @@ void DrawSoundPropertiesUI()
         if (isStrm)
         {
             ImGui::SameLine();
-            HelpMarker("For stream sounds this field is specified in each track");
+            HelpMarker("For Stream Sounds this field is specified in each track");
         }
     }
 

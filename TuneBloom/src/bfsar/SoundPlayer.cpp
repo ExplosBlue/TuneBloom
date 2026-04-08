@@ -116,13 +116,13 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
 
     if (strmSoundInfo.getTrackList().isEmpty())
     {
-        PopupMgr::instance()->addPopup({ "Streams must have at least 1 track", nullptr });
+        PopupMgr::instance()->addPopup({ "Streams must have at least 1 Track", nullptr });
         return false;
     }
 
     if (strmSoundInfo.getTrackList().size() > 8)
     {
-        PopupMgr::instance()->addPopup({ "Streams can only have up to 8 tracks", nullptr });
+        PopupMgr::instance()->addPopup({ "Streams can only have up to 8 Tracks", nullptr });
         return false;
     }
 
@@ -179,13 +179,13 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
         {
             if (mainEncoding != waveFile.getEncoding())
             {
-                PopupMgr::instance()->addPopup({ "All stream tracks must have the same encoding", nullptr });
+                PopupMgr::instance()->addPopup({ "All Stream Tracks must have the same encoding", nullptr });
                 return false;
             }
 
             if (mainSampleRate != waveFile.getSampleRate())
             {
-                PopupMgr::instance()->addPopup({ "All stream tracks must have the same sample rate", nullptr });
+                PopupMgr::instance()->addPopup({ "All Stream Tracks must have the same sample rate", nullptr });
                 return false;
             }
         }

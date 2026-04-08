@@ -15,7 +15,7 @@ int main()
     sead::HeapMgr::createUnboundHeap();
 
     sead::GameFrameworkBaseWin::CreateArg createArg;
-    createArg.wait_vblank = 1;
+    createArg.wait_vblank = 0;
     createArg.window_name = util::cAppName;
     createArg.clear_color = sead::Color4f(0.0f, 0.0f, 0.3f, 1.0f);
 

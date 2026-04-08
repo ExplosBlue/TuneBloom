@@ -695,7 +695,8 @@ enum class DragMode
 {
     None,
     ResizeL,
-    ResizeR
+    ResizeR,
+    ResizeVTop
 };
 
 struct DragState
@@ -704,10 +705,18 @@ struct DragState
     BankFile::KeyRegion* region = nullptr;
     BankFile::KeyRegion* prev = nullptr;
     BankFile::KeyRegion* next = nullptr;
+
+    BankFile::VelocityRegion* velRegion = nullptr;
+    BankFile::VelocityRegion* vNext = nullptr;
+
     bool onLeftEdge = false;
     bool onRightEdge = false;
+    bool onTopEdge = false;
     ImVec2 r0;
     ImVec2 r1;
+
+    ImVec2 v0;
+    ImVec2 v1;
 
     ImVec2 initialCanvasPos;
 };
@@ -995,6 +1004,57 @@ void DrawKeyboardWithRegions(
                     drawGrabBar = true;
                 }
 
+                if (velRegion == sDrag.velRegion)
+                {
+                    sDrag.v0 = p0;
+                    sDrag.v1 = p1;
+                }
+
+                bool hoveredRegionX = mouse.x >= p0.x && mouse.x <= p1.x && hoveredRegionY;
+                bool onTopEdge = hoveredRegionX && (mouse.y <= p0.y + edgeSize) && (mouse.y >= p0.y - edgeSize);
+                bool onBottomEdge = hoveredRegionX && (mouse.y >= p1.y - edgeSize) && (mouse.y <= p1.y + edgeSize);
+
+                if (drawGrabBar)
+                {
+                    splitter.SetCurrentChannel(draw, 1);
+                    auto drawGrabTop = [&draw](ImVec2 p0, ImVec2 p1)
+                    {
+                        draw->AddLine(
+                            ImVec2(p0.x, p0.y),
+                            ImVec2(p1.x, p0.y),
+                            IM_COL32(255, 255, 0, 255),
+                            2.0f
+                        );
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                    };
+
+                    if (sDrag.mode == DragMode::None)
+                    {
+                        if (!onLeftEdge && !onRightEdge)
+                        {
+                            if (onTopEdge && velMax < 127 && velRegion->getNext(*keyRegion))
+                            {
+                                drawGrabTop(p0, p1);
+                            }
+                            else if (onBottomEdge && velMin > 0 && velRegion->getPrev(*keyRegion))
+                            {
+                                draw->AddLine(
+                                    ImVec2(p0.x, p1.y),
+                                    ImVec2(p1.x, p1.y),
+                                    IM_COL32(255, 255, 0, 255),
+                                    2.0f
+                                );
+                                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                            }
+                        }
+                    }
+                    else if (sDrag.mode == DragMode::ResizeVTop && sDrag.velRegion == velRegion)
+                    {
+                        drawGrabTop(sDrag.v0, sDrag.v1);
+                    }
+                    splitter.SetCurrentChannel(draw, 0);
+                }
+
                 ImU32 color = IM_COL32(140, 140, 140, 255);
                 if (sSubSelectedItem == velRegion)
                 {
@@ -1018,6 +1078,22 @@ void DrawKeyboardWithRegions(
                             sDrag.mode = DragMode::ResizeR;
                             sDrag.onRightEdge = true;
                             edgeOffset = r1.x - mouse.x;
+                        }
+                        else if (onTopEdge && velMax < 127 && velRegion->getNext(*keyRegion))
+                        {
+                            sDrag.mode = DragMode::ResizeVTop;
+                            sDrag.onTopEdge = true;
+                            edgeOffset = p0.y - mouse.y;
+                            sDrag.velRegion = velRegion;
+                            sDrag.vNext = velRegion->getNext(*keyRegion);
+                        }
+                        else if (onBottomEdge && velMin > 0 && velRegion->getPrev(*keyRegion))
+                        {
+                            sDrag.mode = DragMode::ResizeVTop;
+                            sDrag.onTopEdge = true;
+                            edgeOffset = p1.y - mouse.y;
+                            sDrag.velRegion = velRegion->getPrev(*keyRegion);
+                            sDrag.vNext = velRegion;
                         }
 
                         sDrag.region = keyRegion;
@@ -1204,93 +1280,119 @@ void DrawKeyboardWithRegions(
         static s32 mouseKey = 0;
         if (sDrag.mode != DragMode::None && mouseDown && ImGui::IsMouseDragging(ImGuiMouseButton_Left))
         {
-            mouseKey = XToKey(mouse.x + edgeOffset + (sDrag.mode == DragMode::ResizeL ? 1.0f : -1.0f));
-            // draw->AddLine(
-            //     ImVec2(mouse.x + edgeOffset, canvasPos.y),
-            //     ImVec2(mouse.x + edgeOffset, canvasPos.y + regionHeight),
-            //     IM_COL32(255, 0, 0, 255),
-            //     1.0f
-            // );
-
-            BankFile::KeyRegion* region = sDrag.region;
-
-            if (sDrag.mode == DragMode::ResizeL)
+            if (sDrag.mode == DragMode::ResizeVTop)
             {
-                if (mouseKey > region->getKeyMax())
+                f32 y = mouse.y + edgeOffset - canvasPos.y;
+                s32 mouseVel = 127 - (s32)IM_ROUND((y / regionHeight) * 128.0f);
+
+                BankFile::VelocityRegion* velRegion = sDrag.velRegion;
+                BankFile::VelocityRegion* vNext = sDrag.vNext;
+
+                if (mouseVel < velRegion->getVelocityMin())
                 {
-                    mouseKey = region->getKeyMax();
+                    mouseVel = velRegion->getVelocityMin();
                 }
 
-                if (region->getPrev(*instrument))
+                if (mouseVel > vNext->getVelocityMax() - 1)
                 {
-                    BankFile::KeyRegion* prev = region->getPrev(*instrument);
-                    if (mouseKey < prev->getKeyMin() + 1)
+                    mouseVel = vNext->getVelocityMax() - 1;
+                }
+
+                snd::internal::driver::SoundThreadLock lock;
+                
+                velRegion->setVelocityMax(mouseVel, *sDrag.region);
+                vNext->setVelocityMin(mouseVel + 1, *sDrag.region);
+            }
+            else
+            {
+                mouseKey = XToKey(mouse.x + edgeOffset + (sDrag.mode == DragMode::ResizeL ? 1.0f : -1.0f));
+                // draw->AddLine(
+                //     ImVec2(mouse.x + edgeOffset, canvasPos.y),
+                //     ImVec2(mouse.x + edgeOffset, canvasPos.y + regionHeight),
+                //     IM_COL32(255, 0, 0, 255),
+                //     1.0f
+                // );
+
+                BankFile::KeyRegion* region = sDrag.region;
+
+                if (sDrag.mode == DragMode::ResizeL)
+                {
+                    if (mouseKey > region->getKeyMax())
                     {
-                        mouseKey = prev->getKeyMin() + 1;
+                        mouseKey = region->getKeyMax();
+                    }
+
+                    if (region->getPrev(*instrument))
+                    {
+                        BankFile::KeyRegion* prev = region->getPrev(*instrument);
+                        if (mouseKey < prev->getKeyMin() + 1)
+                        {
+                            mouseKey = prev->getKeyMin() + 1;
+                        }
+                    }
+
+                    if (sDrag.prev == nullptr && region->getPrev(*instrument))
+                    {
+                        mouseKey = std::clamp(mouseKey, region->getPrev(*instrument)->getKeyMax() + 1, (s32)region->getKeyMax());
+                    }
+                }
+                else if (sDrag.mode == DragMode::ResizeR)
+                {
+                    if (mouseKey < region->getKeyMin())
+                    {
+                        mouseKey = region->getKeyMin();
+                    }
+
+                    if (region->getNext(*instrument))
+                    {
+                        BankFile::KeyRegion* next = region->getNext(*instrument);
+                        if (mouseKey > next->getKeyMax() - 1)
+                        {
+                            mouseKey = next->getKeyMax() - 1;
+                        }
+                    }
+
+                    if (sDrag.next == nullptr && region->getNext(*instrument))
+                    {
+                        mouseKey = std::clamp(mouseKey, (s32)region->getKeyMin(), region->getNext(*instrument)->getKeyMin() - 1);
                     }
                 }
 
-                if (sDrag.prev == nullptr && region->getPrev(*instrument))
+                if (sDrag.mode == DragMode::ResizeL)
                 {
-                    mouseKey = std::clamp(mouseKey, region->getPrev(*instrument)->getKeyMax() + 1, (s32)region->getKeyMax());
-                }
-            }
-            else if (sDrag.mode == DragMode::ResizeR)
-            {
-                if (mouseKey < region->getKeyMin())
-                {
-                    mouseKey = region->getKeyMin();
-                }
+                    snd::internal::driver::SoundThreadLock lock;
 
-                if (region->getNext(*instrument))
-                {
-                    BankFile::KeyRegion* next = region->getNext(*instrument);
-                    if (mouseKey > next->getKeyMax() - 1)
+                    s32 newMin = mouseKey;
+
+                    if (sDrag.prev)
                     {
-                        mouseKey = next->getKeyMax() - 1;
+                        sDrag.prev->setKeyMax(newMin - 1, *instrument);
+                    }
+
+                    region->setKeyMin(newMin, *instrument);
+
+                    if (sDrag.prev)
+                    {
+                        sDrag.prev->setKeyMax(region->getKeyMin() - 1, *instrument);
                     }
                 }
-
-                if (sDrag.next == nullptr && region->getNext(*instrument))
+                else if (sDrag.mode == DragMode::ResizeR)
                 {
-                    mouseKey = std::clamp(mouseKey, (s32)region->getKeyMin(), region->getNext(*instrument)->getKeyMin() - 1);
-                }
-            }
+                    snd::internal::driver::SoundThreadLock lock;
 
-            if (sDrag.mode == DragMode::ResizeL)
-            {
-                snd::internal::driver::SoundThreadLock lock;
+                    s32 newMax = mouseKey;
 
-                s32 newMin = mouseKey;
+                    if (sDrag.next)
+                    {
+                        sDrag.next->setKeyMin(newMax + 1, *instrument);
+                    }
 
-                if (sDrag.prev)
-                {
-                    sDrag.prev->setKeyMax(newMin - 1, *instrument);
-                }
+                    region->setKeyMax(newMax, *instrument);
 
-                region->setKeyMin(newMin, *instrument);
-
-                if (sDrag.prev)
-                {
-                    sDrag.prev->setKeyMax(region->getKeyMin() - 1, *instrument);
-                }
-            }
-            else if (sDrag.mode == DragMode::ResizeR)
-            {
-                snd::internal::driver::SoundThreadLock lock;
-
-                s32 newMax = mouseKey;
-
-                if (sDrag.next)
-                {
-                    sDrag.next->setKeyMin(newMax + 1, *instrument);
-                }
-
-                region->setKeyMax(newMax, *instrument);
-
-                if (sDrag.next)
-                {
-                    sDrag.next->setKeyMin(region->getKeyMax() + 1, *instrument);
+                    if (sDrag.next)
+                    {
+                        sDrag.next->setKeyMin(region->getKeyMax() + 1, *instrument);
+                    }
                 }
             }
 

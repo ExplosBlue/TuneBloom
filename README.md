@@ -12,11 +12,30 @@
 ## Overview
 TuneBloom is an extremely fast & stable editor for editing NintendoWare audio formats, mainly for the Wii U. It features high performance, low memory usage, and a high degree of data accuracy, allowing you to modify everything throughout the archive while ensuring that nothing will go wrong in the process. Support is included for every component of sound archives including waves, sequences, streams, banks, and more. Live playback allows quick previews of your work resulting in a highly effective and streamlined workflow. This is TuneBloom.
 
+## Features
+- Playback for every type of sound!
+- Sequence (BFSEQ) editor!
+- Bank (BFBNK) editor!
+- Edit every single property of the BFSAR!
+- And more!
+
 ## Screenshots
 <div align="center">
-  <img width="640" alt="TuneBloom_KtDCAtcRTj" src="https://github.com/user-attachments/assets/9a9f17c0-dd70-402b-980c-491435f6b882">
-  <img width="640" alt="TuneBloom_4eZ7G778jO" src="https://github.com/user-attachments/assets/33314c74-339b-41a4-b470-5d8c0df08e9a">
+  <img width="400" alt="TuneBloom_PBCw2isamn" src="https://github.com/user-attachments/assets/94a97581-4367-4f2d-b4da-c75b59e53aeb" />
+  <img width="400" alt="TuneBloom_itmqEg2BRg" src="https://github.com/user-attachments/assets/c91e57e4-7f56-4f61-bc1d-723a3bcf2e7f" />
+  <img width="400" alt="TuneBloom_D5QeeacBr2" src="https://github.com/user-attachments/assets/4cfd9de4-1e5c-4fc9-9a25-60ac6f400c0c" />
+  <img width="400" alt="TuneBloom_Ot0x2Fng9e" src="https://github.com/user-attachments/assets/e84fc549-f740-4888-ae22-bd142aef731a" />
 </div>
+
+## Goals
+- BCSAR support.
+- BFSAR support. (Switch)
+
+## Limitations
+- External groups (BFGRP)
+  - Support for external groups is still WIP (Reading only), that means games like SM3DW, CTTT and any that makes use of external groups only supports playback.
+- Import/Export wave files
+  - The tool can only make use of .wav files for importing/replacing and exporting.
 
 ## Compiling
 - Premake is used as the build system which makes setting up a development environment very straightforward.

@@ -88,18 +88,9 @@ void Bfsar::create()
     mOpen = true;
 }
 
-bool Bfsar::open(const sead::SafeString& filePath, sead::Heap* heap)
+bool Bfsar::open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* heap)
 {
     close();
-
-    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-    SEAD_ASSERT(device);
-
-    sead::FileDevice::LoadArg arg;
-    arg.path = filePath;
-    arg.heap = heap;
-
-    u8* bfsarFile = device->load(arg);
 
     mFilePath = new(heap) sead::HeapSafeString(heap, filePath);
 
@@ -107,14 +98,14 @@ bool Bfsar::open(const sead::SafeString& filePath, sead::Heap* heap)
     bool success = soundArchive->Initialize(bfsarFile);
     SEAD_ASSERT(success);
 
-    open_(*soundArchive, heap);
+    success = open_(*soundArchive, heap);
 
     delete soundArchive;
-    device->unload(bfsarFile);
+    delete bfsarFile;
 
     mOpen = true;
 
-    return true;
+    return success;
 }
 
 bool Bfsar::save()
@@ -297,7 +288,7 @@ void Bfsar::updateList(Item::List& list)
     }
 }
 
-void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap)
+bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap)
 {
     mEndian = nw::ut::GetFileEndian(soundArchive.mHeader);
 
@@ -2392,6 +2383,8 @@ void Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     // {
     //     SEAD_PRINT("%s\n", sound->getNameOrNull().cstr());
     // }
+
+    return true;
 }
 
 template <typename T>

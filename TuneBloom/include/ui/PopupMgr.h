@@ -24,6 +24,11 @@ public:
                 : sead::FixedSafeString<1024>(str)
             {
             }
+
+            Text(const sead::SafeString& str)
+                : sead::FixedSafeString<1024>(str)
+            {
+            }
         };
 
     public:

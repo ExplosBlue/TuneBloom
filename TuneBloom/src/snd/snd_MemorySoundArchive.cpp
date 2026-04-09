@@ -31,25 +31,6 @@ bool MemorySoundArchive::Initialize(const void* soundArchiveData)
 
     const internal::SoundArchiveFile::FileHeader& header = *reinterpret_cast<const internal::SoundArchiveFile::FileHeader*>(soundArchiveData);
 
-    // if (sead::MemUtil::compare(header.signature, "CSAR", 4) != 0)
-    if (sead::MemUtil::compare(header.signature, "FSAR", 4) != 0)
-    {
-        SEAD_ASSERT_MSG(false, "not a BFSAR file");
-        return false;
-    }
-
-    {
-        const void* byteOrder = sead::PtrUtil::addOffset(&header, offsetof(ut::BinaryFileHeader, byteOrder));
-        sFileEndian = sead::Endian::markToEndian(*(u16*)byteOrder);
-    }
-
-    // if (false)
-    if (!(0x00010000 <= header.version && header.version <= 0x00020200))
-    {
-        SEAD_ASSERT_MSG(false, "BFSAR version not supported (0x%08X)", (u32)header.version);
-        return false;
-    }
-
     mHeader = header; // Copy
 
     const void* infoBlock = sead::PtrUtil::addOffset(soundArchiveData, mHeader.GetInfoBlockOffset());

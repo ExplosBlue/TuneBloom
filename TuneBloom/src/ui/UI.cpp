@@ -353,30 +353,30 @@ void DrawUI()
     DrawPropertiesUI();
     DrawPlayerUI();
 
-    static void (*fileAction)() = nullptr;
+    static bool (*sFileAction)() = nullptr;
     if (sWantsNew)
     {
         ImGui::OpenPopup("###Save");
         sWantsNew = false;
-        fileAction = &NewFile;
+        sFileAction = &NewFile;
     }
     else if (sWantsOpen)
     {
         ImGui::OpenPopup("###Save");
         sWantsOpen = false;
-        fileAction = &OpenFile;
+        sFileAction = &OpenFile;
     }
     else if (sWantsClose)
     {
         ImGui::OpenPopup("###Save");
         sWantsClose = false;
-        fileAction = &CloseFile;
+        sFileAction = &CloseFile;
     }
     else if (sWantsExit)
     {
         ImGui::OpenPopup("###Save");
         sWantsExit = false;
-        fileAction = &Exit;
+        sFileAction = &Exit;
     }
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -393,7 +393,7 @@ void DrawUI()
         {
             if (SaveFile())
             {
-                fileAction();
+                sFileAction();
             }
             ImGui::CloseCurrentPopup();
         }
@@ -402,7 +402,7 @@ void DrawUI()
 
         if (ImGui::Button("No", buttonSize))
         {
-            fileAction();
+            sFileAction();
             ImGui::CloseCurrentPopup();
         }
 

@@ -41,7 +41,7 @@ public:
     ~Bfsar();
 
     void create();
-    bool open(const sead::SafeString& filePath, sead::Heap* heap);
+    bool open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* heap);
     bool save();
     bool saveAs(const sead::SafeString& filePath);
     void close();
@@ -279,7 +279,7 @@ public:
     bool validate_();
 
 private:
-    void open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap);
+    bool open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap);
     void save_(sead::FileHandle& handle);
     void close_();
 

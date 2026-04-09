@@ -172,7 +172,35 @@ Bfsar sBfsar;
 Item* sSelectedItem = nullptr;
 Item* sSubSelectedItem = nullptr;
 
-void NewFile()
+bool ValidBFSARHeader(const void* file)
+{
+    // if (sead::MemUtil::compare(magic, "CSAR", 4) != 0)
+    if (sead::MemUtil::compare(file, "FSAR", 4) != 0)
+    {
+        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR file", nullptr });
+        return false;
+    }
+
+    const nw::snd::internal::SoundArchiveFile::FileHeader& header = *reinterpret_cast<const nw::snd::internal::SoundArchiveFile::FileHeader*>(file);
+
+    //? Setup global file endian
+    {
+        const void* byteOrder = sead::PtrUtil::addOffset(&header, offsetof(nw::ut::BinaryFileHeader, byteOrder));
+        sFileEndian = sead::Endian::markToEndian(*(u16*)byteOrder);
+    }
+
+    // if (false)
+    if (!(0x00010000 <= header.version && header.version <= 0x00020200))
+    {
+        sead::FormatFixedSafeString<64> msg("BFSAR version not supported (0x%08X)", (u32)header.version);
+        PopupMgr::instance()->addPopup({ msg, nullptr });
+        return false;
+    }
+
+    return true;
+}
+
+bool NewFile()
 {
     CloseFile();
 
@@ -184,9 +212,11 @@ void NewFile()
     SEAD_ASSERT(fw);
 
     fw->setCaption(title);
+
+    return true;
 }
 
-void OpenFile()
+bool OpenFile()
 {
     sead::FixedSafeString<512> filePath;
 
@@ -197,37 +227,34 @@ void OpenFile()
 
     if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
     {
-        return;
+        return false;
     }
 
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);
 
-    sead::FileHandle handle;
-    if (!device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eReadOnly, 0))
+    sead::FileDevice::LoadArg arg;
+    arg.path = filePath;
+
+    u8* bfsarFile = device->tryLoad(arg);
+    if (!bfsarFile)
     {
         PopupMgr::instance()->addPopup({ "Couldn't open the selected file" });
-        return;
+        return false;
     }
 
-    u8 magic[4];
-    handle.read(magic, 4);
-    handle.close();
-
-    // if (sead::MemUtil::compare(magic, "CSAR", 4) != 0)
-    if (sead::MemUtil::compare(magic, "FSAR", 4) != 0)
+    if (!ValidBFSARHeader(bfsarFile))
     {
-        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR file", nullptr });
-        return;
+        return false;
     }
 
     CloseFile();
 
-    if (!sBfsar.open(filePath, nullptr))
+    if (!sBfsar.open(bfsarFile, filePath, nullptr)) //? bfsarFile is freed here
     {
-        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR file", nullptr });
-        //SEAD_PRINT("Not a valid bfsar file\n");
-        return;
+        PopupMgr::instance()->addPopup({ "Your BFSAR file is corrupted beyond repair :(", nullptr });
+        CloseFile();
+        return false;
     }
 
     //sSoundArchive = sBfsar.getSoundArchive();
@@ -242,6 +269,8 @@ void OpenFile()
     SEAD_ASSERT(fw);
 
     fw->setCaption(title);
+
+    return true;
 }
 
 bool SaveFile()
@@ -294,7 +323,7 @@ bool SaveFileAs()
     return false;
 }
 
-void CloseFile()
+bool CloseFile()
 {
     sSelectedItem = nullptr;
     sSubSelectedItem = nullptr;
@@ -310,12 +339,16 @@ void CloseFile()
     {
         fw->setCaption(util::cAppName);
     }
+
+    return true;
 }
 
-void Exit()
+bool Exit()
 {
     CloseFile();
 
     sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
     fw->requestExit();
+
+    return true;
 }

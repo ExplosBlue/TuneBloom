@@ -119,12 +119,12 @@ FileWindow* OpenFileWindow(Item* item);
 void DrawMenuBar();
 void DrawUI();
 
-void NewFile();
-void OpenFile();
+bool NewFile();
+bool OpenFile();
 bool SaveFile();
 bool SaveFileAs();
-void CloseFile();
-void Exit();
+bool CloseFile();
+bool Exit();
 
 // Ui Types
 void DrawProjectInfoUI();

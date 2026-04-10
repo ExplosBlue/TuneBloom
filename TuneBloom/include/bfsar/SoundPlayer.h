@@ -101,6 +101,8 @@ public:
 
 private:
     void initPlayerParam_();
+    void initPlayerTrack_();
+    void initSeqVars_();
 
     struct SeqVarInfo
     {

@@ -243,10 +243,11 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
         mCurrentPlayer = &mStreamPlayer;
 
         mStreamPlayer.setInitialVolume(static_cast<f32>(sound->getVolume()) / 127.0f);
-        initPlayerParam_();
 
         mStreamPlayer.setup(setupArg);
         mStreamPlayer.prepare(strmSoundInfo);
+        initPlayerParam_();
+        initPlayerTrack_();
 
         mSampleCount = mStreamPlayer.getSampleCount();
         mSampleRate = mStreamPlayer.getSampleRate();
@@ -332,10 +333,12 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
         mCurrentPlayer = &mSequencePlayer;
 
         mSequencePlayer.setInitialVolume(static_cast<f32>(volume) / 127.0f);
-        initPlayerParam_();
 
         mSequencePlayer.setup(allocTracks, &mSequenceNoteOnCallback2);
         mSequencePlayer.prepare(seqFile, startOffset, banks);
+        initPlayerParam_();
+        initPlayerTrack_();
+        initSeqVars_();
 
         mSampleCount = 0;
         mSampleRate = 0;
@@ -368,9 +371,8 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
             mWavePlayer.setInitialVolume(static_cast<f32>(sound->getVolume()) / 127.0f);
         }
 
-        initPlayerParam_();
-
         mWavePlayer.prepare(wave, channel, sound, startOffsetSample);
+        initPlayerParam_();
 
         mSampleCount = mWavePlayer.getSampleCount();
         mSampleRate = mWavePlayer.getSampleRate();
@@ -397,9 +399,9 @@ bool SoundPlayer::playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegi
     mWavePlayer.init();
     mCurrentPlayer = &mWavePlayer;
 
+    mWavePlayer.prepare(*waveFile);
     initPlayerParam_();
 
-    mWavePlayer.prepare(*waveFile);
     mWavePlayer.setBankNoteInfo(key, velocity, velocityRegion);
 
     mSampleCount = mWavePlayer.getSampleCount();
@@ -498,6 +500,18 @@ void SoundPlayer::drawParameters()
         {
             bool hasPlayer = isCurrentPlayer();
 
+            if (ImGui::Button(ICON_LC_LIST_RESTART))
+            {
+                mVolume = 1.0f;
+                mPitch = 1.0f;
+                mPan = 0.0f;
+                mLPF = 0.0f;
+                mBiquadType = (s8)snd::BiquadFilterType::Inherit;
+                mBiquadValue = 0.0f;
+                mSeqTempoRatio = 1.0f;
+                initPlayerParam_();
+            }
+
             if (ImGui::SliderFloat("Volume", &mVolume, 0.0f, 4.0f) && hasPlayer)
             {
                 snd::internal::driver::SoundThreadLock lock;
@@ -571,6 +585,16 @@ void SoundPlayer::drawParameters()
 
         if (ImGui::BeginTabItem("Track"))
         {
+            if (ImGui::Button(ICON_LC_LIST_RESTART))
+            {
+                for (u32 i = 0; i < cMaxTracks; i++)
+                {
+                    mTrackVolume[i] = 1.0f;
+                }
+
+                initPlayerTrack_();
+            }
+
             for (u32 i = 0; i < cMaxTracks; i++)
             {
                 bool isStream = mStreamPlayer.isActive();
@@ -760,19 +784,31 @@ void SoundPlayer::drawSeqVars()
 
 void SoundPlayer::initPlayerParam_()
 {
-    SEAD_ASSERT(mCurrentPlayer);
+    if (isCurrentPlayer())
+    {
+        mCurrentPlayer->setVolume(mVolume);
+        mCurrentPlayer->setPitch(mPitch);
+        mCurrentPlayer->setPan(mPan);
+        mCurrentPlayer->setLpfFreq(mLPF);
+        mCurrentPlayer->setBiquadFilter(mBiquadType, mBiquadValue);
+    }
 
-    mCurrentPlayer->setVolume(mVolume);
-    mCurrentPlayer->setPitch(mPitch);
-    mCurrentPlayer->setPan(mPan);
-    mCurrentPlayer->setLpfFreq(mLPF);
-    mCurrentPlayer->setBiquadFilter(mBiquadType, mBiquadValue);
+    if (isCurrentPlayerSequence())
+    {
+        mSequencePlayer.setTempoRatio(mSeqTempoRatio);
+    }
+}
 
+void SoundPlayer::initPlayerTrack_()
+{
     if (isCurrentPlayerStream())
     {
         for (u32 i = 0; i < cStrmTrackNum; i++)
         {
-            mStreamPlayer.setTrackVolume(1 << i, mTrackVolume[i]);
+            if (i < mStreamPlayer.getTrackCount())
+            {
+                mStreamPlayer.setTrackVolume(1 << i, mTrackVolume[i]);
+            }
         }
     }
     else if (isCurrentPlayerSequence())
@@ -785,28 +821,33 @@ void SoundPlayer::initPlayerParam_()
                 track->setVolume(mTrackVolume[i]);
             }
         }
+    }
+}
 
-        mSequencePlayer.setTempoRatio(mSeqTempoRatio);
+void SoundPlayer::initSeqVars_()
+{
+    if (!isCurrentPlayerSequence())
+    {
+        return;
+    }
 
-        //? Init vars
-        for (s32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
+    for (s32 i = 0; i < SequenceSoundPlayer::cPlayerVariableNum; i++)
+    {
+        const SeqVarInfo& varInfo = mPlayerVars[i];
+        if (varInfo.enable)
         {
-            const SeqVarInfo& varInfo = mPlayerVars[i];
+            mSequencePlayer.setLocalVariable(i, varInfo.value);
+        }
+    }
+
+    for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
+    {
+        for (s32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
+        {
+            const SeqVarInfo& varInfo = mTrackVars[trackNo][i];
             if (varInfo.enable)
             {
-                mSequencePlayer.setLocalVariable(i, varInfo.value);
-            }
-        }
-
-        for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
-        {
-            for (s32 i = 0; i < SequenceTrack::cTrackVariableNum; i++)
-            {
-                const SeqVarInfo& varInfo = mTrackVars[trackNo][i];
-                if (varInfo.enable)
-                {
-                    mSequencePlayer.getTrack_(trackNo).setTrackVariable(i, varInfo.value);
-                }
+                mSequencePlayer.getTrack_(trackNo).setTrackVariable(i, varInfo.value);
             }
         }
     }

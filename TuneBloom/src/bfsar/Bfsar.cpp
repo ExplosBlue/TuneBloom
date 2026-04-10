@@ -319,9 +319,15 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     {
         u32 groupId = soundArchive.GetGroupIdFromIndex(i);
         nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = const_cast<nw::snd::internal::SoundArchiveFile::GroupInfo*>(soundArchive.GetGroupInfo(groupId));
+        if (!groupInfo)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid GroupInfo");
+            return false;
+        }
 
         Group* group = new(heap) Group();
         group->mId = i;
+        PopupMgr::instance()->setCurrentProcessItem(group);
 
         group->mEnableName = groupInfo->optionParameter.GetTrueCount(nw::snd::internal::GROUP_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && groupInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
@@ -354,7 +360,21 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     sead::FileDevice::LoadArg arg;
                     arg.path = filePath;
 
-                    bfgrpFile = device->load(arg);
+                    bfgrpFile = device->tryLoad(arg);
+                    if (!bfgrpFile)
+                    {
+                        sead::FixedSafeString<512> file;
+                        if (sead::Path::getFileName(&file, filePath))
+                        {
+                            sead::FormatFixedSafeString<1024> msg("Couldn't load the file '%s'", file.cstr());
+                            PopupMgr::instance()->pushCurrentItemError(msg);
+                        }
+                        else
+                        {
+                            sead::FormatFixedSafeString<256> msg("Couldn't load file for group '%s'", group->getFormattedName().cstr());
+                            PopupMgr::instance()->pushCurrentItemError(msg);
+                        }
+                    }
                 }
             }
 
@@ -528,9 +548,15 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     for (u32 i = 0; i < soundArchive.GetPlayerCount(); i++)
     {
         const nw::snd::internal::SoundArchiveFile::PlayerInfo* playerInfo = soundArchive.GetPlayerInfo(soundArchive.GetPlayerIdFromIndex(i));
+        if (!playerInfo)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid PlayerInfo");
+            return false;
+        }
 
         Player* player = new(heap) Player();
         player->mId = i;
+        PopupMgr::instance()->setCurrentProcessItem(player);
 
         player->mEnableName = playerInfo->optionParameter.GetTrueCount(nw::snd::internal::PLAYER_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && playerInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
@@ -579,7 +605,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         sequence->mEnableName = true;
         sequence->mName = "Sequence";
 
-        sequence->read(seqFile);
+        PopupMgr::instance()->setCurrentProcessItem(sequence);
+        if (!sequence->read(seqFile))
+        {
+        }
 
         mSequenceFileList.pushBack(sequence);
 
@@ -618,7 +647,13 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             const u32 waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(0);
             const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(waveArchiveId);
+            if (!warcInfo)
+            {
+                PopupMgr::instance()->setCorruptInfo("Invalid WaveArchiveInfo");
+                return false;
+            }
 
+            // TODO: Validate
             nw::snd::internal::WaveArchiveFileReader reader(soundArchive.detail_GetFileAddress(warcInfo->fileId));
             const u32 waveFileCount = reader.GetWaveFileCount();
             for (u32 j = 0; j < waveFileCount; j++)
@@ -636,7 +671,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 wave->mEnableName = true;
                 wave->mName = "Wave";
 
-                wave->read(waveFile);
+                PopupMgr::instance()->setCurrentProcessItem(wave);
+                if (!wave->read(waveFile))
+                {
+                }
 
                 mWaveFileList.pushBack(wave);
                 warcFileCache[0].emplace_back(hash, globalId, waveFile, waveFileSize);
@@ -650,7 +688,13 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             const u32 waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(i);
             const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(waveArchiveId);
+            if (!warcInfo)
+            {
+                PopupMgr::instance()->setCorruptInfo("Invalid WaveArchiveInfo");
+                return false;
+            }
 
+            // TODO: Validate
             nw::snd::internal::WaveArchiveFileReader reader(soundArchive.detail_GetFileAddress(warcInfo->fileId));
             const u32 waveFileCount = reader.GetWaveFileCount();
             for (u32 j = 0; j < waveFileCount; j++)
@@ -693,7 +737,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 wave->mEnableName = true;
                 wave->mName = "Wave";
 
-                wave->read(waveFile);
+                PopupMgr::instance()->setCurrentProcessItem(wave);
+                if (!wave->read(waveFile))
+                {
+                }
 
                 mWaveFileList.pushBack(wave);
                 warcFileCache[i].emplace_back(hash, globalId, waveFile, waveFileSize);
@@ -707,6 +754,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             const u32 waveArchiveId = soundArchive.GetWaveArchiveIdFromIndex(i);
             const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo* warcInfo = soundArchive.GetWaveArchiveInfo(waveArchiveId);
+            if (!warcInfo)
+            {
+                PopupMgr::instance()->setCorruptInfo("Invalid WaveArchiveInfo");
+                return false;
+            }
 
             if (warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) == 0)
             {
@@ -715,6 +767,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
 
             WaveArchive* warc = new(heap) WaveArchive();
             warc->mId = i;
+            PopupMgr::instance()->setCurrentProcessItem(warc);
 
             warc->mEnableName = warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) != 0;
             if (mIncludeStringTable && warcInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
@@ -729,7 +782,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             warc->mIsLoadIndividual = warcInfo->isLoadIndividual;
             if (warc->mIsLoadIndividual)
             {
-                SEAD_ASSERT(warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_WAVE_COUNT) != 0);
+                if (warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_WAVE_COUNT) == 0)
+                {
+                    PopupMgr::instance()->pushCurrentItemError("Uh");
+                }
             }
 
             mWaveArchiveList.pushBack(warc);
@@ -751,7 +807,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     {
         const u32 bankId = soundArchive.GetBankIdFromIndex(i);
         const nw::snd::internal::SoundArchiveFile::BankInfo* bank = soundArchive.GetBankInfo(bankId);
-        SEAD_ASSERT(bank);
+        if (!bank)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid BankInfo");
+            return false;
+        }
 
         const u32 fileId = bank->fileId;
         u32 groupId;
@@ -768,6 +828,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             // Process variation 0
             {
+                // TODO: Validate
                 nw::snd::internal::BankFileReader reader(file);
                 SEAD_ASSERT(reader.IsInitialized());
 
@@ -820,6 +881,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     continue;
                 }
 
+                // TODO: Validate
                 nw::snd::internal::BankFileReader reader(file);
                 SEAD_ASSERT(reader.IsInitialized());
 
@@ -906,6 +968,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             // Process variation 0
             {
+                // TODO: Validate
                 nw::snd::internal::BankFileReader reader(file);
                 SEAD_ASSERT(reader.IsInitialized());
 
@@ -934,6 +997,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     continue;
                 }
 
+                // TODO: Validate
                 nw::snd::internal::BankFileReader reader(file);
                 SEAD_ASSERT(reader.IsInitialized());
 
@@ -958,7 +1022,12 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     {
         const u32 sndGroupId = soundArchive.GetSoundGroupIdFromIndex(i);
         const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = soundArchive.detail_GetSoundGroupInfo(sndGroupId);
-        SEAD_ASSERT(soundSetInfo);
+        if (!soundSetInfo)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid SoundGroupInfo");
+            return false;
+        }
+
         const nw::snd::internal::SoundArchiveFile::WaveSoundGroupInfo* waveSoundSetInfo = soundSetInfo->GetWaveSoundGroupInfo();
         if (!waveSoundSetInfo)
             continue;
@@ -979,6 +1048,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             // Process variation 0
             {
+                // TODO: Validate
                 nw::snd::internal::WaveSoundFileReader reader(file);
                 SEAD_ASSERT(reader.IsAvailable());
 
@@ -1029,6 +1099,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     continue;
                 }
 
+                // TODO: Validate
                 nw::snd::internal::WaveSoundFileReader reader(file);
                 SEAD_ASSERT(reader.IsAvailable());
 
@@ -1113,6 +1184,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             // Process variation 0
             {
+                // TODO: Validate
                 nw::snd::internal::WaveSoundFileReader reader(file);
                 SEAD_ASSERT(reader.IsAvailable());
 
@@ -1139,6 +1211,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     continue;
                 }
 
+                // TODO: Validate
                 nw::snd::internal::WaveSoundFileReader reader(file);
                 SEAD_ASSERT(reader.IsAvailable());
 
@@ -1349,7 +1422,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             bank->mEnableName = true;
             bank->mName = "Bank";
 
-            bank->read(bankFile);
+            PopupMgr::instance()->setCurrentProcessItem(bank);
+            if (!bank->read(bankFile))
+            {
+            }
 
             mBankFileList.pushBack(bank);
 
@@ -1363,9 +1439,15 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     for (u32 i = 0; i < soundArchive.GetBankCount(); i++)
     {
         const nw::snd::internal::SoundArchiveFile::BankInfo* bankInfo = soundArchive.GetBankInfo(soundArchive.GetBankIdFromIndex(i));
+        if (!bankInfo)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid BankInfo");
+            return false;
+        }
 
         Bank* bank = new(heap) Bank();
         bank->mId = i;
+        PopupMgr::instance()->setCurrentProcessItem(bank);
 
         bank->mEnableName = bankInfo->optionParameter.GetTrueCount(nw::snd::internal::BANK_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && bankInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
@@ -1395,7 +1477,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             bank->mWaveArchiveType = WaveArchiveType::AutomaticShared;
         }
 
-        SEAD_ASSERT(bank->mWaveArchiveType != WaveArchiveType::Invalid);
+        if (bank->mWaveArchiveType == WaveArchiveType::Invalid)
+        {
+            PopupMgr::instance()->pushCurrentItemError("Invalid WaveArchiveType");
+        }
 
         BankFile* bankFile = static_cast<BankFile*>(getItem(bankFileIdxMap[bankInfo->fileId], getBankFileList()));
 
@@ -1409,7 +1494,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         }
         else
         {
-            //SEAD_ASSERT(false);
+            PopupMgr::instance()->pushCurrentItemError("Couldn't load the BankFile referenced");
         }
 
         mBankList.pushBack(bank);
@@ -1418,9 +1503,15 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     for (u32 i = 0; i < soundArchive.GetSoundCount(); i++)
     {
         const nw::snd::internal::SoundArchiveFile::SoundInfo* soundInfo = soundArchive.GetSoundInfo(soundArchive.GetSoundIdFromIndex(i));
+        if (!soundInfo)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid SoundInfo");
+            return false;
+        }
 
         Sound* sound = new(heap) Sound();
         sound->mId = i;
+        PopupMgr::instance()->setCurrentProcessItem(sound);
 
         sound->mEnableName = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && soundInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
@@ -1433,6 +1524,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         }
 
         sound->mPlayerRef.attach(getItem(soundInfo->playerId, getPlayerList()));
+        if (!sound->mPlayerRef.isAttached())
+        {
+            PopupMgr::instance()->pushCurrentItemError("Invalid Player reference");
+        }
+
         sound->mVolume = soundInfo->volume;
         sound->mRemoteFilter = soundInfo->remoteFilter;
         sound->mSoundType = static_cast<Sound::SoundType>(soundInfo->GetSoundType());
@@ -1486,7 +1582,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     sound->mSequenceSoundInfo.mBankRefs[j]->attach(getItem(table.item[j], getBankList()));
                     if (!sound->mSequenceSoundInfo.mBankRefs[j]->isAttached())
                     {
-                        //SEAD_ASSERT(false);
+                        sead::FormatFixedSafeString<64> msg("Bank[%u] reference is invalid", j);
+                        PopupMgr::instance()->pushCurrentItemError(msg);
                     }
                 }
             }
@@ -1504,7 +1601,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             }
             else
             {
-                //SEAD_ASSERT(false);
+                PopupMgr::instance()->pushCurrentItemError("Couldn't load the SequenceFile referenced");
             }
 
             sound->mSequenceSoundInfo.mEnableStartOffset = seqSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::SEQ_SOUND_INFO_START_OFFSET) != 0;
@@ -1540,7 +1637,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             bool b = sead::Path::getDirectoryName(&dir, getFilePath());
             SEAD_ASSERT(b);
 
-            SEAD_ASSERT(!sound->mStreamSoundInfo.mPath.isEmpty());
+            if (sound->mStreamSoundInfo.mPath.isEmpty())
+            {
+                PopupMgr::instance()->pushCurrentItemError("Path is empty");
+            }
+
             const char* filePath = sound->mStreamSoundInfo.mPath.cstr();
 
             sead::FixedSafeString<512> path;
@@ -1560,6 +1661,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 {
                     validStrmFile = true;
 
+                    // TODO: Validate
                     nw::snd::internal::StreamSoundFileReader reader;
                     reader.Initialize(strmFile);
                     SEAD_ASSERT(reader.IsAvailable());
@@ -1606,12 +1708,14 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 }
                 else
                 {
-                    //SEAD_ASSERT_MSG(false, "Referenced file is not a bfstm [%s]", filePath);
+                    sead::FormatFixedSafeString<1024> msg("The file '%s' is not a valid BFSTM file", path.cstr());
+                    PopupMgr::instance()->pushCurrentItemError(msg);
                 }
             }
             else
             {
-                //SEAD_ASSERT_MSG(false, "Stream file not found [%s]", filePath);
+                sead::FormatFixedSafeString<1024> msg("Couldn't load '%s'", filePath);
+                PopupMgr::instance()->pushCurrentItemError(msg);
             }
 
             if (isStreamTrackInfoAvailable())
@@ -1728,6 +1832,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             const void* wsdFile = soundArchive.detail_GetFileAddress(soundInfo->fileId);
             if (wsdFile)
             {
+                // TODO: Validate
                 nw::snd::internal::WaveSoundFileReader reader(wsdFile);
                 SEAD_ASSERT(reader.IsAvailable());
 
@@ -1746,6 +1851,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     {
                         waveFile->mName.format("GUESS_%s", sound->mName.cstr());
                     }
+                }
+                else
+                {
+                    PopupMgr::instance()->pushCurrentItemError("Couldn't load the WaveFile referenced");
                 }
 
                 const nw::snd::internal::WaveSoundFile::WaveSoundInfo& innerWaveSoundInfo = reader.GetWaveSoundInfo(waveSoundInfo.index);
@@ -1791,6 +1900,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     }
                 }
             }
+            else
+            {
+                PopupMgr::instance()->pushCurrentItemError("Couldn't load the BFWSD file referenced");
+            }
         }
 
         mSoundList.pushBack(sound);
@@ -1832,9 +1945,15 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     for (u32 i = 0; i < soundArchive.GetSoundGroupCount(); i++)
     {
         const nw::snd::internal::SoundArchiveFile::SoundGroupInfo* soundSetInfo = soundArchive.detail_GetSoundGroupInfo(soundArchive.GetSoundGroupIdFromIndex(i));
+        if (!soundSetInfo)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid SoundGroupInfo");
+            return false;
+        }
 
         SoundSet* soundSet = new(heap) SoundSet();
         soundSet->mId = i;
+        PopupMgr::instance()->setCurrentProcessItem(soundSet);
 
         soundSet->mEnableName = soundSetInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_GROUP_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && soundSetInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
@@ -1884,7 +2003,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             soundSet->mWaveArchiveType = WaveArchiveType::AutomaticShared;
         }
 
-        SEAD_ASSERT(soundSet->mWaveArchiveType != WaveArchiveType::Invalid);
+        if (soundSet->mWaveArchiveType == WaveArchiveType::Invalid)
+        {
+            PopupMgr::instance()->pushCurrentItemError("Invalid WaveArchiveType");
+        }
 
         if (soundSetInfo->startId == nw::snd::SoundArchive::INVALID_ID && soundSetInfo->endId == nw::snd::SoundArchive::INVALID_ID)
         {
@@ -1904,11 +2026,18 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     {
         u32 groupId = soundArchive.GetGroupIdFromIndex(i);
         const nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo = soundArchive.GetGroupInfo(groupId);
+        if (!groupInfo)
+        {
+            PopupMgr::instance()->setCorruptInfo("Invalid GroupInfo");
+            return false;
+        }
 
         Group* group = static_cast<Group*>(mGroupList.nth(i)->val());
+        PopupMgr::instance()->setCurrentProcessItem(group);
 
         if (groupInfo->fileId != nw::snd::SoundArchive::INVALID_ID)
         {
+            // TODO: Validate
             nw::snd::internal::GroupFileReader reader(soundArchive.detail_GetFileAddress(groupInfo->fileId));
             if (groupInfo->fileId >= soundArchive.detail_GetFileCount())
             {
@@ -1933,6 +2062,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             {
                 //? Can't know OutputType... Fallback to Embed
                 group->mOutputType = Group::OutputType::Embed;
+                PopupMgr::instance()->pushCurrentItemError("Invalid OutputType");
             }
 
             auto addGroupItem = [&](u32 itemIdx, bool assertNotDisabled)
@@ -1944,7 +2074,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 bool itemDisabled = itemInfoEx.itemId == 0 || itemInfoEx.itemId == nw::snd::SoundArchive::INVALID_ID;
                 if (assertNotDisabled)
                 {
-                    SEAD_ASSERT(!itemDisabled);
+                    if (itemDisabled)
+                    {
+                        sead::FormatFixedSafeString<1024> msg("Item %u is invalid", itemIdx);
+                        PopupMgr::instance()->pushCurrentItemError(msg);
+                    }
                 }
 
                 Group::ItemInfo* itemInfo = new(heap) Group::ItemInfo(group);
@@ -1978,7 +2112,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     }
 
                     itemInfo->mItemRef.attach(getItem(itemInfoEx.itemId, getItemList(itemInfo->mItemRefType)));
-                    SEAD_ASSERT(itemInfo->mItemRef.isAttached());
+                    if (!itemInfo->mItemRef.isAttached())
+                    {
+                        sead::FormatFixedSafeString<1024> msg("Item %u is invalid", itemIdx);
+                        PopupMgr::instance()->pushCurrentItemError(msg);
+                    }
 
                     itemInfo->setLoadItems(itemInfoEx.loadFlag);
                 }
@@ -2031,6 +2169,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                                         SEAD_ASSERT(bankFile);
                                     }
 
+                                    // TODO: Validate
                                     nw::snd::internal::BankFileReader reader(bankFile);
                                     SEAD_ASSERT(reader.IsInitialized());
 
@@ -2074,7 +2213,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                         {
                             if (assertSeq)
                             {
-                                SEAD_ASSERT_MSG(false, "Sound is not a sequence.");
+                                sead::FormatFixedSafeString<1024> msg("Item %u is invalid", j);
+                                PopupMgr::instance()->pushCurrentItemError(msg);
                             }
 
                             // itemFileMap[j].insert(soundInfo->fileId);
@@ -2144,6 +2284,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                                                 SEAD_ASSERT(waveSoundFile);
                                             }
 
+                                            // TODO: Validate
                                             nw::snd::internal::WaveSoundFileReader reader(waveSoundFile);
                                             SEAD_ASSERT(reader.IsAvailable());
 
@@ -2366,7 +2507,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         }
         else
         {
-            //SEAD_ASSERT_MSG(false, "No group file");
+            PopupMgr::instance()->pushCurrentItemError("Couldn't find the BFGRP file referenced");
         }
     }
 
@@ -4922,6 +5063,7 @@ bool Bfsar::readStreamWaves_(const Sound* sound, const void* strmFile, Sound::St
         return false;
     }
 
+    // TODO: Validate
     nw::snd::internal::StreamSoundFileReader reader;
     reader.Initialize(strmFile);
 
@@ -4997,8 +5139,16 @@ bool Bfsar::readStreamWaves_(const Sound* sound, const void* strmFile, Sound::St
         wave->mSampleRate = streamSoundInfo.sampleRate;
         wave->mLoopStartFrame = streamSoundInfo.originalLoopStart;
         wave->mLoopEndFrame = streamSoundInfo.originalLoopEnd;
-        SEAD_ASSERT(wave->getLoopStartFrame(true) == streamSoundInfo.loopStart);
-        SEAD_ASSERT(wave->getLoopEndFrame(true) == streamSoundInfo.frameCount);
+        if (wave->getLoopStartFrame(true) != streamSoundInfo.loopStart)
+        {
+            sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop start (%u should be %u)", trackNo, wave->getLoopStartFrame(true), (u32)streamSoundInfo.loopStart);
+            PopupMgr::instance()->pushCurrentItemError(msg);
+        }
+        if (wave->getLoopEndFrame(true) != streamSoundInfo.frameCount)
+        {
+            sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop end (%u should be %u)", trackNo, wave->getLoopEndFrame(true), (u32)streamSoundInfo.frameCount);
+            PopupMgr::instance()->pushCurrentItemError(msg);
+        }
 
         wave->mSampleCount = wave->mLoopEndFrame;
 

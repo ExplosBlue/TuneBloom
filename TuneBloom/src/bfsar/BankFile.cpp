@@ -1575,8 +1575,9 @@ void BankFile::drawFileUI()
     ImGui::EndChild();
 }
 
-void BankFile::doRead(const void* fileAddr)
+bool BankFile::doRead(const void* fileAddr)
 {
+    // TODO: Validate
     nw::snd::internal::BankFileReader reader(fileAddr);
     SEAD_ASSERT(reader.IsInitialized());
 
@@ -1614,6 +1615,8 @@ void BankFile::doRead(const void* fileAddr)
 
         mInstrumentList.pushBack(instrument);
     }
+
+    return true;
 }
 
 u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const

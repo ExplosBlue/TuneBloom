@@ -1,6 +1,7 @@
 #include <bfsar/SeqCommand.h>
 #include <bfsar/Sound.h>
 
+#include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
 #include <heap/seadFrameHeap.h>
@@ -14,6 +15,7 @@ extern MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& tr
 
 bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u32, u32>* offsetToLine, const void* seqFile, sead::Heap* heap)
 {
+    // TODO: Validate
     SEAD_ASSERT(outLines);
     SEAD_ASSERT(offsetToLine);
 
@@ -121,6 +123,12 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     // TODO: Remove this heap limit
 
     sead::Heap* heap = sead::FrameHeap::tryCreate(30 * 1024 * 1024, "SeqTextHeap", nullptr);
+    if (!heap)
+    {
+        PopupMgr::instance()->pushCurrentItemError("Failed to create heap");
+        return false;
+    }
+
     heap->setEnableWarning(false);
 
     bool ret = ParseSequenceFile(outLines, offsetToLine, seqFile, heap);

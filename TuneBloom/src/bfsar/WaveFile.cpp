@@ -6,6 +6,7 @@
 
 #include <snd/snd_WaveFileReader.h>
 
+#include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
@@ -441,8 +442,9 @@ void WaveFile::drawUI()
     }
 }
 
-void WaveFile::doRead(const void* fileAddr)
+bool WaveFile::doRead(const void* fileAddr)
 {
+    // TODO: Validate
     nw::snd::internal::WaveFileReader reader(fileAddr);
 
     nw::snd::internal::WaveInfo waveInfo;
@@ -454,19 +456,21 @@ void WaveFile::doRead(const void* fileAddr)
     mSampleRate = waveInfo.sampleRate;
     mLoopStartFrame = waveInfo.originalLoopStartFrame;
     mLoopEndFrame = waveInfo.loopEndFrame - (waveInfo.loopStartFrame - waveInfo.originalLoopStartFrame);
-    SEAD_ASSERT(getLoopStartFrame(false) == waveInfo.loopStartFrame);
-    SEAD_ASSERT(getLoopEndFrame(false) == waveInfo.loopEndFrame);
-
-    // if (getLoopStartFrame(false) != waveInfo.loopStartFrame)
-    // {
-    //     SEAD_PRINT("Wave(%u) LoopStart mismatch. %u != %u\n", getId(), getLoopStartFrame(false), waveInfo.loopStartFrame);
-    // }
-    // if (getLoopEndFrame(false) != waveInfo.loopEndFrame)
-    // {
-    //     SEAD_PRINT("Wave(%u) LoopEnd mismatch. %u != %u\n", getId(), getLoopEndFrame(false), waveInfo.loopEndFrame);
-    // }
 
     mSampleCount = mLoopEndFrame;
+
+    if (getLoopStartFrame(false) != waveInfo.loopStartFrame)
+    {
+        sead::FormatFixedSafeString<128> msg("Invalid loop start (%u should be %u)", getLoopStartFrame(false), waveInfo.loopStartFrame);
+        PopupMgr::instance()->pushCurrentItemError(msg);
+        return false;
+    }
+    if (getLoopEndFrame(false) != waveInfo.loopEndFrame)
+    {
+        sead::FormatFixedSafeString<128> msg("Invalid loop end (%u should be %u)", getLoopEndFrame(false), waveInfo.loopEndFrame);
+        PopupMgr::instance()->pushCurrentItemError(msg);
+        return false;
+    }
 
     // TODO: Handle spool frames
 
@@ -515,6 +519,8 @@ void WaveFile::doRead(const void* fileAddr)
     }
 
     // updateLoopInfo_(false, true);
+
+    return true;
 }
 
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const

@@ -25,7 +25,7 @@ public:
     {
     }
 
-    virtual void read(const void* fileAddr)
+    virtual bool read(const void* fileAddr)
     {
         const nw::ut::BinaryFileHeader& header = *static_cast<const nw::ut::BinaryFileHeader*>(fileAddr);
 
@@ -35,10 +35,11 @@ public:
         sFileEndian = mEndian;
 
         mVersion = header.version;
-
-        doRead(fileAddr);
+        bool success = doRead(fileAddr);
 
         sFileEndian = prevEndian;
+
+        return success;
     }
 
     virtual u32 write(sead::FileHandle* handle, sead::WriteStream* stream, sead::Endian::Types prevEndian, bool isLast) const
@@ -87,7 +88,7 @@ public:
     }
 
 protected:
-    virtual void doRead(const void* fileAddr) = 0;
+    virtual bool doRead(const void* fileAddr) = 0;
     virtual u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const = 0;
 
     virtual bool updateWriteInfo_() const

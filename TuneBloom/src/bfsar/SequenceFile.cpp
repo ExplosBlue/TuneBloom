@@ -337,14 +337,14 @@ void SequenceFile::invalidatePlayer_() const
     }
 }
 
-void SequenceFile::doRead(const void* fileAddr)
+bool SequenceFile::doRead(const void* fileAddr)
 {
+    // TODO: Validate
     std::vector<std::string> lines;
     std::unordered_map<u32, u32> offsetToLine;
     if (!ParseSequenceFile(&lines, &offsetToLine, fileAddr))
     {
-        SEAD_ASSERT(false);
-        return;
+        return false;
     }
 
     std::string fseq;
@@ -378,8 +378,7 @@ void SequenceFile::doRead(const void* fileAddr)
         u32 offset;
         if (!reader.GetOffsetByLabel(label, &offset))
         {
-            SEAD_ASSERT(false);
-            return;
+            return false;
         }
 
         labelOffsets.push_back(std::make_pair(offset, label));
@@ -405,6 +404,8 @@ void SequenceFile::doRead(const void* fileAddr)
     mOffsetToLine = offsetToLine;
 
     mIsValid = true;
+
+    return true;
 }
 
 u32 SequenceFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const

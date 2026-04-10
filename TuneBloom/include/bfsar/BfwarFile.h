@@ -26,8 +26,9 @@ public:
     }
 
 private:
-    void doRead(const void* fileAddr) override
+    bool doRead(const void* fileAddr) override
     {
+        return false;
     }
 
     u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const override;

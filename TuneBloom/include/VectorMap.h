@@ -25,6 +25,8 @@ public:
     bool isInMap(const auto& it) const         { return it != theMap.end(); }
     void clear()                               { theVector.clear(); theMap.clear(); }
 
+    const std::vector<T>& getVector() const { return theVector; }
+
 private:
     std::vector<T> theVector;
     std::unordered_map<Key, T> theMap;

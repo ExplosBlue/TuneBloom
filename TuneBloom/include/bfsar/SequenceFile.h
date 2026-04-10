@@ -63,7 +63,7 @@ public:
     void drawFileUI();
 
 private:
-    void doRead(const void* fileAddr) override;
+    bool doRead(const void* fileAddr) override;
     u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const override;
 
     void compile_(bool setCursorPos = true);

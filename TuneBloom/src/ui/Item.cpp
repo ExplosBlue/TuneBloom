@@ -254,8 +254,11 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                     selectedItem = prev->val();
                     sScrollItem = selectedItem;
 
-                    sSubSelectedItem = nullptr;
-                    sSelectedItemIsSubWindow = false;
+                    if (sSubSelectedItem && sSubSelectedItem->getItemType() != sScrollItem->getItemType())
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                    }
                 }
             }
 
@@ -267,8 +270,11 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                     selectedItem = next->val();
                     sScrollItem = selectedItem;
 
-                    sSubSelectedItem = nullptr;
-                    sSelectedItemIsSubWindow = false;
+                    if (sSubSelectedItem && sSubSelectedItem->getItemType() != sScrollItem->getItemType())
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                    }
                 }
             }
 

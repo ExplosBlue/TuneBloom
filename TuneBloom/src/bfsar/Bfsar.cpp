@@ -2176,7 +2176,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                                     const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
                                     if (waveIdTable->GetCount() > 0)
                                     {
-                                        const auto& it = bankFileWarcId.find(u64(bankInfo->fileId) << 32 | groupId);
+                                        u32 realGroupId = group->mOutputType == Group::OutputType::Link ? 0xFFFFFFFF : groupId;
+                                        const auto& it = bankFileWarcId.find(u64(bankInfo->fileId) << 32 | realGroupId);
                                         SEAD_ASSERT(it != bankFileWarcId.end());
 
                                         u32 warcId = it->second;
@@ -2291,7 +2292,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                                             const nw::snd::internal::Util::WaveIdTable& waveIdTable = reader.mInfoBlockBody->GetWaveIdTable();
                                             if (waveIdTable.GetCount() > 0)
                                             {
-                                                const auto& it = wsdFileWarcId.find(u64(waveSoundFileId) << 32 | groupId);
+                                                u32 realGroupId = group->mOutputType == Group::OutputType::Link ? 0xFFFFFFFF : groupId;
+                                                const auto& it = wsdFileWarcId.find(u64(waveSoundFileId) << 32 | realGroupId);
                                                 SEAD_ASSERT(it != wsdFileWarcId.end());
 
                                                 u32 warcId = it->second;

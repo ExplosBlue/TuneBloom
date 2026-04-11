@@ -2062,7 +2062,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             {
                 //? Can't know OutputType... Fallback to Embed
                 group->mOutputType = Group::OutputType::Embed;
-                PopupMgr::instance()->pushCurrentItemError("Invalid OutputType");
+                PopupMgr::instance()->pushCurrentItemError("Couldn't find Output Type");
             }
 
             auto addGroupItem = [&](u32 itemIdx, bool assertNotDisabled)
@@ -2502,6 +2502,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     {
                         addGroupItem(j, true);
                     }
+
+                    PopupMgr::instance()->pushCurrentItemError("Failed to find real Items order");
                 }
             }
 

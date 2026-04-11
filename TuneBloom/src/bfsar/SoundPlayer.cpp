@@ -51,7 +51,11 @@ bool SoundPlayer::playLastSound()
 {
     if (mLastPlayedSound)
     {
-        return playSound(mLastPlayedSound);
+        Item* prev = sSelectedItem;
+        bool ret = playSound(mLastPlayedSound);
+        sSelectedItem = prev;
+
+        return ret;
     }
 
     return false;

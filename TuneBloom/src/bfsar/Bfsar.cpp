@@ -2124,14 +2124,14 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 group->mItemInfoList.pushBack(itemInfo);
             };
 
-            if (mVersion <= BfgrpFile::cIncludeDisabledItemsVersion)
-            {
-                for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
-                {
-                    addGroupItem(j, false);
-                }
-            }
-            else
+            // if (mVersion <= BfgrpFile::cIncludeDisabledItemsVersion)
+            // {
+            //     for (u32 j = 0; j < reader.GetGroupItemExCount(); j++)
+            //     {
+            //         addGroupItem(j, false);
+            //     }
+            // }
+            // else
             {
                 std::vector<VectorSet<u32>> itemFileMap(reader.GetGroupItemExCount());
 
@@ -3220,7 +3220,7 @@ void Bfsar::save_(sead::FileHandle& handle)
         };
 
         //? Stream files are placed first
-        if (mVersion <= 0x00020000)
+        if (mVersion <= 0x00020100)
         {
             for (const Item* item : mSoundList)
             {
@@ -3620,7 +3620,7 @@ void Bfsar::save_(sead::FileHandle& handle)
         }
 
         //? Stream files are placed last
-        if (mVersion > 0x00020000)
+        if (mVersion > 0x00020100)
         {
             for (const Item* item : mSoundList)
             {
@@ -4143,10 +4143,10 @@ void Bfsar::save_(sead::FileHandle& handle)
                                         stream.writeF32(strmInfo.getPitch());
 
                                         writer.openReference("SendValue");
-                                        writer.openReference("StreamSoundExtension");
 
                                         if (isStreamPrefetchAvailable())
                                         {
+                                            writer.openReference("StreamSoundExtension");
                                             stream.writeU32(strmInfo.getPrefetchFileId());
                                         }
                                     }
@@ -4245,19 +4245,22 @@ void Bfsar::save_(sead::FileHandle& handle)
                                         writer.align(0x4);
                                         stream.writeU32(0); //! Unknown
 
-                                        if (strmInfo.isEnableStreamSoundExtension())
+                                        if (isStreamPrefetchAvailable())
                                         {
-                                            writer.closeReference("StreamSoundExtension", nw::snd::internal::ElementType_SoundArchiveFile_StreamSoundExtensionInfo);
+                                            if (strmInfo.isEnableStreamSoundExtension())
+                                            {
+                                                writer.closeReference("StreamSoundExtension", nw::snd::internal::ElementType_SoundArchiveFile_StreamSoundExtensionInfo);
 
-                                            u32 streamTypeInfo = strmInfo.getStreamType() | (strmInfo.getIsLoop() << 8);
-                                            stream.writeU32(streamTypeInfo);
+                                                u32 streamTypeInfo = strmInfo.getStreamType() | (strmInfo.getIsLoop() << 8);
+                                                stream.writeU32(streamTypeInfo);
 
-                                            stream.writeU32(strmInfo.getLoopStartFrame());
-                                            stream.writeU32(strmInfo.getLoopEndFrame());
-                                        }
-                                        else
-                                        {
-                                            writer.closeNullReference("StreamSoundExtension");
+                                                stream.writeU32(strmInfo.getLoopStartFrame());
+                                                stream.writeU32(strmInfo.getLoopEndFrame());
+                                            }
+                                            else
+                                            {
+                                                writer.closeNullReference("StreamSoundExtension");
+                                            }
                                         }
                                     }
                                 }

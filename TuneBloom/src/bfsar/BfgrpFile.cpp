@@ -222,22 +222,22 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoExBlock, "INFX");
 
         u32 itemInfoCount = mGroup->getItemInfoList().size();
-        if (sBfsar.getVersion() > cIncludeDisabledItemsVersion)
-        {
-            itemInfoCount = 0;
-            for (const Item* item : mGroup->getItemInfoList())
-            {
-                SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
-                const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
+        // if (sBfsar.getVersion() > cIncludeDisabledItemsVersion)
+        // {
+        //     itemInfoCount = 0;
+        //     for (const Item* item : mGroup->getItemInfoList())
+        //     {
+        //         SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
+        //         const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
 
-                if (itemInfo->getIsDisabled())
-                {
-                    continue;
-                }
+        //         if (itemInfo->getIsDisabled())
+        //         {
+        //             continue;
+        //         }
 
-                itemInfoCount++;
-            }
-        }
+        //         itemInfoCount++;
+        //     }
+        // }
 
         writer.openReferenceTable("ItemInfoExTable", itemInfoCount);
 
@@ -279,8 +279,9 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
             stream->writeU32(itemInfo.getLoadFlag());
         };
 
-        if (sBfsar.getVersion() <= cIncludeDisabledItemsVersion)
+        if (sBfsar.getVersion() < cSortItemsAlgo2Version)
         {
+            // TODO: Figure out Algo1 sorting
             for (const Item* item : mGroup->getItemInfoList())
             {
                 SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
@@ -298,10 +299,10 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                 SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
                 const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
 
-                if (itemInfo->getIsDisabled())
-                {
-                    continue;
-                }
+                // if (itemInfo->getIsDisabled())
+                // {
+                //     continue;
+                // }
 
                 itemInfos.push_back(itemInfo);
             }

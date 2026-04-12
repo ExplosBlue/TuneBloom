@@ -416,6 +416,7 @@ public:
 
             void setBiquadType(u8 biquadType)
             {
+                biquadType = sead::MathCalcCommon<u8>::clampMax(biquadType, 64);
                 mBiquadType = biquadType;
             }
 
@@ -918,6 +919,7 @@ public:
 
         void setBiquadType(u8 biquadType)
         {
+            biquadType = sead::MathCalcCommon<u8>::clampMax(biquadType, 64);
             mBiquadType = biquadType;
         }
 

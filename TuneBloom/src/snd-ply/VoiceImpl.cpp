@@ -966,7 +966,7 @@ void VoiceImpl::synthesize(VoiceSynthesizeBuffer* buffer, f32* workBuffer, u32 s
 
     {
         // Parameter
-        f32 srcRatio = mVoiceParam.pitch * mSampleRate / sampleRate;
+        f32 srcRatio = sead::Mathf::min(mVoiceParam.pitch, 1000.0f) * mSampleRate / sampleRate;
         u32 srcType;
 
         if (srcRatio > (4.0f / 3.0f))

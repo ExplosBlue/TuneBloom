@@ -3,6 +3,7 @@
 #include "Global.h"
 
 #include <basis/seadRawPrint.h>
+#include <math/seadMathCalcCommon.h>
 
 struct PlayerParamSet
 {
@@ -91,8 +92,11 @@ public:
 
     void setBiquadFilter(s32 type, f32 value)
     {
-        SEAD_ASSERT((s32)snd::BiquadFilterType::Min <= type && type <= (s32)snd::BiquadFilterType::Max);
-        SEAD_ASSERT(0.0f <= value && value <= 1.0f);
+        if (type > (s32)snd::BiquadFilterType::Max)
+            type = 0;
+
+        type = sead::Mathi::clamp2((s32)snd::BiquadFilterType::Min, type, (s32)snd::BiquadFilterType::Max);
+        value = sead::Mathf::clamp2(0.0f, type, 1.0f);
 
         mPlayerParamSet.biquadType = static_cast<s8>(type);
         mPlayerParamSet.biquadValue = value;

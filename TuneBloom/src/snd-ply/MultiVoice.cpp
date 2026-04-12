@@ -499,8 +499,11 @@ void MultiVoice::setLpfFreq(f32 lpfFreq)
 
 void MultiVoice::setBiquadFilter(s32 type, f32 value)
 {
+    if (type > (s32)BiquadFilterType::Max)
+        type = 0;
+
     // To reach here, the INHERIT process should be done, so BiquadFilterType::DataMin should be minimized.
-    SEAD_ASSERT(type >= (s32)BiquadFilterType::DataMin && type <= (s32)BiquadFilterType::Max);
+    type = sead::Mathi::clamp2((s32)BiquadFilterType::DataMin, type, (s32)BiquadFilterType::Max);
 
     value = sead::Mathf::clamp2(cBiquadValueMin, value, cBiquadValueMax);
 

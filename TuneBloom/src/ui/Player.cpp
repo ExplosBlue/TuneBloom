@@ -93,42 +93,6 @@ void DrawPlayerUI()
         ImGui::End();
     }
 
-    // //if (false)
-    // {
-    //     if (ImGui::Begin("FSEQ"))
-    //     {
-    //         //if (sSequencePlayer.isActive())
-    //         {
-    //             // s32 wait = 0;
-    //             // s32 waitAmount = 1;
-
-    //             // const SequenceTrack* track = sSequencePlayer.getPlayerTrack(0);
-    //             // track = &sSequencePlayer.getTrack_(0);
-    //             // if (track)
-    //             // {
-    //             //     sTrack0Offset = intptr_t(track->getParserTrackParam().currentCmdAddr) - intptr_t(track->getParserTrackParam().baseAddr);
-    //             //     wait = track->getParserTrackParam().wait;
-    //             //     waitAmount = track->getParserTrackParam().waitAmount;
-    //             // }
-
-    //             //if (sOffsetToLine)
-    //             //    line = (*sOffsetToLine)[sTrack0Offset];
-
-    //             //f32 progress = static_cast<f32>(wait) / static_cast<f32>(waitAmount);
-
-    //             //sead::FormatFixedSafeString<32> str("%04X/%04X", wait, waitAmount);
-
-    //             //ImGui::Text("Wait:   %d", wait);
-    //             //ImGui::SameLine();
-    //             //ImGui::ProgressBar(progress, ImVec2(120.0f, 0.0f), str.cstr());
-    //             //ImGui::Text("Offset: %d", sTrack0Offset);
-    //             //ImGui::Text("Line:   %d", line);
-    //             //ImGui::SameLine();
-    //         }
-    //     }
-    //     ImGui::End();
-    // }
-
     if (false)
     {
         if (ImGui::Begin("Voices"))

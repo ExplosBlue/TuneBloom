@@ -646,6 +646,41 @@ void SoundPlayer::drawParameters()
                 {
                     ImGui::EndDisabled();
                 }
+
+                if (isSequence)
+                {
+                    s32 wait = 0;
+                    s32 waitAmount = 0;
+                    f32 progress = 1.0f;
+                    sead::FixedSafeString<32> str;
+
+                    {
+                        snd::internal::driver::SoundThreadLock lock;
+                        const SequenceTrack* track = mSequencePlayer.getPlayerTrack(i);
+                        if (track)
+                        {
+                            wait = track->getParserTrackParam().wait;
+                            waitAmount = track->getParserTrackParam().waitAmount;
+                        }
+                        else
+                        {
+                            progress = 0.0f;
+                        }
+                    }
+                    
+                    if (progress == 1.0f)
+                    {
+                        str.format("%02X/%02X", wait, waitAmount);
+
+                        if (waitAmount != 0)
+                        {
+                            progress = static_cast<f32>(wait) / static_cast<f32>(waitAmount);
+                        }
+                    }
+
+                    ImGui::SameLine();
+                    ImGui::ProgressBar(progress, ImVec2(60.0f, 0.0f), str.cstr());
+                }
             }
 
             ImGui::EndTabItem();

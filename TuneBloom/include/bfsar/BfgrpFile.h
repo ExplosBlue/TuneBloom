@@ -19,7 +19,7 @@ class BfgrpFile : public InnerFile
 
 public:
     // static const u32 cIncludeDisabledItemsVersion = 0x00020000;
-    static const u32 cSortItemsAlgo2Version = 0x00020200;
+    static const u32 cSortItemsAlgo2Version = 0x00020100;
 
 public:
     BfgrpFile(sead::Endian::Types endian, u32 version)

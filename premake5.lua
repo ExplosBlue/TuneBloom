@@ -2,7 +2,7 @@
 workspace "TuneBloom"
     configurations { "Debug", "Release", "Dist" }
     platforms { "Win32", "Win64" }
-	toolset "clang"
+	-- toolset "clang"
     startproject "TuneBloom"
 	
     filter { "toolset:clang" }

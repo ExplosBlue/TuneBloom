@@ -444,8 +444,11 @@ void WaveFile::drawUI()
 
 bool WaveFile::doRead(const void* fileAddr)
 {
-    // TODO: Validate
     nw::snd::internal::WaveFileReader reader(fileAddr);
+    if (!reader.IsAvailable())
+    {
+        return false;
+    }
 
     nw::snd::internal::WaveInfo waveInfo;
     reader.ReadWaveInfo(&waveInfo);
@@ -518,6 +521,7 @@ bool WaveFile::doRead(const void* fileAddr)
         }
     }
 
+    //! Causes crash and it tries to access buffer past end (its smaller than an expected stream buffer)
     // updateLoopInfo_(false, true);
 
     return true;

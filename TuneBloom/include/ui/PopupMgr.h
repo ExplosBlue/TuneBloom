@@ -6,6 +6,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include <bfsar/Item.h>
 
@@ -79,7 +80,7 @@ private:
     {
         bool operator()(const Item* a, const Item* b) const
         {
-            return a->getIdWithType() < b->getIdWithType();
+            return a->getIdWithTypeAll() < b->getIdWithTypeAll();
         }
     };
 

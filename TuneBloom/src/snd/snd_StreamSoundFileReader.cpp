@@ -2,6 +2,9 @@
 
 #include <math/seadMathCalcCommon.h>
 
+#include <ui/PopupMgr.h>
+#include <ui/UI.h>
+
 namespace nw { namespace snd { namespace internal {
 
 StreamSoundFileReader::StreamSoundFileReader()
@@ -12,24 +15,36 @@ StreamSoundFileReader::StreamSoundFileReader()
 
 void StreamSoundFileReader::Initialize(const void* streamSoundFile)
 {
-    SEAD_ASSERT(streamSoundFile);
+    if (!streamSoundFile)
+    {
+        return;
+    }
 
     if (!IsValidFileHeader(streamSoundFile))
         return;
 
-    mHeader = reinterpret_cast<const StreamSoundFile::FileHeader*>(streamSoundFile);
+    const StreamSoundFile::FileHeader* header = reinterpret_cast<const StreamSoundFile::FileHeader*>(streamSoundFile);
 
-    const StreamSoundFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
-    SEAD_ASSERT(infoBlock);
-
-    if (sead::MemUtil::compare(infoBlock->header.kind, "INFO", 4) != 0)
+    const StreamSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
+    if (!infoBlock)
     {
-        SEAD_ASSERT_MSG(false, "STREAM SOUND: INFO block is invalid");
+        PopupMgr::instance()->pushCurrentItemError("BFSTM: INFO block not found");
+        return;
+    }
+
+    if (!CheckBlockCorruptError("BFSTM", "INFO", infoBlock))
+    {
         return;
     }
 
     mInfoBlockBody = &infoBlock->body;
-    SEAD_ASSERT(mInfoBlockBody->GetStreamSoundInfo()->oneBlockBytes % 32 == 0);
+    if (mInfoBlockBody->GetStreamSoundInfo()->oneBlockBytes % 32 != 0)
+    {
+        PopupMgr::instance()->pushCurrentItemError("BFSTM: Block bytes not aligned");
+        return;
+    }
+
+    mHeader = header;
 }
 
 void StreamSoundFileReader::Finalize()
@@ -65,14 +80,15 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
     // if (sead::MemUtil::compare(header->signature, "CSTM", 4) != 0)
     if (sead::MemUtil::compare(header->signature, "FSTM", 4) != 0)
     {
-        SEAD_ASSERT_MSG(false, "not a STREAM SOUND file");
+        PopupMgr::instance()->pushCurrentItemError("File is not a valid BFSTM");
         return false;
     }
 
     // if (false)
     if (!(0x00010000 <= header->version && header->version <= 0x00040000))
     {
-        SEAD_ASSERT_MSG(false, "STREAM SOUND version not supported (0x%08X)", (u32)header->version);
+        sead::FormatFixedSafeString<64> msg("BFSTM version not supported (0x%08X)", (u32)header->version);
+        PopupMgr::instance()->pushCurrentItemError(msg);
         return false;
     }
 

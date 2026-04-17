@@ -339,7 +339,6 @@ void SequenceFile::invalidatePlayer_() const
 
 bool SequenceFile::doRead(const void* fileAddr)
 {
-    // TODO: Validate
     std::vector<std::string> lines;
     std::unordered_map<u32, u32> offsetToLine;
     if (!ParseSequenceFile(&lines, &offsetToLine, fileAddr))
@@ -356,7 +355,10 @@ bool SequenceFile::doRead(const void* fileAddr)
     mSeqText = new sead::HeapSafeString(nullptr, fseq.c_str());
 
     nw::snd::internal::SequenceSoundFileReader reader(fileAddr);
-    SEAD_ASSERT(reader.IsAvailable());
+    if (!reader.IsAvailable())
+    {
+        return false;
+    }
 
     mSeqBytesSize = reader.mHeader->GetDataBlock()->header.size - sizeof(reader.mHeader->GetDataBlock()->header);
     mSeqBytes = new u8[mSeqBytesSize];

@@ -2,6 +2,9 @@
 
 #include <prim/seadMemUtil.h>
 
+#include <ui/PopupMgr.h>
+#include <ui/UI.h>
+
 namespace nw { namespace snd { namespace internal {
 
 SampleFormat WaveFileReader::GetSampleFormat(u8 format)
@@ -24,7 +27,10 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
     , mDataBlockBody(nullptr)
     , mWaveType(waveType)
 {
-    SEAD_ASSERT(waveFile);
+    if (!waveFile)
+    {
+        return;
+    }
 
     switch (mWaveType)
     {
@@ -36,41 +42,46 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
                 // if (sead::MemUtil::compare(header->signature, "CWAV", 4) != 0)
                 if (sead::MemUtil::compare(header->signature, "FWAV", 4) != 0)
                 {
-                    SEAD_ASSERT_MSG(false, "not a WAVE file");
+                    PopupMgr::instance()->pushCurrentItemError("File is not a valid BFWAV");
                     return;
                 }
 
                 // if (false)
                 if (!(0x00010000 <= header->version && header->version <= 0x00010200))
                 {
-                    SEAD_ASSERT_MSG(false, "WAVE version not supported (0x%08X)", (u32)header->version);
+                    sead::FormatFixedSafeString<64> msg("BFWAV version not supported (0x%08X)", (u32)header->version);
+                    PopupMgr::instance()->pushCurrentItemError(msg);
                     return;
                 }
             }
 
-            mHeader = reinterpret_cast<const WaveFile::FileHeader*>(waveFile);
-
-            const WaveFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
-            const WaveFile::DataBlock* dataBlock = mHeader->GetDataBlock();
+            const WaveFile::FileHeader* header = reinterpret_cast<const WaveFile::FileHeader*>(waveFile);
+            const WaveFile::InfoBlock* infoBlock = header->GetInfoBlock();
+            const WaveFile::DataBlock* dataBlock = header->GetDataBlock();
 
             if (!infoBlock)
+            {
+                PopupMgr::instance()->pushCurrentItemError("BFWAV: INFO block not found");
                 return;
+            }
 
             if (!dataBlock)
-                return;
-
-            if (sead::MemUtil::compare(infoBlock->header.kind, "INFO", 4) != 0)
             {
-                SEAD_ASSERT_MSG(false, "WAVE: INFO block is invalid");
+                PopupMgr::instance()->pushCurrentItemError("BFWAV: DATA block not found");
                 return;
             }
 
-            if (sead::MemUtil::compare(dataBlock->header.kind, "DATA", 4) != 0)
+            if (!CheckBlockCorruptError("BFWAV", "INFO", infoBlock))
             {
-                SEAD_ASSERT_MSG(false, "WAVE: DATA block is invalid");
                 return;
             }
 
+            if (!CheckBlockCorruptError("BFWAV", "DATA", dataBlock))
+            {
+                return;
+            }
+
+            mHeader = header;
             mInfoBlockBody = &infoBlock->body;
             mDataBlockBody = &dataBlock->byte;
 

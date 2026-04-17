@@ -219,6 +219,59 @@ public:
         return mId;
     }
 
+    u32 getIdWithTypeAll() const
+    {
+        SEAD_ASSERT(ItemType::Invalid < mItemType && mItemType <= ItemType::StreamTrack);
+
+        switch (mItemType)
+        {
+            case ItemType::Sound:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType_Sound);
+
+            case ItemType::SoundSet:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType_SoundGroup);
+
+            case ItemType::Bank:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType_Bank);
+
+            case ItemType::Player:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType_Player);
+
+            case ItemType::WaveArchive:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType_WaveArchive);
+
+            case ItemType::Group:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType_Group);
+
+            case ItemType::WaveFile:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(7));
+
+            case ItemType::SequenceFile:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(8));
+
+            case ItemType::BankFile:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(9));
+
+            case ItemType::BankFileInstrument:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(10));
+
+            case ItemType::BankFileKeyRegion:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(11));
+
+            case ItemType::BankFileVelocityRegion:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(12));
+
+            case ItemType::GroupItemInfo:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(13));
+
+            case ItemType::StreamTrack:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(14));
+        }
+
+        SEAD_ASSERT(false);
+        return mId;
+    }
+
     void setId(u32 id)
     {
         mId = id;

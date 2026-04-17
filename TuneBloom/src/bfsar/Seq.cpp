@@ -15,7 +15,6 @@ extern MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& tr
 
 bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u32, u32>* offsetToLine, const void* seqFile, sead::Heap* heap)
 {
-    // TODO: Validate
     SEAD_ASSERT(outLines);
     SEAD_ASSERT(offsetToLine);
 
@@ -23,6 +22,11 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
         return false;
 
     nw::snd::internal::SequenceSoundFileReader reader(seqFile);
+    if (!reader.IsAvailable())
+    {
+        return false;
+    }
+
     reader.createLabelCache();
 
     const void* seqData = reader.GetSequenceData();
@@ -58,6 +62,7 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
         MmlCommandBase* cmd = nullptr;
         {
             sead::CurrentHeapSetter chs(heap);
+            // TODO: Validate
             cmd = nw__snd__internal__driver__MmlParser__Parse(trackPtr, reader);
         }
 
@@ -69,7 +74,11 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     u32 endOffset = reinterpret_cast<uintptr_t>(trackPtr) - reinterpret_cast<uintptr_t>(seqData);
     for (const auto& it : labelCache)
     {
-        SEAD_ASSERT(commands.find(it.first) != commands.end() || it.first == endOffset);
+        if (commands.find(it.first) == commands.end() && it.first != endOffset)
+        {
+            PopupMgr::instance()->pushCurrentItemError("Invalid sequence data");
+            return false;
+        }
     }
 
     for (const auto& it : commands)

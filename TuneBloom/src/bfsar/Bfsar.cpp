@@ -1659,50 +1659,51 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 // if (sead::MemUtil::compare(strmFile, "CSTM", 4) == 0)
                 if (sead::MemUtil::compare(strmFile, "FSTM", 4) == 0)
                 {
-                    validStrmFile = true;
-
-                    // TODO: Validate
                     nw::snd::internal::StreamSoundFileReader reader;
                     reader.Initialize(strmFile);
-                    SEAD_ASSERT(reader.IsAvailable());
 
-                    // If track information is embedded in bXstm (up to binary version 0.2.0.0)
-                    if (reader.IsTrackInfoAvailable())
+                    if (reader.IsAvailable())
                     {
-                        u32 trackCount = reader.GetTrackCount();
-                        if (trackCount > cStrmTrackNum)
+                        validStrmFile = true;
+
+                        // If track information is embedded in bXstm (up to binary version 0.2.0.0)
+                        if (reader.IsTrackInfoAvailable())
                         {
-                            trackCount = cStrmTrackNum;
-                        }
-
-                        // Read track information.
-                        for (u32 j = 0; j < trackCount; j++)
-                        {
-                            nw::snd::internal::StreamSoundFileReader::TrackInfo trackInfo;
-                            b = reader.ReadStreamTrackInfo(&trackInfo, j);
-                            SEAD_ASSERT(b);
-
-                            Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
-                            track->mId = j;
-
-                            track->mEnableName = true;
-                            track->mName = "Track";
-
-                            track->mVolume = trackInfo.volume;
-                            track->mPan = trackInfo.pan;
-                            track->mSPan = trackInfo.span;
-                            track->mFlags = trackInfo.flags;
-
-                            u8 channelCount = trackInfo.channelCount;
-                            SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
-
-                            for (u8 k = 0; k < channelCount; k++)
+                            u32 trackCount = reader.GetTrackCount();
+                            if (trackCount > cStrmTrackNum)
                             {
-                                u8& channel = *track->mChannels.birthBack();
-                                channel = trackInfo.globalChannelIndex[k];
+                                trackCount = cStrmTrackNum;
                             }
 
-                            sound->mStreamSoundInfo.mTrackList.pushBack(track);
+                            // Read track information.
+                            for (u32 j = 0; j < trackCount; j++)
+                            {
+                                nw::snd::internal::StreamSoundFileReader::TrackInfo trackInfo;
+                                b = reader.ReadStreamTrackInfo(&trackInfo, j);
+                                SEAD_ASSERT(b);
+
+                                Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
+                                track->mId = j;
+
+                                track->mEnableName = true;
+                                track->mName = "Track";
+
+                                track->mVolume = trackInfo.volume;
+                                track->mPan = trackInfo.pan;
+                                track->mSPan = trackInfo.span;
+                                track->mFlags = trackInfo.flags;
+
+                                u8 channelCount = trackInfo.channelCount;
+                                SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
+
+                                for (u8 k = 0; k < channelCount; k++)
+                                {
+                                    u8& channel = *track->mChannels.birthBack();
+                                    channel = trackInfo.globalChannelIndex[k];
+                                }
+
+                                sound->mStreamSoundInfo.mTrackList.pushBack(track);
+                            }
                         }
                     }
                 }
@@ -1814,6 +1815,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             if (strmFile)
             {
                 device->unload(strmFile);
+            }
+
+            if (sound->mStreamSoundInfo.mTrackList.isEmpty())
+            {
+                PopupMgr::instance()->pushCurrentItemError("Couldn't find any Track information");
             }
         }
         else if (sound->mSoundType == Sound::SoundType::Wave)
@@ -5070,7 +5076,6 @@ bool Bfsar::readStreamWaves_(const Sound* sound, const void* strmFile, Sound::St
         return false;
     }
 
-    // TODO: Validate
     nw::snd::internal::StreamSoundFileReader reader;
     reader.Initialize(strmFile);
 

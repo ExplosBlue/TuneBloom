@@ -1577,9 +1577,11 @@ void BankFile::drawFileUI()
 
 bool BankFile::doRead(const void* fileAddr)
 {
-    // TODO: Validate
     nw::snd::internal::BankFileReader reader(fileAddr);
-    SEAD_ASSERT(reader.IsInitialized());
+    if (!reader.IsInitialized())
+    {
+        return false;
+    }
 
     using InstrumentItemPair = std::pair<s16, const nw::snd::internal::BankFile::Instrument*>;
     std::vector<InstrumentItemPair> instruments;

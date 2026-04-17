@@ -2,6 +2,9 @@
 
 #include <format>
 
+#include <ui/PopupMgr.h>
+#include <ui/UI.h>
+
 namespace nw { namespace snd { namespace internal {
 
 SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
@@ -9,7 +12,10 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     , mDataBlockBody(nullptr)
     , mLabelBlockBody(nullptr)
 {
-    SEAD_ASSERT(sequenceFile);
+    if (!sequenceFile)
+    {
+        return;
+    }
 
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(sequenceFile);
@@ -17,38 +23,46 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         // if (sead::MemUtil::compare(header->signature, "CSEQ", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FSEQ", 4) != 0)
         {
-            SEAD_ASSERT_MSG(false, "not a SEQUENCE file");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFSEQ");
             return;
         }
 
         // if (false)
         if (!(0x00010000 <= header->version && header->version <= 0x00020000))
         {
-            SEAD_ASSERT_MSG(false, "SEQUENCE version not supported (0x%08X)", (u32)header->version);
+            sead::FormatFixedSafeString<64> msg("BFSEQ version not supported (0x%08X)", (u32)header->version);
+            PopupMgr::instance()->pushCurrentItemError(msg);
             return;
         }
     }
 
-    mHeader = reinterpret_cast<const SequenceSoundFile::FileHeader*>(sequenceFile);
+    const SequenceSoundFile::FileHeader* header = reinterpret_cast<const SequenceSoundFile::FileHeader*>(sequenceFile);
 
-    const SequenceSoundFile::DataBlock* dataBlock = mHeader->GetDataBlock();
-    SEAD_ASSERT(dataBlock);
-
-    if (sead::MemUtil::compare(dataBlock->header.kind, "DATA", 4) != 0)
+    const SequenceSoundFile::DataBlock* dataBlock = header->GetDataBlock();
+    if (!dataBlock)
     {
-        SEAD_ASSERT_MSG(false, "SEQUENCE: DATA block is invalid");
+        PopupMgr::instance()->pushCurrentItemError("BFSEQ: DATA block not found");
         return;
     }
 
-    const SequenceSoundFile::LabelBlock* labelBlock = mHeader->GetLabelBlock();
-    SEAD_ASSERT(labelBlock);
-
-    if (sead::MemUtil::compare(labelBlock->header.kind, "LABL", 4) != 0)
+    if (!CheckBlockCorruptError("BFSEQ", "DATA", dataBlock))
     {
-        SEAD_ASSERT_MSG(false, "SEQUENCE: LABEL block is invalid");
         return;
     }
 
+    const SequenceSoundFile::LabelBlock* labelBlock = header->GetLabelBlock();
+    if (!labelBlock)
+    {
+        PopupMgr::instance()->pushCurrentItemError("BFSEQ: LABL block not found");
+        return;
+    }
+
+    if (!CheckBlockCorruptError("BFSEQ", "LABL", labelBlock))
+    {
+        return;
+    }
+
+    mHeader = header;
     mDataBlockBody = &dataBlock->body;
     mLabelBlockBody = &labelBlock->body;
 }

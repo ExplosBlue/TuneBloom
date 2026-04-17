@@ -13,6 +13,7 @@ public:
 
     WaveFileReader(const void* waveFile, s8 waveType = WAVE_TYPE_NWWAV);
 
+    bool IsAvailable() const { return mHeader != nullptr; }
     bool IsOriginalLoopAvailable() const;
 
     bool ReadWaveInfo(WaveInfo* info, const void* waveDataOffsetOrigin = nullptr) const;

@@ -3,6 +3,9 @@
 #include <basis/seadWarning.h>
 #include <prim/seadMemUtil.h>
 
+#include <ui/PopupMgr.h>
+#include <ui/UI.h>
+
 namespace nw { namespace snd { namespace internal {
 
 BankFileReader::BankFileReader()
@@ -31,14 +34,15 @@ void BankFileReader::Initialize(const void* bankFile)
         // if (sead::MemUtil::compare(header->signature, "CBNK", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FBNK", 4) != 0)
         {
-            SEAD_ASSERT_MSG(false, "not a BANK file");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFBNK");
             return;
         }
 
         // if (false)
         if (header->version != 0x00010000)
         {
-            SEAD_ASSERT_MSG(false, "BANK version not supported (0x%08X)", (u32)header->version);
+            sead::FormatFixedSafeString<64> msg("BFBNK version not supported (0x%08X)", (u32)header->version);
+            PopupMgr::instance()->pushCurrentItemError(msg);
             return;
         }
     }
@@ -46,11 +50,14 @@ void BankFileReader::Initialize(const void* bankFile)
     mHeader = reinterpret_cast<const BankFile::FileHeader*>(bankFile);
 
     const BankFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
-    SEAD_ASSERT(infoBlock);
-
-    if (sead::MemUtil::compare(infoBlock->header.kind, "INFO", 4) != 0)
+    if (!infoBlock)
     {
-        SEAD_ASSERT_MSG(false, "BANK: INFO block is invalid");
+        PopupMgr::instance()->pushCurrentItemError("BFBNK: INFO block not found");
+        return;
+    }
+
+    if (!CheckBlockCorruptError("BFBNK", "INFO", infoBlock))
+    {
         return;
     }
 

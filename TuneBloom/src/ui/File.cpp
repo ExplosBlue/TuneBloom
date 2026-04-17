@@ -366,3 +366,14 @@ bool CheckBlockCorrupt(const char* fileName, const char* blockName, const void* 
 
     return true;
 }
+
+bool CheckBlockCorruptError(const char* fileName, const char* blockName, const void* block)
+{
+    if (sead::MemUtil::compare(block, blockName, 4) != 0)
+    {
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: %s block not found", fileName, blockName));
+        return false;
+    }
+
+    return true;
+}

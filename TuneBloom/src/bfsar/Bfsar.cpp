@@ -342,8 +342,9 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         if (groupInfo->fileId == nw::snd::SoundArchive::INVALID_ID)
         {
             //? Group is external
-            const void* bfgrpFile = nullptr;
+            group->mOutputType = Group::OutputType::External;
 
+            const void* bfgrpFile = nullptr;
             {
                 sead::FixedSafeString<512> filePath;
 

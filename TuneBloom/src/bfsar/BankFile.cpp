@@ -1583,6 +1583,8 @@ bool BankFile::doRead(const void* fileAddr)
         return false;
     }
 
+    // TODO: Validate
+
     using InstrumentItemPair = std::pair<s16, const nw::snd::internal::BankFile::Instrument*>;
     std::vector<InstrumentItemPair> instruments;
 

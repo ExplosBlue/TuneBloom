@@ -7,7 +7,6 @@
 #include <bfsar/SequenceFile.h>
 #include <bfsar/Sound.h>
 #include <bfsar/SoundSet.h>
-#include <bfsar/SoundDataMgr.h>
 #include <bfsar/WaveArchive.h>
 #include <bfsar/WaveFile.h>
 

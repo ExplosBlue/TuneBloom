@@ -167,7 +167,6 @@ void InnerFile::drawUI()
 Bfsar sBfsar;
 
 //const nw::snd::MemorySoundArchive* sSoundArchive = nullptr;
-//const SoundDataMgr* sSoundDataMgr = nullptr;
 
 Item* sSelectedItem = nullptr;
 Item* sSubSelectedItem = nullptr;
@@ -261,7 +260,6 @@ bool OpenFile()
     }
 
     //sSoundArchive = sBfsar.getSoundArchive();
-    //sSoundDataMgr = &sBfsar.getSoundDataMgr();
 
     sead::FixedSafeString<512> fileName;
     sead::Path::getFileName(&fileName, filePath);

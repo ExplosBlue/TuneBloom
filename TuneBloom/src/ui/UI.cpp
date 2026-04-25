@@ -1343,7 +1343,8 @@ InstanciateItemCallback CreateSoundFunc(bool clear)
 
         if (clear)
         {
-            sPlayer = sBfsar.getItem(0, sBfsar.getPlayerList());
+            // sPlayer = sBfsar.getItem(0, sBfsar.getPlayerList());
+            sPlayer = nullptr;
             sSoundType = Sound::SoundType::Invalid;
         }
 

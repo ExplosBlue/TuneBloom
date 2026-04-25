@@ -95,6 +95,17 @@ public:
         return mLabels;
     }
 
+    ItemReference* getBankRef_(u32 index)
+    {
+        SEAD_ASSERT(index < 4);
+        return mBankRefs[index];
+    }
+
+    sead::FixedSafeString<128>& getStartLabel_()
+    {
+        return mStartLabel;
+    }
+
 private:
     void invalidatePlayer_() const;
 

@@ -1,3 +1,4 @@
+#include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
 #include <imgui/imgui_custom.h>
@@ -430,6 +431,22 @@ void DrawSoundPropertiesUI()
                 {
                     seqSoundInfo.getSequenceFileRef().attach(seqFile);
                 }
+
+                if (!seqFile)
+                {
+                    ImGui::BeginDisabled();
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button(ICON_LC_FILE_PEN "###EditSeq"))
+                {
+                    OpenFileWindow(seqFile);
+                }
+
+                if (!seqFile)
+                {
+                    ImGui::EndDisabled();
+                }
             }
 
             //if (ImGui::CollapsingHeader("Banks"))
@@ -440,6 +457,34 @@ void DrawSoundPropertiesUI()
                     if (ItemSelector(sead::FormatFixedSafeString<16>("Bank %u", i).cstr(), sBfsar.getBankList(), &bank, true))
                     {
                         seqSoundInfo.getBankRef(i).attach(bank);
+                    }
+
+                    Item* bankFile = nullptr;
+                    if (bank)
+                    {
+                        Bank* bankItem = static_cast<Bank*>(bank);
+                        bankFile = bankItem->getFileRef().getItem();
+                    }
+
+                    if (!bankFile)
+                    {
+                        ImGui::BeginDisabled();
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_FILE_PEN "###EditBank%u", i).cstr()))
+                    {
+                        OpenFileWindow(bankFile);
+                    }
+
+                    if (!bankFile)
+                    {
+                        ImGui::EndDisabled();
+                    }
+
+                    if (bank && !bankFile && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone))
+                    {
+                        ImGui::SetTooltip("Bank has no file attached");
                     }
                 }
 
@@ -516,6 +561,47 @@ void DrawSoundPropertiesUI()
 
                 if (!enableStartOffset)
                     ImGui::EndDisabled();
+
+                {
+                    Item* seqFile = seqSoundInfo.getSequenceFileRef().getItem();
+                    sead::FixedSafeString<128> startLabel = enableStartOffset ? seqSoundInfo.getStartLabel() : sead::FixedSafeString<128>();
+
+                    if (!seqFile)
+                    {
+                        ImGui::BeginDisabled();
+                    }
+
+                    ImGui::SameLine();
+                    if (ImGui::Button(ICON_LC_EXTERNAL_LINK "###GoSeq"))
+                    {
+                        SequenceFile* seq = static_cast<SequenceFile*>(seqFile);
+
+                        u32 startOffset = seq->getLabelOffset(startLabel);
+                        if (startOffset != SequenceFile::cInvaldOffset)
+                        {
+                            for (u32 i = 0; i < 4; i++)
+                            {
+                                seq->getBankRef_(i)->attach(seqSoundInfo.getBankRef(i).getItem());
+                            }
+
+                            seq->getStartLabel_() = startLabel;
+
+                            // TODO: Set text cursor to start label offset
+
+                            OpenFileWindow(seqFile);
+                        }
+                        else
+                        {
+                            PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<128>("Couldn't find start label in Sequence File\n'%s'", startLabel.cstr()).cstr(), nullptr });
+                        }
+
+                    }
+
+                    if (!seqFile)
+                    {
+                        ImGui::EndDisabled();
+                    }
+                }
             }
 
             {
@@ -761,6 +847,22 @@ void DrawSoundPropertiesUI()
                 {
                     waveSoundInfo.getWaveFileRef().attach(waveFile);
                 }
+
+                if (!waveFile)
+                {
+                    ImGui::BeginDisabled();
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button(ICON_LC_EXTERNAL_LINK "###GoWave"))
+                {
+                    SelectItem(waveFile);
+                }
+
+                if (!waveFile)
+                {
+                    ImGui::EndDisabled();
+                }
             }
 
             {
@@ -990,6 +1092,22 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
         {
             getWaveFileRef().attach(waveFile);
+        }
+
+        if (!waveFile)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button(ICON_LC_EXTERNAL_LINK "###GoWave"))
+        {
+            SelectItem(waveFile);
+        }
+
+        if (!waveFile)
+        {
+            ImGui::EndDisabled();
         }
     }
 

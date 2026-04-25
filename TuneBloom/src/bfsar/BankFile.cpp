@@ -111,6 +111,22 @@ void BankFile::VelocityRegion::drawUI()
         {
             getWaveFileRef().attach(waveFile);
         }
+
+        if (!waveFile)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button(ICON_LC_EXTERNAL_LINK "###GoWave"))
+        {
+            SelectItem(waveFile);
+        }
+
+        if (!waveFile)
+        {
+            ImGui::EndDisabled();
+        }
     }
 
     {

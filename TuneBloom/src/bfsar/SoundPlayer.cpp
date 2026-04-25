@@ -286,15 +286,13 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
     if (!seqFile.isValid())
     {
         PopupMgr::instance()->addPopup({ "Sequence File is not compiled", nullptr });
-        //SEAD_PRINT("SequenceFile is not valid\n");
         return false;
     }
 
     u32 startOffset = seqFile.getLabelOffset(startLabel);
     if (startOffset == SequenceFile::cInvaldOffset)
     {
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>("Couldn't find start label '%s' in Sequence File", startLabel.cstr()).cstr(), nullptr });
-        //SEAD_PRINT("Couldn't find start label '%s' in Sequence File\n", startLabel.cstr());
+        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<128>("Couldn't find start label in Sequence File\n'%s'", startLabel.cstr()).cstr(), nullptr });
         return false;
     }
 

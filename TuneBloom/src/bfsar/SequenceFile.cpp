@@ -138,6 +138,34 @@ void SequenceFile::drawFileUI()
         {
             mBankRefs[i]->attach(bank);
         }
+
+        Item* bankFile = nullptr;
+        if (bank)
+        {
+            Bank* bankItem = static_cast<Bank*>(bank);
+            bankFile = bankItem->getFileRef().getItem();
+        }
+
+        if (!bankFile)
+        {
+            ImGui::BeginDisabled();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_FILE_PEN "###EditBank%u", i).cstr()))
+        {
+            OpenFileWindow(bankFile);
+        }
+
+        if (!bankFile)
+        {
+            ImGui::EndDisabled();
+        }
+
+        if (bank && !bankFile && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone))
+        {
+            ImGui::SetTooltip("Bank has no file attached");
+        }
     }
 
     const char** labels = nullptr;

@@ -2014,7 +2014,8 @@ public:
 class MmlCommandModType : public MmlCommandArgs1<SeqArg8>
 {
 public:
-    static const char* const sTypes[];
+    static const u32 cTypeNum = 3;
+    static const char* cTypes[cTypeNum];
 
 public:
     using MmlCommandArgs1::MmlCommandArgs1;
@@ -2033,7 +2034,7 @@ public:
     {
         const SeqArg8* argDefaultType = sead::DynamicCast<const SeqArg8>(mArg);
         if (argDefaultType && 0 <= argDefaultType->mValue && argDefaultType->mValue <= 2)
-            return { sTypes[argDefaultType->mValue] };
+            return { cTypes[argDefaultType->mValue] };
 
         return { mArg->toString() };
     }

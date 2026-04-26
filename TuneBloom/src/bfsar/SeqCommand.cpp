@@ -40,7 +40,7 @@ const char* MmlCommandNote::sKeys[MmlCommandNote::sKeysNum] = {
     "cn9",  "cs9",  "dn9",  "ds9",  "en9",  "fn9",  "fs9",  "gn9"
 };
 
-const char* const MmlCommandModType::sTypes[] = {
+const char* MmlCommandModType::cTypes[MmlCommandModType::cTypeNum] = {
     "MOD_TYPE_PITCH",
     "MOD_TYPE_VOLUME",
     "MOD_TYPE_PAN"

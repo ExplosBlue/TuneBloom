@@ -1803,26 +1803,19 @@ bool CmdModTypeArgCallback(MmlCommandBase* base, const std::string& cmdName, con
 {
     SEAD_ASSERT(base);
 
-    const u32 cModTypeNum = 3;
-    const char* cModTypes[cModTypeNum] = {
-        "MOD_TYPE_PITCH",
-        "MOD_TYPE_VOLUME",
-        "MOD_TYPE_PAN"
-    };
-
     std::vector<std::string> args = args_;
 
     MmlCommandModType* cmd = static_cast<MmlCommandModType*>(base);
 
     int argInt;
-    if (!ParseListArg(&argInt, args, 1, cModTypes, cModTypeNum, "modulation type identifier", errorMsg))
+    if (!ParseListArg(&argInt, args, 1, MmlCommandModType::cTypes, MmlCommandModType::cTypeNum, "modulation type identifier", errorMsg))
     {
         return false;
     }
 
-    if (!(0 <= argInt && argInt < cModTypeNum))
+    if (!(0 <= argInt && argInt < MmlCommandModType::cTypeNum))
     {
-        errorMsg = "Argument 1 must in the range [0, " + std::to_string(cModTypeNum) + ")";
+        errorMsg = "Argument 1 must in the range [0, " + std::to_string(MmlCommandModType::cTypeNum) + ")";
         return false;
     }
 

@@ -2022,7 +2022,7 @@ public:
 
     bool validateArgValueDefaultType_(const SeqArg8* arg) const override
     {
-        return 0 <= arg->mValue && arg->mValue <= 2;
+        return 0 <= arg->mValue && arg->mValue < cTypeNum;
     }
 
     MmlCommand::Mml getCommand_() const override
@@ -2033,7 +2033,7 @@ public:
     std::vector<std::string> getArgs_() const override
     {
         const SeqArg8* argDefaultType = sead::DynamicCast<const SeqArg8>(mArg);
-        if (argDefaultType && 0 <= argDefaultType->mValue && argDefaultType->mValue <= 2)
+        if (argDefaultType && 0 <= argDefaultType->mValue && argDefaultType->mValue < cTypeNum)
             return { cTypes[argDefaultType->mValue] };
 
         return { mArg->toString() };

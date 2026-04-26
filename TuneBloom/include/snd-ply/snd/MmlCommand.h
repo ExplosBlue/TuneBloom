@@ -32,8 +32,8 @@ public:
         MML_BIQUAD_VALUE    = 0xb5,
         MML_BANK_SELECT     = 0xb6,
                                 // Six b7-bc are open.
-        MML_MOD_PHASE       = 0xbd,
-        MML_MOD_CURVE       = 0xbe,
+        MML_MOD_PHASE       = 0xbd, // v0.2.0.0
+        MML_MOD_CURVE       = 0xbe, // v0.2.0.0
         MML_FRONT_BYPASS    = 0xbf,
         MML_PAN             = 0xc0,
         MML_VOLUME          = 0xc1,
@@ -107,33 +107,33 @@ public:
         MML_CMP_LT          = 0x94,
         MML_CMP_NE          = 0x95,
 
-        MML_MOD_2_CURVE     = 0xa0,
-        MML_MOD_2_PHASE     = 0xa1,
-        MML_MOD_2_DEPTH     = 0xa2,
-        MML_MOD_2_SPEED     = 0xa3,
-        MML_MOD_2_TYPE      = 0xa4,
-        MML_MOD_2_RANGE     = 0xa5,
+        MML_MOD_2_CURVE     = 0xa0, // v0.2.0.0
+        MML_MOD_2_PHASE     = 0xa1, // v0.2.0.0
+        MML_MOD_2_DEPTH     = 0xa2, // v0.2.0.0
+        MML_MOD_2_SPEED     = 0xa3, // v0.2.0.0
+        MML_MOD_2_TYPE      = 0xa4, // v0.2.0.0
+        MML_MOD_2_RANGE     = 0xa5, // v0.2.0.0
 
-        MML_MOD_3_CURVE     = 0xa6,
-        MML_MOD_3_PHASE     = 0xa7,
-        MML_MOD_3_DEPTH     = 0xa8,
-        MML_MOD_3_SPEED     = 0xa9,
-        MML_MOD_3_TYPE      = 0xaa,
-        MML_MOD_3_RANGE     = 0xab,
+        MML_MOD_3_CURVE     = 0xa6, // v0.2.0.0
+        MML_MOD_3_PHASE     = 0xa7, // v0.2.0.0
+        MML_MOD_3_DEPTH     = 0xa8, // v0.2.0.0
+        MML_MOD_3_SPEED     = 0xa9, // v0.2.0.0
+        MML_MOD_3_TYPE      = 0xaa, // v0.2.0.0
+        MML_MOD_3_RANGE     = 0xab, // v0.2.0.0
 
-        MML_MOD_4_CURVE     = 0xac,
-        MML_MOD_4_PHASE     = 0xad,
-        MML_MOD_4_DEPTH     = 0xae,
-        MML_MOD_4_SPEED     = 0xaf,
-        MML_MOD_4_TYPE      = 0xb0,
-        MML_MOD_4_RANGE     = 0xb1,
+        MML_MOD_4_CURVE     = 0xac, // v0.2.0.0
+        MML_MOD_4_PHASE     = 0xad, // v0.2.0.0
+        MML_MOD_4_DEPTH     = 0xae, // v0.2.0.0
+        MML_MOD_4_SPEED     = 0xaf, // v0.2.0.0
+        MML_MOD_4_TYPE      = 0xb0, // v0.2.0.0
+        MML_MOD_4_RANGE     = 0xb1, // v0.2.0.0
 
         MML_USERPROC        = 0xe0,
-        MML_MOD_2_DELAY     = 0xe1,
-        MML_MOD_2_PERIOD    = 0xe2,
-        MML_MOD_3_DELAY     = 0xe3,
-        MML_MOD_3_PERIOD    = 0xe4,
-        MML_MOD_4_DELAY     = 0xe5,
-        MML_MOD_4_PERIOD    = 0xe6
+        MML_MOD_2_DELAY     = 0xe1, // v0.2.0.0
+        MML_MOD_2_PERIOD    = 0xe2, // v0.2.0.0
+        MML_MOD_3_DELAY     = 0xe3, // v0.2.0.0
+        MML_MOD_3_PERIOD    = 0xe4, // v0.2.0.0
+        MML_MOD_4_DELAY     = 0xe5, // v0.2.0.0
+        MML_MOD_4_PERIOD    = 0xe6  // v0.2.0.0
     };
 };

@@ -13,7 +13,7 @@
 
 extern MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData, nw::snd::internal::SequenceSoundFileReader& reader);
 
-bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u32, u32>* offsetToLine, const void* seqFile, sead::Heap* heap)
+bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u32, u32>* offsetToLine, const void* seqFile)
 {
     SEAD_ASSERT(outLines);
     SEAD_ASSERT(offsetToLine);
@@ -61,7 +61,6 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
 
         MmlCommandBase* cmd = nullptr;
         {
-            sead::CurrentHeapSetter chs(heap);
             // TODO: Validate
             cmd = nw__snd__internal__driver__MmlParser__Parse(trackPtr, reader);
         }
@@ -124,25 +123,10 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
 
     //outLines->emplace_back("");
 
-    return true;
-}
-
-bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u32, u32>* offsetToLine, const void* seqFile)
-{
-    // TODO: Remove this heap limit
-
-    sead::Heap* heap = sead::FrameHeap::tryCreate(30 * 1024 * 1024, "SeqTextHeap", nullptr);
-    if (!heap)
+    for (const auto& it : commands)
     {
-        PopupMgr::instance()->pushCurrentItemError("Failed to create heap");
-        return false;
+        delete it.second;
     }
 
-    heap->setEnableWarning(false);
-
-    bool ret = ParseSequenceFile(outLines, offsetToLine, seqFile, heap);
-
-    heap->destroy();
-
-    return ret;
+    return true;
 }

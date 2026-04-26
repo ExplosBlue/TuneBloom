@@ -528,7 +528,7 @@ class MmlExCommandBase : public MmlCommandBase
             case 0xE0:
                 return MmlExCommandArgType::U16;
 
-            // The following is only present in newer versions
+            // TODO: The following is only present in newer versions
             // case 0xA0:
             // case 0xB0:
             //     return MmlExCommandArgType::U8;

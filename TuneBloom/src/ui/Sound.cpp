@@ -582,8 +582,7 @@ void DrawSoundPropertiesUI()
                     {
                         SequenceFile* seq = static_cast<SequenceFile*>(seqFile);
 
-                        u32 startOffset = seq->getLabelOffset(startLabel);
-                        if (startOffset != SequenceFile::cInvaldOffset)
+                        if (seq->getLabelOffset(startLabel) != SequenceFile::cInvaldOffset)
                         {
                             for (u32 i = 0; i < 4; i++)
                             {
@@ -592,9 +591,9 @@ void DrawSoundPropertiesUI()
 
                             seq->getStartLabel_() = startLabel;
 
-                            // TODO: Set text cursor to start label offset
-
                             OpenFileWindow(seqFile);
+
+                            seq->setCursorToLabel_(startLabel);
                         }
                         else
                         {

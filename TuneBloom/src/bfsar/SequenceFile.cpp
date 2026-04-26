@@ -356,6 +356,31 @@ std::string SequenceFile::getLabelFromParsedOffset(u32 offset, u32 allocTrackFla
     return "";
 }
 
+void SequenceFile::setCursorToLabel_(const sead::SafeString& label)
+{
+    if (!mIsValid || !mTextEditor)
+    {
+        return;
+    }
+
+    auto it = mLabelsStartInfo.find(label.cstr());
+    if (it == mLabelsStartInfo.end())
+    {
+        return;
+    }
+
+    u32 offset = it->second.offset;
+
+    auto lineIt = mOffsetToLine.find(offset);
+    if (lineIt == mOffsetToLine.end())
+    {
+        return;
+    }
+
+    u32 line = lineIt->second;
+    mTextEditor->SetCursorPosition({ s32(line - 1), 0 });
+}
+
 void SequenceFile::invalidatePlayer_() const
 {
     if (sSoundPlayer.getSequencePlayer().isPlayingFile(*this))

@@ -112,6 +112,8 @@ public:
         mLoadError = true;
     }
 
+    void setCursorToLabel_(const sead::SafeString& label);
+
 private:
     void invalidatePlayer_() const;
 

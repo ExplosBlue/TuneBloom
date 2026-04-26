@@ -215,7 +215,7 @@ void PopupMgr::updateErrors_()
             const std::vector<std::string>& errors = sItSel->second;
             for (size_t i = 0; i < errors.size(); i++)
             {
-                ImGui::Text(errors[i].c_str());
+                ImGui::TextWrapped(errors[i].c_str());
 
                 if (i != errors.size() - 1)
                 {

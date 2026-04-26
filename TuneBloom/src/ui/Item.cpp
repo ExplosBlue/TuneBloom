@@ -330,6 +330,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         if (ImGui::Selectable(sead::FormatFixedSafeString<256>("%s%s", namePrefix, name.cstr()).cstr(), selected))
         {
             selectedItem = item;
+            FocusPropertiesWindow();
 
             if (isSubWindow)
             {
@@ -666,11 +667,8 @@ void SelectItem(Item* item)
             break;
     }
 
-    ImGuiWindow* w = ImGui::FindWindowByName("###InfoWindow");
-    if (w && w->DockIsActive && w->Hidden)
-    {
-        ImGui::SetWindowFocus("###InfoWindow");
-    }
+    FocusInfoWindow();
+    FocusPropertiesWindow();
 }
 
 bool ItemSelector(const char* name, const Item::List& list, Item** itemPtr, bool allowNone)

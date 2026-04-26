@@ -579,6 +579,8 @@ void SelectVelocity(BankFile::KeyRegion* keyRegion, BankFile::VelocityRegion* ve
     sSubSelectedItem = velocityRegion;
     sSelectedItemIsSubWindow = true;
     sContextKeyRegion = keyRegion;
+
+    FocusPropertiesWindow(); // TODO: Why is this broken ugh
 }
 
 void DeselectVelocity()

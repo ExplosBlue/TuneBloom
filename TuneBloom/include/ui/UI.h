@@ -37,6 +37,8 @@ enum class UIType
 };
 
 void SetUITab(UIType type);
+void FocusInfoWindow();
+void FocusPropertiesWindow();
 
 struct FileFilter
 {

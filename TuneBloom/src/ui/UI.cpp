@@ -16,6 +16,24 @@ void SetUITab(UIType type)
     sSelectedUIType = type;
 }
 
+void FocusInfoWindow()
+{
+    ImGuiWindow* w = ImGui::FindWindowByName("###InfoWindow");
+    if (w && w->DockIsActive && w->Hidden)
+    {
+        ImGui::SetWindowFocus("###InfoWindow");
+    }
+}
+
+void FocusPropertiesWindow()
+{
+    ImGuiWindow* w = ImGui::FindWindowByName("###PropertiesWindow");
+    if (w && w->DockIsActive && w->Hidden)
+    {
+        ImGui::SetWindowFocus("###PropertiesWindow");
+    }
+}
+
 bool sShowSystemWindow = false;
 bool sShowDemoWindow = false;
 

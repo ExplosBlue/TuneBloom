@@ -36,6 +36,12 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
             }
 
             const SequenceFile& seqFile = *static_cast<const SequenceFile*>(seqInfo.getSequenceFileRef().getItem());
+            if (!seqFile.isValid())
+            {
+                error = "Sequence File is not compiled";
+                return this;
+            }
+
             if (seqFile.getLabelOffset(seqInfo.getStartLabel()) == SequenceFile::cInvaldOffset)
             {
                 error = "Invalid Start Label (Is Sequence File compiled ?)";

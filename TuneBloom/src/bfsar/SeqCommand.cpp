@@ -2,6 +2,9 @@
 
 #include <snd/snd_SequenceSoundFileReader.h>
 
+#include <ui/PopupMgr.h>
+#include <ui/UI.h>
+
 SeqArgBase* nw__snd__internal__driver__MmlParser__ReadArg(const u8** ptr, MmlParser::SeqArgType argType, bool hasSign = false)
 {
     switch (argType)
@@ -198,8 +201,20 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                 case MmlCommand::MML_BANK_SELECT:
                     cmdInst = new MmlCommandBankSelect(arg1, conditional);
                     break;
-                //case MmlCommand::MML_MOD_PHASE:
-                //case MmlCommand::MML_MOD_CURVE:
+                case MmlCommand::MML_MOD_PHASE:
+                    if (sBfsar.getVersionForBfseq() < 0x00020000)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Command not supported in current version: mod_phase");
+                    }
+                    cmdInst = new MmlCommandModPhase(arg1, conditional);
+                    break;
+                case MmlCommand::MML_MOD_CURVE:
+                    if (sBfsar.getVersionForBfseq() < 0x00020000)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Command not supported in current version: mod_curve");
+                    }
+                    cmdInst = new MmlCommandModCurve(arg1, conditional);
+                    break;
                 case MmlCommand::MML_FRONT_BYPASS:
                     cmdInst = new MmlCommandFrontBypass(arg1, conditional);
                     break;

@@ -2127,6 +2127,48 @@ public:
     }
 };
 
+class MmlCommandModPhase : public MmlCommandArgs1<SeqArg8>
+{
+public:
+    using MmlCommandArgs1::MmlCommandArgs1;
+
+    bool validateArgValueDefaultType_(const SeqArg8* arg) const override
+    {
+        return !arg->mHasSign;
+    }
+
+    MmlCommand::Mml getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_PHASE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod_phase";
+    }
+};
+
+class MmlCommandModCurve : public MmlCommandArgs1<SeqArg8>
+{
+public:
+    using MmlCommandArgs1::MmlCommandArgs1;
+
+    bool validateArgValueDefaultType_(const SeqArg8* arg) const override
+    {
+        return !arg->mHasSign;
+    }
+
+    MmlCommand::Mml getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_CURVE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod_curve";
+    }
+};
+
 class MmlCommandSetVar : public MmlExCommandBase
 {
 public:

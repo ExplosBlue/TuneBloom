@@ -314,7 +314,7 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 
         ImGui::Dummy(ImVec2(0.0f, 10.0f));
 
-        CenterText("A NintendoWare sound archive editor");
+        CenterText("The NintendoWare sound archive editor");
 
         CenterItem(ImGui::CalcTextSize("Made in Brazil").x);
         ImGui::Text("Made in");

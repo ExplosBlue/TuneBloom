@@ -47,4 +47,10 @@ public:
     static volatile s16* GetVariablePtr( SequenceSoundPlayer* player, SequenceTrack* track, int varNo );
 
     static u32 ParseAllocTrack( const void* baseAddress, u32 seqOffset, u32* allocTrack );
+
+    static void EnablePrintVar(bool enable) { mPrintVarEnabledFlag = enable; }
+    static bool IsEnabledPrintVar() { return mPrintVarEnabledFlag; }
+
+private:
+    static bool mPrintVarEnabledFlag;
 };

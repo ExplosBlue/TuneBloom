@@ -111,7 +111,6 @@ public:
     void initParam();
 
     bool isOpened() const { return mOpenFlag; }
-    void setPlayerTrackNo(s32 trackNo);
     void open();
     void close(bool stop = false);
     void updateChannelParam();
@@ -162,6 +161,9 @@ public:
         else
             return nullptr;
     }
+
+    void setPlayerTrackNo(s32 trackNo);
+    u8 getPlayerTrackNo() const { return mPlayerTrackNo; }
 
 protected:
     ParseResult parse(bool doNoteOn);

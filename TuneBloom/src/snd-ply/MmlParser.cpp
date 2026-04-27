@@ -9,6 +9,8 @@
 
 const f32 MOD_SPEED_BASE = 0.390625f;                   // 6.25Hz because it is x 16.
 
+bool MmlParser::mPrintVarEnabledFlag = true;
+
 SequenceTrack::ParseResult MmlParser::parse(SequenceTrack* track, bool doNoteOn) const
 {
     SEAD_ASSERT(track);
@@ -639,18 +641,29 @@ void MmlParser::commandProc(SequenceTrack* track, u32 command, s32 commandArg1, 
             break;
 
         case MmlCommand::MML_PRINTVAR:
-            // TODO: Why is this commented ?
-            // if (mPrintVarEnabledFlag) {
-            //     const vs16* const varPtr = GetVariablePtr(player, track, commandArg1);
-            //     NW_NULL_ASSERT(varPtr);
-            //     NW_LOG("#%08x[%d]: printvar %sVAR_%d(%d) = %d\n",
-            //         player,
-            //         track->GetPlayerTrackNo(),
-            //         (commandArg1 >= 32)? "T": (commandArg1 >= 16)? "G": "",
-            //         (commandArg1 >= 32)? commandArg1-32: (commandArg1 >= 16)? commandArg1-16: commandArg1,
-            //         commandArg1,
-            //         *varPtr);
-            // }
+            if (mPrintVarEnabledFlag)
+            {
+                const volatile s16* const varPtr = GetVariablePtr(player, track, commandArg1);
+                if (varPtr)
+                {
+                    SEAD_PRINT("#%08x[%d]: printvar %sVAR_%d(%d) = %d\n",
+                        player,
+                        track->getPlayerTrackNo(),
+                        (commandArg1 >= 32) ? "T" : (commandArg1 >= 16) ? "G" : "",
+                        (commandArg1 >= 32) ? commandArg1 - 32: (commandArg1 >= 16) ? commandArg1 - 16: commandArg1,
+                        commandArg1,
+                        *varPtr
+                    );
+                }
+                else
+                {
+                    SEAD_PRINT("#%08x[%d]: printvar invalid variable (%d)\n",
+                        player,
+                        track->getPlayerTrackNo(),
+                        commandArg1
+                    );
+                }
+            }
             break;
 
         case MmlCommand::MML_OPEN_TRACK:

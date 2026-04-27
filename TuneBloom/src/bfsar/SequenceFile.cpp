@@ -1864,6 +1864,31 @@ bool CmdModTypeArgCallback(MmlCommandBase* base, const std::string& cmdName, con
     return true;
 }
 
+bool CmdPrintVarArgCallback(MmlCommandBase* base, const std::string& cmdName, const CommandInfo& info, const std::vector<std::string>& extensions_, const std::vector<std::string>& args_, std::string& errorMsg)
+{
+    SEAD_ASSERT(base);
+
+    std::vector<std::string> args = args_;
+
+    MmlCommandPrintVar* cmd = static_cast<MmlCommandPrintVar*>(base);
+
+    int argInt;
+    if (!ParseVariableArg(&argInt, args, 1, errorMsg))
+    {
+        return false;
+    }
+
+    SeqArgBase* seqArg = new SeqArg8(argInt);
+    if (!cmd->setArg1(seqArg))
+    {
+        delete seqArg;
+        errorMsg = "Argument 1: Internal error !";
+        return false;
+    }
+
+    return true;
+}
+
 template <typename T>
 bool CmdVarArgCallback(MmlCommandBase* base, const std::string& cmdName, const CommandInfo& info, const std::vector<std::string>& extensions_, const std::vector<std::string>& args_, std::string& errorMsg)
 {
@@ -1990,7 +2015,7 @@ std::pair<std::string, CommandInfo> GetCommandInfo(const std::string& cmd)
         { "release",         { &TCommandFactory<MmlCommandRelease>,       SeqArgType::ArgU8,    1, true,  false, true, nullptr } },
         { "loop_start",      { &TCommandFactory<MmlCommandLoopStart>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr } },
         { "volume2",         { &TCommandFactory<MmlCommandVolume2>,       SeqArgType::ArgU8,    1, true,  true,  true, nullptr } },
-        { "printvar",        { &TCommandFactory<MmlCommandPrintVar>,      SeqArgType::ArgU8,    1, false, false, true, nullptr } },
+        { "printvar",        { &TCommandFactory<MmlCommandPrintVar>,      SeqArgType::ArgU8,    1, false, false, true, &CmdPrintVarArgCallback } },
         { "span",            { &TCommandFactory<MmlCommandSurroundPan>,   SeqArgType::ArgU8,    1, true,  true,  true, nullptr } },
         { "lpf_cutoff",      { &TCommandFactory<MmlCommandLPFCutoff>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr } },
         { "fxsend_a",        { &TCommandFactory<MmlCommandFxSendA>,       SeqArgType::ArgU8,    1, true,  false, true, nullptr } },

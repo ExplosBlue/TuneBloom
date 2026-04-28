@@ -271,7 +271,7 @@ void SequenceFile::drawFileUI()
 
         ImGui::Combo("Track", (s32*)&sFollowTrack, sTrackNames, IM_ARRAYSIZE(sTrackNames));
 
-        if (sFollowSeq)
+        if (sFollowSeq && sSoundPlayer.isCurrentPlayerSequence() && sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
         {
             const SeqTextInfo::Track& track = mSeqTextInfo.mTracks[sFollowTrack];
             if (track.active && track.line > 0 && (track.updated || !sSoundPlayer.isPause() || force))

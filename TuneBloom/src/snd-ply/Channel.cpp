@@ -379,6 +379,10 @@ void Channel::appendWaveBuffer(const WaveInfo& waveInfo, u32 startOffsetSamples)
             startOffsetSamples = (startOffsetSamples / 14) * 14;
         }
     }
+    else if (startOffsetSamples >= waveInfo.loopEndFrame)
+    {
+        startOffsetSamples = waveInfo.loopEndFrame - 1;
+    }
 
     mStartOffsetSamples = startOffsetSamples;
     SEAD_ASSERT(waveInfo.loopEndFrame > startOffsetSamples);

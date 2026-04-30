@@ -235,6 +235,7 @@ void DrawPlayerUI()
                 ImGui::PopStyleColor();
             
             //? Draw loop points
+            if (!sSoundPlayer.isCurrentPlayerSequence() || !sSoundPlayer.isActive())
             {
                 const WaveFile* wave = nullptr;
                 if (sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile())

@@ -1158,6 +1158,11 @@ void WaveFile::rebuildSpooledData_()
         channel->mData = newData;
         channel->mDataSize = dataSize;
         channel->mOwnsData = true;
+
+        if (mEncoding == Encoding::Pcm16)
+        {
+            mDataEndian = sead::Endian::getHostEndian();
+        }
     }
 }
 

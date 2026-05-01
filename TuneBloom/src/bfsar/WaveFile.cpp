@@ -420,10 +420,7 @@ void WaveFile::drawUI()
                 channel->mOwnsData = true;
             }
 
-            if (sEncoding == Encoding::Pcm16)
-            {
-                mDataEndian = sead::Endian::getHostEndian();
-            }
+            mDataEndian = sead::Endian::getHostEndian();
 
             invalidateOriginalData_();
             mEncoding = sEncoding;
@@ -1166,10 +1163,7 @@ void WaveFile::rebuildSpooledData_()
         channel->mOwnsData = true;
     }
 
-    if (mEncoding == Encoding::Pcm16)
-    {
-        mDataEndian = sead::Endian::getHostEndian();
-    }
+    mDataEndian = sead::Endian::getHostEndian();
 }
 
 void* WaveFile::convertChannel_(

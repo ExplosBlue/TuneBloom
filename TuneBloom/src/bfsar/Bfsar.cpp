@@ -1677,6 +1677,12 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     {
                         validStrmFile = true;
 
+                        // TODO
+                        if (reader.GetRegionDataOffset() != 0)
+                        {
+                            PopupMgr::instance()->pushCurrentItemError("Stream region (REGN) block is not supported");
+                        }
+
                         // If track information is embedded in bXstm (up to binary version 0.2.0.0)
                         if (reader.IsTrackInfoAvailable())
                         {

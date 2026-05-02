@@ -35,9 +35,16 @@ TuneBloom is an extremely fast & stable editor for editing NintendoWare audio fo
 - External groups (`BFGRP`)
   - Support for external groups is still WIP (read-only), that means games like SM3DW, CTTT and any other game which makes use of external groups only supports playback. (You have to provide the `BFGRP`s on load)
 - Import/Export wave files
-  - The tool can only make use of .wav files for importing/replacing and exporting.
+  - The tool can only make use of RIFF .wav files for importing/replacing and exporting.
+- Stream regions
+  - The `REGN` blocks on `BFSTM` files are yet not supported.
+- Stream prefetch (`BFSTP`)
+  - Prefetch files are yet not supported.
 - Edited `BFSAR` files
   - Sound archives which have been re-saved by imperfect tools (such as Citric Composer) are very likely to have been corrupted in ways that will result in failure to load into TuneBloom.
+
+> [!TIP]
+> While TuneBloom has reached a stable release, it is still advised to make frequent backups before saving.
 
 ## Compiling
 - Premake is used as the build system which makes setting up a development environment very straightforward.

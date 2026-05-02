@@ -366,7 +366,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         ImVec2 cursor = ImGui::GetCursorScreenPos();
 
         bool selected = selectedItem == item;
-        sead::FormatFixedSafeString<256> selName("%s%s%s", namePrefix, name.cstr(), postFix);
+        sead::FormatFixedSafeString<256> selName("%s%s%s###%p", namePrefix, name.cstr(), postFix, item);
         if (ImGui::Selectable(selName.cstr(), selected))
         {
             selectedItem = item;

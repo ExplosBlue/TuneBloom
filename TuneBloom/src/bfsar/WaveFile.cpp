@@ -363,6 +363,7 @@ void WaveFile::drawUI()
         }
     }
 
+    if (false)
     {
         ImGui::BeginDisabled();
 

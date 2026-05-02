@@ -198,6 +198,147 @@ void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo)
     param->coef[7][1] = adpcmInfo.coef[15];
 }
 
+bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u32 sampleCount, u32 sampleRate, bool drawEx, bool* pIsLoopDirty)
+{
+    const ImU32 cStepU32 = 1;
+
+    {
+        ImGui::BeginDisabled();
+
+        if (ImGui::InputScalar("Sample Rate", ImGuiDataType_U32, &sampleRate, &cStepU32))
+        {
+        }
+
+        if (ImGui::InputScalar("Sample Count", ImGuiDataType_U32, &sampleCount, &cStepU32))
+        {
+        }
+
+        ImGui::EndDisabled();
+    }
+
+    bool ret = false;
+
+    bool isLoop = rIsLoop;
+    if (ImGui::Checkbox("Is Loop", &isLoop))
+    {
+        ret = true;
+
+        rIsLoop = isLoop;
+
+        if (pIsLoopDirty && rLoopStartFrame != 0)
+        {
+            *pIsLoopDirty = true;
+        }
+    }
+
+    if (pIsLoopDirty && *pIsLoopDirty)
+    {
+        ImGui::SameLine();
+        HelpMarker("Loop information will be recalculated");
+    }
+
+    if (!isLoop)
+    {
+        ImGui::BeginDisabled();
+    }
+
+    auto capLoopStart = [&]()
+    {
+        if (rLoopStartFrame >= rLoopEndFrame)
+        {
+            rLoopStartFrame = rLoopEndFrame - 1;
+        }
+    };
+
+    auto capLoopEnd = [&]()
+    {
+        if (rLoopEndFrame > sampleCount)
+        {
+            rLoopEndFrame = sampleCount;
+        }
+        else if (rLoopEndFrame < 1)
+        {
+            rLoopEndFrame = 1;
+        }
+    };
+
+    {
+        bool buttonEdited = false;
+        u32 loopStartFrame = (isLoop ? rLoopStartFrame : 0);
+        ImGui::InputScalarCustom("Loop Start Frame", ImGuiDataType_U32, &loopStartFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
+
+        if (loopStartFrame >= sampleCount)
+        {
+            loopStartFrame = sampleCount - 1;
+        }
+
+        if (loopStartFrame != (isLoop ? rLoopStartFrame : 0))
+        {
+            ret = true;
+        }
+
+        if (isLoop)
+        {
+            rLoopStartFrame = loopStartFrame;
+        }
+
+        if (ImGui::IsItemDeactivatedAfterEdit() || buttonEdited)
+        {
+            if (pIsLoopDirty)
+            {
+                *pIsLoopDirty = true;
+            }
+
+            if (rLoopEndFrame <= rLoopStartFrame)
+            {
+                rLoopEndFrame = rLoopStartFrame + 1;
+            }
+
+            capLoopEnd();
+            capLoopStart();
+        }
+    }
+
+    if (!isLoop)
+    {
+        ImGui::EndDisabled();
+    }
+
+    {
+        bool buttonEdited = false;
+        u32 loopEndFrame = rLoopEndFrame;
+        ImGui::InputScalarCustom("Loop End Frame", ImGuiDataType_U32, &loopEndFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
+
+        if (loopEndFrame > sampleCount)
+        {
+            loopEndFrame = sampleCount;
+        }
+        else if (loopEndFrame < 1)
+        {
+            loopEndFrame = 1;
+        }
+
+        if (loopEndFrame != rLoopEndFrame)
+        {
+            ret = true;
+        }
+
+        rLoopEndFrame = loopEndFrame;
+
+        if (ImGui::IsItemDeactivatedAfterEdit() || buttonEdited)
+        {
+            if (pIsLoopDirty)
+            {
+                *pIsLoopDirty = true;
+            }
+
+            capLoopStart();
+        }
+    }
+
+    return ret;
+}
+
 void WaveFile::drawUI()
 {
     mVersion = sBfsar.getVersionForBfwav();
@@ -232,135 +373,9 @@ void WaveFile::drawUI()
         }
     }
 
+    if (DrawWaveLoopInfo(mIsLoop, mLoopStartFrame, mLoopEndFrame, mSampleCount, mSampleRate, true, &mIsLoopDirty))
     {
-        ImGui::BeginDisabled();
-
-        u32 sampleRate = getSampleRate();
-        if (ImGui::InputScalar("Sample Rate", ImGuiDataType_U32, &sampleRate, &cStepU32))
-        {
-            //mSampleRate = sampleRate;
-        }
-
-        u32 sampleCount = getSampleCount();
-        if (ImGui::InputScalar("Sample Count", ImGuiDataType_U32, &sampleCount, &cStepU32))
-        {
-            //mSampleCount = sampleCount;
-        }
-
-        ImGui::EndDisabled();
-    }
-
-    {
-        bool isLoop = getIsLoop();
-        if (ImGui::Checkbox("Is Loop", &isLoop))
-        {
-            disposeChannels_();
-            
-            mIsLoop = isLoop;
-            if (mLoopStartFrame != 0)
-            {
-                mIsLoopDirty = true;
-            }
-        }
-
-        if (mIsLoopDirty)
-        {
-            ImGui::SameLine();
-            HelpMarker("Loop information will be recalculated");
-        }
-
-        if (!isLoop)
-        {
-            ImGui::BeginDisabled();
-        }
-
-        auto capLoopStart = [&]()
-        {
-            if (mLoopStartFrame >= mLoopEndFrame)
-            {
-                mLoopStartFrame = mLoopEndFrame - 1;
-            }
-        };
-
-        auto capLoopEnd = [&]()
-        {
-            if (mLoopEndFrame > mSampleCount)
-            {
-                mLoopEndFrame = mSampleCount;
-            }
-            else if (mLoopEndFrame < 1)
-            {
-                mLoopEndFrame = 1;
-            }
-        };
-
-        {
-            bool buttonEdited = false;
-            u32 loopStartFrame = getOriginalLoopStartFrame();
-            ImGui::InputScalarCustom("Loop Start Frame", ImGuiDataType_U32, &loopStartFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
-
-            if (loopStartFrame >= mSampleCount)
-            {
-                loopStartFrame = mSampleCount - 1;
-            }
-
-            if (loopStartFrame != getOriginalLoopStartFrame())
-            {
-                disposeChannels_();
-            }
-
-            if (isLoop)
-            {
-                mLoopStartFrame = loopStartFrame;
-            }
-
-            if (ImGui::IsItemDeactivatedAfterEdit() || buttonEdited)
-            {
-                mIsLoopDirty = true;
-
-                if (mLoopEndFrame <= mLoopStartFrame)
-                {
-                    mLoopEndFrame = mLoopStartFrame + 1;
-                }
-
-                capLoopEnd();
-                capLoopStart();
-            }
-        }
-
-        if (!isLoop)
-        {
-            ImGui::EndDisabled();
-        }
-
-        {
-            bool buttonEdited = false;
-            u32 loopEndFrame = getOriginalLoopEndFrame();
-            ImGui::InputScalarCustom("Loop End Frame", ImGuiDataType_U32, &loopEndFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
-
-            if (loopEndFrame > mSampleCount)
-            {
-                loopEndFrame = mSampleCount;
-            }
-            else if (loopEndFrame < 1)
-            {
-                loopEndFrame = 1;
-            }
-
-            if (loopEndFrame != getOriginalLoopEndFrame())
-            {
-                disposeChannels_();
-            }
-
-            mLoopEndFrame = loopEndFrame;
-
-            if (ImGui::IsItemDeactivatedAfterEdit() || buttonEdited)
-            {
-                mIsLoopDirty = true;
-
-                capLoopStart();
-            }
-        }
+        disposeChannels_();
     }
 
     if (false)

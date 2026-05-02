@@ -1711,41 +1711,13 @@ void DrawSequenceSoundSetsUI()
 
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)
 {
-    const ImU32 cStepU32 = 1;
-
     if (ImGui::Combo("Encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes)))
     {
     }
 
     ImGui::Separator();
 
-    if (ImGui::Checkbox("Is Loop", &info->isLoop))
-    {
-    }
-
-    if (!info->isLoop)
-    {
-        ImGui::BeginDisabled();
-    }
-
-    // TODO: Cap
-
-    u32 loopStartFrame = info->isLoop ? info->loopStartFrame : 0;
-    if (ImGui::InputScalar("Loop Start Frame", ImGuiDataType_U32, &loopStartFrame, &cStepU32))
-    {
-        info->loopStartFrame = loopStartFrame;
-    }
-
-    if (!info->isLoop)
-    {
-        ImGui::EndDisabled();
-    }
-
-    u32 loopEndFrame = info->loopEndFrame;
-    if (ImGui::InputScalar("Loop End Frame", ImGuiDataType_U32, &loopEndFrame, &cStepU32))
-    {
-        info->loopEndFrame = loopEndFrame;
-    }
+    DrawWaveLoopInfo(info->isLoop, info->loopStartFrame, info->loopEndFrame, info->sampleCount, info->sampleRate, true, nullptr);
 }
 
 InstanciateItemCallback CreateWaveFileFunc(bool clear)

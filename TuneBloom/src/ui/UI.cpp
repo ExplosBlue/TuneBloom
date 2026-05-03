@@ -205,8 +205,8 @@ void DrawMenuBar()
 
         if (ImGui::BeginMenu("More"))
         {
-            ImGui::MenuItem("System Window", nullptr, &sShowSystemWindow);
-            ImGui::MenuItem("Demo Window", nullptr, &sShowDemoWindow);
+            ImGui::MenuItem(ICON_LC_CPU " System Window", nullptr, &sShowSystemWindow);
+            // ImGui::MenuItem("Demo Window", nullptr, &sShowDemoWindow);
 
             ImGui::EndMenu();
         }

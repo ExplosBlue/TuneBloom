@@ -243,13 +243,13 @@ void DrawPlayerUI()
                 {
                     wave = sSoundPlayer.getPlayingWaveFile();
                 }
-                else if (sSelectedItem)
+                else if (sSelectedItem && (sSelectedItem->getItemType() == Item::ItemType::WaveFile || sSelectedItem->getItemType() == Item::ItemType::Sound))
                 {
                     if (sSelectedItem->getItemType() == Item::ItemType::WaveFile)
                     {
                         wave = static_cast<WaveFile*>(sSelectedItem);
                     }
-                    else if (sSelectedItem->getItemType() == Item::ItemType::Sound)
+                    else
                     {
                         Sound* sound = static_cast<Sound*>(sSelectedItem);
                         if (sound->getSoundType() == Sound::SoundType::Wave)

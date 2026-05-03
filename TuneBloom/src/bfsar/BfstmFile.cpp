@@ -409,9 +409,7 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile)
     }
 
     WaveFile::Encoding encoding = static_cast<WaveFile::Encoding>(streamSoundInfo.encodeMethod);
-    u32 sampleSize = encoding == WaveFile::Encoding::Pcm16 ? sizeof(s16) : sizeof(u8);
 
-    //u32 channelSize = streamSoundInfo.frameCount * sampleSize;
     u32 channelSize = streamSoundInfo.oneBlockBytes * (streamSoundInfo.blockCount - 1) + streamSoundInfo.lastBlockPaddedBytes;
 
     for (u32 i = 0; i < streamSoundInfo.channelCount; i++)

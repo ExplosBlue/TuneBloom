@@ -282,15 +282,15 @@ public:
         return endFrame;
     }
 
-    // u32 getMaxRealFrame(bool forStream) const
-    // {
-    //     u32 loopFrames = getSampleCount() - getOriginalLoopStartFrame();
-    //     u32 endFrame = getLoopStartFrame(forStream) + loopFrames;
-    //     if (forStream && cStreamMinimumLoopFrames > loopFrames && loopFrames != 0)
-    //         endFrame += loopFrames * (cStreamMinimumLoopFrames / loopFrames);
-    //
-    //     return endFrame;
-    // }
+    u32 getMaxRealFrame(bool forStream) const
+    {
+        u32 loopFrames = getSampleCount() - getOriginalLoopStartFrame();
+        u32 endFrame = getLoopStartFrame(forStream) + loopFrames;
+        if (forStream && cStreamMinimumLoopFrames > loopFrames && loopFrames != 0)
+            endFrame += loopFrames * (cStreamMinimumLoopFrames / loopFrames);
+    
+        return endFrame;
+    }
 
     u32 getOriginalLoopStartFrame() const
     {

@@ -255,12 +255,10 @@ void StreamSoundPlayer::prepare(const void* strmFile, snd::UpdateType updateType
     }
 
     {
-        u32 sampleSize = waveInfo.sampleFormat == nw::snd::SAMPLE_FORMAT_PCM_S16 ? sizeof(s16) : sizeof(u8);
-
         u8* channelBuffers[cStrmChannelNum];
         for (u32 i = 0; i < waveInfo.channelCount; i++)
         {
-            channelBuffers[i] = new u8[streamSoundInfo.frameCount * sampleSize];
+            channelBuffers[i] = new u8[nw::snd::internal::Util::GetByteBySample(streamSoundInfo.frameCount, waveInfo.sampleFormat)];
             mChannels[i].mBufferAddress = channelBuffers[i];
         }
 
@@ -342,9 +340,11 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
     }
 
     const WaveFile::Channel* channels[cStrmChannelNum];
+    const WaveFile* channelOwners[cStrmChannelNum];
     for (u32 i = 0; i < cStrmChannelNum; i++)
     {
         channels[i] = nullptr;
+        channelOwners[i] = nullptr;
     }
 
     u32 channelNum = 0;
@@ -357,6 +357,7 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
         for (s32 ch = 0; ch < wave.getChannels().size(); ch++)
         {
             channels[channelNum] = wave.getChannels().nth(ch);
+            channelOwners[channelNum] = &wave;
             channelNum++;
         }
     }
@@ -382,8 +383,7 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
     }
 
     {
-        u32 sampleSize = waveInfo.sampleFormat == nw::snd::SAMPLE_FORMAT_PCM_S16 ? sizeof(s16) : sizeof(u8);
-        u32 bufferSize = mainWave.getLoopEndFrame(false) * sampleSize;
+        u32 bufferSize = nw::snd::internal::Util::GetByteBySample(mainWave.getLoopEndFrame(false), waveInfo.sampleFormat);
 
         u8* channelBuffers[cStrmChannelNum];
         for (u32 i = 0; i < waveInfo.channelCount; i++)
@@ -392,7 +392,8 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
             mChannels[i].mBufferAddress = channelBuffers[i];
 
             const WaveFile::Channel& channel = *channels[i];
-            u32 dataSize = sead::Mathu::min(bufferSize, channel.getDataSize());
+            u32 channelDataSize = nw::snd::internal::Util::GetByteBySample(channelOwners[i]->getMaxRealFrame(false), waveInfo.sampleFormat);
+            u32 dataSize = sead::Mathu::min(bufferSize, channelDataSize);
 
             const void* src = channel.getData();
             u8* dst = channelBuffers[i];
@@ -400,7 +401,7 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
             sead::MemUtil::copy(dst, src, dataSize);
 
             //? If other channels are smaller pad out
-            if (channel.getDataSize() < bufferSize)
+            if (channelDataSize < bufferSize)
             {
                 u32 remainSize = bufferSize - dataSize;
 
@@ -434,6 +435,7 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
                 channelParam.adpcmParam.yn1 = adpcmParam.yn1;
                 channelParam.adpcmParam.yn2 = adpcmParam.yn2;
 
+                // TODO: This should actually reflect the mainWave loop start frame...
                 channelParam.adpcmLoopParam.loopPredScale = adpcmLoopParam.loopPredScale;
                 channelParam.adpcmLoopParam.loopYn1 = adpcmLoopParam.loopYn1;
                 channelParam.adpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;

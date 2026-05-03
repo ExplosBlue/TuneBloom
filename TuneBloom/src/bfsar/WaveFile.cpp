@@ -1343,7 +1343,8 @@ void* WaveFile::convertChannel_(
     }
 
     //? Spool PCM data
-    u32 totalSamples = mIsLoop ? sead::Mathu::max(baseSamples, getLoopEndFrame(true)) : baseSamples;
+    u32 framesAfterLoopEnd = 140; //? Needed for seamless looping (prevents pops)
+    u32 totalSamples = mIsLoop ? sead::Mathu::max(baseSamples, getLoopEndFrame(true)) + framesAfterLoopEnd : baseSamples;
     s16* spooledPcm = new s16[totalSamples];
     {
         u32 copyCount = mIsLoop ? sead::Mathu::min(baseSamples, getOriginalLoopEndFrame()) : baseSamples;

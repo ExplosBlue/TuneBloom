@@ -502,18 +502,18 @@ void SoundPlayer::invalidateBankFile(const BankFile& bankFile)
     mSequencePlayer.invalidateBankFile(bankFile);
 }
 
-s32 SoundPlayer::getPlaySamplePosition() const
+s32 SoundPlayer::getPlaySamplePosition(bool isOriginalSamplePosition) const
 {
     s32 currentSample = 0;
 
     if (mWavePlayer.isActive())
     {
-        currentSample = mWavePlayer.getPlaySamplePosition(true);
+        currentSample = mWavePlayer.getPlaySamplePosition(isOriginalSamplePosition);
     }
 
     if (mStreamPlayer.isActive())
     {
-        currentSample = mStreamPlayer.getPlaySamplePosition(true);
+        currentSample = mStreamPlayer.getPlaySamplePosition(isOriginalSamplePosition);
     }
 
     return currentSample;

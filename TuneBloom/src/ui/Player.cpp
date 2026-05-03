@@ -160,7 +160,7 @@ void DrawPlayerUI()
 
         u32 sampleCount = sSoundPlayer.getSampleCount();
         u32 sampleRate = sSoundPlayer.getSampleRate();
-        s32 currentSample = sSoundPlayer.getPlaySamplePosition();
+        s32 currentSample = sSoundPlayer.getPlaySamplePosition(true);
 
         playingSample = static_cast<f32>(currentSample);
         progress = sampleCount != 0 ? playingSample / static_cast<f32>(sampleCount) : 0.0f;

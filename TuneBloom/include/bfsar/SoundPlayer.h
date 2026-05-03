@@ -78,7 +78,7 @@ public:
 
     u32 getSampleRate() const { return mSampleRate; }
     u32 getSampleCount() const { return mSampleCount; }
-    s32 getPlaySamplePosition() const;
+    s32 getPlaySamplePosition(bool isOriginalSamplePosition) const;
 
     bool isCurrentPlayer() const { return mCurrentPlayer != nullptr; }
     bool isCurrentPlayerSequence() const { return mCurrentPlayer == &mSequencePlayer; }

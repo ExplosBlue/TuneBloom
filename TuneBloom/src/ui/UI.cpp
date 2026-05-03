@@ -378,6 +378,15 @@ void DrawUI()
 
     if (!sDroppedFilePath.isEmpty())
     {
+        if (!ImGui::IsPopupOpen("###Save"))
+        {
+            sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+            if (fw)
+            {
+                SetForegroundWindow(fw->getWindowHandle());
+            }
+        }
+
         if (sBfsar.isOpen())
         {
             sWantsOpen = true; // open with save prompt

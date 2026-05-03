@@ -1677,7 +1677,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     {
                         validStrmFile = true;
 
-                        // TODO
+                        // TODO: Regions
                         if (reader.GetRegionDataOffset() != 0)
                         {
                             PopupMgr::instance()->pushCurrentItemError("Stream region (REGN) block is not supported");

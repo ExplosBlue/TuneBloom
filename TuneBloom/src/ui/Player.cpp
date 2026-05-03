@@ -261,12 +261,34 @@ void DrawPlayerUI()
                             Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(sound->getStreamSoundInfo().getTrackList().front()->val());
                             wave = static_cast<WaveFile*>(track->getWaveFileRef().getItem());
                         }
+                        else if (sound->getSoundType() == Sound::SoundType::Seq)
+                        {
+                            sampleRate = 0;
+                        }
+                    }
+                }
+                else if (sSoundPlayer.getLastPlayedSound())
+                {
+                    const Sound* sound = sSoundPlayer.getLastPlayedSound();
+                    if (sound->getSoundType() == Sound::SoundType::Wave)
+                    {
+                        wave = static_cast<const WaveFile*>(sound->getWaveSoundInfo().getWaveFileRef().getItem());
+                    }
+                    else if (sound->getSoundType() == Sound::SoundType::Strm && !sound->getStreamSoundInfo().getTrackList().isEmpty())
+                    {
+                        Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(sound->getStreamSoundInfo().getTrackList().front()->val());
+                        wave = static_cast<const WaveFile*>(track->getWaveFileRef().getItem());
+                    }
+                    else if (sound->getSoundType() == Sound::SoundType::Seq)
+                    {
+                        sampleRate = 0;
                     }
                 }
 
                 if (wave)
                 {
                     sampleCount = wave->getSampleCount();
+                    sampleRate = wave->getSampleRate();
 
                     ImDrawList* draw = ImGui::GetWindowDrawList();
                     f32 loopStartX = wave->getOriginalLoopStartFrame() / static_cast<f32>(sampleCount);

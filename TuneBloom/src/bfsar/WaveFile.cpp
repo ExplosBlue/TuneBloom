@@ -450,6 +450,9 @@ void WaveFile::drawUI()
         {
             disposeChannels_();
 
+            Encoding prev = mEncoding;
+            mEncoding = sEncoding;
+
             for (u32 i = 0; i < mChannels.size(); i++)
             {
                 Channel* channel = mChannels.nth(i);
@@ -459,7 +462,7 @@ void WaveFile::drawUI()
                 u32 dataSize = 0;
                 void* newData = convertChannel_(
                     *channel, channel->getData(), mDataEndian,
-                    mEncoding, sEncoding,
+                    prev, mEncoding,
                     &dataSize
                 );
 
@@ -477,7 +480,6 @@ void WaveFile::drawUI()
             mIsLoopDirty = false;
 
             invalidateOriginalData_();
-            mEncoding = sEncoding;
 
             ImGui::CloseCurrentPopup();
         }

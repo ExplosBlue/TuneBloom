@@ -49,6 +49,8 @@ public:
             , mDataSize(0)
             , mOriginalDataOffset(0)
             , mFullData(nullptr)
+            , mFullDataEncoding(Encoding::Pcm16)             // Arbitrary
+            , mFullDataEndian(sead::Endian::getHostEndian()) // ^
             , mSeekInfo(nullptr)
             , mSeekInfoBlocks(0)
         {
@@ -99,9 +101,27 @@ public:
             return mFullData;
         }
 
-        void setFullData_(const void* fullData)
+        Encoding getFullDataEncoding_() const
+        {
+            return mFullDataEncoding;
+        }
+
+        sead::Endian::Types getFullDataEndian_() const
+        {
+            return mFullDataEndian;
+        }
+
+        void setFullData_(const void* fullData, Encoding encoding, sead::Endian::Types endian)
         {
             mFullData = fullData;
+            mFullDataEncoding = encoding;
+            mFullDataEndian = endian;
+        }
+
+        void freeFullData_()
+        {
+            delete[] static_cast<const u8*>(mFullData);
+            mFullData = nullptr;
         }
 
     private:
@@ -115,6 +135,8 @@ public:
         s32 mOriginalDataOffset;
 
         const void* mFullData; // For when mLoopEndFrame < mSampleCount, to keep the full data alive for loop editing (Not spooled !)
+        Encoding mFullDataEncoding;
+        sead::Endian::Types mFullDataEndian;
 
         snd::DspAdpcmParam mAdpcmParam;
         snd::internal::DspAdpcmLoopParam mAdpcmLoopParam;

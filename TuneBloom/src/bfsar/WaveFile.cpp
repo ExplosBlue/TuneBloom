@@ -1300,11 +1300,13 @@ void* WaveFile::convertChannel_(
     u32 baseSamples = mSampleCount;
     s16* basePcm = new s16[baseSamples];
     bool shouldPreserveFullData = getOriginalLoopEndFrame() < baseSamples;
+    const u8* srcData = nullptr;
     {
         if (channel.getFullData_())
         {
             data = channel.getFullData_();
-            from = Encoding::Pcm16; //? Full data is always in Pcm16 format
+            from = channel.getFullDataEncoding_();
+            dataEndian = channel.getFullDataEndian_();
         }
 
         if (from == Encoding::Pcm16)
@@ -1334,19 +1336,31 @@ void* WaveFile::convertChannel_(
         }
         else if (from == Encoding::DspAdpcm)
         {
-            const u8* src = static_cast<const u8*>(data);
+            srcData = static_cast<const u8*>(data);
 
             ADPCMINFO adpcmInfo;
             sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
             FillAdpcmInfo(&adpcmInfo, channel.getAdpcmParam(), channel.getAdpcmLoopParam());
 
-            decode(const_cast<u8*>(src), basePcm, &adpcmInfo, baseSamples);
+            decode(const_cast<u8*>(srcData), basePcm, &adpcmInfo, baseSamples);
+        }
+
+        if (shouldPreserveFullData && !channel.getFullData_())
+        {
+            // TODO: If converting to DspAdpcm and full data is not already DspAdpcm, resave full data as DspAdpcm
+
+            u32 dataSize = channel.getDataSize();
+            void* fullData = new u8[dataSize];
+            sead::MemUtil::copy(fullData, data, dataSize);
+
+            channel.setFullData_(fullData, from, dataEndian);
         }
     }
 
     //? Spool PCM data
     u32 framesAfterLoopEnd = 140; //? Needed for seamless looping (prevents pops)
-    u32 totalSamples = mIsLoop ? sead::Mathu::max(baseSamples, getLoopEndFrame(true)) + framesAfterLoopEnd : baseSamples;
+    // u32 totalSamples = mIsLoop ? sead::Mathu::max(baseSamples, getLoopEndFrame(true)) + framesAfterLoopEnd : baseSamples;
+    u32 totalSamples = mIsLoop ? getLoopEndFrame(true) + framesAfterLoopEnd : baseSamples;
     s16* spooledPcm = new s16[totalSamples];
     {
         u32 copyCount = mIsLoop ? sead::Mathu::min(baseSamples, getOriginalLoopEndFrame()) : baseSamples;
@@ -1369,23 +1383,6 @@ void* WaveFile::convertChannel_(
                     currentPos++;
                 }
             }
-        }
-
-        if (shouldPreserveFullData)
-        {
-            if (!channel.getFullData_())
-            {
-                // TODO: Preserve data instead of allocating new PCM data ?
-                void* fullData = new s16[baseSamples];
-                sead::MemUtil::copy(fullData, basePcm, baseSamples * sizeof(s16));
-
-                channel.setFullData_(fullData);
-            }
-        }
-        else
-        {
-            delete[] static_cast<const u8*>(channel.getFullData_());
-            channel.setFullData_(nullptr);
         }
 
         delete[] basePcm;
@@ -1422,20 +1419,83 @@ void* WaveFile::convertChannel_(
             ADPCMINFO adpcmInfo;
             sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
 
-            encode(spooledPcm, dst, &adpcmInfo, totalSamples);
-            getLoopContext(dst, &adpcmInfo, getLoopStartFrame(false));
+            if (from == Encoding::DspAdpcm && srcData != nullptr)
+            {
+                u32 copyCount = mIsLoop ? sead::Mathu::min(baseSamples, getOriginalLoopEndFrame()) : baseSamples;
+                u32 copiedFrames = copyCount / 14;
+                u32 copiedBytes = copiedFrames * 8;
+                u32 copiedSamples = copiedFrames * 14;
 
-            ADPCMINFO adpcmInfoStream;
-            sead::MemUtil::copy(&adpcmInfoStream, &adpcmInfo, sizeof(ADPCMINFO));
-            getLoopContext(dst, &adpcmInfoStream, getLoopStartFrame(true));
+                sead::MemUtil::copy(dst, srcData, copiedBytes);
 
-            FillAdpcmParam(&channel.mAdpcmParam, &channel.mAdpcmLoopParam, adpcmInfo);
-            FillAdpcmParam(&channel.mAdpcmParamStream, &channel.mAdpcmLoopParamStream, adpcmInfoStream);
+                s16 pcmFrame[16] = { 0 };
+                if (copiedSamples >= 2)
+                {
+                    pcmFrame[0] = spooledPcm[copiedSamples - 2];
+                    pcmFrame[1] = spooledPcm[copiedSamples - 1];
+                }
+                else if (copiedSamples == 1)
+                {
+                    pcmFrame[1] = spooledPcm[0];
+                }
+
+                u32 remainingSamples = totalSamples - copiedSamples;
+                u32 remainingFrames = (remainingSamples + 13) / 14;
+
+                s16* pcm = spooledPcm + copiedSamples;
+                u8* adpcm = dst + copiedBytes;
+
+                const snd::DspAdpcmParam& param = channel.getAdpcmParam();
+
+                for (u32 i = 0; i < remainingFrames; i++, pcm += 14, adpcm += 8)
+                {
+                    u32 sampleCount = remainingSamples - i * 14;
+                    if (sampleCount > 14)
+                    {
+                        sampleCount = 14;
+                    }
+
+                    sead::MemUtil::fillZero(pcmFrame + 2, 14 * sizeof(s16));
+                    sead::MemUtil::copy(pcmFrame + 2, pcm, sampleCount * sizeof(s16));
+
+                    encodeFrame(pcmFrame, adpcm, (s16*)param.coef, 0);
+
+                    pcmFrame[0] = pcmFrame[14];
+                    pcmFrame[1] = pcmFrame[15];
+                }
+
+                FillAdpcmInfo(&adpcmInfo, param, channel.getAdpcmLoopParam());
+                getLoopContext(dst, &adpcmInfo, getLoopStartFrame(false));
+
+                ADPCMINFO adpcmInfoStream;
+                sead::MemUtil::copy(&adpcmInfoStream, &adpcmInfo, sizeof(ADPCMINFO));
+                getLoopContext(dst, &adpcmInfoStream, getLoopStartFrame(true));
+
+                FillAdpcmParam(&channel.mAdpcmParam, &channel.mAdpcmLoopParam, adpcmInfo);
+                FillAdpcmParam(&channel.mAdpcmParamStream, &channel.mAdpcmLoopParamStream, adpcmInfoStream);
+            }
+            else
+            {
+                encode(spooledPcm, dst, &adpcmInfo, totalSamples);
+                getLoopContext(dst, &adpcmInfo, getLoopStartFrame(false));
+
+                ADPCMINFO adpcmInfoStream;
+                sead::MemUtil::copy(&adpcmInfoStream, &adpcmInfo, sizeof(ADPCMINFO));
+                getLoopContext(dst, &adpcmInfoStream, getLoopStartFrame(true));
+
+                FillAdpcmParam(&channel.mAdpcmParam, &channel.mAdpcmLoopParam, adpcmInfo);
+                FillAdpcmParam(&channel.mAdpcmParamStream, &channel.mAdpcmLoopParamStream, adpcmInfoStream);
+            }
 
             dstData = dst;
             *size = bufferSize;
 
             delete[] spooledPcm;
+        }
+
+        if (!shouldPreserveFullData && channel.getFullData_())
+        {
+            channel.freeFullData_();
         }
     }
 

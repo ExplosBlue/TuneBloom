@@ -111,7 +111,10 @@ public:
         }
 
         const BankFile::VelocityRegion* velocityRegion = keyRegion->getVelocityRegion(noteOnInfo.velocity);
-        SEAD_ASSERT(velocityRegion);
+        if (!velocityRegion)
+        {
+            return nullptr;
+        }
 
         const WaveFile* waveFile = static_cast<const WaveFile*>(velocityRegion->getWaveFileRef().getItem());
         if (!waveFile || waveFile->getIsLoopDirty() || waveFile->getChannels().isEmpty())

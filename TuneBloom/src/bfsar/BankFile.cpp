@@ -2,6 +2,7 @@
 
 #include <bfsar/SeqCommand.h>
 
+#include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
 #include <VectorSet.h>
@@ -47,7 +48,10 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
             u8 vel = static_cast<u8>(Vel * 127.0f);
 
             const BankFile::VelocityRegion* velocityRegion = keyRegion->getVelocityRegion(vel);
-            SEAD_ASSERT(velocityRegion);
+            if (!velocityRegion)
+            {
+                PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<32>("Invalid VelocityRegion(%d)", vel) });
+            }
 
             sSoundPlayer.playBankNote(static_cast<u8>(Key), vel, *velocityRegion);
 

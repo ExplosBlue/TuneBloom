@@ -39,7 +39,6 @@ bool SoundPlayer::playSound(const Sound* sound, u32 startOffsetSample)
 {
     SEAD_ASSERT(sound);
     mLastPlayedSound = sound;
-    mPlayingSound = nullptr;
 
     switch (sound->getSoundType())
     {

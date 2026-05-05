@@ -373,8 +373,8 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
     waveInfo.loopFlag = mainWave.getIsLoop();
     waveInfo.channelCount = streamSoundInfo.getAllocateChannelCount();
     waveInfo.sampleRate = mainWave.getSampleRate();
-    waveInfo.loopStartFrame = mainWave.getLoopStartFrame(false);
-    waveInfo.loopEndFrame = mainWave.getLoopEndFrame(false);
+    waveInfo.loopStartFrame = mainWave.getLoopStartFrame(true);
+    waveInfo.loopEndFrame = mainWave.getLoopEndFrame(true);
     waveInfo.originalLoopStartFrame = mainWave.getOriginalLoopStartFrame();
 
     for (u32 i = 0; i < waveInfo.channelCount; i++)
@@ -382,64 +382,77 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
         mWaveInfos[i] = waveInfo;
     }
 
+    auto updateWaveInfo = [&](
+        nw::snd::internal::WaveInfo& info, const void* buffer, sead::Endian::Types endian,
+        const snd::DspAdpcmParam& adpcmParam, const snd::internal::DspAdpcmLoopParam& adpcmLoopParam)
     {
-        u32 bufferSize = nw::snd::internal::Util::GetByteBySample(mainWave.getLoopEndFrame(false), waveInfo.sampleFormat);
+        info.channelCount = 1;
+        info.endian = endian;
 
-        u8* channelBuffers[cStrmChannelNum];
-        for (u32 i = 0; i < waveInfo.channelCount; i++)
+        nw::snd::internal::WaveInfo::ChannelParam& channelParam = info.channelParam[0];
+        channelParam.dataAddress = buffer;
+
+        if (mainWave.getEncoding() == WaveFile::Encoding::DspAdpcm)
         {
-            channelBuffers[i] = new u8[bufferSize];
-            mChannels[i].mBufferAddress = channelBuffers[i];
-
-            const WaveFile::Channel& channel = *channels[i];
-            u32 channelDataSize = nw::snd::internal::Util::GetByteBySample(channelOwners[i]->getMaxRealFrame(false), waveInfo.sampleFormat);
-            u32 dataSize = sead::Mathu::min(bufferSize, channelDataSize);
-
-            const void* src = channel.getData();
-            u8* dst = channelBuffers[i];
-
-            sead::MemUtil::copy(dst, src, dataSize);
-
-            //? If other channels are smaller pad out
-            if (channelDataSize < bufferSize)
+            for (u32 j = 0; j < 8; j++)
             {
-                u32 remainSize = bufferSize - dataSize;
-
-                dst += dataSize;
-                sead::MemUtil::fillZero(dst, remainSize);
+                channelParam.adpcmParam.coef[j][0] = adpcmParam.coef[j][0];
+                channelParam.adpcmParam.coef[j][1] = adpcmParam.coef[j][1];
             }
+
+            channelParam.adpcmParam.predScale = adpcmParam.predScale;
+            channelParam.adpcmParam.yn1 = adpcmParam.yn1;
+            channelParam.adpcmParam.yn2 = adpcmParam.yn2;
+
+            channelParam.adpcmLoopParam.loopPredScale = adpcmLoopParam.loopPredScale;
+            channelParam.adpcmLoopParam.loopYn1 = adpcmLoopParam.loopYn1;
+            channelParam.adpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;
         }
+    };
 
+    {
+        u32 bufferSize = nw::snd::internal::Util::GetByteBySample(waveInfo.loopEndFrame, waveInfo.sampleFormat);
+
+        u8* channelBuffers[cStrmChannelNum] = { nullptr };
         for (u32 i = 0; i < waveInfo.channelCount; i++)
         {
-            nw::snd::internal::WaveInfo& info = mWaveInfos[i];
-            info.channelCount = 1;
+            const WaveFile& currentWave = *channelOwners[i];
+            const WaveFile::Channel& channel = *channels[i];
 
-            nw::snd::internal::WaveInfo::ChannelParam& channelParam = info.channelParam[0];
-            channelParam.dataAddress = channelBuffers[i];
-
-            if (mainWave.getEncoding() == WaveFile::Encoding::DspAdpcm)
+            if (currentWave.getIsStreamExtended() &&
+                currentWave.getLoopStartFrame(true) == waveInfo.loopStartFrame &&
+                currentWave.getLoopEndFrame(true) == waveInfo.loopEndFrame)
             {
-                const WaveFile::Channel& channel = *channels[i];
+                channelBuffers[i] = new u8[bufferSize];
 
-                const snd::DspAdpcmParam& adpcmParam = channel.getAdpcmParam(false);
-                const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel.getAdpcmLoopParam(false);
+                const void* src = channel.getData();
+                u8* dst = channelBuffers[i];
 
-                for (u32 j = 0; j < 8; j++)
-                {
-                    channelParam.adpcmParam.coef[j][0] = adpcmParam.coef[j][0];
-                    channelParam.adpcmParam.coef[j][1] = adpcmParam.coef[j][1];
-                }
+                sead::MemUtil::copy(dst, src, bufferSize);
 
-                channelParam.adpcmParam.predScale = adpcmParam.predScale;
-                channelParam.adpcmParam.yn1 = adpcmParam.yn1;
-                channelParam.adpcmParam.yn2 = adpcmParam.yn2;
-
-                // TODO: This should actually reflect the mainWave loop start frame...
-                channelParam.adpcmLoopParam.loopPredScale = adpcmLoopParam.loopPredScale;
-                channelParam.adpcmLoopParam.loopYn1 = adpcmLoopParam.loopYn1;
-                channelParam.adpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;
+                const snd::DspAdpcmParam& adpcmParam = channel.getAdpcmParam(true);
+                const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel.getAdpcmLoopParam(true);
+                updateWaveInfo(mWaveInfos[i], channelBuffers[i], currentWave.getDataEndian(), adpcmParam, adpcmLoopParam);
             }
+            else
+            {
+                snd::DspAdpcmParam adpcmParam;
+                snd::internal::DspAdpcmLoopParam adpcmLoopParam;
+                channelBuffers[i] = (u8*)WaveFile::convertChannel_(
+                    const_cast<WaveFile::Channel&>(channel), channel.getData(), currentWave.getDataEndian(),
+                    currentWave.getEncoding(), currentWave.getEncoding(), nullptr, false, waveInfo.loopFlag,
+                    currentWave.getSampleCount(), mainWave.getOriginalLoopEndFrame(),
+                    mainWave.getOriginalLoopStartFrame(), mainWave.getOriginalLoopEndFrame(),
+                    0, 0,
+                    waveInfo.loopStartFrame, waveInfo.loopEndFrame,
+                    nullptr, nullptr,
+                    &adpcmParam, &adpcmLoopParam
+                );
+
+                updateWaveInfo(mWaveInfos[i], channelBuffers[i], sead::Endian::getHostEndian(), adpcmParam, adpcmLoopParam);
+            }
+
+            mChannels[i].mBufferAddress = channelBuffers[i];
         }
     }
 

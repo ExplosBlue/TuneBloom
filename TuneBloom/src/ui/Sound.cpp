@@ -796,7 +796,7 @@ void DrawSoundPropertiesUI()
 
                     {
                         u32 loopStartFrame = enableSend ? strmSoundInfo.getLoopStartFrame() : 0;
-                        if (ImGui::InputScalar("Loop Start Frame", ImGuiDataType_U32, &loopStartFrame, &cStepU32))
+                        if (ImGui::InputScalar("Loop Start Sample", ImGuiDataType_U32, &loopStartFrame, &cStepU32))
                         {
                             strmSoundInfo.setLoopStartFrame(loopStartFrame);
                         }
@@ -804,7 +804,7 @@ void DrawSoundPropertiesUI()
 
                     {
                         u32 loopEndFrame = enableSend ? strmSoundInfo.getLoopEndFrame() : 0;
-                        if (ImGui::InputScalar("Loop End Frame", ImGuiDataType_U32, &loopEndFrame, &cStepU32))
+                        if (ImGui::InputScalar("Loop End Sample", ImGuiDataType_U32, &loopEndFrame, &cStepU32))
                         {
                             strmSoundInfo.setLoopEndFrame(loopEndFrame);
                         }

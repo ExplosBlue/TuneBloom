@@ -268,7 +268,7 @@ bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u
     {
         bool buttonEdited = false;
         u32 loopStartFrame = (isLoop ? rLoopStartFrame : 0);
-        ImGui::InputScalarCustom("Loop Start Frame", ImGuiDataType_U32, &loopStartFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
+        ImGui::InputScalarCustom("Loop Start Sample", ImGuiDataType_U32, &loopStartFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
 
         if (loopStartFrame >= sampleCount)
         {
@@ -310,7 +310,7 @@ bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u
     {
         bool buttonEdited = false;
         u32 loopEndFrame = rLoopEndFrame;
-        ImGui::InputScalarCustom("Loop End Frame", ImGuiDataType_U32, &loopEndFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
+        ImGui::InputScalarCustom("Loop End Sample", ImGuiDataType_U32, &loopEndFrame, &cStepU32, nullptr, nullptr, 0, &buttonEdited);
 
         if (loopEndFrame > sampleCount)
         {
@@ -386,22 +386,22 @@ void WaveFile::drawUI()
         ImGui::BeginDisabled();
 
         u32 realLoopStartFrame = getLoopStartFrame(false);
-        if (ImGui::InputScalar("Real Loop Start Frame", ImGuiDataType_U32, &realLoopStartFrame, &cStepU32))
+        if (ImGui::InputScalar("Real Loop Start Sample", ImGuiDataType_U32, &realLoopStartFrame, &cStepU32))
         {
         }
 
         u32 realLoopEndFrame = getLoopEndFrame(false);
-        if (ImGui::InputScalar("Real Loop End Frame", ImGuiDataType_U32, &realLoopEndFrame, &cStepU32))
+        if (ImGui::InputScalar("Real Loop End Sample", ImGuiDataType_U32, &realLoopEndFrame, &cStepU32))
         {
         }
 
         realLoopStartFrame = getLoopStartFrame(true);
-        if (ImGui::InputScalar("Real Loop Start Frame (For Stream)", ImGuiDataType_U32, &realLoopStartFrame, &cStepU32))
+        if (ImGui::InputScalar("Real Loop Start Sample (For Stream)", ImGuiDataType_U32, &realLoopStartFrame, &cStepU32))
         {
         }
 
         realLoopEndFrame = getLoopEndFrame(true);
-        if (ImGui::InputScalar("Real Loop End Frame (For Stream)", ImGuiDataType_U32, &realLoopEndFrame, &cStepU32))
+        if (ImGui::InputScalar("Real Loop End Sample (For Stream)", ImGuiDataType_U32, &realLoopEndFrame, &cStepU32))
         {
         }
 

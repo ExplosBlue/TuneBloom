@@ -72,12 +72,12 @@ public:
             return mDataSize;
         }
 
-        const snd::DspAdpcmParam& getAdpcmParam(bool forStream = false) const
+        const snd::DspAdpcmParam& getAdpcmParam(bool forStream) const
         {
             return forStream ? mAdpcmParamStream : mAdpcmParam;
         }
 
-        const snd::internal::DspAdpcmLoopParam& getAdpcmLoopParam(bool forStream = false) const
+        const snd::internal::DspAdpcmLoopParam& getAdpcmLoopParam(bool forStream) const
         {
             return forStream ? mAdpcmLoopParamStream : mAdpcmLoopParam;
         }

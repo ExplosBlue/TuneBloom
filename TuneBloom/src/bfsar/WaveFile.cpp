@@ -627,7 +627,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
                     writer.closeReference(sead::FormatFixedSafeString<16>("AdpcmInfo%u", i), nw::snd::internal::ElementType_Codec_DspAdpcmInfo);
 
                     {
-                        const snd::DspAdpcmParam& adpcmParam = channel->getAdpcmParam();
+                        const snd::DspAdpcmParam& adpcmParam = channel->getAdpcmParam(false);
 
                         for (u32 j = 0; j < 8; j++)
                         {
@@ -641,7 +641,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
                     }
 
                     {
-                        const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel->getAdpcmLoopParam();
+                        const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel->getAdpcmLoopParam(false);
 
                         stream->writeU16(adpcmLoopParam.loopPredScale);
                         stream->writeU16(adpcmLoopParam.loopYn1);
@@ -1104,7 +1104,7 @@ bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
             ADPCMINFO adpcmInfo;
             sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
 
-            FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(), channel->getAdpcmLoopParam());
+            FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(false), channel->getAdpcmLoopParam(false));
 
             s16* data = new s16[mSampleCount];
             decode((u8*)channel->getData(), data, &adpcmInfo, mSampleCount);
@@ -1232,7 +1232,7 @@ void WaveFile::updateLoopInfo_(bool update, bool updateStream)
 
         if (update)
         {
-            FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(), channel->getAdpcmLoopParam());
+            FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(false), channel->getAdpcmLoopParam(false));
             getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, getLoopStartFrame(false));
 
             channel->mAdpcmLoopParam.loopPredScale = adpcmInfo.loop_pred_scale;
@@ -1347,7 +1347,7 @@ void* WaveFile::convertChannel_(
 
             ADPCMINFO adpcmInfo;
             sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
-            FillAdpcmInfo(&adpcmInfo, channel.getAdpcmParam(), channel.getAdpcmLoopParam());
+            FillAdpcmInfo(&adpcmInfo, channel.getAdpcmParam(false), channel.getAdpcmLoopParam(false));
 
             decode(const_cast<u8*>(srcData), basePcm, &adpcmInfo, baseSamples);
         }
@@ -1452,7 +1452,7 @@ void* WaveFile::convertChannel_(
                 s16* pcm = spooledPcm + copiedSamples;
                 u8* adpcm = dst + copiedBytes;
 
-                const snd::DspAdpcmParam& param = channel.getAdpcmParam();
+                const snd::DspAdpcmParam& param = channel.getAdpcmParam(false);
 
                 for (u32 i = 0; i < remainingFrames; i++, pcm += 14, adpcm += 8)
                 {
@@ -1471,7 +1471,7 @@ void* WaveFile::convertChannel_(
                     pcmFrame[1] = pcmFrame[15];
                 }
 
-                FillAdpcmInfo(&adpcmInfo, param, channel.getAdpcmLoopParam());
+                FillAdpcmInfo(&adpcmInfo, param, channel.getAdpcmLoopParam(false));
                 getLoopContext(dst, &adpcmInfo, getLoopStartFrame(false));
 
                 ADPCMINFO adpcmInfoStream;

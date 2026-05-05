@@ -422,8 +422,8 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
             {
                 const WaveFile::Channel& channel = *channels[i];
 
-                const snd::DspAdpcmParam& adpcmParam = channel.getAdpcmParam();
-                const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel.getAdpcmLoopParam();
+                const snd::DspAdpcmParam& adpcmParam = channel.getAdpcmParam(false);
+                const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel.getAdpcmLoopParam(false);
 
                 for (u32 j = 0; j < 8; j++)
                 {

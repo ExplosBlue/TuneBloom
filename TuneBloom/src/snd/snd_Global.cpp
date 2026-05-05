@@ -29,8 +29,8 @@ void GetWaveInfoFromWaveFile(WaveInfo* out, const ::WaveFile& waveFile, s32 chan
 
         if (out->sampleFormat == nw::snd::SAMPLE_FORMAT_DSP_ADPCM)
         {
-            const ::snd::DspAdpcmParam& adpcmParam = channel->getAdpcmParam();
-            const ::snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel->getAdpcmLoopParam();
+            const ::snd::DspAdpcmParam& adpcmParam = channel->getAdpcmParam(false);
+            const ::snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel->getAdpcmLoopParam(false);
 
             for (u32 i = 0; i < 8; i++)
             {

@@ -96,7 +96,7 @@ public:
             type = 0;
 
         type = sead::Mathi::clamp2((s32)snd::BiquadFilterType::Min, type, (s32)snd::BiquadFilterType::Max);
-        value = sead::Mathf::clamp2(0.0f, type, 1.0f);
+        value = sead::Mathf::clamp2(0.0f, value, 1.0f);
 
         mPlayerParamSet.biquadType = static_cast<s8>(type);
         mPlayerParamSet.biquadValue = value;

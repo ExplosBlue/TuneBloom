@@ -220,7 +220,7 @@ void SequenceFile::drawFileUI()
                 banks[i] = bank;
             }
 
-            sSoundPlayer.playSeqFile(*this, mStartLabel, banks, 127);
+            sSoundPlayer.playSeqFile(*this, mStartLabel, banks);
         }
     }
 

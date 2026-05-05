@@ -104,7 +104,7 @@ bool SoundPlayer::playSeqSound(const Sound* sound)
         banks[i] = bank;
     }
 
-    if (!playSeqFile(seqFile, seqSoundInfo.getStartLabel(), banks, sound->getVolume()))
+    if (!playSeqFile(seqFile, seqSoundInfo.getStartLabel(), banks, sound))
     {
         return false;
     }
@@ -262,6 +262,8 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
         mCurrentPlayer = &mStreamPlayer;
 
         mStreamPlayer.setInitialVolume(static_cast<f32>(sound->getVolume()) / 127.0f);
+        mStreamPlayer.setPanMode(sound->getPanMode());
+        mStreamPlayer.setPanCurve(sound->getPanCurve());
 
         mStreamPlayer.setup(setupArg);
         mStreamPlayer.prepare(strmSoundInfo);
@@ -300,7 +302,7 @@ bool SoundPlayer::playWaveSound(const Sound* sound, u32 startOffsetSample)
     return true;
 }
 
-bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, u8 volume)
+bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, const Sound* sound)
 {
     if (!seqFile.isValid())
     {
@@ -353,7 +355,12 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
         mSequencePlayer.init();
         mCurrentPlayer = &mSequencePlayer;
 
-        mSequencePlayer.setInitialVolume(static_cast<f32>(volume) / 127.0f);
+        if (sound)
+        {
+            mSequencePlayer.setInitialVolume(static_cast<f32>(sound->getVolume()) / 127.0f);
+            mSequencePlayer.setPanMode(sound->getPanMode());
+            mSequencePlayer.setPanCurve(sound->getPanCurve());
+        }
 
         s32 origSeqOffset = seqFile.getLabelOffset(startLabel, false);
         if (origSeqOffset == startOffset)
@@ -399,6 +406,8 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
         if (sound)
         {
             mWavePlayer.setInitialVolume(static_cast<f32>(sound->getVolume()) / 127.0f);
+            mWavePlayer.setPanMode(sound->getPanMode());
+            mWavePlayer.setPanCurve(sound->getPanCurve());
         }
 
         mWavePlayer.prepare(wave, channel, sound, startOffsetSample);

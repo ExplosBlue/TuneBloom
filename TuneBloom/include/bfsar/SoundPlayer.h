@@ -51,7 +51,7 @@ public:
     bool playStrmSound(const Sound* sound);
     bool playWaveSound(const Sound* sound, u32 startOffsetSample = 0);
 
-    bool playSeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, u8 volume);
+    bool playSeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, const Sound* sound = nullptr);
     bool playWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0);
     bool playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
 

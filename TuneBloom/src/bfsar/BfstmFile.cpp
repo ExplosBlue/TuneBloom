@@ -536,6 +536,7 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile)
         }
 
         wave->mIsLoopDirty = false;
+        wave->mIsStreamExtended = true;
 
         sBfsar.getWaveFileList().pushBack(wave);
 

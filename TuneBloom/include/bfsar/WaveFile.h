@@ -228,6 +228,8 @@ public:
 
         , mChannels()
 
+        , mIsStreamExtended(false)
+
         , mUseOriginalData(false)
         , mOriginalData(nullptr)
         , mOriginalDataSize(0)
@@ -369,9 +371,23 @@ public:
         return mSampleCount;
     }
 
+    bool getIsStreamExtended() const
+    {
+        return mIsStreamExtended;
+    }
+
     void updateLoop();
 
     static void buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel& channel);
+
+    static void* convertChannel_(
+        Channel& channel, const void* data, sead::Endian::Types dataEndian,
+        Encoding from, Encoding to, u32* outSize, bool updateChannel, bool isLoop,
+        u32 sampleCount, u32 targetSampleCount, u32 originalLoopStartFrame, u32 originalLoopEndFrame,
+        u32 loopStartFrame, u32 loopEndFrame, u32 loopStartFrameStream, u32 loopEndFrameStream,
+        snd::DspAdpcmParam* outAdpcmParam, snd::internal::DspAdpcmLoopParam* outAdpcmLoopParam,
+        snd::DspAdpcmParam* outAdpcmParamStream, snd::internal::DspAdpcmLoopParam* outAdpcmLoopParamStream
+    );
 
 private:
     void invalidateOriginalData_()
@@ -388,7 +404,6 @@ private:
     void disposeChannels_();
     void updateLoopInfo_(bool update, bool updateStream);
     void rebuildSpooledData_();
-    void* convertChannel_(Channel& channel, const void* data, sead::Endian::Types dataEndian, Encoding from, Encoding to, u32* size);
 
 private:
     sead::Endian::Types mDataEndian; //? For when Encoding is Pcm16
@@ -402,6 +417,8 @@ private:
     u32 mSampleCount;
 
     sead::ObjList<Channel> mChannels;
+
+    bool mIsStreamExtended; //? If data already accounts for Stream Sounds
 
     bool mUseOriginalData;
     void* mOriginalData;

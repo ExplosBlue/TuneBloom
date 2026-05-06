@@ -208,6 +208,7 @@ public:
 
     static const char* sEncodingTypes[3];
 
+    static const u32 cFramesAfterLoopEnd = 140;
     static const u32 cSamplesPerFrame = 14;
     static const u32 cStreamLoopStartAlignmentFramesAdpcm = 0x3800;
     static const u32 cStreamMinimumLoopFrames = 0x480;

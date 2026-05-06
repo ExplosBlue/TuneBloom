@@ -228,7 +228,7 @@ bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u
 
         rIsLoop = isLoop;
 
-        if (pIsLoopDirty && rLoopStartFrame != 0)
+        if (pIsLoopDirty && (rLoopStartFrame != 0 || rLoopEndFrame < WaveFile::cStreamMinimumLoopFrames))
         {
             *pIsLoopDirty = true;
         }
@@ -1393,7 +1393,7 @@ void* WaveFile::convertChannel_(
     }
 
     //? Spool PCM data
-    u32 framesAfterLoopEnd = isLoop ? 140 : 0; //? Needed for seamless looping (prevents pops)
+    u32 framesAfterLoopEnd = isLoop ? cFramesAfterLoopEnd : 0; //? Needed for seamless looping (prevents pops)
     u32 totalSamples = loopEndFrameStream + framesAfterLoopEnd;
     s16* spooledPcm = new s16[totalSamples];
     {
@@ -1417,6 +1417,10 @@ void* WaveFile::convertChannel_(
                     currentPos++;
                 }
             }
+        }
+        else if (copyCount < loopEndFrameStream)
+        {
+            sead::MemUtil::fillZero(spooledPcm + copyCount, (loopEndFrameStream - copyCount) * sizeof(s16));
         }
 
         delete[] basePcm;

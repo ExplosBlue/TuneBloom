@@ -571,10 +571,8 @@ bool WaveFile::doRead(const void* fileAddr)
         }
     }
 
-    //! Causes crash and it tries to access buffer past end (its smaller than an expected stream buffer)
-    // updateLoopInfo_(false, true);
-
     mIsLoopDirty = false;
+    mIsStreamExtended = false;
 
     return true;
 }

@@ -4875,7 +4875,7 @@ void Bfsar::save_(sead::FileHandle& handle)
     //? Stream Files
     {
         extern bool CreateDirectoryRecursively(const std::string& directory);
-        extern bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo);
+        extern bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian);
 
         std::unordered_set<std::string> writenFiles;
 
@@ -4929,7 +4929,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                 }
             }
 
-            WriteBfstmFile(strmHandle, strmSoundInfo);
+            WriteBfstmFile(strmHandle, strmSoundInfo, getVersionForBfstm(), mEndian);
 
             writenFiles.emplace(path);
         }

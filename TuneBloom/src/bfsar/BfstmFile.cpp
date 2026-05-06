@@ -23,16 +23,40 @@ static bool IsOriginalLoopAvailable(u32 version)
     return version >= 0x00040000;
 }
 
-bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo)
+bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian)
 {
     sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
-    stream.setBinaryEndian(sBfsar.getEndian());
+    stream.setBinaryEndian(endian);
 
     SEAD_ASSERT(soundInfo.getTrackList().size() > 0);
+
+    struct ChannelInfo
+    {
+        ChannelInfo()
+            : buffer(nullptr), shouldDelete(false), endian(sead::Endian::getHostEndian())
+        {
+        }
+
+        ~ChannelInfo()
+        {
+            if (shouldDelete)
+            {
+                delete[] buffer;
+            }
+        }
+
+        u8* buffer;
+        bool shouldDelete;
+        sead::Endian::Types endian;
+        snd::DspAdpcmParam adpcmParam;
+        snd::internal::DspAdpcmLoopParam adpcmLoopParam;
+        WaveFile::Channel::SeekData seekData;
+    };
 
     u32 channelNum = 0;
     const WaveFile::Channel* channels[cStrmChannelNum];
     const WaveFile* channelOwners[cStrmChannelNum];
+    ChannelInfo channelInfos[cStrmChannelNum];
     for (u32 i = 0; i < cStrmChannelNum; i++)
     {
         channels[i] = nullptr;
@@ -68,13 +92,16 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
     SEAD_ASSERT(tracks[0]->getWaveFileRef().isAttached());
     const WaveFile& mainWave = *static_cast<const WaveFile*>(tracks[0]->getWaveFileRef().getItem());
 
-    nw::snd::SampleFormat sampleFormat = static_cast<nw::snd::SampleFormat>(mainWave.getEncoding());
+    nw::snd::SampleFormat sampleFormat = nw::snd::internal::WaveFileReader::GetSampleFormat(static_cast<u8>(mainWave.getEncoding()));
 
     const u32 cDefaultBytesPerBlock = 0x2000;
     const u32 cDefaultBytesPerSeekTableEntry = 2 * sizeof(s16);
-    //const u32 cDefaultSamplesPerSeekTableEntry = nw::snd::internal::Util::GetSampleByByte(cDefaultBytesPerBlock, sampleFormat);
 
-    u32 sampleCount = mainWave.getLoopEndFrame(true);
+    u32 loopStartFrame = mainWave.getLoopStartFrame(true);
+    u32 loopEndFrame = mainWave.getLoopEndFrame(true);
+    bool isLoop = mainWave.getIsLoop();
+
+    u32 sampleCount = loopEndFrame;
     u32 samplePerBlock = nw::snd::internal::Util::GetSampleByByte(cDefaultBytesPerBlock, sampleFormat);
     u32 blockNum = sampleCount / samplePerBlock + (sampleCount % samplePerBlock != 0); // Divide sampleCount by samplePerBlock and ceil
 
@@ -82,7 +109,55 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
     u32 lastBlockBytes = nw::snd::internal::Util::GetByteBySample(lastBlockSamples, sampleFormat);
     u32 lastBlockBytesPadded = sead::Mathu::roundUpPow2(lastBlockBytes, 0x20);
 
-    u32 version = sBfsar.getVersionForBfstm();
+    {
+        u32 mainWaveSize = channels[0]->getDataSize();
+
+        for (u32 i = 0; i < channelNum; i++)
+        {
+            const WaveFile& currentWave = *channelOwners[i];
+            const WaveFile::Channel& channel = *channels[i];
+            ChannelInfo& channelInfo = channelInfos[i];
+
+            if (currentWave.getIsStreamExtended() &&
+                currentWave.getLoopStartFrame(true) == loopStartFrame &&
+                currentWave.getLoopEndFrame(true) == loopEndFrame)
+            {
+                channelInfo.buffer = new u8[mainWaveSize];
+                channelInfo.shouldDelete = true;
+                channelInfo.endian = currentWave.getDataEndian();
+
+                const void* src = channel.getData();
+                u8* dst = channelInfo.buffer;
+
+                sead::MemUtil::copy(dst, src, mainWaveSize);
+
+                channelInfo.adpcmParam = channel.getAdpcmParam(true);
+                channelInfo.adpcmLoopParam = channel.getAdpcmLoopParam(true);
+                channelInfo.seekData.mSeekInfo.setBuffer(
+                    channel.getSeekData().mSeekInfo.size(),
+                    const_cast<WaveFile::Channel::SeekInfo*>(channel.getSeekData().mSeekInfo.getBufferPtr())
+                );
+                channelInfo.seekData.mOwner = false;
+            }
+            else
+            {
+                channelInfo.buffer = (u8*)WaveFile::convertChannel_(
+                    const_cast<WaveFile::Channel&>(channel), channel.getData(), currentWave.getDataEndian(),
+                    currentWave.getEncoding(), currentWave.getEncoding(), nullptr, false, isLoop,
+                    currentWave.getSampleCount(), mainWave.getOriginalLoopEndFrame(),
+                    mainWave.getOriginalLoopStartFrame(), mainWave.getOriginalLoopEndFrame(),
+                    0, 0,
+                    loopStartFrame, loopEndFrame,
+                    nullptr, nullptr,
+                    &channelInfo.adpcmParam, &channelInfo.adpcmLoopParam,
+                    &channelInfo.seekData
+                );
+                channelInfo.shouldDelete = true;
+                channelInfo.endian = sead::Endian::getHostEndian();
+            }
+        }
+    }
+
     bool hasSeekBlock = mainWave.getEncoding() == WaveFile::Encoding::DspAdpcm;
     bool hasRegionBlock = false; // TODO
 
@@ -112,11 +187,11 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
         writer.pushOffsetBase();
         {
             stream.writeU8(static_cast<u8>(mainWave.getEncoding()));
-            stream.writeU8(mainWave.getIsLoop());
+            stream.writeU8(isLoop);
             stream.writeU8(static_cast<u8>(channelNum));
             stream.writeU8(0); // TODO: ? Region count
             stream.writeU32(mainWave.getSampleRate());
-            stream.writeU32(mainWave.getLoopStartFrame(true));
+            stream.writeU32(loopStartFrame);
             stream.writeU32(sampleCount);
             stream.writeU32(blockNum);
             stream.writeU32(cDefaultBytesPerBlock);
@@ -216,10 +291,10 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
                 {
                     writer.closeReference(refName, nw::snd::internal::ElementType_Codec_DspAdpcmInfo);
 
-                    const WaveFile::Channel& channel = *channels[i];
+                    const ChannelInfo& channelInfo = channelInfos[i];
 
                     {
-                        const snd::DspAdpcmParam& adpcmParam = channel.getAdpcmParam(true);
+                        const snd::DspAdpcmParam& adpcmParam = channelInfo.adpcmParam;
 
                         for (u32 j = 0; j < 8; j++)
                         {
@@ -233,7 +308,7 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
                     }
 
                     {
-                        const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel.getAdpcmLoopParam(true);
+                        const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channelInfo.adpcmLoopParam;
 
                         stream.writeU16(adpcmLoopParam.loopPredScale);
                         stream.writeU16(adpcmLoopParam.loopYn1);
@@ -264,29 +339,10 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
         {
             for (u32 ch = 0; ch < channelNum; ch++)
             {
-                const WaveFile::Channel& channel = *channels[ch];
-                if (channel.getSeekInfoBlocks() == 0)
-                {
-                    // TODO: This needs to be spooled
+                const ChannelInfo& channelInfo = channelInfos[ch];
 
-                    WaveFile* currentWave = (WaveFile*)channelOwners[ch];
-
-                    u32 samplesPcm = currentWave->getLoopEndFrame(true);
-
-                    ADPCMINFO adpcmInfo;
-                    sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
-                    FillAdpcmInfo(&adpcmInfo, channel.getAdpcmParam(true), channel.getAdpcmLoopParam(true));
-
-                    s16* samples = new s16[samplesPcm];
-                    decode((u8*)channel.getData(), samples, &adpcmInfo, samplesPcm);
-
-                    WaveFile::buildSeekTable_(samples, samplesPcm, snd::SampleFormat::PcmS16, (WaveFile::Channel&)channel);
-
-                    delete[] samples;
-                }
-
-                s16 s1 = sead::Endian::fromHostS16(sead::Endian::eLittle, channel.getSeekInfo(blockNo).yn1);
-                s16 s2 = sead::Endian::fromHostS16(sead::Endian::eLittle, channel.getSeekInfo(blockNo).yn2);
+                s16 s1 = sead::Endian::fromHostS16(sead::Endian::eLittle, channelInfo.seekData.getSeekInfo(blockNo).yn1);
+                s16 s2 = sead::Endian::fromHostS16(sead::Endian::eLittle, channelInfo.seekData.getSeekInfo(blockNo).yn2);
 
                 stream.writeMemBlock(&s1, sizeof(s16));
                 stream.writeMemBlock(&s2, sizeof(s16));
@@ -326,38 +382,13 @@ bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soun
             {
                 // u32 pos = writer.getPosition();
 
-                const WaveFile::Channel& channel = *channels[ch];
-                const WaveFile& currentWave = *channelOwners[ch];
-
-                u32 offset = blockNo * cDefaultBytesPerBlock;
-
-                u32 dataSize = nw::snd::internal::Util::GetByteBySample(currentWave.getLoopEndFrame(false), sampleFormat);
-                // u32 dataSize = channel.getDataSize();
-                const u8* data = static_cast<const u8*>(channel.getData()) + offset;
+                const ChannelInfo& channelInfo = channelInfos[ch];
 
                 bool isLastBlock = blockNo == blockNum - 1;
+                u32 offset = blockNo * cDefaultBytesPerBlock;
+                u32 blockBytes = isLastBlock ? lastBlockBytesPadded : cDefaultBytesPerBlock;
 
-              //u32 blockBytes = isLastBlock ? lastBlockBytes : cDefaultBytesPerBlock;
-                u32 blockBytes = isLastBlock ? lastBlockBytesPadded : cDefaultBytesPerBlock; //? Write padded last block to account for random bytes at the end ?
-                u32 blockBytesPadded = isLastBlock ? lastBlockBytesPadded : cDefaultBytesPerBlock;
-
-                // Calculate the remaining data size from the current offset
-                u32 remainingDataSize = dataSize > offset ? dataSize - offset : 0;
-
-                // Write the smaller of the block size or the remaining data
-                u32 writeBytes = sead::Mathu::min(blockBytes, remainingDataSize);
-
-                stream.writeMemBlock(data, writeBytes);
-
-                // Handle padding if necessary
-                if (writeBytes < blockBytesPadded)
-                {
-                    static const u8 cPad[cDefaultBytesPerBlock] = { 0 };
-
-                    u32 padSize = blockBytesPadded - writeBytes;
-
-                    stream.writeMemBlock(cPad, padSize);
-                }
+                stream.writeMemBlock(channelInfo.buffer + offset, blockBytes);
 
                 //? Debug
                 // {

@@ -1,6 +1,8 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/UI.h>
 
+#include <ui/PopupMgr.h>
+
 //#include <snd/SoundThread.h>
 
 #include <filedevice/seadPath.h>
@@ -1364,7 +1366,7 @@ void DrawFileUI(ImGuiID dockspaceId)
         if (!window->isOpen() && dirty)
         {
             *window->getOpenPtr() = true;
-            // TODO: Open Popup
+            PopupMgr::instance()->addPopup({ "Please compile your Sequence data first" });
         }
 
         if (visible)

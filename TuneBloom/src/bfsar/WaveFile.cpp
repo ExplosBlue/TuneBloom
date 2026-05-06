@@ -189,10 +189,11 @@ void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo)
     param->coef[7][1] = adpcmInfo.coef[15];
 }
 
-bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u32 sampleCount, u32 sampleRate, bool drawEx, bool* pIsLoopDirty)
+bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u32 sampleCount, u32 sampleRate, bool drawEx, bool* pIsLoopDirty, bool notice)
 {
     const ImU32 cStepU32 = 1;
 
+    if (drawEx)
     {
         ImGui::BeginDisabled();
 
@@ -226,6 +227,15 @@ bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u
     {
         ImGui::SameLine();
         HelpMarker("Loop information will be recalculated");
+    }
+
+    if (notice)
+    {
+        ImGui::SameLine();
+        HelpMarker(
+            "To avoid multiple re-encodes which degrade audio quality, it is recommended to set your looping parameters upfront here.\n"
+            "Alternatively, import as Pcm16 which lets you edit parameters without re-encodes, then convert to DspAdpcm once at the end."
+        );
     }
 
     if (!isLoop)
@@ -364,7 +374,7 @@ void WaveFile::drawUI()
         }
     }
 
-    if (DrawWaveLoopInfo(mIsLoop, mLoopStartFrame, mLoopEndFrame, mSampleCount, mSampleRate, true, &mIsLoopDirty))
+    if (DrawWaveLoopInfo(mIsLoop, mLoopStartFrame, mLoopEndFrame, mSampleCount, mSampleRate, true, &mIsLoopDirty, false))
     {
         disposeChannels_();
     }

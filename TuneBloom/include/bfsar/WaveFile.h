@@ -16,7 +16,7 @@ void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const 
 void FillAdpcmParam(snd::DspAdpcmParam* param, snd::internal::DspAdpcmLoopParam* loopParam, const ADPCMINFO& adpcmInfo);
 void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo);
 
-bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u32 sampleCount, u32 sampleRate, bool drawEx, bool* pIsLoopDirty);
+bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u32 sampleCount, u32 sampleRate, bool drawEx, bool* pIsLoopDirty, bool notice);
 
 class WaveFile : public Item, public InnerFile
 {

@@ -1726,7 +1726,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
 
     ImGui::Separator();
 
-    DrawWaveLoopInfo(info->isLoop, info->loopStartFrame, info->loopEndFrame, info->sampleCount, info->sampleRate, true, nullptr);
+    DrawWaveLoopInfo(info->isLoop, info->loopStartFrame, info->loopEndFrame, info->sampleCount, info->sampleRate, true, nullptr, true);
 }
 
 InstanciateItemCallback CreateWaveFileFunc(bool clear)

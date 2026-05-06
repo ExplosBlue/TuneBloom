@@ -516,15 +516,36 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile)
         wave->mSampleRate = streamSoundInfo.sampleRate;
         wave->mLoopStartFrame = streamSoundInfo.originalLoopStart;
         wave->mLoopEndFrame = streamSoundInfo.originalLoopEnd;
+
+        bool loopError = false;
+        if (wave->mLoopStartFrame >= wave->mLoopEndFrame)
+        {
+            sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop (%u >= %u)", trackNo, wave->mLoopStartFrame, wave->mLoopEndFrame);
+            PopupMgr::instance()->pushCurrentItemError(msg);
+            loopError = true;
+        }
+
         if (wave->getLoopStartFrame(true) != streamSoundInfo.loopStart)
         {
             sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop start (%u should be %u)", trackNo, wave->getLoopStartFrame(true), (u32)streamSoundInfo.loopStart);
             PopupMgr::instance()->pushCurrentItemError(msg);
+            loopError = true;
         }
+
         if (wave->getLoopEndFrame(true) != streamSoundInfo.frameCount)
         {
             sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop end (%u should be %u)", trackNo, wave->getLoopEndFrame(true), (u32)streamSoundInfo.frameCount);
             PopupMgr::instance()->pushCurrentItemError(msg);
+            loopError = true;
+        }
+
+        sBfsar.getWaveFileList().pushBack(wave);
+
+        track.getWaveFileRef().attach(wave);
+
+        if (loopError)
+        {
+            continue;
         }
 
         wave->mSampleCount = wave->mLoopEndFrame;
@@ -538,11 +559,18 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile)
                 break;
             }
 
-            WaveFile::Channel* channel = wave->mChannels.birthBack();
-            SEAD_ASSERT(channel);
-
             s8 globalChannelIndex = *track.getChannels_().nth(ch);
             SEAD_ASSERT(0 <= globalChannelIndex && globalChannelIndex < cStrmChannelNum);
+
+            if (!channelBuffers[globalChannelIndex])
+            {
+                sead::FormatFixedSafeString<1024> msg("Track %u has no associated channels", trackNo);
+                PopupMgr::instance()->pushCurrentItemError(msg);
+                continue;
+            }
+
+            WaveFile::Channel* channel = wave->mChannels.birthBack();
+            SEAD_ASSERT(channel);
 
             channel->mOwnsData = true;
             channel->mData = channelBuffers[globalChannelIndex];
@@ -555,23 +583,29 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile)
             {
                 nw::snd::DspAdpcmParam adpcmParam;
                 nw::snd::internal::DspAdpcmLoopParam adpcmLoopParam;
-                reader.ReadDspAdpcmChannelInfo(&adpcmParam, &adpcmLoopParam, globalChannelIndex);
-
-                for (u32 i = 0; i < 8; i++)
+                if (reader.ReadDspAdpcmChannelInfo(&adpcmParam, &adpcmLoopParam, globalChannelIndex))
                 {
-                    channel->mAdpcmParam.coef[i][0] = adpcmParam.coef[i][0];
-                    channel->mAdpcmParam.coef[i][1] = adpcmParam.coef[i][1];
+                    for (u32 i = 0; i < 8; i++)
+                    {
+                        channel->mAdpcmParam.coef[i][0] = adpcmParam.coef[i][0];
+                        channel->mAdpcmParam.coef[i][1] = adpcmParam.coef[i][1];
+                    }
+
+                    channel->mAdpcmParam.predScale = adpcmParam.predScale;
+                    channel->mAdpcmParam.yn1 = adpcmParam.yn1;
+                    channel->mAdpcmParam.yn2 = adpcmParam.yn2;
+                    sead::MemUtil::copy(&channel->mAdpcmParamStream, &channel->mAdpcmParam, sizeof(snd::DspAdpcmParam));
+
+                    channel->mAdpcmLoopParam.loopPredScale = adpcmLoopParam.loopPredScale;
+                    channel->mAdpcmLoopParam.loopYn1 = adpcmLoopParam.loopYn1;
+                    channel->mAdpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;
+                    sead::MemUtil::copy(&channel->mAdpcmLoopParamStream, &channel->mAdpcmLoopParam, sizeof(snd::internal::DspAdpcmLoopParam));
                 }
-
-                channel->mAdpcmParam.predScale = adpcmParam.predScale;
-                channel->mAdpcmParam.yn1 = adpcmParam.yn1;
-                channel->mAdpcmParam.yn2 = adpcmParam.yn2;
-                sead::MemUtil::copy(&channel->mAdpcmParamStream, &channel->mAdpcmParam, sizeof(snd::DspAdpcmParam));
-
-                channel->mAdpcmLoopParam.loopPredScale = adpcmLoopParam.loopPredScale;
-                channel->mAdpcmLoopParam.loopYn1 = adpcmLoopParam.loopYn1;
-                channel->mAdpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;
-                sead::MemUtil::copy(&channel->mAdpcmLoopParamStream, &channel->mAdpcmLoopParam, sizeof(snd::internal::DspAdpcmLoopParam));
+                else
+                {
+                    sead::FormatFixedSafeString<1024> msg("Track %u DspAdpcm channel read error (really bad)", trackNo);
+                    PopupMgr::instance()->pushCurrentItemError(msg);
+                }
 
                 channel->mSeekData.mSeekInfo.allocBuffer(streamSoundInfo.blockCount);
                 channel->mSeekData.mOwner = true;
@@ -595,10 +629,6 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile)
 
         wave->mIsLoopDirty = false;
         wave->mIsStreamExtended = true;
-
-        sBfsar.getWaveFileList().pushBack(wave);
-
-        track.getWaveFileRef().attach(wave);
     }
 
     for (u32 i = 0; i < cStrmChannelNum; i++)

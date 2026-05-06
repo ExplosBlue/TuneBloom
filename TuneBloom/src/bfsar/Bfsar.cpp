@@ -1694,28 +1694,33 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                             // Read track information.
                             for (u32 j = 0; j < trackCount; j++)
                             {
-                                nw::snd::internal::StreamSoundFileReader::TrackInfo trackInfo;
-                                b = reader.ReadStreamTrackInfo(&trackInfo, j);
-                                SEAD_ASSERT(b);
-
                                 Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
                                 track->mId = j;
 
                                 track->mEnableName = true;
                                 track->mName = "Track";
 
-                                track->mVolume = trackInfo.volume;
-                                track->mPan = trackInfo.pan;
-                                track->mSPan = trackInfo.span;
-                                track->mFlags = trackInfo.flags;
-
-                                u8 channelCount = trackInfo.channelCount;
-                                SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
-
-                                for (u8 k = 0; k < channelCount; k++)
+                                nw::snd::internal::StreamSoundFileReader::TrackInfo trackInfo;
+                                if (reader.ReadStreamTrackInfo(&trackInfo, j))
                                 {
-                                    u8& channel = *track->mChannels.birthBack();
-                                    channel = trackInfo.globalChannelIndex[k];
+                                    track->mVolume = trackInfo.volume;
+                                    track->mPan = trackInfo.pan;
+                                    track->mSPan = trackInfo.span;
+                                    track->mFlags = trackInfo.flags;
+
+                                    u8 channelCount = trackInfo.channelCount;
+                                    SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
+
+                                    for (u8 k = 0; k < channelCount; k++)
+                                    {
+                                        u8& channel = *track->mChannels.birthBack();
+                                        channel = trackInfo.globalChannelIndex[k];
+                                    }
+                                }
+                                else
+                                {
+                                    sead::FormatFixedSafeString<32> msg("Track %u read error", j);
+                                    PopupMgr::instance()->pushCurrentItemError(msg);
                                 }
 
                                 sound->mStreamSoundInfo.mTrackList.pushBack(track);
@@ -1746,45 +1751,51 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     {
                         for (u32 j = 0; j < nw::snd::SoundArchive::STRM_TRACK_NUM && j < trackInfoTable->GetTrackCount(); j++)
                         {
-                            const nw::snd::internal::SoundArchiveFile::StreamTrackInfo* trackInfo = trackInfoTable->GetTrackInfo(j);
-                            SEAD_ASSERT(trackInfo);
-
                             Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
                             track->mId = j;
 
                             track->mEnableName = true;
                             track->mName = "Track";
 
-                            track->mVolume = trackInfo->volume;
-                            track->mPan = trackInfo->pan;
-                            track->mSPan = trackInfo->span;
-                            track->mFlags = trackInfo->flags;
-
-                            u32 channelCount = trackInfo->GetTrackChannelCount();
-                            SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
-
-                            for (u32 k = 0; k < channelCount; k++)
+                            const nw::snd::internal::SoundArchiveFile::StreamTrackInfo* trackInfo = trackInfoTable->GetTrackInfo(j);
+                            if (trackInfo)
                             {
-                                u8& channel = *track->mChannels.birthBack();
-                                channel = trackInfo->GetGlobalChannelIndex(k);
-                            }
+                                track->mVolume = trackInfo->volume;
+                                track->mPan = trackInfo->pan;
+                                track->mSPan = trackInfo->span;
+                                track->mFlags = trackInfo->flags;
 
-                            if (isStreamSendAvailable())
-                            {
-                                const nw::snd::internal::SoundArchiveFile::SendValue send = trackInfo->GetSendValue();
-                                track->mMainSend = send.mainSend;
+                                u32 channelCount = trackInfo->GetTrackChannelCount();
+                                SEAD_ASSERT(channelCount <= nw::snd::WAVE_CHANNEL_MAX);
 
-                                for (u32 k = 0; k < nw::snd::AUX_BUS_NUM; k++)
+                                for (u32 k = 0; k < channelCount; k++)
                                 {
-                                    track->mFxSend[k] = send.fxSend[k];
+                                    u8& channel = *track->mChannels.birthBack();
+                                    channel = trackInfo->GetGlobalChannelIndex(k);
+                                }
+
+                                if (isStreamSendAvailable())
+                                {
+                                    const nw::snd::internal::SoundArchiveFile::SendValue send = trackInfo->GetSendValue();
+                                    track->mMainSend = send.mainSend;
+
+                                    for (u32 k = 0; k < nw::snd::AUX_BUS_NUM; k++)
+                                    {
+                                        track->mFxSend[k] = send.fxSend[k];
+                                    }
+                                }
+
+                                if (isFilterSupportedVersion())
+                                {
+                                    track->mLpfFreq = trackInfo->lpfFreq;
+                                    track->mBiquadType = trackInfo->biquadType;
+                                    track->mBiquadValue = trackInfo->biquadValue;
                                 }
                             }
-
-                            if (isFilterSupportedVersion())
+                            else
                             {
-                                track->mLpfFreq = trackInfo->lpfFreq;
-                                track->mBiquadType = trackInfo->biquadType;
-                                track->mBiquadValue = trackInfo->biquadValue;
+                                sead::FormatFixedSafeString<32> msg("Track %u read error (internal)", j);
+                                PopupMgr::instance()->pushCurrentItemError(msg);
                             }
 
                             sound->mStreamSoundInfo.mTrackList.pushBack(track);

@@ -44,6 +44,12 @@ void StreamSoundFileReader::Initialize(const void* streamSoundFile)
         return;
     }
 
+    if (mInfoBlockBody->GetStreamSoundInfo()->lastBlockPaddedBytes % 32 != 0)
+    {
+        PopupMgr::instance()->pushCurrentItemError("BFSTM: Block bytes not aligned");
+        return;
+    }
+
     mHeader = header;
 }
 
@@ -175,12 +181,14 @@ bool StreamSoundFileReader::ReadDspAdpcmChannelInfo(DspAdpcmParam* pParam, DspAd
     SEAD_ASSERT(pParam);
     SEAD_ASSERT(pLoopParam);
 
-    const StreamSoundFile::DspAdpcmChannelInfo* src =
-        mInfoBlockBody->
-        GetChannelInfoTable()->
-        GetChannelInfo(channelIndex)->
-        GetDspAdpcmChannelInfo();
+    const StreamSoundFile::ChannelInfoTable* channelTable = mInfoBlockBody->GetChannelInfoTable();
+    if (!channelTable)
+        return false;
 
+    if (channelIndex >= channelTable->GetChannelCount())
+        return false;
+
+    const StreamSoundFile::DspAdpcmChannelInfo* src = channelTable->GetChannelInfo(channelIndex)->GetDspAdpcmChannelInfo();
     if (!src)
         return false;
 

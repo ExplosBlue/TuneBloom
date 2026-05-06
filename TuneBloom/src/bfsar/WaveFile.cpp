@@ -522,20 +522,34 @@ bool WaveFile::doRead(const void* fileAddr)
     mLoopStartFrame = waveInfo.originalLoopStartFrame;
     mLoopEndFrame = waveInfo.loopEndFrame - (waveInfo.loopStartFrame - waveInfo.originalLoopStartFrame);
 
-    mSampleCount = mLoopEndFrame;
+    bool loopError = false;
+    if (mLoopStartFrame >= mLoopEndFrame)
+    {
+        sead::FormatFixedSafeString<1024> msg("Invalid loop (%u >= %u)", mLoopStartFrame, mLoopEndFrame);
+        PopupMgr::instance()->pushCurrentItemError(msg);
+        loopError = true;
+    }
 
     if (getLoopStartFrame(false) != waveInfo.loopStartFrame)
     {
         sead::FormatFixedSafeString<128> msg("Invalid loop start (%u should be %u)", getLoopStartFrame(false), waveInfo.loopStartFrame);
         PopupMgr::instance()->pushCurrentItemError(msg);
-        return false;
+        loopError = true;
     }
+
     if (getLoopEndFrame(false) != waveInfo.loopEndFrame)
     {
         sead::FormatFixedSafeString<128> msg("Invalid loop end (%u should be %u)", getLoopEndFrame(false), waveInfo.loopEndFrame);
         PopupMgr::instance()->pushCurrentItemError(msg);
+        loopError = true;
+    }
+
+    if (loopError)
+    {
         return false;
     }
+
+    mSampleCount = mLoopEndFrame;
 
     mUseOriginalData = true;
     mOriginalDataSize = reader.mHeader->GetDataBlock()->header.size - 0x20;

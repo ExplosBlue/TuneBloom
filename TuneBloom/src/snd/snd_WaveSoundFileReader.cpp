@@ -2,13 +2,19 @@
 
 #include <prim/seadMemUtil.h>
 
+#include <ui/PopupMgr.h>
+#include <ui/UI.h>
+
 namespace nw { namespace snd { namespace internal {
 
 WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
     : mHeader(nullptr)
     , mInfoBlockBody(nullptr)
 {
-    SEAD_ASSERT(waveSoundFile);
+    if (!waveSoundFile)
+    {
+        return;
+    }
 
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveSoundFile);
@@ -16,32 +22,33 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
         // if (sead::MemUtil::compare(header->signature, "CWSD", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FWSD", 4) != 0)
         {
-            SEAD_ASSERT_MSG(false, "not a WAVE SOUND file");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFWSD");
             return;
         }
 
         // if (false)
         if (!(0x00010000 <= header->version && header->version <= 0x00010100))
         {
-            SEAD_ASSERT_MSG(false, "WAVE SOUND version not supported (0x%08X)", (u32)header->version);
+            sead::FormatFixedSafeString<64> msg("BFWSD version not supported (0x%08X)", (u32)header->version);
             return;
         }
     }
 
-    mHeader = reinterpret_cast<const WaveSoundFile::FileHeader*>(waveSoundFile);
+    const WaveSoundFile::FileHeader* header = reinterpret_cast<const WaveSoundFile::FileHeader*>(waveSoundFile);
 
-    const WaveSoundFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
-
-    SEAD_ASSERT(infoBlock);
+    const WaveSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
     if (!infoBlock)
-        return;
-
-    if (sead::MemUtil::compare(infoBlock->header.kind, "INFO", 4) != 0)
     {
-        SEAD_ASSERT_MSG(false, "WAVE SOUND: INFO block is invalid");
+        PopupMgr::instance()->pushCurrentItemError("BFWSD: INFO block not found");
         return;
     }
 
+    if (!CheckBlockCorruptError("BFWSD", "INFO", infoBlock))
+    {
+        return;
+    }
+
+    mHeader = header;
     mInfoBlockBody = &infoBlock->body;
 }
 

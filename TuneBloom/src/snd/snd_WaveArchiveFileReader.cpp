@@ -3,6 +3,8 @@
 #include <basis/seadRawPrint.h>
 #include <prim/seadMemUtil.h>
 
+#include <ui/PopupMgr.h>
+
 #define NW_SND_DEBUG_PRINT_ENABLE
 
 namespace nw { namespace snd { namespace internal {
@@ -27,7 +29,10 @@ WaveArchiveFileReader::WaveArchiveFileReader(const void* pWaveArchiveFile, bool 
 void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndividual)
 {
     if (pWaveArchiveFile == nullptr)
+    {
+        PopupMgr::instance()->setCorruptInfo("BFWAR file is nullptr");
         return;
+    }
 
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(pWaveArchiveFile);
@@ -35,14 +40,15 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
         // if (sead::MemUtil::compare(header->signature, "CWAR", 4) != 0)
         if (sead::MemUtil::compare(header->signature, "FWAR", 4) != 0)
         {
-            SEAD_ASSERT_MSG(false, "not a WAVE ARCHIVE file");
+            PopupMgr::instance()->setCorruptInfo("File is not a valid BFWAR");
             return;
         }
 
         // if (false)
         if (header->version != 0x00010000)
         {
-            SEAD_ASSERT_MSG(false, "WAVE ARCHIVE version not supported (0x%08X)", (u32)header->version);
+            sead::FormatFixedSafeString<64> msg("BFWAR version not supported (0x%08X)", (u32)header->version);
+            PopupMgr::instance()->setCorruptInfo(msg);
             return;
         }
     }

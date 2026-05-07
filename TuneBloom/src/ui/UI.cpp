@@ -713,7 +713,7 @@ bool ItemMatchesFilter(const Item* item)
         return true;
     }
 
-    std::string name = item->getName().cstr();
+    std::string name = item->getFormattedName().cstr();
     std::string filter = sFilter.cstr();
 
     if (!sFilterCaseSensitive)

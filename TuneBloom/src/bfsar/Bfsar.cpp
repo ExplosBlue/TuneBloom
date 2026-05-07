@@ -1536,7 +1536,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         }
         else
         {
-            PopupMgr::instance()->pushCurrentItemError("Couldn't load the BankFile referenced");
+            PopupMgr::instance()->pushCurrentItemError("Couldn't load the Bank File referenced");
         }
 
         mBankList.pushBack(bank);
@@ -1644,7 +1644,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             }
             else
             {
-                PopupMgr::instance()->pushCurrentItemError("Couldn't load the SequenceFile referenced");
+                PopupMgr::instance()->pushCurrentItemError("Couldn't load the Sequence File referenced");
             }
 
             sound->mSequenceSoundInfo.mEnableStartOffset = seqSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::SEQ_SOUND_INFO_START_OFFSET) != 0;
@@ -1946,7 +1946,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     }
                     else
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Couldn't load the WaveFile referenced");
+                        PopupMgr::instance()->pushCurrentItemError("Couldn't load the Wave File referenced");
                     }
 
                     const nw::snd::internal::WaveSoundFile::WaveSoundInfo& innerWaveSoundInfo = reader.GetWaveSoundInfo(waveSoundInfo.index);

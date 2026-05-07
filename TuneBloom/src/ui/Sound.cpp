@@ -673,6 +673,9 @@ void DrawSoundPropertiesUI()
                         strmSoundInfo.getPath() = path;
                     }
                 }
+
+                ImGui::SameLine();
+                HelpMarker("This is relative to your .bfsar file");
             }
 
             // {
@@ -1068,7 +1071,7 @@ void DrawSoundPropertiesUI()
 
                 {
                     u8 lpfFreq = filterVersionEnable ? waveSoundInfo.getLpfFreq() : 64;
-                    if (ImGui::InputScalar("LPF Frequency", ImGuiDataType_U8, &lpfFreq, &cStepU8))
+                    if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("LPF Frequency (%.3f)###lfreq", (static_cast<f32>(lpfFreq) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &lpfFreq, &cStepU8))
                     {
                         waveSoundInfo.setLpfFreq(lpfFreq);
                     }
@@ -1084,7 +1087,7 @@ void DrawSoundPropertiesUI()
 
                 {
                     u8 biquadValue = filterVersionEnable ? waveSoundInfo.getBiquadValue() : 0;
-                    if (ImGui::InputScalar("Biquad Value", ImGuiDataType_U8, &biquadValue, &cStepU8))
+                    if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("Biquad Value (%.3f)###bival", static_cast<f32>(biquadValue) / 127.0f).cstr(), ImGuiDataType_U8, &biquadValue, &cStepU8))
                     {
                         waveSoundInfo.setBiquadValue(biquadValue);
                     }
@@ -1206,7 +1209,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
 
         {
             u8 lpfFreq = enableFilter ? getLpfFreq() : 64;
-            if (ImGui::InputScalar("LPF Frequency", ImGuiDataType_U8, &lpfFreq, &cStepU8))
+            if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("LPF Frequency (%.3f)###lfreq", (static_cast<f32>(lpfFreq) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &lpfFreq, &cStepU8))
             {
                 setLpfFreq(lpfFreq);
             }
@@ -1222,7 +1225,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
 
         {
             u8 biquadValue = enableFilter ? getBiquadValue() : 0;
-            if (ImGui::InputScalar("Biquad Value", ImGuiDataType_U8, &biquadValue, &cStepU8))
+            if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("Biquad Value (%.3f)###bival", static_cast<f32>(biquadValue) / 127.0f).cstr(), ImGuiDataType_U8, &biquadValue, &cStepU8))
             {
                 setBiquadValue(biquadValue);
             }

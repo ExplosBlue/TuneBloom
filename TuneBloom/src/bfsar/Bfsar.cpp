@@ -4,6 +4,7 @@
 #include <bfsar/writer/FlagParameters.h>
 #include <bfsar/writer/PatriciaTree.h>
 #include <bfsar/BfgrpFile.h>
+#include <bfsar/BfstmFile.h>
 #include <bfsar/BfwarFile.h>
 #include <bfsar/BfwsdFile.h>
 #include <bfsar/File.h>
@@ -4954,7 +4955,6 @@ void Bfsar::save_(sead::FileHandle& handle)
     //? Stream Files
     {
         extern bool CreateDirectoryRecursively(const std::string& directory);
-        extern bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian);
 
         std::unordered_set<std::string> writenFiles;
 
@@ -5008,7 +5008,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                 }
             }
 
-            WriteBfstmFile(strmHandle, strmSoundInfo, getVersionForBfstm(), mEndian);
+            BfstmFile::WriteBfstmFile(strmHandle, strmSoundInfo, getVersionForBfstm(), mEndian);
 
             writenFiles.emplace(path);
         }
@@ -5032,19 +5032,25 @@ bool Bfsar::validate_()
 {
     sead::FixedSafeString<1024> error;
 
-    auto validateList = [&error](const ItemList& list, bool validateWaveSoundSet = false)
+    auto validateList = [&error, this](const ItemList& list, bool validateWaveSoundSet = false, bool validateStreams = false)
     {
+        std::unordered_map<std::string, const Sound*> streamSounds;
         for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
         {
             const Item* item = (*it).val();
             SEAD_ASSERT(item);
 
+            const Sound* sound = nullptr;
+            if (item->getItemType() == Item::ItemType::Sound)
+            {
+                sound = static_cast<const Sound*>(item);
+            }
+
             const Item* problemItem = nullptr;
             if (!validateWaveSoundSet)
             {
-                if (item->getItemType() == Item::ItemType::Sound)
+                if (sound)
                 {
-                    const Sound* sound = static_cast<const Sound*>(item);
                     sound->mOwnerSet = nullptr; //? Reset for when validating SoundSets
                 }
 
@@ -5052,8 +5058,7 @@ bool Bfsar::validate_()
             }
             else
             {
-                SEAD_ASSERT(item->getItemType() == Item::ItemType::Sound);
-                const Sound* sound = static_cast<const Sound*>(item);
+                SEAD_ASSERT(sound);
                 if (sound->getSoundType() == Sound::SoundType::Wave)
                 {
                     const SoundSet* soundSet = sound->mOwnerSet;
@@ -5089,13 +5094,77 @@ bool Bfsar::validate_()
                 return false;
             }
 
+            if (validateStreams && sound && sound->getSoundType() == Sound::SoundType::Strm)
+            {
+                auto pair = streamSounds.insert({ sound->getStreamSoundInfo().getPath().cstr(), sound });
+                if (!pair.second)
+                {
+                    const Sound* masterSound = pair.first->second;
+
+                    const Sound::StreamSoundInfo::Track::List& tracks = sound->getStreamSoundInfo().getTrackList();
+                    const Sound::StreamSoundInfo::Track::List& masterTracks = masterSound->getStreamSoundInfo().getTrackList();
+                    if (tracks.size() != masterTracks.size())
+                    {
+                        error.format("Shared Stream path with '%s'\nMust have the same Track amount", masterSound->getFormattedName().cstr());
+                        PopupMgr::instance()->addPopup({ error, const_cast<Sound*>(sound) });
+                        return false;
+                    }
+
+                    for (u32 trackNo = 0; trackNo < tracks.size(); trackNo++)
+                    {
+                        const Sound::StreamSoundInfo::Track& track = *static_cast<Sound::StreamSoundInfo::Track*>(tracks.nth(trackNo)->val());
+                        const Sound::StreamSoundInfo::Track& masterTrack = *static_cast<const Sound::StreamSoundInfo::Track*>(masterTracks.nth(trackNo)->val());
+
+                        if (track.getWaveFileRef().getItem() != masterTrack.getWaveFileRef().getItem())
+                        {
+                            error.format("Shared Stream path with '%s'\nTracks must all point to the same Wave File", masterSound->getFormattedName().cstr());
+                            PopupMgr::instance()->addPopup({ error, const_cast<Sound::StreamSoundInfo::Track*>(&track), const_cast<Sound*>(sound) });
+                            return false;
+                        }
+
+                        if (!BfstmFile::IsTrackInfoAvailable(getVersionForBfstm()))
+                        {
+                            continue;
+                        }
+
+                        if (track.getVolume() != masterTrack.getVolume())
+                        {
+                            error.format("Shared Stream path with '%s'\nThis version requires Tracks to be identical", masterSound->getFormattedName().cstr());
+                            PopupMgr::instance()->addPopup({ error, const_cast<Sound::StreamSoundInfo::Track*>(&track), const_cast<Sound*>(sound) });
+                            return false;
+                        }
+
+                        if (track.getPan() != masterTrack.getPan())
+                        {
+                            error.format("Shared Stream path with '%s'\nThis version requires Tracks to be identical", masterSound->getFormattedName().cstr());
+                            PopupMgr::instance()->addPopup({ error, const_cast<Sound::StreamSoundInfo::Track*>(&track), const_cast<Sound*>(sound) });
+                            return false;
+                        }
+
+                        if (track.getSPan() != masterTrack.getSPan())
+                        {
+                            error.format("Shared Stream path with '%s'\nThis version requires Tracks to be identical", masterSound->getFormattedName().cstr());
+                            PopupMgr::instance()->addPopup({ error, const_cast<Sound::StreamSoundInfo::Track*>(&track), const_cast<Sound*>(sound) });
+                            return false;
+                        }
+
+                        if (track.getFlags() != masterTrack.getFlags())
+                        {
+                            error.format("Shared Stream path with '%s'\nThis version requires Tracks to be identical", masterSound->getFormattedName().cstr());
+                            PopupMgr::instance()->addPopup({ error, const_cast<Sound::StreamSoundInfo::Track*>(&track), const_cast<Sound*>(sound) });
+                            return false;
+                        }
+                    }
+                }
+            }
+
             error.clear();
         }
 
         return true;
     };
 
-    if (!validateList(mSoundList))
+    if (!validateList(mSoundList, false, true))
     {
         return false;
     }

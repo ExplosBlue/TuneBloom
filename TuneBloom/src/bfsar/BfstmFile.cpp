@@ -1,5 +1,6 @@
 #include <bfsar/Sound.h>
 
+#include <bfsar/BfstmFile.h>
 #include <bfsar/writer/FileWriter.h>
 
 #include <ui/PopupMgr.h>
@@ -13,17 +14,7 @@
 #include <filedevice/seadFileDevice.h>
 #include <stream/seadFileDeviceStream.h>
 
-static bool IsTrackInfoAvailable(u32 version)
-{
-    return version <= 0x00020000;
-}
-
-static bool IsOriginalLoopAvailable(u32 version)
-{
-    return version >= 0x00040000;
-}
-
-bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian)
+bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian)
 {
     sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(endian);

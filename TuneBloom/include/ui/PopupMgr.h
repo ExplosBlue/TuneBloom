@@ -47,6 +47,7 @@ private:
 public:
     void addPopup(const PopupInfo& info);
     void update();
+    void closeFile();
 
     void setCorruptInfo(const sead::SafeString& info)
     {

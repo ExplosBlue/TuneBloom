@@ -334,6 +334,8 @@ bool SaveFileAs()
 
 bool CloseFile()
 {
+    PopupMgr::instance()->closeFile();
+
     sSelectedItem = nullptr;
     sSubSelectedItem = nullptr;
     sSelectedItemIsSubWindow = false;

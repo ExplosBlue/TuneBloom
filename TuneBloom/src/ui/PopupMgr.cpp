@@ -151,6 +151,10 @@ void PopupMgr::updateErrors_()
         f32 sizeSlack = -buttonSize.y - ImGui::GetStyle().WindowPadding.y / 1.0f;
 
         static size_t sSelected = 0;
+        if (ImGui::IsWindowAppearing())
+        {
+            sSelected = 0;
+        }
 
         bool scroll = false;
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow))
@@ -245,4 +249,10 @@ void PopupMgr::updateErrors_()
 
         ImGui::EndPopup();
     }
+}
+
+void PopupMgr::closeFile()
+{
+    mCurrentProcessItem = nullptr;
+    mProcessedErrors.clear();
 }

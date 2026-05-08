@@ -675,13 +675,22 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             mGenWaveArchiveList.pushBack(warc);
 
             warc->mEnableName = true;
+
+            bool isGen = warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) == 0;
             if (mIncludeStringTable && warcInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
             {
                 warc->mName = soundArchive.GetString(warcInfo->GetStringId());
             }
             else
             {
-                warc->mName.format("@AutoGen_WARC_%u", 0);
+                if (isGen)
+                {
+                    warc->mName.format("@AutoGen_WARC_%u", 0);
+                }
+                else
+                {
+                    warc->mName.format("WARC_%u", 0);
+                }
             }
 
             if (warcInfo->isLoadIndividual)
@@ -743,13 +752,22 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             mGenWaveArchiveList.pushBack(warc);
 
             warc->mEnableName = true;
+
+            bool isGen = warcInfo->optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_STRING_ID) == 0;
             if (mIncludeStringTable && warcInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
             {
                 warc->mName = soundArchive.GetString(warcInfo->GetStringId());
             }
             else
             {
-                warc->mName.format("@AutoGen_WARC_%u", i);
+                if (isGen)
+                {
+                    warc->mName.format("@AutoGen_WARC_%u", i);
+                }
+                else
+                {
+                    warc->mName.format("WARC_%u", i);
+                }
             }
 
             if (warcInfo->isLoadIndividual)

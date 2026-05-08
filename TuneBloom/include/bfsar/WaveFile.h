@@ -106,6 +106,7 @@ public:
             : mOwnsData(false)
             , mData(nullptr)
             , mDataSize(0)
+            , mDataSizeMin(0)
             , mOriginalDataOffset(0)
             , mFullData(nullptr)
             , mFullDataEncoding(Encoding::Pcm16)             // Arbitrary
@@ -128,6 +129,11 @@ public:
         u32 getDataSize() const
         {
             return mDataSize;
+        }
+
+        u32 getDataSizeMin() const
+        {
+            return mDataSizeMin;
         }
 
         const snd::DspAdpcmParam& getAdpcmParam(bool forStream) const
@@ -204,7 +210,8 @@ public:
     private:
         bool mOwnsData;
         const void* mData;
-        u32 mDataSize;
+        u32 mDataSize; // Full stream extended
+        u32 mDataSizeMin; // Minimum for bfwav
         s32 mOriginalDataOffset;
 
         const void* mFullData; // For when mLoopEndFrame < mSampleCount, to keep the full data alive for loop editing (Not spooled !)
@@ -456,7 +463,7 @@ public:
 
     static void* convertChannel_(
         Channel& channel, const void* data, sead::Endian::Types dataEndian,
-        Encoding from, Encoding to, u32* outSize, bool updateChannel, bool isLoop,
+        Encoding from, Encoding to, u32* outSize, u32* outSizeMin, bool updateChannel, bool isLoop,
         u32 sampleCount, u32 targetSampleCount, u32 originalLoopStartFrame, u32 originalLoopEndFrame,
         u32 loopStartFrame, u32 loopEndFrame, u32 loopStartFrameStream, u32 loopEndFrameStream,
         snd::DspAdpcmParam* outAdpcmParam, snd::internal::DspAdpcmLoopParam* outAdpcmLoopParam,

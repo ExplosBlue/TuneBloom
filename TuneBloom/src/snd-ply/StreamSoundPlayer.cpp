@@ -440,7 +440,7 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
                 snd::internal::DspAdpcmLoopParam adpcmLoopParam;
                 channelBuffers[i] = (u8*)WaveFile::convertChannel_(
                     const_cast<WaveFile::Channel&>(channel), channel.getData(), currentWave.getDataEndian(),
-                    currentWave.getEncoding(), currentWave.getEncoding(), nullptr, false, waveInfo.loopFlag,
+                    currentWave.getEncoding(), currentWave.getEncoding(), nullptr, nullptr, false, waveInfo.loopFlag,
                     currentWave.getSampleCount(), mainWave.getOriginalLoopEndFrame(),
                     mainWave.getOriginalLoopStartFrame(), mainWave.getOriginalLoopEndFrame(),
                     0, 0,

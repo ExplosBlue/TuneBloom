@@ -155,7 +155,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
             {
                 channelInfo.buffer = (u8*)WaveFile::convertChannel_(
                     const_cast<WaveFile::Channel&>(channel), channel.getData(), currentWave.getDataEndian(),
-                    currentWave.getEncoding(), currentWave.getEncoding(), nullptr, false, isLoop,
+                    currentWave.getEncoding(), currentWave.getEncoding(), nullptr, nullptr, false, isLoop,
                     currentWave.getSampleCount(), mainWave.getOriginalLoopEndFrame(),
                     mainWave.getOriginalLoopStartFrame(), mainWave.getOriginalLoopEndFrame(),
                     0, 0,
@@ -590,6 +590,16 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
             channel->mOwnsData = true;
             channel->mData = channelBuffers[globalChannelIndex];
             channel->mDataSize = channelSize;
+
+            if (wave->mEncoding == WaveFile::Encoding::DspAdpcm)
+            {
+                channel->mDataSizeMin = getBytesForAdpcmBuffer(wave->getLoopEndFrame(false));
+            }
+            else
+            {
+                channel->mDataSizeMin = nw::snd::internal::Util::GetByteBySample(wave->getLoopEndFrame(false), nw::snd::internal::WaveFileReader::GetSampleFormat((u8)wave->mEncoding));
+            }
+
             channel->mOriginalDataOffset = 0;
 
             channelBuffersUsed[globalChannelIndex] = true;

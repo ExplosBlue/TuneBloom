@@ -461,10 +461,11 @@ void WaveFile::drawUI()
                 channel->mSeekData.free();
 
                 u32 dataSize = 0;
+                u32 dataSizeMin = 0;
                 void* newData = convertChannel_(
                     *channel, channel->getData(), mDataEndian,
                     prev, mEncoding,
-                    &dataSize, true, getIsLoop(),
+                    &dataSize, &dataSizeMin, true, getIsLoop(),
                     getSampleCount(), getSampleCount(),
                     getOriginalLoopStartFrame(), getOriginalLoopEndFrame(),
                     getLoopStartFrame(false), getLoopEndFrame(false),
@@ -481,6 +482,7 @@ void WaveFile::drawUI()
 
                 channel->mData = newData;
                 channel->mDataSize = dataSize;
+                channel->mDataSizeMin = dataSizeMin;
                 channel->mOwnsData = true;
             }
 
@@ -572,7 +574,18 @@ bool WaveFile::doRead(const void* fileAddr)
 
         channel->mOwnsData = false;
         channel->mData = reader.mInfoBlockBody->GetChannelInfo(i).GetSamplesAddress(dataBlockBody);
-        channel->mDataSize = nw::snd::internal::Util::GetByteBySample(mSampleCount, nw::snd::internal::WaveFileReader::GetSampleFormat((u8)mEncoding));
+
+        if (mEncoding == Encoding::DspAdpcm)
+        {
+            channel->mDataSize = getBytesForAdpcmBuffer(getLoopEndFrame(false));
+        }
+        else
+        {
+            // TODO: Different between versions ??? :(
+            channel->mDataSize = nw::snd::internal::Util::GetByteBySample(getLoopEndFrame(false), nw::snd::internal::WaveFileReader::GetSampleFormat((u8)mEncoding));
+        }
+
+        channel->mDataSizeMin = channel->mDataSize;
         channel->mOriginalDataOffset = reader.mInfoBlockBody->GetChannelInfo(i).referToSamples.offset;
 
         if (mEncoding == Encoding::DspAdpcm)
@@ -705,7 +718,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         }
         else
         {
-            u32 sampleBytes = nw::snd::internal::Util::GetByteBySample(getLoopEndFrame(false), nw::snd::internal::WaveFileReader::GetSampleFormat((u8)mEncoding));
+            u32 sampleBytes = mChannels.front()->mDataSizeMin;
 
             for (u32 i = 0; i < mChannels.size(); i++)
             {
@@ -733,10 +746,12 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
                         }
                         else
                         {
-                            const s16* data = static_cast<const s16*>(channel->getData());
-                            s16* samples = new s16[mSampleCount];
+                            u32 sampleCount = getLoopEndFrame(false);
 
-                            for (u32 j = 0; j < mSampleCount; j++)
+                            const s16* data = static_cast<const s16*>(channel->getData());
+                            s16* samples = new s16[sampleCount];
+
+                            for (u32 j = 0; j < sampleCount; j++)
                             {
                                 samples[j] = sead::Endian::convertS16(mDataEndian, mEndian, data[j]);
                             }
@@ -754,7 +769,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
                 }
             }
 
-            writer.align(0x8);
+            // writer.align(0x8); // huh
         }
 
         writer.closeBlock();
@@ -992,11 +1007,12 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
         SEAD_ASSERT(channel);
 
         u32 dataSize = 0;
+        u32 dataSizeMin = 0;
         channel->mOwnsData = true;
         channel->mData = convertChannel_(
             *channel, channels[i], info.endian,
             info.sampleFormat == snd::SampleFormat::PcmS8 ? Encoding::Pcm8 : Encoding::Pcm16, encoding,
-            &dataSize, true, getIsLoop(),
+            &dataSize, &dataSizeMin, true, getIsLoop(),
             getSampleCount(), getSampleCount(),
             getOriginalLoopStartFrame(), getOriginalLoopEndFrame(),
             getLoopStartFrame(false), getLoopEndFrame(false),
@@ -1017,6 +1033,7 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
         }
 
         channel->mDataSize = dataSize;
+        channel->mDataSizeMin = dataSizeMin;
     }
 
     mIsLoopDirty = false;
@@ -1335,9 +1352,10 @@ void WaveFile::rebuildSpooledData_()
         Channel* channel = mChannels.nth(i);
 
         u32 dataSize = 0;
+        u32 dataSizeMin = 0;
         void* newData = convertChannel_(
             *channel, channel->getData(), mDataEndian,
-            mEncoding, mEncoding, &dataSize, true, getIsLoop(),
+            mEncoding, mEncoding, &dataSize, &dataSizeMin, true, getIsLoop(),
             getSampleCount(), getSampleCount(),
             getOriginalLoopStartFrame(), getOriginalLoopEndFrame(),
             getLoopStartFrame(false), getLoopEndFrame(false),
@@ -1354,6 +1372,7 @@ void WaveFile::rebuildSpooledData_()
 
         channel->mData = newData;
         channel->mDataSize = dataSize;
+        channel->mDataSizeMin = dataSizeMin;
         channel->mOwnsData = true;
     }
 
@@ -1364,7 +1383,7 @@ void WaveFile::rebuildSpooledData_()
 
 void* WaveFile::convertChannel_(
     Channel& channel, const void* data, sead::Endian::Types dataEndian,
-    Encoding from, Encoding to, u32* outSize, bool updateChannel, bool isLoop,
+    Encoding from, Encoding to, u32* outSize, u32* outSizeMin, bool updateChannel, bool isLoop,
     u32 sampleCount, u32 targetSampleCount, u32 originalLoopStartFrame, u32 originalLoopEndFrame,
     u32 loopStartFrame, u32 loopEndFrame, u32 loopStartFrameStream, u32 loopEndFrameStream,
     snd::DspAdpcmParam* outAdpcmParam, snd::internal::DspAdpcmLoopParam* outAdpcmLoopParam,
@@ -1451,6 +1470,7 @@ void* WaveFile::convertChannel_(
     //? Spool PCM data
     u32 framesAfterLoopEnd = (isLoop && to == Encoding::DspAdpcm) ? cFramesAfterLoopEnd : 0; //? Needed for seamless looping (prevents pops)
     u32 totalSamples = loopEndFrameStream + framesAfterLoopEnd;
+    u32 totalSamplesMin = loopEndFrame + framesAfterLoopEnd;
     s16* spooledPcm = new s16[totalSamples];
     {
         u32 copyCount = sead::Mathu::min(targetSampleCount, originalLoopEndFrame);
@@ -1492,6 +1512,11 @@ void* WaveFile::convertChannel_(
             {
                 *outSize = sizeof(s16) * totalSamples;
             }
+
+            if (outSizeMin)
+            {
+                *outSizeMin = sizeof(s16) * totalSamplesMin;
+            }
         }
         else if (to == Encoding::Pcm8)
         {
@@ -1507,11 +1532,17 @@ void* WaveFile::convertChannel_(
                 *outSize = sizeof(s8) * totalSamples;
             }
 
+            if (outSizeMin)
+            {
+                *outSizeMin = sizeof(s8) * totalSamplesMin;
+            }
+
             delete[] spooledPcm;
         }
         else if (to == Encoding::DspAdpcm)
         {
             u32 bufferSize = getBytesForAdpcmBuffer(totalSamples);
+            u32 bufferSizeMin = getBytesForAdpcmBuffer(totalSamplesMin);
             u8* dst = new u8[bufferSize];
 
             ADPCMINFO adpcmInfo;
@@ -1619,6 +1650,11 @@ void* WaveFile::convertChannel_(
             if (outSize)
             {
                 *outSize = bufferSize;
+            }
+
+            if (outSizeMin)
+            {
+                *outSizeMin = bufferSizeMin;
             }
 
             delete[] spooledPcm;

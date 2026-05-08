@@ -333,7 +333,9 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
 
         case 0x90: // Extra
         {
-            SEAD_ASSERT_MSG(false, "Command type does not exist in current version: 0x%02X", cmd);
+            sead::FormatFixedSafeString<128> msg("Command type does not exist in current version: 0x%02X", cmd);
+            PopupMgr::instance()->pushCurrentItemError(msg);
+            InvalidateSeqFile();
             break;
         }
 
@@ -385,7 +387,9 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                 {
                 case 0xa0: case 0xb0: // u8 parameters.
                 {
-                    //SEAD_ASSERT_MSG(false, "Command type does not exist in current version: 0x%02X", cmd);
+                    sead::FormatFixedSafeString<128> msg("Command type does not exist in current version: 0x%02X (ex: 0x%02X)", cmd, cmdex);
+                    PopupMgr::instance()->pushCurrentItemError(msg);
+                    InvalidateSeqFile();
                     break;
                 }
 
@@ -489,7 +493,9 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
         case 0xa0: // prefix commands
         {
             // Having a prefix command here is invalid.
-            SEAD_ASSERT_MSG(false, "Invalid seqdata command: %d", cmd);
+            sead::FormatFixedSafeString<128> msg("Invalid seqdata command: 0x%02X", cmd);
+            PopupMgr::instance()->pushCurrentItemError(msg);
+            InvalidateSeqFile();
         }
         }
     }
@@ -500,12 +506,19 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
     {
         cmdInst->init();
 
-        if (false)
         {
             const auto& bytes = cmdInst->encode();
 
             s32 ret = sead::MemUtil::compare(start, bytes.data(), bytes.size());
-            SEAD_ASSERT(ret == 0);
+            if (ret != 0)
+            {
+                sead::FormatFixedSafeString<128> msg("Command data does not match expected format: 0x%02X", cmd);
+                PopupMgr::instance()->pushCurrentItemError(msg);
+                InvalidateSeqFile();
+
+                delete cmdInst;
+                cmdInst = nullptr;
+            }
         }
     }
 

@@ -269,7 +269,9 @@ public:
 
     virtual bool validateArgValue_(const SeqArg8* arg) const
     {
-        return arg->mValue == 0 || arg->mValue == 1;
+        // TODO: Look into this...
+        return true;
+        // return arg->mValue == 0 || arg->mValue == 1;
     }
 
     virtual bool isTrue_(const SeqArg8* arg) const

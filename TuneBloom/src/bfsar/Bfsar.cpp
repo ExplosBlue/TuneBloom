@@ -5036,6 +5036,10 @@ void Bfsar::save_(sead::FileHandle& handle)
             }
 
             const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
+            if (strmSoundInfo.getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+            {
+                continue;
+            }
 
             SEAD_ASSERT(!strmSoundInfo.getPath().isEmpty());
             const char* path = strmSoundInfo.getPath().cstr();

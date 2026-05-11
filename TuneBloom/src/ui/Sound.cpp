@@ -67,57 +67,60 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
                 return this;
             }
 
-            if (strmInfo.getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+            if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary)
             {
-                error = "Only BFSTM streams are supported";
-                return this;
-            }
-
-            const Sound::StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
-            if (tracks.isEmpty())
-            {
-                error = "Streams must have at least 1 Track";
-                return this;
-            }
-
-            if (tracks.size() > 8)
-            {
-                error = "Streams can only have up to 8 Tracks";
-                return this;
-            }
-
-            WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
-            u32 mainSampleRate = 0;
-            for (s32 i = 0; i < tracks.size(); i++)
-            {
-                const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
-                if (!track.getWaveFileRef().isAttached())
+                const Sound::StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
+                if (tracks.isEmpty())
                 {
-                    error.format("Track %i: Invalid Wave File", i);
-                    return &track;
+                    error = "Streams must have at least 1 Track";
+                    return this;
                 }
 
-                const WaveFile& waveFile = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
-
-                if (i == 0)
+                if (tracks.size() > 8)
                 {
-                    mainEncoding = waveFile.getEncoding();
-                    mainSampleRate = waveFile.getSampleRate();
+                    error = "Streams can only have up to 8 Tracks";
+                    return this;
                 }
-                else
+
+                WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
+                u32 mainSampleRate = 0;
+                for (s32 i = 0; i < tracks.size(); i++)
                 {
-                    if (mainEncoding != waveFile.getEncoding())
+                    const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
+                    if (!track.getWaveFileRef().isAttached())
                     {
-                        error = "All Stream Tracks must have the same encoding";
-                        return this;
+                        error.format("Track %i: Invalid Wave File", i);
+                        return &track;
                     }
 
-                    if (mainSampleRate != waveFile.getSampleRate())
+                    const WaveFile& waveFile = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
+
+                    if (i == 0)
                     {
-                        error = "All Stream Tracks must have the same sample rate";
-                        return this;
+                        mainEncoding = waveFile.getEncoding();
+                        mainSampleRate = waveFile.getSampleRate();
+                    }
+                    else
+                    {
+                        if (mainEncoding != waveFile.getEncoding())
+                        {
+                            error = "All Stream Tracks must have the same encoding";
+                            return this;
+                        }
+
+                        if (mainSampleRate != waveFile.getSampleRate())
+                        {
+                            error = "All Stream Tracks must have the same sample rate";
+                            return this;
+                        }
                     }
                 }
+            }
+            else
+            {
+                //? Dont scream as we simply dont save
+                // error = "Only BFSTM streams are supported";
+                // return this;
             }
 
             break;

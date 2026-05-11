@@ -112,6 +112,8 @@ static LRESULT __stdcall MsgProc(HWND hWnd, u32 msg, WPARAM wParam, LPARAM lPara
                 return 1;
             }
 
+            break;
+
         case WM_CLOSE:
             TryExit();
             return 1;

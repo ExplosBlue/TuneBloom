@@ -1737,7 +1737,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             }
 
             //sound->mStreamSoundInfo.mAllocateTrackFlags = strmSoundInfo.allocateTrackFlags;
-            //sound->mStreamSoundInfo.mAllocateChannelCount = strmSoundInfo.allocateChannelCount;
+            sound->mStreamSoundInfo.mAllocateChannelCount = strmSoundInfo.allocateChannelCount;
 
             sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
             SEAD_ASSERT(device);
@@ -4369,11 +4369,21 @@ void Bfsar::save_(sead::FileHandle& handle)
                                                     }
 
                                                     writer.closeReference("GlobalChannelIndexTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
-                                                    stream.writeU32(track.getChannelCount());
+                                                    stream.writeU32(track.getChannelCount(strmInfo.getStreamType()));
 
-                                                    for (u32 j = 0; j < track.getChannelCount(); j++)
+                                                    if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary)
                                                     {
-                                                        stream.writeU8(channelIdxStart + j);
+                                                        for (u32 j = 0; j < track.getChannelCount(); j++)
+                                                        {
+                                                            stream.writeU8(channelIdxStart + j);
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        for (u32 j = 0; j < track.getChannelCount(strmInfo.getStreamType()); j++)
+                                                        {
+                                                            stream.writeU8(*track.getChannels_().nth(j));
+                                                        }
                                                     }
 
                                                     writer.align(0x4);

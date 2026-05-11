@@ -266,6 +266,14 @@ public:
     class StreamSoundInfo
     {
     public:
+        enum StreamType
+        {
+            Invalid = 0,
+
+            NwStreamBinary,
+            Adts
+        };
+
         class Track : public Item
         {
         public:
@@ -362,8 +370,13 @@ public:
             //     return mChannels;
             // }
 
-            u16 getChannelCount() const
+            u16 getChannelCount(StreamType streamType = StreamType::NwStreamBinary) const
             {
+                if (streamType != StreamType::NwStreamBinary)
+                {
+                    return mChannels.size(); //? For AAC streams (TEMP UNTIL PROPER SUPPORT)
+                }
+
                 if (!mWaveFileRef.isAttached())
                 {
                     return 0;
@@ -448,20 +461,12 @@ public:
             friend class Bfsar;
         };
 
-        enum StreamType
-        {
-            Invalid = 0,
-
-            NwStreamBinary,
-            Adts
-        };
-
     public:
         StreamSoundInfo(Sound* owner)
             : mPath()
 
             //, mAllocateTrackFlags(0)
-            //, mAllocateChannelCount(0)
+            , mAllocateChannelCount(0)
             , mTrackList()
             , mPitch(1.0f)
             , mMainSend(127)
@@ -506,6 +511,11 @@ public:
 
         u16 getAllocateChannelCount() const
         {
+            if (mStreamType != StreamType::NwStreamBinary)
+            {
+                return mAllocateChannelCount;
+            }
+
             u16 channelCount = 0;
             for (u32 i = 0; i < mTrackList.size(); i++)
             {
@@ -646,7 +656,7 @@ public:
         sead::FixedSafeString<512> mPath; //? Temp solution, will probably not leave like this
 
         //u16 mAllocateTrackFlags;
-        //u16 mAllocateChannelCount;
+        u16 mAllocateChannelCount; //? For AAC streams (TEMP UNTIL PROPER SUPPORT)
         Track::List mTrackList;
         f32 mPitch;
         u8 mMainSend;

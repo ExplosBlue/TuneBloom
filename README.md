@@ -60,7 +60,7 @@ External contributions & Pull Requests are welcome! We understand that the quali
 - [STUPID Modder](https://github.com/stupidestmodder) - Development lead
 - [AboodXD](https://github.com/aboood40091) - Research & algorithms
 - [Luminyx1](https://github.com/Luminyx1) - Build system & testing
-- [Alex Barney](https://github.com/Thealexbarney) - DspTool (Adpcm Encoding)
+- [Alex Barney](https://github.com/Thealexbarney) - DspTool (DspAdpcm Encoding)
 - [omar](https://github.com/ocornut) - ImGui
 - [Vladimir Shatrov](https://github.com/frowrik) - ImGui piano keyboard
 - [BalazsJako](https://github.com/BalazsJako) - ImGui text editor

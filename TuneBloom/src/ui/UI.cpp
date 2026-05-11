@@ -285,7 +285,13 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
         ImGui::PopFont();
 
         ImGui::SameLine();
+
+
+#if defined(COMMIT_SHA)
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f), " %s", COMMIT_SHA);
+#else
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f), " v%s", util::cAppVersion.cstr());
+#endif
 
         ImGui::Dummy(ImVec2(0.0f, 5.0f));
 

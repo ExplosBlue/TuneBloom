@@ -9,6 +9,7 @@ on:
 env:
   SOLUTION_FILE_PATH: .
   BUILD_CONFIGURATION: Release
+  BUILD_PLATFORM: Win64
 
 permissions:
   contents: write
@@ -34,7 +35,7 @@ jobs:
 
     - name: Build
       working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}}
+      run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} /p:Platform=${{env.BUILD_PLATFORM}} ${{env.SOLUTION_FILE_PATH}}
 
     - name: List files
       run: tree
@@ -43,7 +44,7 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/workdir"
-        Copy-Item -Path "${{ github.workspace }}/bin/TuneBloom-Win64-Release/out/TuneBloom.exe" `
+        Copy-Item -Path "${{ github.workspace }}/TuneBloom/bin/TuneBloom-Win64-Release/out/TuneBloom.exe" `
           -Destination "${{ github.workspace }}/workdir/"
 
     - name: Zip workdir contents

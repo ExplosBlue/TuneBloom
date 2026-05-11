@@ -33,6 +33,10 @@ project "TuneBloom"
         --"FatalWarnings"
     }
 
+    if os.getenv("COMMIT_SHA") then
+        defines { "COMMIT_SHA=\"" .. string.sub(os.getenv("COMMIT_SHA"), 1, 7) .. "\"" }
+    end
+
     filter "system:windows"
         defines {
             "SEAD_PLATFORM_WINDOWS",

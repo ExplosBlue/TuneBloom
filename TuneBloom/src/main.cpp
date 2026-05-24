@@ -7,12 +7,25 @@
 
 #include "Utilll.h"
 
+#include <portable-file-dialogs.h>
+
 void AssertException(const char* msg)
 {
-#if defined(SEAD_PLATFORM_WINDOWS)
-    sead::FormatFixedSafeString<2048> info("%s\nAn unexpected error has ocurred, please report this issue on 'https://github.com/stupidestmodder/TuneBloom/issues' or ask here 'https://go.nsmbu.net/discord'", msg);
-    MessageBoxA(nullptr, info.cstr(), "ASSERTION ERROR", 0);
-#endif // SEAD_PLATFORM_WINDOWS
+    auto msgBox = [msg]()
+    {
+        sead::FormatFixedSafeString<2048> info("%s\nAn unexpected error has ocurred, please report this issue on 'https://github.com/stupidestmodder/TuneBloom/issues' or ask here 'https://go.nsmbu.net/discord'", msg);
+        pfd::message("ASSERTION ERROR", info.cstr(), pfd::choice::ok, pfd::icon::warning).result();
+    };
+
+    if (sead::ThreadMgr::instance()->getCurrentThread())
+    {
+        sead::CurrentHeapSetter chs(sead::HeapMgr::getUnboundHeap());
+        msgBox();
+    }
+    else
+    {
+        msgBox();
+    }
 }
 
 int main()
@@ -25,6 +38,8 @@ int main()
     AppFramework::initialize(initArg);
 
     sead::HeapMgr::createUnboundHeap();
+    sead::HeapMgr::instance()->setAllocFromNotSeadThreadHeap(sead::HeapMgr::getUnboundHeap());
+    sead::HeapMgr::getUnboundHeap()->setEnableLock(true);
 
     AppFramework::CreateArg createArg;
     createArg.wait_vblank = 0;

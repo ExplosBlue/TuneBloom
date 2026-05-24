@@ -17,7 +17,7 @@ void AssertException(const char* msg)
         pfd::message("ASSERTION ERROR", info.cstr(), pfd::choice::ok, pfd::icon::warning).result();
     };
 
-    if (sead::ThreadMgr::instance()->getCurrentThread())
+    if (sead::ThreadMgr::instance() && sead::ThreadMgr::instance()->getCurrentThread())
     {
         sead::CurrentHeapSetter chs(sead::HeapMgr::getUnboundHeap());
         msgBox();
@@ -70,6 +70,10 @@ int main()
     framework->run(sead::HeapMgr::getRootHeap(0), rootArg, runArg);
 
     delete framework;
+
+    // TODO: sead framework destroy
+    sead::ThreadMgr::instance()->destroy();
+    sead::HeapMgr::destroy();
 }
 
 // extern "C"

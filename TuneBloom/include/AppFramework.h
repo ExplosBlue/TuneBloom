@@ -1,10 +1,10 @@
 #pragma once
 
-#include <framework/win/seadGameFrameworkWinGL.h>
+#include <framework/glfw/seadGameFrameworkGlfwGL.h>
 
-class AppFramework : public sead::GameFrameworkWinGL
+class AppFramework : public sead::GameFrameworkGlfwGL
 {
-    SEAD_RTTI_OVERRIDE(AppFramework, sead::GameFrameworkWinGL);
+    SEAD_RTTI_OVERRIDE(AppFramework, sead::GameFrameworkGlfwGL);
 
 public:
     explicit AppFramework(const CreateArg& arg);

@@ -1,6 +1,6 @@
 #include <Utilll.h>
 
-#include <framework/win/seadGameFrameworkBaseWin.h>
+#include <framework/glfw/seadGameFrameworkGlfwGL.h>
 #include <gfx/seadTexture.h>
 
 static sead::Framework* sFramework = nullptr;
@@ -30,7 +30,7 @@ void setIcon_(sead::Texture* icon)
 
 bool updateTitle(const char* path)
 {
-    sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(getFramework());
+    sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
     if (!fw)
     {
         return false;

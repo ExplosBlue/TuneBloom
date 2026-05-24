@@ -1,36 +1,33 @@
 project "TuneBloom"
     language "C++"
     cppdialect "C++20"
-    systemversion "latest"
 
-    exceptionhandling "Off"
-    rtti "Off"
+    multiprocessorcompile "on"
+    staticruntime "on"
+    exceptionhandling "off"
+    rtti "off"
+    -- fatalwarnings { "all" } -- TODO
 
-    targetdir ("bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/out")
-    objdir ("bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/int")
+    targetdir "bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/out"
+    objdir "bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/int"
     debugdir "../workdir"
-
-    links {
-        "sead"
-    }
 
     includedirs {
         "include",
         "include/imgui",
         "include/snd-ply",
 
-        "vendor/sead/sead/include",
-        "vendor/sead/sead/vendor/glad/include",
+        "vendor/sead/include",
+        "vendor/sead/libs/glad/include",
+        "vendor/sead/libs/glfw/include",
     }
 
     files {
         "src/**.cpp"
     }
 
-    flags {
-        "MultiProcessorCompile",
-        "ShadowedVariables",
-        --"FatalWarnings"
+    links {
+        "sead",
     }
 
     if os.getenv("COMMIT_SHA") then
@@ -38,34 +35,71 @@ project "TuneBloom"
     end
 
     filter "system:windows"
+        systemversion "latest"
+
+        defines { "SEAD_PLATFORM_WINDOWS" }
+
+    filter "system:linux"
+        systemversion "latest"
+
+        defines { "SEAD_PLATFORM_POSIX", "SEAD_PLATFORM_LINUX" }
+
+    filter "system:macosx"
+        systemversion "11.0"
+
+        defines { "SEAD_PLATFORM_POSIX", "SEAD_PLATFORM_MACOSX" }
+        links {
+            "Cocoa.framework",
+            "IOKit.framework",
+            "CoreVideo.framework",
+            "OpenGL.framework",
+            "QuartzCore.framework",
+            "UniformTypeIdentifiers.framework"
+        }
+
+    filter "platforms:GLFW_*"
         defines {
-            "SEAD_PLATFORM_WINDOWS",
-            "SEAD_USE_GL"
+            "SEAD_PLATFORM_GLFW",
+            "SEAD_USE_GL",
+        }
+
+        includedirs {
+            "libs/sead/libs/glad/include",
+            "libs/sead/libs/glfw/include",
+        }
+
+        links {
+            -- "glad",
+            "glfw",
         }
 
     filter "configurations:Debug"
         kind "ConsoleApp"
         defines { "SEAD_TARGET_DEBUG" }
-        runtime "Debug"
+        runtime "debug"
+        optimize "debug"
         symbols "on"
-        optimize "off"
+        linktimeoptimization "off"
+
+    filter "configurations:Develop"
+        kind "ConsoleApp"
+        defines { "SEAD_TARGET_DEBUG" } -- TODO: Use SEAD_TARGET_DEVELOP
+        runtime "release"
+        optimize "speed"
+        symbols "on"
+        linktimeoptimization "off"
 
     filter "configurations:Release"
-        kind "ConsoleApp"
-        defines { "SEAD_TARGET_DEBUG" }
-        runtime "Release"
-        symbols "on"
-        optimize "speed"
-        flags { "LinkTimeOptimization" }
-
-    filter "configurations:Dist"
         kind "WindowedApp"
-        defines { "SEAD_TARGET_DEBUG", "NDEBUG" }
-        runtime "Release"
-        symbols "off"
+        defines { "SEAD_TARGET_RELEASE", "NDEBUG" }
+        runtime "release"
         optimize "speed"
-        flags { "LinkTimeOptimization" }
+        symbols "off"
+        linktimeoptimization "on"
+
+    filter { "system:windows", "configurations:Release" }
+        entrypoint "mainCRTStartup"
 
 group "Dependencies"
-    include "vendor/sead/sead"
+    include "vendor/sead"
 group ""

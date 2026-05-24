@@ -1,29 +1,50 @@
 -- premake5.lua
 workspace "TuneBloom"
-    configurations { "Debug", "Release", "Dist" }
-    platforms { "Win32", "Win64" }
-	-- toolset "clang"
-    startproject "TuneBloom"
-	
-    filter { "toolset:clang" }
-        staticruntime "on"
-    	disablewarnings {
-    		"invalid-offsetof",
-    		"c++11-narrowing",
-    	}
+    platforms {
+        "GLFW_x86",
+        "GLFW_x86_64",
+        "GLFW_ARM32",
+        "GLFW_ARM64",
+    }
 
-    filter { "platforms:Win32" }
-        system "Windows"
+    configurations {
+        "Debug",
+        "Develop",
+        "Release",
+    }
+
+    startproject "TuneBloom"
+
+    toolset "clang"
+    stl "libc++"
+
+    -- TODO: Remove
+    buildoptions {
+    -- suppressed errors
+        "-Wno-invalid-offsetof",
+        "-Wno-undefined-var-template",
+        "-Wno-missing-braces",
+    -- keep, but as warnings
+        "-Wno-error=switch",
+        "-Wno-error=unused-private-field",
+        "-Wno-error=unused-const-variable",
+        "-Wno-error=logical-op-parentheses",
+        "-Wno-error=bitwise-op-parentheses",
+        "-Wno-error=delete-non-abstract-non-virtual-dtor",
+    }
+
+    filter "platforms:*_x86"
         architecture "x86"
-    
-    filter { "platforms:Win64" }
-        system "Windows"
+        stl "gnu"
+
+    filter "platforms:*_x86_64"
         architecture "x86_64"
-	
-	filter { "configurations:Debug", "platforms:x64", "toolset:clang" }
-    	sanitize {
-    		"Address",
-    		--"UndefinedBehavior",
-    	}
+        vectorextensions "AVX2"
+
+    filter "platforms:*_ARM32"
+        architecture "ARM"
+
+    filter "platforms:*_ARM64"
+        architecture "ARM64"
 
 include "TuneBloom"

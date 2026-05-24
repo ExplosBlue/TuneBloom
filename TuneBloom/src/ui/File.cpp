@@ -7,7 +7,7 @@
 #include <basis/win/seadWindows.h>
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
-#include <framework/win/seadGameFrameworkBaseWin.h>
+#include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 #include <stream/seadFileDeviceStream.h>
 
 #include <Utilll.h>
@@ -40,23 +40,25 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
         }
     }
 
-    OPENFILENAMEA ofn;
-    sead::MemUtil::fillZero(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.lpstrFile = outPath->getBuffer();
-    ofn.nMaxFile = outPath->getBufferSize();
-    ofn.lpstrFilter = filtersStr.c_str();
-    ofn.nFilterIndex = filterCount > 0 ? 2 : 1;
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
-    ofn.lpstrTitle = title;
+    // TODO
+    return false;
+    // OPENFILENAMEA ofn;
+    // sead::MemUtil::fillZero(&ofn, sizeof(ofn));
+    // ofn.lStructSize = sizeof(ofn);
+    // ofn.lpstrFile = outPath->getBuffer();
+    // ofn.nMaxFile = outPath->getBufferSize();
+    // ofn.lpstrFilter = filtersStr.c_str();
+    // ofn.nFilterIndex = filterCount > 0 ? 2 : 1;
+    // ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
+    // ofn.lpstrTitle = title;
 
-    sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-    if (fw)
-    {
-        ofn.hwndOwner = fw->getWindowHandle();
-    }
+    // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+    // if (fw)
+    // {
+    //     ofn.hwndOwner = fw->getWindowHandle();
+    // }
 
-    return GetOpenFileNameA(&ofn);
+    // return GetOpenFileNameA(&ofn);
 }
 
 bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters, const char* defaultExt)
@@ -78,24 +80,26 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
         }
     }
 
-    OPENFILENAMEA ofn;
-    sead::MemUtil::fillZero(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.lpstrFile = outPath->getBuffer();
-    ofn.nMaxFile = outPath->getBufferSize();
-    ofn.lpstrFilter = filtersStr.c_str();
-    ofn.nFilterIndex = 1;
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT;
-    ofn.lpstrTitle = title;
-    ofn.lpstrDefExt = defaultExt;
+    // TODO
+    return false;
+    // OPENFILENAMEA ofn;
+    // sead::MemUtil::fillZero(&ofn, sizeof(ofn));
+    // ofn.lStructSize = sizeof(ofn);
+    // ofn.lpstrFile = outPath->getBuffer();
+    // ofn.nMaxFile = outPath->getBufferSize();
+    // ofn.lpstrFilter = filtersStr.c_str();
+    // ofn.nFilterIndex = 1;
+    // ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT;
+    // ofn.lpstrTitle = title;
+    // ofn.lpstrDefExt = defaultExt;
 
-    sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-    if (fw)
-    {
-        ofn.hwndOwner = fw->getWindowHandle();
-    }
+    // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+    // if (fw)
+    // {
+    //     ofn.hwndOwner = fw->getWindowHandle();
+    // }
 
-    return GetSaveFileNameA(&ofn);
+    // return GetSaveFileNameA(&ofn);
 }
 
 //* https://gist.github.com/danzek/d7192d250c951804dec05125f5223a30
@@ -340,7 +344,8 @@ bool Exit()
 {
     CloseFile();
 
-    sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+    sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
+    SEAD_ASSERT(fw);
     fw->requestExit();
 
     return true;

@@ -12,7 +12,7 @@
 
 #include <Utilll.h>
 
-#include <shellapi.h>
+// #include <shellapi.h>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -318,7 +318,8 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                system("start https://github.com/stupidestmodder");
+                // TODO
+                // system("start https://github.com/stupidestmodder");
             }
         }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
@@ -361,7 +362,8 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                system(sead::FormatFixedSafeString<64>("start %s", link).cstr());
+                // TODO
+                // system(sead::FormatFixedSafeString<64>("start %s", link).cstr());
             }
         }
 
@@ -395,11 +397,11 @@ void DrawUI()
     {
         if (!ImGui::IsPopupOpen("###Save"))
         {
-            sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-            if (fw)
-            {
-                SetForegroundWindow(fw->getWindowHandle());
-            }
+            // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+            // if (fw)
+            // {
+            //     SetForegroundWindow(fw->getWindowHandle());
+            // }
         }
 
         if (sBfsar.isOpen())
@@ -519,19 +521,19 @@ void DrawUI()
 
     if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
     {
-        sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-        if (fw)
-        {
-            DragAcceptFiles(fw->getWindowHandle(), false); // prevent accepting files while a popup is open
-        }
+        // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+        // if (fw)
+        // {
+        //     DragAcceptFiles(fw->getWindowHandle(), false); // prevent accepting files while a popup is open
+        // }
     }
     else
     {
-        sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-        if (fw)
-        {
-            DragAcceptFiles(fw->getWindowHandle(), true);
-        }
+        // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
+        // if (fw)
+        // {
+        //     DragAcceptFiles(fw->getWindowHandle(), true);
+        // }
     }
 }
 

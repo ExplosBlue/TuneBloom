@@ -21,15 +21,15 @@ int main()
     sead::AssertConfig::registerFinalCallback(&deleg);
 
     sead::Framework::InitializeArg initArg;
-    initArg.heap_size = 100 * 1024 * 1024; // 100 MB
+    initArg.heap_size = 150 * 1024 * 1024; // 150 MiB
     AppFramework::initialize(initArg);
 
     sead::HeapMgr::createUnboundHeap();
 
-    sead::GameFrameworkBaseWin::CreateArg createArg;
+    AppFramework::CreateArg createArg;
     createArg.wait_vblank = 0;
     createArg.window_name = util::cAppName;
-    createArg.window_ex_style = WS_EX_ACCEPTFILES; // win32 for drag-and-drop
+    // createArg.window_ex_style = WS_EX_ACCEPTFILES; // TODO: win32 for drag-and-drop
     createArg.clear_color = sead::Color4f(0.0f, 0.0f, 0.3f, 1.0f);
 
     AppFramework* framework = nullptr;
@@ -54,14 +54,6 @@ int main()
 
     delete framework;
 }
-
-#if defined(SEAD_PLATFORM_WINDOWS)
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, int nCmdShow)
-{
-    main();
-    return 0;
-}
-#endif // SEAD_PLATFORM_WINDOWS
 
 extern "C"
 {

@@ -1,7 +1,7 @@
 #include "tasks/RootTask.h"
 
 #include <filedevice/seadFileDeviceMgr.h>
-#include <framework/win/seadGameFrameworkBaseWin.h>
+#include <framework/seadGameFramework.h>
 #include <framework/seadProcessMeter.h>
 #include <gfx/seadPrimitiveRenderer.h>
 
@@ -51,12 +51,6 @@ void RootTask::prepare()
 
 void RootTask::calc()
 {
-    // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(getFramework());
-
-    // sead::FixedSafeString<32> title;
-    // title.format("FPS: %f", fw->calcFps());
-
-    //fw->setCaption(title);
 }
 
 void RootTask::draw()

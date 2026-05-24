@@ -21,9 +21,6 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
 
     std::vector<std::string> filtersVec;
 
-    filtersVec.push_back("All Files (*.*)");
-    filtersVec.push_back("*.*");
-
     if (filterCount > 0)
     {
         SEAD_ASSERT(filters);
@@ -34,6 +31,9 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
             filtersVec.push_back(filters[i].filter);
         }
     }
+
+    filtersVec.push_back("All Files (*.*)");
+    filtersVec.push_back("*.*");
 
     std::vector<std::string> result = pfd::open_file(title ? title : "", "", filtersVec, pfd::opt::none).result();
     if (result.empty())

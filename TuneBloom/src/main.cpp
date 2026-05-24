@@ -50,13 +50,15 @@ int main()
 
     sead::TaskBase::CreateArg rootArg(&sead::TTaskFactory<RootTask>);
     sead::Framework::RunArg runArg;
+    runArg.prepare_stack_size = 8 * 1024 * 1024;
+
     framework->run(sead::HeapMgr::getRootHeap(0), rootArg, runArg);
 
     delete framework;
 }
 
-extern "C"
-{
-	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-	__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
-}
+// extern "C"
+// {
+// 	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+// 	__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
+// }

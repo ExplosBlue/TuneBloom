@@ -1,6 +1,6 @@
 #pragma once
 
-#include <filedevice/win/seadWinNativeFileDeviceWin.h>
+#include <filedevice/seadFileDevice.h>
 #include <framework/seadTask.h>
 
 class RootTask : public sead::Task
@@ -15,5 +15,5 @@ public:
     void draw() override;
 
 protected:
-    sead::WinNativeFileDevice* mNativeFileDevice;
+    sead::FileDevice* mNativeFileDevice;
 };

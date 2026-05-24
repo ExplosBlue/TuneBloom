@@ -5,6 +5,12 @@
 #include <framework/seadProcessMeter.h>
 #include <gfx/seadPrimitiveRenderer.h>
 
+#if defined(SEAD_PLATFORM_WINDOWS)
+#include <filedevice/win/seadWinNativeFileDeviceWin.h>
+#elif defined(SEAD_PLATFORM_POSIX)
+#include <filedevice/posix/seadPosixNativeFileDevicePosix.h>
+#endif // SEAD_PLATFORM
+
 #include "tasks/BfsarTask.h"
 #include "tasks/ImGuiTask.h"
 
@@ -25,7 +31,14 @@ void RootTask::prepare()
         fw->createProcessMeter(this);
     }
 
+#if defined(SEAD_PLATFORM_WINDOWS)
     mNativeFileDevice = new sead::WinNativeFileDevice();
+#elif defined(SEAD_PLATFORM_POSIX)
+    mNativeFileDevice = new sead::PosixNativeFileDevice();
+#else
+#error "Unsupported platform"
+#endif // SEAD_PLATFORM
+
     sead::FileDeviceMgr::instance()->mount(mNativeFileDevice);
 
     sead::PrimitiveRenderer::createInstance(nullptr);

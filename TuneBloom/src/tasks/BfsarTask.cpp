@@ -146,8 +146,8 @@ void BfsarTask::prepare()
         heap->adjust();
     }
 
-    util::getFramework()->setProcessPriority(sead::Framework::ProcessPriority::eRealTime);
-    snd::internal::driver::SoundThread::instance()->getThreadImpl_()->setPriority(THREAD_PRIORITY_TIME_CRITICAL);
+    // util::getFramework()->setProcessPriority(sead::Framework::ProcessPriority::eRealTime);
+    // snd::internal::driver::SoundThread::instance()->getThreadImpl_()->setPriority(THREAD_PRIORITY_TIME_CRITICAL);
 
     PopupMgr::createInstance(nullptr);
 

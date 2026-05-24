@@ -11,8 +11,6 @@
 
 #include <ui/UI.h>
 
-#include <shellapi.h>
-
 #include "icons/IconsLucide.h"
 
 SEAD_TASK_SINGLETON_DISPOSER_IMPL(ImGuiTask);
@@ -256,7 +254,7 @@ void ImGuiTask::prepare()
     //     platform_io.Platform_RenderWindow = HookPlatformRenderWindow;
     // }
 
-    adjustHeapAll();
+    adjustHeapWithSlack(0, 5 * 1024 * 1024);
 }
 
 void ImGuiTask::enter()
@@ -277,6 +275,8 @@ void ImGuiTask::exit()
 
 void ImGuiTask::calc()
 {
+    sead::CurrentHeapSetter chs(getHeapArray().getPrimaryHeap());
+
     mCalcMeter.measureBegin();
 
     ImGui_ImplOpenGL3_NewFrame();
@@ -288,6 +288,8 @@ void ImGuiTask::calc()
 
 void ImGuiTask::draw()
 {
+    sead::CurrentHeapSetter chs(getHeapArray().getPrimaryHeap());
+
     mDrawMeter.measureBegin();
 
     ImGui::Render();

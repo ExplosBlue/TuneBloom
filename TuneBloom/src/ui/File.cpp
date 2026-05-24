@@ -4,15 +4,12 @@
 
 #include <snd/SoundThread.h>
 
-#include <basis/win/seadWindows.h>
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
 #include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 #include <stream/seadFileDeviceStream.h>
 
 #include <Utilll.h>
-
-#include <commdlg.h>
 
 #include <string>
 
@@ -105,41 +102,43 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
 //* https://gist.github.com/danzek/d7192d250c951804dec05125f5223a30
 bool CreateDirectoryRecursively(const std::string& directory)
 {
-    const std::string cSeparators("\\/");
+    // TODO
+    return false;
+    // const std::string cSeparators("\\/");
 
-    // If the specified directory name doesn't exist, do our thing
-    DWORD fileAttributes = ::GetFileAttributesA(directory.c_str());
-    if (fileAttributes == INVALID_FILE_ATTRIBUTES)
-    {
-        // Recursively do it all again for the parent directory, if any
-        size_t slashIndex = directory.find_last_of(cSeparators);
-        if (slashIndex != std::string::npos)
-        {
-            CreateDirectoryRecursively(directory.substr(0, slashIndex));
-        }
+    // // If the specified directory name doesn't exist, do our thing
+    // DWORD fileAttributes = ::GetFileAttributesA(directory.c_str());
+    // if (fileAttributes == INVALID_FILE_ATTRIBUTES)
+    // {
+    //     // Recursively do it all again for the parent directory, if any
+    //     size_t slashIndex = directory.find_last_of(cSeparators);
+    //     if (slashIndex != std::string::npos)
+    //     {
+    //         CreateDirectoryRecursively(directory.substr(0, slashIndex));
+    //     }
 
-        // Create the last directory on the path (the recursive calls will have taken
-        // care of the parent directories by now)
-        BOOL result = ::CreateDirectoryA(directory.c_str(), nullptr);
-        if (result == FALSE)
-        {
-            //throw std::runtime_error("Could not create directory");
-            return false;
-        }
-    }
-    else
-    {
-        // Specified directory name already exists as a file or directory
-        bool isDirectoryOrJunction = ((fileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) || ((fileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
+    //     // Create the last directory on the path (the recursive calls will have taken
+    //     // care of the parent directories by now)
+    //     BOOL result = ::CreateDirectoryA(directory.c_str(), nullptr);
+    //     if (result == FALSE)
+    //     {
+    //         //throw std::runtime_error("Could not create directory");
+    //         return false;
+    //     }
+    // }
+    // else
+    // {
+    //     // Specified directory name already exists as a file or directory
+    //     bool isDirectoryOrJunction = ((fileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0) || ((fileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0);
 
-        if (!isDirectoryOrJunction)
-        {
-            //throw std::runtime_error("Could not create directory because a file with the same name exists");
-            return false;
-        }
-    }
+    //     if (!isDirectoryOrJunction)
+    //     {
+    //         //throw std::runtime_error("Could not create directory because a file with the same name exists");
+    //         return false;
+    //     }
+    // }
 
-    return true;
+    // return true;
 }
 
 void InnerFile::drawUI()

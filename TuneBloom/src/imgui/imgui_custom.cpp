@@ -1479,7 +1479,8 @@ bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const cha
             bool selected = str == buf;
             if (Selectable(str.cstr(), selected))
             {
-                strcpy_s(buf, buf_size, str.cstr());
+                // strcpy_s(buf, buf_size, str.cstr());
+                strcpy(buf, str.cstr());
                 ret = true;
             }
 

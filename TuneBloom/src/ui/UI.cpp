@@ -6,7 +6,7 @@
 //#include <snd/SoundThread.h>
 
 #include <filedevice/seadPath.h>
-#include <framework/win/seadGameFrameworkBaseWin.h>
+#include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 #include <framework/seadProcessMeter.h>
 #include <gfx/gl/seadTextureGL.h>
 

@@ -24,6 +24,14 @@ SeqArgBase* nw__snd__internal__driver__MmlParser__ReadArg(const u8** ptr, MmlPar
     return nullptr;
 }
 
+std::vector<u8> MmlCommandBase::encode()
+{
+    if (mConditional)
+        return { MmlCommand::MML_IF };
+
+    return { };
+}
+
 const char* MmlCommandNote::sKeys[MmlCommandNote::sKeysNum] = {
     "cnm1", "csm1", "dnm1", "dsm1", "enm1", "fnm1", "fsm1", "gnm1",
     "gsm1", "anm1", "asm1", "bnm1", "cn0",  "cs0",  "dn0",  "ds0",

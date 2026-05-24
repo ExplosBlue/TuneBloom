@@ -233,7 +233,7 @@ struct StreamSoundFile
 
         u8 GetGlobalIndex(u32 index) const
         {
-            SEAD_ASSERT(0 <= index <= table.count);
+            SEAD_ASSERT(0 <= index && index <= table.count);
             return table.item[index];
         }
     };

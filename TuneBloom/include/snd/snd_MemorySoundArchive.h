@@ -104,7 +104,7 @@ public:
 
     bool ReadSoundUserParam(ItemId soundId, s32 index, u32& value) const
     {
-        SEAD_ASSERT(0 <= index <= USER_PARAM_INDEX_MAX);
+        SEAD_ASSERT(0 <= index && index <= USER_PARAM_INDEX_MAX);
         SEAD_ASSERT(mInfoBlockBody);
 
         const internal::SoundArchiveFile::SoundInfo* soundInfo = mInfoBlockBody->GetSoundInfo(soundId);

@@ -45,14 +45,7 @@ public:
         return false;
     }
 
-    virtual std::vector<u8> encode() = 0
-    {
-        if (mConditional)
-            return { MmlCommand::MML_IF };
-
-        return { };
-    }
-
+    virtual std::vector<u8> encode() = 0;
     virtual std::vector<std::string> getArgs_() const = 0;
     virtual std::string toString() const = 0;
 

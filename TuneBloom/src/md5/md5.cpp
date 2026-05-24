@@ -31,7 +31,7 @@ documentation and/or software.
 */
 
 /* interface header */
-#include <md5/MD5.h>
+#include <md5/md5.h>
 
 /* system implementation headers */
 #include <cstdio>
@@ -349,7 +349,10 @@ std::string MD5::hexdigest() const
 
   char buf[33];
   for (int i=0; i<16; i++)
-    sprintf_s(buf+i*2, sizeof(buf)-i*2, "%02X", digest[i]);
+  {
+    // sprintf_s(buf+i*2, sizeof(buf)-i*2, "%02X", digest[i]);
+    sprintf(buf+i*2, "%02X", digest[i]);
+  }
   buf[32]=0;
 
   return std::string(buf);

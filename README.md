@@ -64,3 +64,4 @@ External contributions & Pull Requests are welcome! We understand that the quali
 - [omar](https://github.com/ocornut) - ImGui
 - [Vladimir Shatrov](https://github.com/frowrik) - ImGui piano keyboard
 - [BalazsJako](https://github.com/BalazsJako) - ImGui text editor
+- [samhocevar](https://github.com/samhocevar/portable-file-dialogs) - Portable file dialog

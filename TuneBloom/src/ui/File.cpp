@@ -13,16 +13,16 @@
 
 #include <string>
 
+#include <portable-file-dialogs.h>
+
 bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters)
 {
     SEAD_ASSERT(outPath);
 
-    std::string filtersStr;
+    std::vector<std::string> filtersVec;
 
-    filtersStr.append("All Files (*.*)");
-    filtersStr.append(1, '\0');
-    filtersStr.append("*.*");
-    filtersStr.append(1, '\0');
+    filtersVec.push_back("All Files (*.*)");
+    filtersVec.push_back("*.*");
 
     if (filterCount > 0)
     {
@@ -30,39 +30,26 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
 
         for (u32 i = 0; i < filterCount; i++)
         {
-            filtersStr.append(filters[i].name);
-            filtersStr.append(1, '\0');
-            filtersStr.append(filters[i].filter);
-            filtersStr.append(1, '\0');
+            filtersVec.push_back(filters[i].name);
+            filtersVec.push_back(filters[i].filter);
         }
     }
 
-    // TODO
-    return false;
-    // OPENFILENAMEA ofn;
-    // sead::MemUtil::fillZero(&ofn, sizeof(ofn));
-    // ofn.lStructSize = sizeof(ofn);
-    // ofn.lpstrFile = outPath->getBuffer();
-    // ofn.nMaxFile = outPath->getBufferSize();
-    // ofn.lpstrFilter = filtersStr.c_str();
-    // ofn.nFilterIndex = filterCount > 0 ? 2 : 1;
-    // ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY;
-    // ofn.lpstrTitle = title;
+    std::vector<std::string> result = pfd::open_file(title ? title : "", "", filtersVec, pfd::opt::none).result();
+    if (result.empty())
+    {
+        return false;
+    }
 
-    // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-    // if (fw)
-    // {
-    //     ofn.hwndOwner = fw->getWindowHandle();
-    // }
-
-    // return GetOpenFileNameA(&ofn);
+    outPath->copy(result[0].c_str());
+    return true;
 }
 
 bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters, const char* defaultExt)
 {
     SEAD_ASSERT(outPath);
 
-    std::string filtersStr;
+    std::vector<std::string> filtersVec;
 
     if (filterCount > 0)
     {
@@ -70,33 +57,19 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
 
         for (u32 i = 0; i < filterCount; i++)
         {
-            filtersStr.append(filters[i].name);
-            filtersStr.append(1, '\0');
-            filtersStr.append(filters[i].filter);
-            filtersStr.append(1, '\0');
+            filtersVec.push_back(filters[i].name);
+            filtersVec.push_back(filters[i].filter);
         }
     }
 
-    // TODO
-    return false;
-    // OPENFILENAMEA ofn;
-    // sead::MemUtil::fillZero(&ofn, sizeof(ofn));
-    // ofn.lStructSize = sizeof(ofn);
-    // ofn.lpstrFile = outPath->getBuffer();
-    // ofn.nMaxFile = outPath->getBufferSize();
-    // ofn.lpstrFilter = filtersStr.c_str();
-    // ofn.nFilterIndex = 1;
-    // ofn.Flags = OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_OVERWRITEPROMPT;
-    // ofn.lpstrTitle = title;
-    // ofn.lpstrDefExt = defaultExt;
+    std::string result = pfd::save_file(title ? title : "", "", filtersVec, pfd::opt::none).result();
+    if (result.empty())
+    {
+        return false;
+    }
 
-    // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-    // if (fw)
-    // {
-    //     ofn.hwndOwner = fw->getWindowHandle();
-    // }
-
-    // return GetSaveFileNameA(&ofn);
+    outPath->copy(result.c_str());
+    return true;
 }
 
 //* https://gist.github.com/danzek/d7192d250c951804dec05125f5223a30

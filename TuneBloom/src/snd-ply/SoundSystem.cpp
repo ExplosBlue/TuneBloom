@@ -359,6 +359,8 @@ static ma_device device;
 
 static void InitSDK(sead::Heap* heap)
 {
+    sead::CurrentHeapSetter chs(heap);
+
     ma_device_config config    = ma_device_config_init(ma_device_type_playback);
     config.playback.format     = ma_format_f32;
     config.playback.channels   = internal::driver::HardwareMgr::cChannelCount;

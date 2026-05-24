@@ -255,6 +255,7 @@ void ImGuiTask::prepare()
     // }
 
     adjustHeapWithSlack(0, 5 * 1024 * 1024);
+    getHeapArray().getPrimaryHeap()->setEnableLock(true);
 }
 
 void ImGuiTask::enter()

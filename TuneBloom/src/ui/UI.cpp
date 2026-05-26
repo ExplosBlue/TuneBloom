@@ -12,7 +12,12 @@
 
 #include <Utilll.h>
 
-// #include <shellapi.h>
+#if defined(SEAD_PLATFORM_WINDOWS)
+#include <basis/win/seadWindows.h>
+#include <shellapi.h>
+#elif defined(SEAD_PLATFORM_LINUX) || defined(SEAD_PLATFORM_MACOSX)
+#include <cstdlib>
+#endif
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -234,6 +239,21 @@ void DrawMenuBar()
     }
 }
 
+void OpenURL(const char* url)
+{
+#if defined(SEAD_PLATFORM_WINDOWS)
+    ShellExecuteA(nullptr, "open", url, nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(SEAD_PLATFORM_LINUX)
+    std::string command = "xdg-open \"" + std::string(url) + "\"";
+    system(command.c_str());
+#elif defined(SEAD_PLATFORM_MACOSX)
+    std::string command = "open \"" + std::string(url) + "\"";
+    system(command.c_str());
+#else
+    #error "Unsupported platform"
+#endif
+}
+
 void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -318,8 +338,7 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                // TODO
-                // system("start https://github.com/stupidestmodder");
+                OpenURL("https://github.com/stupidestmodder");
             }
         }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
@@ -362,8 +381,7 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             {
-                // TODO
-                // system(sead::FormatFixedSafeString<64>("start %s", link).cstr());
+                OpenURL(link);
             }
         }
 

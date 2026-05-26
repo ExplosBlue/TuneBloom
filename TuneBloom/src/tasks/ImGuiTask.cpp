@@ -51,7 +51,10 @@ void ImGuiTask::prepare()
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;       // Enable Docking
+
+#if !defined(SEAD_PLATFORM_LINUX)
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;     // Enable Multi-Viewport / Platform Windows
+#endif
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();

@@ -56,7 +56,7 @@ void RootTask::prepare()
     {
         sead::TaskBase::CreateArg arg(&sead::TTaskFactory<BfsarTask>);
 
-        createTaskSync(arg);
+        requestCreateTask(arg);
     }
 
     //adjustHeapAll();

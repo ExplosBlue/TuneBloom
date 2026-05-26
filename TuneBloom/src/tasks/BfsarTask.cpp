@@ -130,6 +130,8 @@ void PlayWave(const nw::snd::internal::WaveInfo& waveInfo)
     sWavePlayerOld.start(&waveInfoS);
 }
 
+GLFWimage sGlfwIcon;
+
 void BfsarTask::prepare()
 {
     //adjustHeapAll();
@@ -190,6 +192,10 @@ void BfsarTask::prepare()
         SEAD_ASSERT(r);
 
         util::setIcon_(icon);
+
+        sGlfwIcon.width = width;
+        sGlfwIcon.height = height;
+        sGlfwIcon.pixels = data;
     }
     else
     {
@@ -279,6 +285,10 @@ void BfsarTask::prepare()
 
 void BfsarTask::enter()
 {
+    sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
+    SEAD_ASSERT(fw);
+
+    glfwSetWindowIcon(fw->getWindowHandle(), 1, &sGlfwIcon);
 }
 
 void BfsarTask::exit()

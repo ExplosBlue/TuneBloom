@@ -1,6 +1,7 @@
 #include "tasks/BfsarTask.h"
 
 #include <filedevice/seadFileDeviceMgr.h>
+#include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 #include <gfx/gl/seadTextureGL.h>
 #include <gfx/seadTextureUtil.h>
 #include <heap/seadExpHeap.h>
@@ -145,6 +146,33 @@ void BfsarTask::prepare()
 
         heap->adjust();
     }
+
+    sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
+    SEAD_ASSERT(fw);
+
+    glfwSetWindowCloseCallback(fw->getWindowHandle(), [](GLFWwindow* window)
+    {
+        TryExit();
+    });
+
+    glfwSetDropCallback(fw->getWindowHandle(), [](GLFWwindow* window, s32 count, const char** paths)
+    {
+        if (count == 1)
+        {
+            sDroppedFilePath = paths[0];
+        }
+
+        for (s32 i = 0; i < count; i++)
+        {
+            if (sead::SafeString(paths[i]).endsWith(".bfsar"))
+            {
+                sDroppedFilePath = paths[i];
+                return;
+            }
+        }
+
+        PopupMgr::instance()->addPopup({ "Unsupported file type dropped" });
+    });
 
     // util::getFramework()->setProcessPriority(sead::Framework::ProcessPriority::eRealTime);
     // snd::internal::driver::SoundThread::instance()->getThreadImpl_()->setPriority(THREAD_PRIORITY_TIME_CRITICAL);

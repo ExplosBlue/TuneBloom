@@ -415,11 +415,11 @@ void DrawUI()
     {
         if (!ImGui::IsPopupOpen("###Save"))
         {
-            // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-            // if (fw)
-            // {
-            //     SetForegroundWindow(fw->getWindowHandle());
-            // }
+            sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
+            if (fw)
+            {
+                glfwFocusWindow(fw->getWindowHandle());
+            }
         }
 
         if (sBfsar.isOpen())
@@ -535,23 +535,6 @@ void DrawUI()
         }
 
         DrawTuneBloomSplash(icon, ImVec2(130, 130));
-    }
-
-    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
-    {
-        // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-        // if (fw)
-        // {
-        //     DragAcceptFiles(fw->getWindowHandle(), false); // prevent accepting files while a popup is open
-        // }
-    }
-    else
-    {
-        // sead::GameFrameworkBaseWin* fw = sead::DynamicCast<sead::GameFrameworkBaseWin>(util::getFramework());
-        // if (fw)
-        // {
-        //     DragAcceptFiles(fw->getWindowHandle(), true);
-        // }
     }
 }
 

@@ -159,6 +159,11 @@ void BfsarTask::prepare()
 
     glfwSetDropCallback(fw->getWindowHandle(), [](GLFWwindow* window, s32 count, const char** paths)
     {
+        if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
+        {
+            return; // ignore dropped files while a popup is open
+        }
+
         if (count == 1)
         {
             sDroppedFilePath = paths[0];

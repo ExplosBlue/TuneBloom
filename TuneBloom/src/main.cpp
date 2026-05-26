@@ -70,10 +70,6 @@ int main()
     framework->run(sead::HeapMgr::getRootHeap(0), rootArg, runArg);
 
     delete framework;
-
-    // TODO: sead framework destroy
-    sead::ThreadMgr::instance()->destroy();
-    sead::HeapMgr::destroy();
 }
 
 // extern "C"

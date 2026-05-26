@@ -254,8 +254,7 @@ void ImGuiTask::prepare()
     //     platform_io.Platform_RenderWindow = HookPlatformRenderWindow;
     // }
 
-    adjustHeapWithSlack(0, 5 * 1024 * 1024);
-    getHeapArray().getPrimaryHeap()->setEnableLock(true);
+    adjustHeapAll();
 }
 
 void ImGuiTask::enter()
@@ -269,6 +268,11 @@ void ImGuiTask::enter()
 
 void ImGuiTask::exit()
 {
+    sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
+    SEAD_ASSERT(fw);
+
+    sead::CurrentHeapSetter chs(fw->getGLHeap());
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -276,7 +280,10 @@ void ImGuiTask::exit()
 
 void ImGuiTask::calc()
 {
-    sead::CurrentHeapSetter chs(getHeapArray().getPrimaryHeap());
+    sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
+    SEAD_ASSERT(fw);
+
+    sead::CurrentHeapSetter chs(fw->getGLHeap());
 
     mCalcMeter.measureBegin();
 
@@ -289,7 +296,10 @@ void ImGuiTask::calc()
 
 void ImGuiTask::draw()
 {
-    sead::CurrentHeapSetter chs(getHeapArray().getPrimaryHeap());
+    sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
+    SEAD_ASSERT(fw);
+
+    sead::CurrentHeapSetter chs(fw->getGLHeap());
 
     mDrawMeter.measureBegin();
 

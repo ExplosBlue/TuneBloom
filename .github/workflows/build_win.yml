@@ -8,8 +8,8 @@ on:
 
 env:
   SOLUTION_FILE_PATH: .
-  BUILD_CONFIGURATION: Release
-  BUILD_PLATFORM: Win64
+  BUILD_CONFIGURATION: Develop
+  BUILD_PLATFORM: GLFW_x86_64
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
     - name: Setup premake
       uses: abel0b/setup-premake@v2.4
       with:
-        version: "5.0.0-beta2"
+        version: "5.0.0-beta8"
 
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v1.0.2
@@ -44,7 +44,7 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/workdir"
-        Copy-Item -Path "${{ github.workspace }}/TuneBloom/bin/TuneBloom-Win64-Release/out/TuneBloom.exe" `
+        Copy-Item -Path "${{ github.workspace }}/TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom.exe" `
           -Destination "${{ github.workspace }}/workdir/"
 
     - name: Zip workdir contents

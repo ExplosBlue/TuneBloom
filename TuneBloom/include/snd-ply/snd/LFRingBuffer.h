@@ -3,6 +3,8 @@
 #include <container/seadSafeArray.h>
 #include <thread/seadAtomic.h>
 
+#include <utility>
+
 // Lock-Free RingBuffer
 template <typename T, u32 Size>
 class LFRingBuffer

@@ -1036,8 +1036,11 @@ bool toInt(int* out, std::string str)
         }
     }
 
-    int value;
-    if (std::from_chars(str.data() + (base != 10 ? 2 : 0), str.data() + str.size(), value, base).ec != std::errc{})
+    const char* startPtr = str.data() + (base != 10 ? 2 : 0);
+    char* endPtr = nullptr;
+    int value = std::strtoul(startPtr, &endPtr, base);
+
+    if (endPtr == startPtr) // No characters consumed = parsing failed
     {
         return false;
     }

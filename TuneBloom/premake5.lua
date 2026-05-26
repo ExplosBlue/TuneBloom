@@ -45,7 +45,7 @@ project "TuneBloom"
         defines { "SEAD_PLATFORM_POSIX", "SEAD_PLATFORM_LINUX" }
 
     filter "system:macosx"
-        systemversion "11.0"
+        systemversion "14.0"
 
         defines { "SEAD_PLATFORM_POSIX", "SEAD_PLATFORM_MACOSX" }
         links {

@@ -15,125 +15,6 @@
 
 SEAD_TASK_SINGLETON_DISPOSER_IMPL(ImGuiTask);
 
-// extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-// struct WGL_WindowData
-// {
-//     HDC hDC;
-// };
-
-// static bool CreateDeviceWGL(HWND hWnd, WGL_WindowData* data)
-// {
-//     HDC hDc = ::GetDC(hWnd);
-//     PIXELFORMATDESCRIPTOR pfd = { 0 };
-//     pfd.nSize = sizeof(pfd);
-//     pfd.nVersion = 1;
-//     pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
-//     pfd.iPixelType = PFD_TYPE_RGBA;
-//     pfd.cColorBits = 32;
-//     pfd.cDepthBits = 24;
-//     pfd.cStencilBits = 8;
-//     pfd.iLayerType = PFD_MAIN_PLANE;
-
-//     const int pf = ::ChoosePixelFormat(hDc, &pfd);
-//     if (pf == 0)
-//         return false;
-//     if (::SetPixelFormat(hDc, pf, &pfd) == FALSE)
-//         return false;
-//     ::ReleaseDC(hWnd, hDc);
-
-//     data->hDC = ::GetDC(hWnd);
-
-//     return true;
-// }
-
-// static void CleanupDeviceWGL(HWND hWnd, WGL_WindowData* data)
-// {
-//     wglMakeCurrent(nullptr, nullptr);
-//     ::ReleaseDC(hWnd, data->hDC);
-// }
-
-// static void HookRendererCreateWindow(ImGuiViewport* viewport)
-// {
-//     SEAD_ASSERT(!viewport->RendererUserData);
-
-//     WGL_WindowData* data = IM_NEW(WGL_WindowData);
-//     bool b = CreateDeviceWGL((HWND)viewport->PlatformHandle, data);
-//     SEAD_ASSERT(b);
-//     viewport->RendererUserData = data;
-// }
-
-// static void HookRendererDestroyWindow(ImGuiViewport* viewport)
-// {
-//     if (viewport->RendererUserData != NULL)
-//     {
-//         WGL_WindowData* data = (WGL_WindowData*)viewport->RendererUserData;
-//         CleanupDeviceWGL((HWND)viewport->PlatformHandle, data);
-//         IM_DELETE(data);
-//         viewport->RendererUserData = NULL;
-//     }
-// }
-
-// static void HookPlatformRenderWindow(ImGuiViewport* viewport, void* hglrc)
-// {
-//     // Activate the platform window DC in the OpenGL rendering context
-//     WGL_WindowData* data = (WGL_WindowData*)viewport->RendererUserData;
-//     SEAD_ASSERT(data);
-
-//     {
-//         bool b = wglMakeCurrent(data->hDC, (HGLRC)hglrc);
-//         SEAD_ASSERT(b);
-//     }
-// }
-
-// static void HookRendererSwapBuffers(ImGuiViewport* viewport, void*)
-// {
-//     WGL_WindowData* data = (WGL_WindowData*)viewport->RendererUserData;
-//     SEAD_ASSERT(data);
-
-//     {
-//         bool b = ::SwapBuffers(data->hDC);
-//         SEAD_ASSERT(b);
-//     }
-// }
-
-// static LRESULT __stdcall MsgProc(HWND hWnd, u32 msg, WPARAM wParam, LPARAM lParam)
-// {
-//     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
-//         return 1;
-
-//     switch (msg)
-//     {
-//         case WM_KEYDOWN:
-//             if (wParam == VK_ESCAPE)
-//             {
-//                 return 1;
-//             }
-
-//             break;
-
-//         case WM_CLOSE:
-//             TryExit();
-//             return 1;
-
-//         case WM_DROPFILES:
-//         {
-//             HDROP drop = (HDROP)wParam;
-
-//             UINT fileCount = DragQueryFileA(drop, 0xFFFFFFFF, NULL, 0);
-//             if (fileCount > 0)
-//             {
-//                 DragQueryFileA(drop, 0, sDroppedFilePath.getBuffer(), sDroppedFilePath.getBufferSize());
-//             }
-//             DragFinish(drop);
-
-//             return 1;
-//         }
-//     }
-
-//     return 0;
-// }
-
 static void SetupImGuiStyle();
 
 static void* ImGuiAllocFunc(size_t size, void* userPtr)
@@ -230,7 +111,6 @@ void ImGuiTask::prepare()
 
     sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(getFramework());
     SEAD_ASSERT(fw);
-    // fw->setMsgProcCallback(&MsgProc);
 
     sead::Graphics::instance()->lockDrawContext();
     {
@@ -239,20 +119,6 @@ void ImGuiTask::prepare()
         ImGui_ImplOpenGL3_Init();
     }
     sead::Graphics::instance()->unlockDrawContext();
-
-    // // Win32+GL needs specific hooks for viewport, as there are specific things needed to tie Win32 and GL api.
-    // if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-    // {
-    //     ImGuiPlatformIO& platform_io = ImGui::GetPlatformIO();
-    //     IM_ASSERT(!platform_io.Renderer_CreateWindow);
-    //     IM_ASSERT(!platform_io.Renderer_DestroyWindow);
-    //     IM_ASSERT(!platform_io.Renderer_SwapBuffers);
-    //     IM_ASSERT(!platform_io.Platform_RenderWindow);
-    //     platform_io.Renderer_CreateWindow = HookRendererCreateWindow;
-    //     platform_io.Renderer_DestroyWindow = HookRendererDestroyWindow;
-    //     platform_io.Renderer_SwapBuffers = HookRendererSwapBuffers;
-    //     platform_io.Platform_RenderWindow = HookPlatformRenderWindow;
-    // }
 
     adjustHeapAll();
 }
@@ -306,28 +172,27 @@ void ImGuiTask::draw()
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    // // Update and Render additional Platform Windows
-    // if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-    // {
-    //     sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
-    //     SEAD_ASSERT(fw);
+    // Update and Render additional Platform Windows
+    if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+        sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(getFramework());
+        SEAD_ASSERT(fw);
 
-    //     HDC hdc = wglGetCurrentDC();
-    //     HGLRC hglrc = wglGetCurrentContext();
+        GLFWwindow* prevContext = glfwGetCurrentContext();
 
-    //     GLint prevFBO;
-    //     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
+        GLint prevFBO;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFBO);
 
-    //     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-    //     ImGui::UpdatePlatformWindows();
-    //     ImGui::RenderPlatformWindowsDefault(fw->getHGLRC());
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
 
-    //     // Restore the OpenGL rendering context to the main window DC, since platform windows might have changed it.
-    //     wglMakeCurrent(hdc, hglrc);
+        // Restore the OpenGL rendering context to the main window DC, since platform windows might have changed it.
+        glfwMakeContextCurrent(prevContext);
 
-    //     glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
-    // }
+        glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
+    }
 
     mDrawMeter.measureEnd();
 }

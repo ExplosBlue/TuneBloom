@@ -34,7 +34,7 @@ jobs:
       run: echo "COMMIT_SHA=${{ github.sha }}" >> $env:GITHUB_ENV
 
     - name: Run premake
-      run: ./setupVS.bat
+      run: premake5 vs2022
 
     - name: Build
       working-directory: ${{env.GITHUB_WORKSPACE}}

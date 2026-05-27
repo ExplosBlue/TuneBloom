@@ -26,6 +26,10 @@ project "TuneBloom"
         "src/**.cpp"
     }
 
+    removefiles {
+        "src/macos/**"
+    }
+
     links {
         "sead",
     }
@@ -48,6 +52,12 @@ project "TuneBloom"
         systemversion "14.0"
 
         defines { "SEAD_PLATFORM_POSIX", "SEAD_PLATFORM_MACOSX" }
+
+        files {
+            "src/macos/**.mm",
+            "src/macos/**.cpp",
+        }
+
         links {
             "Cocoa.framework",
             "IOKit.framework",
@@ -99,6 +109,9 @@ project "TuneBloom"
 
     filter { "system:windows", "configurations:Release" }
         entrypoint "mainCRTStartup"
+
+    filter { "system:macosx", "configurations:Release" }
+        linktimeoptimization "off" -- TODO: Fix LTO crashes
 
 group "Dependencies"
     include "vendor/sead"

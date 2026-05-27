@@ -26,6 +26,10 @@
 #include <Utilll.h>
 #include <stb/stb_image.h>
 
+#if defined(SEAD_PLATFORM_MACOSX)
+#include "macos/dockIcon.h"
+#endif
+
 BfsarTask::BfsarTask(const sead::TaskConstructArg& arg)
     : sead::Task(arg, "BfsarTask")
 {
@@ -293,7 +297,11 @@ void BfsarTask::enter()
     sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
     SEAD_ASSERT(fw);
 
+#if defined(SEAD_PLATFORM_MACOSX)
+    macos::setDockIcon("content/icon.png");
+#else
     glfwSetWindowIcon(fw->getWindowHandle(), 1, &sGlfwIcon);
+#endif
 }
 
 void BfsarTask::exit()

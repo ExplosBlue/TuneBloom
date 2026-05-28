@@ -69,12 +69,6 @@ int main()
     framework->run(sead::HeapMgr::getRootHeap(0), rootArg, runArg);
 
     delete framework;
-
-#if defined(SEAD_PLATFORM_WINDOWS)
-    // TODO: Why...
-    sead::ThreadMgr::instance()->destroy();
-    sead::HeapMgr::destroy();
-#endif // SEAD_PLATFORM_WINDOWS
 }
 
 // extern "C"

@@ -18,20 +18,21 @@ workspace "TuneBloom"
     toolset "clang"
     stl "libc++"
 
-    -- TODO: Remove
-    buildoptions {
-    -- suppressed errors
-        "-Wno-invalid-offsetof",
-        "-Wno-undefined-var-template",
-        "-Wno-missing-braces",
-    -- keep, but as warnings
-        "-Wno-error=switch",
-        "-Wno-error=unused-private-field",
-        "-Wno-error=unused-const-variable",
-        "-Wno-error=logical-op-parentheses",
-        "-Wno-error=bitwise-op-parentheses",
-        "-Wno-error=delete-non-abstract-non-virtual-dtor",
-    }
+    filter "toolset:clang"
+        -- TODO: Remove
+        buildoptions {
+        -- suppressed errors
+            "-Wno-invalid-offsetof",
+            "-Wno-undefined-var-template",
+            "-Wno-missing-braces",
+        -- keep, but as warnings
+            "-Wno-error=switch",
+            "-Wno-error=unused-private-field",
+            "-Wno-error=unused-const-variable",
+            "-Wno-error=logical-op-parentheses",
+            "-Wno-error=bitwise-op-parentheses",
+            "-Wno-error=delete-non-abstract-non-virtual-dtor",
+        }
 
     filter "platforms:*_x86"
         architecture "x86"

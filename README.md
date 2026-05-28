@@ -28,8 +28,8 @@ TuneBloom is an extremely fast & stable editor for editing NintendoWare audio fo
 </div>
 
 ## Future Goals
-- `BCSAR` support. (3DS)
-- `BFSAR` support. (Switch)
+- `BCSAR` support (3DS)
+- `BFSAR` support (Switch)
 
 ## Limitations
 - Edited `BFSAR` files
@@ -49,9 +49,46 @@ TuneBloom is an extremely fast & stable editor for editing NintendoWare audio fo
 > While TuneBloom has reached a stable release, it is still advised to make frequent backups before saving.
 
 ## Compiling
-- Premake is used as the build system which makes setting up a development environment very straightforward.
-- Simply run the `setupVS.bat` script in the root of the repository and then open the generated `.sln` file in Visual Studio to edit & build.
-- Currently, only Windows is supported with MSVC & Clang, but support for other platforms is upcoming.
+[Premake](https://premake.github.io/) is used as the build system which makes setting up a development environment very straightforward.
+
+You only must make sure you have Premake version **5.0.0-beta8** or greater.
+
+> [!IMPORTANT]
+> When cloning the repository, make sure to use `--recurse-submodules`!
+
+### Windows
+**Requirements**
+- The [latest Premake pre-built binary](https://premake.github.io/download) for Windows (The version on WinGet is not up-to-date!)
+- [Microsoft Visual Studio](https://visualstudio.microsoft.com/downloads/) 2022 or higher, with the [C++ Clang tools for Windows](https://learn.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170) component installed.
+  - If you cannot use Clang on your system, you may skip this and use MSVC instead, see below for how.
+- Windows 10 or 11
+
+**Build**
+- Run `premake5 vs2022` (Only needed to run on first setup, when a `premake5.lua` changes or when source files are added/deleted)
+  - If using MSVC, add the flag `--cc=msc-v143`
+- Open the generated `.sln` file in Visual Studio (2022 or greater) to edit & build
+
+### macOS
+**Requirements**
+- Premake (`brew install premake`)
+- Xcode Command Line Tools (`xcode-select --install`)
+- macOS 14 or higher
+
+**Build**
+- Run `premake5 gmake` (Only needed to run on first setup, when a `premake5.lua` changes or when source files are added/deleted)
+- Run `make config=release_glfw_arm64` (Release build) or `make config=debug_glfw_arm64` (Debug build)
+
+### Linux
+**Requirements**
+- Install Premake from your system package manager if it is up-to-date, otherwise manually download the [latest Premake pre-built binary](https://premake.github.io/download) for Linux
+- You may need to install X11/Wayland development headers packages for your distro
+
+**Build**
+- Run `premake5 gmake` (Only needed to run on first setup, when a `premake5.lua` changes or when source files are added/deleted)
+- Run `make config=release_glfw_x86_64` (Release build) or `make config=debug_glfw_x86_64` (Debug build)
+
+> [!TIP]
+> On macOS and Linux, you can add `-j` to the `make` command to speed-up compilation.
 
 ## Contributing
 External contributions & Pull Requests are welcome! We understand that the quality of the code may not be fully up-to-bar, so we appreciate your patience. Help and developer discussions are always available in our [Discord](https://go.nsmbu.net/discord) server.

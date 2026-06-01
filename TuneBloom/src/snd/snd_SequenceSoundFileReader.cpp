@@ -20,19 +20,30 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(sequenceFile);
 
-        // if (sead::MemUtil::compare(header->signature, "CSEQ", 4) != 0)
-        if (sead::MemUtil::compare(header->signature, "FSEQ", 4) != 0)
+        if (sead::MemUtil::compare(header->signature, "FSEQ", 4) != 0 && sead::MemUtil::compare(header->signature, "CSEQ", 4) != 0)
         {
             PopupMgr::instance()->pushCurrentItemError("File is not a valid BFSEQ");
             return;
         }
 
-        // if (false)
-        if (!(0x00010000 <= header->version && header->version <= 0x00020000))
+        if (sead::MemUtil::compare(header->signature, "CSEQ", 4) == 0)
         {
-            sead::FormatFixedSafeString<64> msg("BFSEQ version not supported (0x%08X)", (u32)header->version);
-            PopupMgr::instance()->pushCurrentItemError(msg);
-            return;
+            u32 major = ((u32)header->version >> 24) & 0xFF;
+            if (major < 1 || major > 2)
+            {
+                sead::FormatFixedSafeString<64> msg("CSEQ version not supported (0x%08X)", (u32)header->version);
+                PopupMgr::instance()->pushCurrentItemError(msg);
+                return;
+            }
+        }
+        else
+        {
+            if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00020000))
+            {
+                sead::FormatFixedSafeString<64> msg("BFSEQ version not supported (0x%08X)", (u32)header->version);
+                PopupMgr::instance()->pushCurrentItemError(msg);
+                return;
+            }
         }
     }
 

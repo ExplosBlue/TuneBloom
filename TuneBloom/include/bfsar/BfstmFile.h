@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bfsar/InnerFile.h>
 #include <bfsar/Sound.h>
 
 #include <filedevice/seadFileDevice.h>
@@ -18,5 +19,5 @@ public:
         return version >= 0x00040000;
     }
 
-    static bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian);
+    static bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format = ArchiveFormat::BFSAR);
 };

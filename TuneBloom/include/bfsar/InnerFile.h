@@ -2,6 +2,12 @@
 
 #include <bfsar/writer/FileWriter.h>
 
+enum class ArchiveFormat
+{
+    BFSAR,
+    BCSAR
+};
+
 #include <snd/ut/ut_BinaryFileFormat.h>
 
 #include <prim/seadPtrUtil.h>
@@ -69,6 +75,16 @@ public:
         return fileSize;
     }
 
+    ArchiveFormat getFormat() const
+    {
+        return mFormat;
+    }
+
+    void setFormat(ArchiveFormat format) const
+    {
+        mFormat = format;
+    }
+
     virtual void drawUI();
 
     u32 getWritePos() const
@@ -99,6 +115,7 @@ protected:
 protected:
     mutable sead::Endian::Types mEndian;
     mutable u32 mVersion;
+    mutable ArchiveFormat mFormat{ArchiveFormat::BFSAR};
 
     mutable u32 mWritePos;
     mutable u32 mWriteSize;

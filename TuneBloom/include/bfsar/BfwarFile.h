@@ -11,13 +11,14 @@ class BfwarFile : public InnerFile
     SEAD_RTTI_OVERRIDE(BfwarFile, InnerFile);
 
 public:
-    BfwarFile(sead::Endian::Types endian, u32 version, const VectorSet<const WaveFile*>& waveFiles)
+    BfwarFile(sead::Endian::Types endian, u32 version, const VectorSet<const WaveFile*>& waveFiles, ArchiveFormat format = ArchiveFormat::BFSAR)
         : InnerFile()
         , mWaveFiles(waveFiles)
         , mUpdateWriteInfo(true)
     {
         mEndian = endian;
         mVersion = version;
+        mFormat = format;
     }
 
     void prepare(bool updateWriteInfo) const

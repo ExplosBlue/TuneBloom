@@ -1,5 +1,6 @@
 #include <bfsar/Sound.h>
 
+#include <bfsar/InnerFile.h>
 #include <bfsar/BfstmFile.h>
 #include <bfsar/writer/FileWriter.h>
 
@@ -14,7 +15,7 @@
 #include <filedevice/seadFileDevice.h>
 #include <stream/seadFileDeviceStream.h>
 
-bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian)
+bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format)
 {
     sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(endian);
@@ -190,7 +191,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     }
 
     FileWriter writer(&handle, &stream);
-    writer.openFile("FSTM", fileBlockCount, version);
+    writer.openFile(format == ArchiveFormat::BCSAR ? "CSTM" : "FSTM", fileBlockCount, version);
 
     //? Info Block
     {

@@ -521,6 +521,10 @@ bool WaveFile::doRead(const void* fileAddr)
     mEncoding = static_cast<Encoding>(reader.mInfoBlockBody->encoding);
     mIsLoop = waveInfo.loopFlag;
     mSampleRate = waveInfo.sampleRate;
+
+    if (waveInfo.originalLoopStartFrame == 0 && waveInfo.loopStartFrame != 0)
+        waveInfo.originalLoopStartFrame = waveInfo.loopStartFrame;
+
     mLoopStartFrame = waveInfo.originalLoopStartFrame;
     mLoopEndFrame = waveInfo.loopEndFrame - (waveInfo.loopStartFrame - waveInfo.originalLoopStartFrame);
 
@@ -530,25 +534,6 @@ bool WaveFile::doRead(const void* fileAddr)
         sead::FormatFixedSafeString<1024> msg("Invalid loop (%u >= %u)", mLoopStartFrame, mLoopEndFrame);
         PopupMgr::instance()->pushCurrentItemError(msg);
         loopError = true;
-    }
-
-    if (getLoopStartFrame(false) != waveInfo.loopStartFrame)
-    {
-        sead::FormatFixedSafeString<128> msg("Invalid loop start (%u should be %u)", getLoopStartFrame(false), waveInfo.loopStartFrame);
-        PopupMgr::instance()->pushCurrentItemError(msg);
-        loopError = true;
-    }
-
-    if (getLoopEndFrame(false) != waveInfo.loopEndFrame)
-    {
-        sead::FormatFixedSafeString<128> msg("Invalid loop end (%u should be %u)", getLoopEndFrame(false), waveInfo.loopEndFrame);
-        PopupMgr::instance()->pushCurrentItemError(msg);
-        loopError = true;
-    }
-
-    if (loopError)
-    {
-        return false;
     }
 
     mSampleCount = mLoopEndFrame;
@@ -617,7 +602,7 @@ bool WaveFile::doRead(const void* fileAddr)
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
     FileWriter writer(handle, stream);
-    writer.openFile("FWAV", 2, mVersion);
+    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWAV" : "FWAV", 2, mVersion);
 
     //? Info Block
     {

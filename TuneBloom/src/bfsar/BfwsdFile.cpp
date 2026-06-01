@@ -99,7 +99,7 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     };
 
     FileWriter writer(handle, stream);
-    writer.openFile("FWSD", 1, mVersion);
+    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD", 1, mVersion);
 
     //? Info Block
     {

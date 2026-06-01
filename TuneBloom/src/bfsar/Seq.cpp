@@ -38,6 +38,9 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     std::map<u32, MmlCommandBase*> commands;
     while (true)
     {
+        if (trackPtr >= seqDataEnd)
+            break;
+
         if (*trackPtr == 0xFF)
         {
             const u8* remainPtr = trackPtr + 1;
@@ -61,7 +64,6 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
 
         MmlCommandBase* cmd = nullptr;
         {
-            // TODO: Validate
             cmd = nw__snd__internal__driver__MmlParser__Parse(trackPtr, reader);
         }
 
@@ -75,7 +77,9 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     {
         if (commands.find(it.first) == commands.end() && it.first != endOffset)
         {
-            PopupMgr::instance()->pushCurrentItemError("Invalid sequence data");
+            sead::FormatFixedSafeString<256> msg("Invalid sequence data: label 0x%X not visited (endOfs=0x%X, cmdCount=%zu, labelCount=%zu)",
+                it.first, endOffset, commands.size(), labelCache.size());
+            PopupMgr::instance()->pushCurrentItemError(msg);
             return false;
         }
     }

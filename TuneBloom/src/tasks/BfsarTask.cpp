@@ -175,7 +175,7 @@ void BfsarTask::prepare()
 
         for (s32 i = 0; i < count; i++)
         {
-            if (sead::SafeString(paths[i]).endsWith(".bfsar"))
+            if (sead::SafeString(paths[i]).endsWith(".bfsar") || sead::SafeString(paths[i]).endsWith(".bcsar"))
             {
                 sDroppedFilePath = paths[i];
                 return;

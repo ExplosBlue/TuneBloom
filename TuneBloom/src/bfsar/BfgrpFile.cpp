@@ -27,7 +27,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     SEAD_ASSERT(mGroupTargetWarcs);
 
     FileWriter writer(handle, stream);
-    writer.openFile("FGRP", 3, mVersion);
+    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CGRP" : "FGRP", 3, mVersion);
 
     u32 fileSize = 0;
 
@@ -90,6 +90,8 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
         if (mGroup->getOutputType() == Group::OutputType::Embed)
         {
+            mEmbeddedFileInfos.clear();
+
             for (u32 i : *mItemFiles)
             {
                 const File& file = (*mFiles)[i];
@@ -197,6 +199,8 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                     innerFile->write(handle, stream, mEndian, file.id == mItemFiles->size() - 1);
                 }
                 u32 size = writer.getPosition() - pos;
+
+                mEmbeddedFileInfos[file.id] = {pos, size};
 
                 writer.closeSizedReference(
                     sead::FormatFixedSafeString<32>("File%u", file.id),

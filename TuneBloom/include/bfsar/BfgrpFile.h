@@ -22,7 +22,7 @@ public:
     static const u32 cSortItemsAlgo2Version = 0x00020100;
 
 public:
-    BfgrpFile(sead::Endian::Types endian, u32 version)
+    BfgrpFile(sead::Endian::Types endian, u32 version, ArchiveFormat format = ArchiveFormat::BFSAR)
         : InnerFile()
         , mGroup(nullptr)
         , mItemFiles(nullptr)
@@ -35,6 +35,18 @@ public:
     {
         mEndian = endian;
         mVersion = version;
+        mFormat = format;
+    }
+
+    struct EmbeddedFileInfo
+    {
+        u32 offset;
+        u32 size;
+    };
+
+    const std::unordered_map<u32, EmbeddedFileInfo>& getEmbeddedFileInfos() const
+    {
+        return mEmbeddedFileInfos;
     }
 
     void prepare(
@@ -81,6 +93,7 @@ private:
     u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const override;
 
 private:
+    mutable std::unordered_map<u32, EmbeddedFileInfo> mEmbeddedFileInfos;
     mutable const Group* mGroup;
     mutable const VectorSet<u32>* mItemFiles;
     mutable const std::vector<File>* mFiles;

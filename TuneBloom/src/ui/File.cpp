@@ -121,10 +121,12 @@ Item* sSubSelectedItem = nullptr;
 
 bool ValidBFSARHeader(const void* file)
 {
-    // if (sead::MemUtil::compare(magic, "CSAR", 4) != 0)
-    if (sead::MemUtil::compare(file, "FSAR", 4) != 0)
+    bool isFSAR = sead::MemUtil::compare(file, "FSAR", 4) == 0;
+    bool isCSAR = sead::MemUtil::compare(file, "CSAR", 4) == 0;
+
+    if (!isFSAR && !isCSAR)
     {
-        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR file", nullptr });
+        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR/BCSAR file", nullptr });
         return false;
     }
 
@@ -136,11 +138,25 @@ bool ValidBFSARHeader(const void* file)
         sFileEndian = sead::Endian::markToEndian(*(u16*)byteOrder);
     }
 
-    // if (false)
-    if (!(0x00010000 <= header.version && header.version <= 0x00020200))
+    //? Only check version for FSAR (BFSAR) files
+    if (isFSAR)
     {
-        sead::FormatFixedSafeString<64> msg("BFSAR version not supported (0x%08X)", (u32)header.version);
-        PopupMgr::instance()->addPopup({ msg, nullptr });
+        if (!(0x00010000 <= header.version && header.version <= 0x00020200))
+        {
+            sead::FormatFixedSafeString<64> msg("BFSAR version not supported (0x%08X)", (u32)header.version);
+            PopupMgr::instance()->addPopup({ msg, nullptr });
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool ValidBCSARHeader(const void* file)
+{
+    if (sead::MemUtil::compare(file, "CSAR", 4) != 0)
+    {
+        PopupMgr::instance()->addPopup({ "Selected file is not a valid BCSAR file", nullptr });
         return false;
     }
 
@@ -169,9 +185,10 @@ bool OpenFile()
     }
     else
     {
-        const u32 filterCount = 1;
+        const u32 filterCount = 2;
         FileFilter filters[filterCount] = {
-            { "Sound Archive (*.bfsar)", "*.bfsar" }
+            { "Cafe Sound Archive (*.bfsar)", "*.bfsar" },
+            { "CTR Sound Archive (*.bcsar)", "*.bcsar" }
         };
 
         if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
@@ -244,12 +261,13 @@ bool SaveFileAs()
 
     sead::FixedSafeString<512> path;
 
-    const u32 filterCount = 1;
+    const u32 filterCount = 2;
     FileFilter filters[filterCount] = {
-        { "Sound Archive (*.bfsar)", "*.bfsar" }
+        { "Cafe Sound Archive (*.bfsar)", "*.bfsar" },
+        { "CTR Sound Archive (*.bcsar)", "*.bcsar" }
     };
 
-    if (SaveFileDialog(&path, nullptr, filterCount, filters, "bfsar"))
+    if (SaveFileDialog(&path, nullptr, filterCount, filters, sBfsar.getFormat() == ArchiveFormat::BCSAR ? "bcsar" : "bfsar"))
     {
         if (sBfsar.saveAs(path))
         {

@@ -2043,7 +2043,7 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     }
 
     FileWriter writer(handle, stream);
-    writer.openFile("FBNK", 1, mVersion);
+    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CBNK" : "FBNK", 1, mVersion);
 
     auto writeVelocityRegion = [&](const VelocityRegion& velocityRegion)
     {

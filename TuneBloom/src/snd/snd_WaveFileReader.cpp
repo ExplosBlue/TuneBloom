@@ -39,19 +39,30 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
             {
                 const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveFile);
 
-                // if (sead::MemUtil::compare(header->signature, "CWAV", 4) != 0)
-                if (sead::MemUtil::compare(header->signature, "FWAV", 4) != 0)
+                if (sead::MemUtil::compare(header->signature, "FWAV", 4) != 0 && sead::MemUtil::compare(header->signature, "CWAV", 4) != 0)
                 {
                     PopupMgr::instance()->pushCurrentItemError("File is not a valid BFWAV");
                     return;
                 }
 
-                // if (false)
-                if (!(0x00010000 <= header->version && header->version <= 0x00010200))
+                if (sead::MemUtil::compare(header->signature, "CWAV", 4) == 0)
                 {
-                    sead::FormatFixedSafeString<64> msg("BFWAV version not supported (0x%08X)", (u32)header->version);
-                    PopupMgr::instance()->pushCurrentItemError(msg);
-                    return;
+                    u32 major = ((u32)header->version >> 24) & 0xFF;
+                    if (major < 1)
+                    {
+                        sead::FormatFixedSafeString<64> msg("CWAV version not supported (0x%08X)", (u32)header->version);
+                        PopupMgr::instance()->pushCurrentItemError(msg);
+                        return;
+                    }
+                }
+                else
+                {
+                    if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010200))
+                    {
+                        sead::FormatFixedSafeString<64> msg("BFWAV version not supported (0x%08X)", (u32)header->version);
+                        PopupMgr::instance()->pushCurrentItemError(msg);
+                        return;
+                    }
                 }
             }
 
@@ -98,6 +109,8 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
 bool WaveFileReader::IsOriginalLoopAvailable() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
+    if (sead::MemUtil::compare(&header.signature, "CSTM", 4) == 0)
+        return false;
     if (header.version >= 0x00010200)
         return true;
 

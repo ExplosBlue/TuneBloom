@@ -1,6 +1,7 @@
 #pragma once
 
 #include <bfsar/Bank.h>
+#include <bfsar/InnerFile.h>
 #include <bfsar/BankFile.h>
 #include <bfsar/Group.h>
 #include <bfsar/Player.h>
@@ -39,7 +40,17 @@ public:
     Bfsar();
     ~Bfsar();
 
-    void create();
+    ArchiveFormat getFormat() const
+    {
+        return mFormat;
+    }
+
+    void setFormat(ArchiveFormat format)
+    {
+        mFormat = format;
+    }
+
+    void create(ArchiveFormat format = ArchiveFormat::BFSAR);
     bool open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* heap);
     bool save();
     bool saveAs(const sead::SafeString& filePath);
@@ -78,24 +89,40 @@ public:
         mVersion = version;
     }
 
+    // BFSAR: version = (0 << 24) | (major << 16) | (minor << 8) | sub
+    // BCSAR: version = (major << 24) | (minor << 16) | (0 << 8) | sub
+    u32 getDecodedMajor() const
+    {
+        if (mFormat == ArchiveFormat::BCSAR)
+            return (mVersion >> 24) & 0xFF;
+        return (mVersion >> 16) & 0xFF;
+    }
+
+    u32 getDecodedMinor() const
+    {
+        if (mFormat == ArchiveFormat::BCSAR)
+            return (mVersion >> 16) & 0xFF;
+        return (mVersion >> 8) & 0xFF;
+    }
+
     bool isStreamTrackInfoAvailable() const
     {
-        return mVersion >= 0x00020000; //! Assumption
+        return getDecodedMajor() >= 2;
     }
 
     bool isStreamSendAvailable() const
     {
-        return mVersion >= 0x00020100;
+        return getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1);
     }
 
     bool isFilterSupportedVersion() const
     {
-        return mVersion >= 0x00020100;
+        return getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1);
     }
 
     bool isStreamPrefetchAvailable() const
     {
-        return mVersion >= 0x00020200;
+        return getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2);
     }
 
     bool isIncludeStringTable() const
@@ -219,7 +246,7 @@ public:
         return cNullList;
     }
 
-    //? Check if name constains only allowed characters
+    //? Check if name contains only allowed characters
     bool validName(const sead::SafeString& name) const;
     //? Check if name is duplicated
     bool validateName(const sead::SafeString& name) const;
@@ -230,8 +257,8 @@ public:
 
     u32 getVersionForBfwsd() const
     {
-        if (mVersion >= 0x00020100)
-            return 0x00010100;
+        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
+            return 0x01000000;
 
         return 0x00010000;
     }
@@ -243,17 +270,23 @@ public:
 
     u32 getVersionForBfwar() const
     {
+        if (getDecodedMajor() > 2 || (getDecodedMajor() >= 2 && getDecodedMinor() >= 1))
+            return 0x01000000;
+
         return 0x00010000;
     }
 
     u32 getVersionForBfgrp() const
     {
+        if (getDecodedMajor() > 2 || (getDecodedMajor() >= 2 && getDecodedMinor() >= 1))
+            return 0x01010000;
+
         return 0x00010000;
     }
 
     u32 getVersionForBfseq() const
     {
-        if (mVersion >= 0x00020100)
+        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
             return 0x00020000;
 
         return 0x00010000;
@@ -261,9 +294,9 @@ public:
 
     u32 getVersionForBfwav() const
     {
-        if (mVersion >= 0x00020200)
+        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
             return 0x00010200;
-        else if (mVersion >= 0x00020000)
+        else if (getDecodedMajor() >= 2)
             return 0x00010100;
 
         return 0x00010000;
@@ -271,9 +304,9 @@ public:
 
     u32 getVersionForBfstm() const
     {
-        if (mVersion >= 0x00020200)
+        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
             return 0x00040000;
-        else if (mVersion >= 0x00020000)
+        else if (getDecodedMajor() >= 2)
             return 0x00030000;
 
         return 0x00010000;
@@ -281,6 +314,46 @@ public:
 
     //? Validate every item for saving
     bool validate_();
+
+    const char* getArchiveMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CSAR" : "FSAR";
+    }
+
+    const char* getSeqMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CSEQ" : "FSEQ";
+    }
+
+    const char* getBankMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CBNK" : "FBNK";
+    }
+
+    const char* getWsdMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD";
+    }
+
+    const char* getWarMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CWAR" : "FWAR";
+    }
+
+    const char* getGrpMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CGRP" : "FGRP";
+    }
+
+    const char* getStmMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CSTM" : "FSTM";
+    }
+
+    const char* getWavMagic() const
+    {
+        return mFormat == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
+    }
 
 private:
     bool open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap);
@@ -291,6 +364,7 @@ private:
 
 private:
     bool mOpen;
+    ArchiveFormat mFormat;
     sead::HeapSafeString* mFilePath;
 
     sead::Endian::Types mEndian;

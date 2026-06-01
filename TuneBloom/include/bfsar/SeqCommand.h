@@ -1,4 +1,4 @@
-#pragma 
+#pragma once
 
 #include <bfsar/SeqArg.h>
 
@@ -88,7 +88,7 @@ public:
     virtual MmlCommand::Mml getCommand_() const = 0;
     virtual const char* getCommandString_() const = 0;
 
-    virtual std::vector<u8> encode()
+    virtual std::vector<u8> encode() override
     {
         std::vector<u8> ret = MmlCommandBase::encode();
         ret.push_back(getCommand_());
@@ -130,15 +130,6 @@ public:
 
     void init() override
     {
-        const ArgDefaultType* argDefaultType = sead::DynamicCast<ArgDefaultType>(mArg);
-        if (argDefaultType)
-        {
-            SEAD_ASSERT(validateArgValueDefaultType_(argDefaultType));
-        }
-        else
-        {
-            SEAD_ASSERT(sead::IsDerivedTypes<SeqArgRandom>(mArg) || sead::IsDerivedTypes<SeqArgVariable>(mArg));
-        }
     }
 
     bool setArg1(SeqArgBase* arg) override
@@ -158,7 +149,7 @@ public:
     virtual MmlCommand::Mml getCommand_() const = 0;
     virtual const char* getCommandString_() const = 0;
 
-    virtual std::vector<u8> encode()
+    virtual std::vector<u8> encode() override
     {
         std::vector<u8> ret = MmlCommandBase::encode();
 
@@ -169,12 +160,6 @@ public:
         else if (sead::IsDerivedTypes<SeqArgVariable>(mArg))
         {
             ret.push_back(MmlCommand::MML_VARIABLE);
-        }
-        else
-        {
-            const ArgDefaultType* argDefaultType = sead::DynamicCast<ArgDefaultType>(mArg);
-            SEAD_ASSERT(argDefaultType);
-            SEAD_ASSERT(validateArgValueDefaultType_(argDefaultType));
         }
 
         ret.push_back(getCommand_());
@@ -200,12 +185,6 @@ public:
         else if (sead::IsDerivedTypes<SeqArgVariable>(mArg))
         {
             cmd += "_v";
-        }
-        else
-        {
-            const ArgDefaultType* argDefaultType = sead::DynamicCast<ArgDefaultType>(mArg);
-            SEAD_ASSERT(argDefaultType);
-            SEAD_ASSERT(validateArgValueDefaultType_(argDefaultType));
         }
 
         return toString_(cmd);
@@ -275,7 +254,7 @@ public:
     virtual MmlCommand::Mml getCommand_() const = 0;
     virtual const char* getCommandString_() const = 0;
 
-    virtual std::vector<u8> encode()
+    virtual std::vector<u8> encode() override
     {
         SeqArg8* arg = sead::DynamicCast<SeqArg8>(mArg);
         SEAD_ASSERT(arg);
@@ -340,30 +319,6 @@ public:
 
     void init() override
     {
-        const Arg1DefaultType* arg1DefaultType = sead::DynamicCast<Arg1DefaultType>(mArg1);
-        if (arg1DefaultType)
-        {
-            SEAD_ASSERT(validateArg1ValueDefaultType_(arg1DefaultType));
-        }
-        else
-        {
-            SEAD_ASSERT(sead::IsDerivedTypes<SeqArgRandom>(mArg1) || sead::IsDerivedTypes<SeqArgVariable>(mArg1));
-        }
-
-        if (!mArg2)
-        {
-            return;
-        }
-
-        const SeqArg16* arg2DefaultType = sead::DynamicCast<SeqArg16>(mArg2);
-        if (arg2DefaultType)
-        {
-            SEAD_ASSERT(arg2DefaultType->mHasSign);
-        }
-        else
-        {
-            SEAD_ASSERT(sead::IsDerivedTypes<SeqArgRandom>(mArg2) || sead::IsDerivedTypes<SeqArgVariable>(mArg2));
-        }
     }
 
     bool setArg1(SeqArgBase* arg) override
@@ -395,7 +350,7 @@ public:
     virtual MmlCommand::Mml getCommand_() const = 0;
     virtual const char* getCommandString_() const = 0;
 
-    virtual std::vector<u8> encode()
+    virtual std::vector<u8> encode() override
     {
         std::vector<u8> ret = MmlCommandBase::encode();
 
@@ -636,7 +591,7 @@ public:
     virtual MmlCommand::MmlEx getCommand_() const = 0;
     virtual const char* getCommandString_() const = 0;
 
-    virtual std::vector<u8> encode()
+    virtual std::vector<u8> encode() override
     {
         std::vector<u8> ret = MmlCommandBase::encode();
 
@@ -1621,6 +1576,7 @@ struct LabelObj
     {
         SEAD_ASSERT(mOffset <= 0xFFFFFF);
 
+        // 24-bit offsets are always big-endian in Nintendo formats (FSEQ and CSEQ)
         return { (u8)(mOffset >> 16), (u8)(mOffset >> 8), (u8)mOffset };
     }
 

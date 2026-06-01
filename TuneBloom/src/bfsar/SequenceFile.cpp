@@ -486,7 +486,7 @@ u32 SequenceFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, b
     }
 
     FileWriter writer(handle, stream);
-    writer.openFile("FSEQ", 2, mVersion);
+    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CSEQ" : "FSEQ", 2, mVersion);
 
     //? Data Block
     {

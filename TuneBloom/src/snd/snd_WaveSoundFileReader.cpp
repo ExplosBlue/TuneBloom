@@ -19,18 +19,29 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveSoundFile);
 
-        // if (sead::MemUtil::compare(header->signature, "CWSD", 4) != 0)
-        if (sead::MemUtil::compare(header->signature, "FWSD", 4) != 0)
+        if (sead::MemUtil::compare(header->signature, "FWSD", 4) != 0 && sead::MemUtil::compare(header->signature, "CWSD", 4) != 0)
         {
             PopupMgr::instance()->pushCurrentItemError("File is not a valid BFWSD");
             return;
         }
 
-        // if (false)
-        if (!(0x00010000 <= header->version && header->version <= 0x00010100))
+        if (sead::MemUtil::compare(header->signature, "CWSD", 4) == 0)
         {
-            sead::FormatFixedSafeString<64> msg("BFWSD version not supported (0x%08X)", (u32)header->version);
-            return;
+            u32 major = ((u32)header->version >> 24) & 0xFF;
+            u32 minor = ((u32)header->version >> 16) & 0xFF;
+            if (major < 1)
+            {
+                sead::FormatFixedSafeString<64> msg("CWSD version not supported (0x%08X)", (u32)header->version);
+                return;
+            }
+        }
+        else
+        {
+            if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010100))
+            {
+                sead::FormatFixedSafeString<64> msg("BFWSD version not supported (0x%08X)", (u32)header->version);
+                return;
+            }
         }
     }
 
@@ -132,8 +143,18 @@ bool WaveSoundFileReader::ReadNoteInfo(WaveSoundNoteInfo* dst, u32 index, u32 no
 bool WaveSoundFileReader::IsFilterSupportedVersion() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
-    if (header.version >= 0x00010100)
-        return true;
+    if (sead::MemUtil::compare(header.signature, "CWSD", 4) == 0)
+    {
+        u32 major = ((u32)header.version >> 24) & 0xFF;
+        u32 minor = ((u32)header.version >> 16) & 0xFF;
+        if (major > 1 || (major == 1 && minor >= 1))
+            return true;
+    }
+    else
+    {
+        if ((u32)header.version >= 0x00010100)
+            return true;
+    }
 
     return false;
 }

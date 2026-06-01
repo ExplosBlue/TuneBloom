@@ -31,19 +31,30 @@ void BankFileReader::Initialize(const void* bankFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(bankFile);
 
-        // if (sead::MemUtil::compare(header->signature, "CBNK", 4) != 0)
-        if (sead::MemUtil::compare(header->signature, "FBNK", 4) != 0)
+        if (sead::MemUtil::compare(header->signature, "FBNK", 4) != 0 && sead::MemUtil::compare(header->signature, "CBNK", 4) != 0)
         {
             PopupMgr::instance()->pushCurrentItemError("File is not a valid BFBNK");
             return;
         }
 
-        // if (false)
-        if (header->version != 0x00010000)
+        if (sead::MemUtil::compare(header->signature, "CBNK", 4) == 0)
         {
-            sead::FormatFixedSafeString<64> msg("BFBNK version not supported (0x%08X)", (u32)header->version);
-            PopupMgr::instance()->pushCurrentItemError(msg);
-            return;
+            u32 major = ((u32)header->version >> 24) & 0xFF;
+            if (major < 1)
+            {
+                sead::FormatFixedSafeString<64> msg("CBNK version not supported (0x%08X)", (u32)header->version);
+                PopupMgr::instance()->pushCurrentItemError(msg);
+                return;
+            }
+        }
+        else
+        {
+            if ((u32)header->version != 0x00010000)
+            {
+                sead::FormatFixedSafeString<64> msg("BFBNK version not supported (0x%08X)", (u32)header->version);
+                PopupMgr::instance()->pushCurrentItemError(msg);
+                return;
+            }
         }
     }
 

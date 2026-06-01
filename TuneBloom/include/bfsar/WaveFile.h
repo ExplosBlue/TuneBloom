@@ -326,10 +326,9 @@ public:
 
     void drawUI() override;
 
-    void setup(sead::Endian::Types endian, u32 version) const
+    void setup(sead::Endian::Types endian) const
     {
         mEndian = endian;
-        mVersion = version;
     }
 
 private:

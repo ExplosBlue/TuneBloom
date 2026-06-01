@@ -8,7 +8,7 @@
 u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
     FileWriter writer(handle, stream);
-    writer.openFile("FWAR", nw::snd::internal::WaveArchiveFile::BLOCK_SIZE, mVersion);
+    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWAR" : "FWAR", nw::snd::internal::WaveArchiveFile::BLOCK_SIZE, mVersion);
 
     //? Info Block
     {
@@ -37,7 +37,8 @@ u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
             u32 pos = writer.getPosition();
             {
-                wave->setup(mEndian, sBfsar.getVersionForBfwav());
+                wave->setup(mEndian);
+                wave->setFormat(mFormat);
                 wave->write(handle, stream, mEndian, i == mWaveFiles.size() - 1);
             }
             u32 size = writer.getPosition() - pos;

@@ -1079,22 +1079,13 @@ u16 MmlParser::Read16(const u8** ptr)
 
 u32 MmlParser::Read24(const u8** ptr)
 {
-    if (sFileEndian == sead::Endian::eLittle && sSwapLittleSeqArgs)
-    {
-        u32 ret = ReadByte(ptr);
-        ret |= (ReadByte(ptr) << 8);
-        ret |= (ReadByte(ptr) << 16);
-        return ret;
-    }
-    else
-    {
-        u32 ret = ReadByte(ptr);
-        ret <<= 8;
-        ret |= ReadByte(ptr);
-        ret <<= 8;
-        ret |= ReadByte(ptr);
-        return ret;
-    }
+    // 24-bit offsets are always big-endian in Nintendo formats (FSEQ and CSEQ)
+    u32 ret = ReadByte(ptr);
+    ret <<= 8;
+    ret |= ReadByte(ptr);
+    ret <<= 8;
+    ret |= ReadByte(ptr);
+    return ret;
 }
 
 s32 MmlParser::ReadVar(const u8** ptr)

@@ -13,7 +13,7 @@ class BfwsdFile : public InnerFile
     SEAD_RTTI_OVERRIDE(BfwsdFile, InnerFile);
 
 public:
-    BfwsdFile(sead::Endian::Types endian, u32 version)
+    BfwsdFile(sead::Endian::Types endian, u32 version, ArchiveFormat format = ArchiveFormat::BFSAR)
         : InnerFile()
         , mSoundSet(nullptr)
         , mWaveArchive(nullptr)
@@ -22,6 +22,7 @@ public:
     {
         mEndian = endian;
         mVersion = version;
+        mFormat = format;
     }
 
     void prepare(const SoundSet* soundSet, const WaveArchive* warc, const std::unordered_map<const WaveArchive*, std::unordered_map<const WaveFile*, u32>>& waveFilesIndexes, bool updateWriteInfo) const
@@ -45,7 +46,7 @@ public:
 
     static bool isFilterSupportedVersion(u32 version)
     {
-        return version >= 0x00010100;
+        return version >= 0x01010000;
     }
 
 private:

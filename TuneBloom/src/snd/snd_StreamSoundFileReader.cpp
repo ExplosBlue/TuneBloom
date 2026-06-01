@@ -62,17 +62,27 @@ void StreamSoundFileReader::Finalize()
 bool StreamSoundFileReader::IsTrackInfoAvailable() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
+    if (sead::MemUtil::compare(&header.signature, "CSTM", 4) == 0)
+        return true;
     if (header.version <= 0x00020000)
         return true;
-
     return false;
 }
 
 bool StreamSoundFileReader::IsOriginalLoopAvailable() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
-    if (header.version >= 0x00040000)
-        return true;
+    if (sead::MemUtil::compare(header.signature, "CSTM", 4) == 0)
+    {
+        u32 major = ((u32)header.version >> 24) & 0xFF;
+        if (major >= 4)
+            return true;
+    }
+    else
+    {
+        if ((u32)header.version >= 0x00040000)
+            return true;
+    }
 
     return false;
 }
@@ -83,19 +93,30 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
 
     const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(streamSoundFile);
 
-    // if (sead::MemUtil::compare(header->signature, "CSTM", 4) != 0)
-    if (sead::MemUtil::compare(header->signature, "FSTM", 4) != 0)
+    if (sead::MemUtil::compare(header->signature, "FSTM", 4) != 0 && sead::MemUtil::compare(header->signature, "CSTM", 4) != 0)
     {
         PopupMgr::instance()->pushCurrentItemError("File is not a valid BFSTM");
         return false;
     }
 
-    // if (false)
-    if (!(0x00010000 <= header->version && header->version <= 0x00040000))
+    if (sead::MemUtil::compare(header->signature, "CSTM", 4) == 0)
     {
-        sead::FormatFixedSafeString<64> msg("BFSTM version not supported (0x%08X)", (u32)header->version);
-        PopupMgr::instance()->pushCurrentItemError(msg);
-        return false;
+        u32 major = ((u32)header->version >> 24) & 0xFF;
+        if (major < 1 || major > 4)
+        {
+            sead::FormatFixedSafeString<64> msg("CSTM version not supported (0x%08X)", (u32)header->version);
+            PopupMgr::instance()->pushCurrentItemError(msg);
+            return false;
+        }
+    }
+    else
+    {
+        if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00040000))
+        {
+            sead::FormatFixedSafeString<64> msg("BFSTM version not supported (0x%08X)", (u32)header->version);
+            PopupMgr::instance()->pushCurrentItemError(msg);
+            return false;
+        }
     }
 
     return true;

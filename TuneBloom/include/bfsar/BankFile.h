@@ -351,10 +351,10 @@ public:
     void drawUI() override;
     void drawFileUI();
 
-    void setup(sead::Endian::Types endian, u32 version) const
+    void setup(sead::Endian::Types endian, ArchiveFormat format = ArchiveFormat::BFSAR) const
     {
         mEndian = endian;
-        mVersion = version;
+        mFormat = format;
     }
 
     void prepare(const Bank* bank, const WaveArchive* warc, const std::unordered_map<const WaveArchive*, std::unordered_map<const WaveFile*, u32>>& waveFilesIndexes, bool updateWriteInfo) const

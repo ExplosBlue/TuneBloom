@@ -9,14 +9,23 @@
 class BfstmFile
 {
 public:
-    static bool IsTrackInfoAvailable(u32 version)
+    static bool IsTrackInfoAvailable(u32 version, ArchiveFormat format)
     {
-        return version <= 0x00020000;
+        if (format == ArchiveFormat::BCSAR)
+            return true;                        // CSTM always has track info
+
+        return version <= 0x00020000;           // FSTM
     }
 
-    static bool IsOriginalLoopAvailable(u32 version)
+    static bool IsOriginalLoopAvailable(u32 version, ArchiveFormat format)
     {
-        return version >= 0x00040000;
+        if (format == ArchiveFormat::BCSAR)
+        {
+            u32 major = (version >> 24) & 0xFF;
+            return major >= 4;                  // CSTM: original loop from v4.0.0.0+
+        }
+
+        return version >= 0x00040000;           // FSTM
     }
 
     static bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format = ArchiveFormat::BFSAR);

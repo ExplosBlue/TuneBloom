@@ -304,12 +304,23 @@ public:
 
     u32 getVersionForBfstm() const
     {
-        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
-            return 0x00040000;
-        else if (getDecodedMajor() >= 2)
-            return 0x00030000;
+        if (mFormat == ArchiveFormat::BCSAR)
+        {
+            // NW4C format: 0xMMmmμμbb (major/minor/micro/bugfix)
+            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
+                return 0x02010000;  // 2.1.0.0 - track info available, no original loop
 
-        return 0x00010000;
+            return 0x02000000;      // 2.0.0.0 - base version
+        }
+        else
+        {
+            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
+                return 0x00040000;
+            else if (getDecodedMajor() >= 2)
+                return 0x00030000;
+
+            return 0x00010000;
+        }
     }
 
     //? Validate every item for saving

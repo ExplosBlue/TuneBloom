@@ -2,7 +2,6 @@ project "TuneBloom"
 language "C++"
 cppdialect "C++20"
 
-multiprocessorcompile "on"
 staticruntime "on"
 exceptionhandling "off"
 rtti "off"

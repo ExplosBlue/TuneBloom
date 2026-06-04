@@ -5244,7 +5244,7 @@ bool Bfsar::validate_()
                             return false;
                         }
 
-                        if (!BfstmFile::IsTrackInfoAvailable(getVersionForBfstm()))
+                        if (!BfstmFile::IsTrackInfoAvailable(getVersionForBfstm(), mFormat))
                         {
                             continue;
                         }

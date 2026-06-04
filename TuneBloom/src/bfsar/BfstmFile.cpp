@@ -231,7 +231,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
                 writer.closeNullReference("RegionDataRef");
             }
 
-            if (IsOriginalLoopAvailable(version))
+            if (IsOriginalLoopAvailable(version, format))
             {
                 stream.writeU32(mainWave.getOriginalLoopStartFrame());
                 stream.writeU32(mainWave.getOriginalLoopEndFrame());
@@ -239,7 +239,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
         }
         writer.popOffsetBase();
 
-        if (IsTrackInfoAvailable(version))
+        if (IsTrackInfoAvailable(version, format))
         {
             writer.closeReference("TrackInfoTableRef", nw::snd::internal::ElementType_Table_ReferenceTable);
             writer.pushOffsetBase();

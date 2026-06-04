@@ -286,20 +286,42 @@ public:
 
     u32 getVersionForBfseq() const
     {
-        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
-            return 0x00020000;
+        if (mFormat == ArchiveFormat::BCSAR)
+        {
+            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
+                return 0x01010000;  // 1.1.0.0 - NW4C current
 
-        return 0x00010000;
+            return 0x01000000;      // 1.0.0.0 - minimum supported
+        }
+        else
+        {
+            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
+                return 0x00020000;
+
+            return 0x00010000;
+        }
     }
 
     u32 getVersionForBfwav() const
     {
-        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
-            return 0x00010200;
-        else if (getDecodedMajor() >= 2)
-            return 0x00010100;
+        if (mFormat == ArchiveFormat::BCSAR)
+        {
+            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
+                return 0x02010100;  // 2.1.1.0 - NW4C current, includes original loop
+            else if (getDecodedMajor() >= 2)
+                return 0x02010000;  // 2.1.0.0 - base version with track info
 
-        return 0x00010000;
+            return 0x02000000;      // 2.0.0.0 - minimum supported
+        }
+        else
+        {
+            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
+                return 0x00010200;
+            else if (getDecodedMajor() >= 2)
+                return 0x00010100;
+
+            return 0x00010000;
+        }
     }
 
     u32 getVersionForBfstm() const

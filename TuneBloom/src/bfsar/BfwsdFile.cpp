@@ -1,4 +1,5 @@
 #include <bfsar/BfwsdFile.h>
+#include <Debug.h>
 
 #include <bfsar/writer/FlagParameters.h>
 
@@ -10,6 +11,11 @@
 
 u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
+    LOG_FUNC();
+    LOG_FMT("format=%s, version=0x%04X", mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD", mVersion);
+    LOG_U32("soundSetStartId", mSoundSet ? mSoundSet->getStartId() : 0);
+    LOG_U32("soundSetEndId", mSoundSet ? mSoundSet->getEndId() : 0);
+
     SEAD_ASSERT(mSoundSet);
     SEAD_ASSERT(mWaveArchive);
 
@@ -101,8 +107,14 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     FileWriter writer(handle, stream);
     writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD", 1, mVersion);
 
+    LOG_FMT("File opened: magic=%s, blockCount=1, version=0x%04X", mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD", mVersion);
+
+    LOG_U32("waveIdsCount", waveIds.size());
+    LOG_U32("waveSoundCount", waveSoundCount);
+
     //? Info Block
     {
+        LOG_FMT("Writing InfoBlock");
         writer.openBlock(nw::snd::internal::ElementType_WaveSoundFile_InfoBlock, "INFO");
 
         writer.openReference("WaveIdTable");
@@ -114,6 +126,7 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
         for (const WaveId& waveId : waveIds)
         {
+            LOG_FMT("WaveId: warcId=%u, waveIdx=%u", waveId.warcId, waveId.waveIdx);
             stream->writeU32(waveId.warcId);
             stream->writeU32(waveId.waveIdx);
         }
@@ -335,6 +348,8 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     }
 
     u32 fileSize = writer.getPosition();
+
+    LOG_U32("fileSize", fileSize);
 
     writer.closeFile();
 

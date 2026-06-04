@@ -11,6 +11,8 @@
 
 #include <Utilll.h>
 
+#include <Debug.h>
+
 #include <string>
 #include <filesystem>
 
@@ -18,6 +20,7 @@
 
 bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters)
 {
+    LOG_FMT("title=\"%s\" filterCount=%u", title ? title : "nullptr", filterCount);
     SEAD_ASSERT(outPath);
 
     std::vector<std::string> filtersVec;
@@ -42,12 +45,14 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
         return false;
     }
 
+    LOG_STR(result[0].c_str());
     outPath->copy(result[0].c_str());
     return true;
 }
 
 bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters, const char* defaultExt)
 {
+    LOG_FMT("title=\"%s\" filterCount=%u defaultExt=\"%s\"", title ? title : "nullptr", filterCount, defaultExt ? defaultExt : "nullptr");
     SEAD_ASSERT(outPath);
 
     std::vector<std::string> filtersVec;
@@ -69,12 +74,14 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
         return false;
     }
 
+    LOG_STR(result.c_str());
     outPath->copy(result.c_str());
     return true;
 }
 
 bool CreateDirectoryRecursively(const std::string& directory)
 {
+    LOG_STR(directory.c_str());
     namespace fs = std::filesystem;
 
     std::error_code ec;
@@ -165,6 +172,7 @@ bool ValidBCSARHeader(const void* file)
 
 bool NewFile()
 {
+    LOG_STR("Creating new BFSAR file");
     CloseFile();
 
     sBfsar.create();
@@ -200,6 +208,7 @@ bool OpenFile()
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);
 
+    LOG_STR(filePath.cstr());
     sead::FileDevice::LoadArg arg;
     arg.path = filePath;
 
@@ -239,6 +248,7 @@ bool OpenFile()
 
 bool SaveFile()
 {
+    LOG_BOOL("isOpen", sBfsar.isOpen());
     if (sBfsar.isOpen())
     {
         return sBfsar.save();
@@ -269,6 +279,7 @@ bool SaveFileAs()
 
     if (SaveFileDialog(&path, nullptr, filterCount, filters, sBfsar.getFormat() == ArchiveFormat::BCSAR ? "bcsar" : "bfsar"))
     {
+        LOG_STR(path.cstr());
         if (sBfsar.saveAs(path))
         {
             sead::FixedSafeString<512> fileName;

@@ -10,6 +10,8 @@
 #include <imgui/imgui_custom.h>
 #include <TextEditor.h>
 
+#include <Debug.h>
+
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -404,12 +406,17 @@ void SequenceFile::invalidatePlayer_() const
 
 bool SequenceFile::doRead(const void* fileAddr)
 {
+    LOG_FMT("%s: doRead at %p, magic=%.4s", getNameOrNull().cstr(), fileAddr, (const char*)fileAddr);
+
     std::vector<std::string> lines;
     std::unordered_map<u32, u32> offsetToLine;
     if (!ParseSequenceFile(&lines, &offsetToLine, fileAddr))
     {
+        LOG_FMT("doRead: ParseSequenceFile failed");
         return false;
     }
+
+    LOG_U32("parsedLines", lines.size());
 
     std::string fseq;
     for (const auto& line : lines)
@@ -422,10 +429,12 @@ bool SequenceFile::doRead(const void* fileAddr)
     nw::snd::internal::SequenceSoundFileReader reader(fileAddr);
     if (!reader.IsAvailable())
     {
+        LOG_FMT("doRead: SequenceSoundFileReader not available");
         return false;
     }
 
     mSeqBytesSize = reader.mHeader->GetDataBlock()->header.size - sizeof(reader.mHeader->GetDataBlock()->header);
+    LOG_U32("seqBytesSize", mSeqBytesSize);
     mSeqBytes = new u8[mSeqBytesSize];
     sead::MemUtil::copy(mSeqBytes, reader.GetSequenceData(), mSeqBytesSize);
 
@@ -437,6 +446,7 @@ bool SequenceFile::doRead(const void* fileAddr)
 
     std::vector<std::pair<u32, const char*>> labelOffsets;
 
+    LOG_U32("labelCount", reader.GetLabelCount());
     for (s32 i = 0; i < reader.GetLabelCount(); i++)
     {
         const char* label = reader.GetLabel(i);
@@ -480,8 +490,12 @@ bool SequenceFile::doRead(const void* fileAddr)
 
 u32 SequenceFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
+    const char* magic = mFormat == ArchiveFormat::BCSAR ? "CSEQ" : "FSEQ";
+    LOG_FMT("%s: doWrite magic=%.4s seqBytes=%u labels=%zu version=%u", getNameOrNull().cstr(), magic, mSeqBytesSize, mLabels.size(), mVersion);
+
     if (!isValid())
     {
+        LOG_FMT("doWrite: not valid, returning 0");
         return 0;
     }
 
@@ -492,6 +506,7 @@ u32 SequenceFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, b
     {
         writer.openBlock(nw::snd::internal::ElementType_SequenceSoundFile_DataBlock, "DATA");
 
+        LOG_FMT("writing %u bytes of sequence data", mSeqBytesSize);
         stream->writeMemBlock(mSeqBytes, mSeqBytesSize);
 
         writer.align(0x20);
@@ -600,6 +615,11 @@ std::vector<std::string> split(std::string s, std::string delimiter)
 
 void SequenceFile::compile_(bool setCursorPos)
 {
+    LOG_FMT("%s: compiling...", getNameOrNull().cstr());
+    if (mSeqText)
+    {
+        LOG_FMT("--- sequence code for %s ---\n%s\n--- end sequence code ---", getNameOrNull().cstr(), mSeqText->cstr());
+    }
     mIsValid = false;
     mLabelsStartInfo.clear();
     mLabels.clear();
@@ -974,6 +994,7 @@ void SequenceFile::compile_(bool setCursorPos)
 
     mIsValid = true;
     mIsDirty = false;
+    LOG_FMT("%s: compiled OK, %u bytes", getNameOrNull().cstr(), mSeqBytesSize);
 }
 
 template <typename T>
@@ -2115,6 +2136,7 @@ std::pair<std::string, CommandInfo> GetCommandInfo(const std::string& cmd)
 
 MmlCommandBase* SequenceFile::parseCommand_(const std::string& str, const std::vector<std::string>& args, std::string& errorMsg)
 {
+    LOG_FUNC();
     MmlCommandBase* cmd = nullptr;
 
     auto info = GetCommandInfo(str);

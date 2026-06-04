@@ -1,5 +1,7 @@
 #include <bfsar/Bfsar.h>
 
+#include <Debug.h>
+
 #include <bfsar/writer/FileWriter.h>
 #include <bfsar/writer/FlagParameters.h>
 #include <bfsar/writer/PatriciaTree.h>
@@ -73,6 +75,8 @@ Bfsar::~Bfsar()
 
 void Bfsar::create(ArchiveFormat format)
 {
+    LOG_FUNC();
+    LOG_U32("format", (u32)format);
     close();
 
     mFormat = format;
@@ -96,6 +100,9 @@ void Bfsar::create(ArchiveFormat format)
 
 bool Bfsar::open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* heap)
 {
+    LOG_FUNC();
+    LOG_HEX("magic", bfsarFile, 4);
+    LOG_STR(filePath.cstr());
     close();
 
     // Detect format from magic
@@ -128,6 +135,7 @@ bool Bfsar::open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* he
 
 bool Bfsar::save()
 {
+    LOG_FUNC();
     if (!mOpen)
         return false;
 
@@ -166,6 +174,8 @@ bool Bfsar::save()
 
 bool Bfsar::saveAs(const sead::SafeString& filePath)
 {
+    LOG_FUNC();
+    LOG_STR(filePath.cstr());
     if (!mOpen)
         return false;
 
@@ -200,6 +210,7 @@ bool Bfsar::saveAs(const sead::SafeString& filePath)
 
 void Bfsar::close()
 {
+    LOG_FUNC();
     if (!mOpen)
         return;
 
@@ -308,6 +319,11 @@ void Bfsar::updateList(Item::List& list)
 
 bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap)
 {
+    LOG_FUNC();
+    LOG_U32("fileSize", soundArchive.mHeader.fileSize);
+    LOG_HEX("magic", &soundArchive.mHeader.signature, 4);
+    LOG_U32("version", soundArchive.mHeader.version);
+    LOG_U32("blockCount", soundArchive.mHeader.dataBlocks);
     mEndian = nw::ut::GetFileEndian(soundArchive.mHeader);
 
     mVersion = soundArchive.mHeader.version;
@@ -602,6 +618,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
 
         mPlayerList.pushBack(player);
     }
+    LOG_FMT("Players: %d, Groups: %u", mPlayerList.size(), soundArchive.GetGroupCount());
 
     struct TempFile
     {
@@ -639,6 +656,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
 
         seqFileIdxMap.try_emplace(i, globalId);
     }
+    LOG_FMT("SequenceFiles: %d", mSequenceFileList.size());
 
     // {
     //     u32 bankFileId = soundArchive.GetBankInfo(soundArchive.GetBankIdFromIndex(29))->fileId;
@@ -664,6 +682,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     };
 
     const u32 warcNum = soundArchive.GetWaveArchiveCount();
+    LOG_U32("warcNum", warcNum);
+    LOG_U32("fileCount", soundArchive.detail_GetFileCount());
+    LOG_U32("bankCount", soundArchive.GetBankCount());
+    LOG_U32("soundCount", soundArchive.GetSoundCount());
+    LOG_U32("soundGroupCount", soundArchive.GetSoundGroupCount());
     std::vector< std::vector<WaveTempFile> > warcFileCache(warcNum);
     std::vector< std::unordered_set<u32> > waveIdMapSet(warcNum);
     if (warcNum > 0)
@@ -892,6 +915,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
     //         SEAD_PRINT("WARC 5 File %u -> Global ID %u\n", i, ref.id);
     //     }
     // }
+
+    LOG_FMT("WaveFiles: %d, WaveArchives: %d, GenWaveArchives: %d", mWaveFileList.size(), mWaveArchiveList.size(), mGenWaveArchiveList.size());
 
     std::unordered_map<u64, u32> bankFileWarcId;
 
@@ -1613,6 +1638,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         mBankList.pushBack(bank);
     }
 
+    LOG_FMT("Banks: %d, BankFiles: %d", mBankList.size(), mBankFileList.size());
     std::unordered_map<std::string, const Sound*> streamSounds; //? Keep track of which .bfstm files we already loaded
     for (u32 i = 0; i < soundArchive.GetSoundCount(); i++)
     {
@@ -2721,10 +2747,73 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         updateList(mWaveFileList);
     }
 
-    // for (const Item* sound : mSoundList)
-    // {
-    //     SEAD_PRINT("%s\n", sound->getNameOrNull().cstr());
-    // }
+    LOG_FMT("=== Archive loaded: %d groups, %d players, %d banks, %d sounds, %d waveArchives, %d waveFiles",
+        mGroupList.size(), mPlayerList.size(), mBankList.size(), mSoundList.size(), mWaveArchiveList.size(), mWaveFileList.size());
+    {
+        auto it = mGroupList.robustBegin();
+        while (it != mGroupList.robustEnd()) {
+            LOG_FMT("  Group[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr());
+            ++it;
+        }
+    }
+    {
+        auto it = mPlayerList.robustBegin();
+        while (it != mPlayerList.robustEnd()) {
+            LOG_FMT("  Player[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr());
+            ++it;
+        }
+    }
+    {
+        auto it = mBankList.robustBegin();
+        while (it != mBankList.robustEnd()) {
+            const Bank* b = static_cast<const Bank*>(it->val());
+            LOG_FMT("  Bank[%d]: \"%s\"%s", b->getId(), b->getNameOrNull().cstr(), b->mFileRef.isAttached() ? "" : " (NO FILE)");
+            ++it;
+        }
+    }
+    {
+        auto it = mBankFileList.robustBegin();
+        while (it != mBankFileList.robustEnd()) {
+            LOG_FMT("  BankFile[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr());
+            ++it;
+        }
+    }
+    {
+        auto it = mSoundList.robustBegin();
+        while (it != mSoundList.robustEnd()) {
+            const Sound* s = static_cast<const Sound*>(it->val());
+            LOG_FMT("  Sound[%d]: \"%s\" type=%d", s->getId(), s->getNameOrNull().cstr(), (int)s->getSoundType());
+            ++it;
+        }
+    }
+    {
+        auto it = mSoundSetList.robustBegin();
+        while (it != mSoundSetList.robustEnd()) {
+            LOG_FMT("  SoundSet[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr());
+            ++it;
+        }
+    }
+    {
+        auto it = mSequenceFileList.robustBegin();
+        while (it != mSequenceFileList.robustEnd()) {
+            LOG_FMT("  SeqFile[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr());
+            ++it;
+        }
+    }
+    {
+        auto it = mWaveArchiveList.robustBegin();
+        while (it != mWaveArchiveList.robustEnd()) {
+            LOG_FMT("  WaveArchive[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr());
+            ++it;
+        }
+    }
+    {
+        auto it = mWaveFileList.robustBegin();
+        while (it != mWaveFileList.robustEnd()) {
+            LOG_FMT("  WaveFile[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr());
+            ++it;
+        }
+    }
 
     return true;
 }
@@ -2759,6 +2848,14 @@ struct pair_equal
 
 void Bfsar::save_(sead::FileHandle& handle)
 {
+    LOG_FUNC();
+    LOG_U32("mVersion", mVersion);
+    LOG_U32("mEndian", (u32)mEndian);
+    LOG_U32("mFormat", (u32)mFormat);
+    LOG_BOOL("mIncludeStringTable", mIncludeStringTable);
+    LOG_FMT("Sounds: %d, SoundSets: %d, Banks: %d, WaveArchives: %d, Groups: %d, Players: %d",
+        mSoundList.size(), mSoundSetList.size(), mBankList.size(), mWaveArchiveList.size(), mGroupList.size(), mPlayerList.size());
+
     sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(mEndian);
 
@@ -5133,11 +5230,51 @@ void Bfsar::save_(sead::FileHandle& handle)
 
             writenFiles.emplace(path);
         }
+
+        LOG_FMT("Stream files written: %d", (s32)writenFiles.size());
+    }
+    LOG_FMT("=== Archive saved (%.4s) ===", getArchiveMagic());
+    {
+        auto it = mGroupList.robustBegin();
+        while (it != mGroupList.robustEnd()) { LOG_FMT("  Group[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
+    }
+    {
+        auto it = mPlayerList.robustBegin();
+        while (it != mPlayerList.robustEnd()) { LOG_FMT("  Player[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
+    }
+    {
+        auto it = mBankList.robustBegin();
+        while (it != mBankList.robustEnd()) { LOG_FMT("  Bank[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
+    }
+    {
+        auto it = mBankFileList.robustBegin();
+        while (it != mBankFileList.robustEnd()) { LOG_FMT("  BankFile[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
+    }
+    {
+        auto it = mSoundList.robustBegin();
+        while (it != mSoundList.robustEnd()) { const Sound* s = static_cast<const Sound*>(it->val()); LOG_FMT("  Sound[%d]: \"%s\" type=%d", s->getId(), s->getNameOrNull().cstr(), (int)s->getSoundType()); ++it; }
+    }
+    {
+        auto it = mSoundSetList.robustBegin();
+        while (it != mSoundSetList.robustEnd()) { LOG_FMT("  SoundSet[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
+    }
+    {
+        auto it = mSequenceFileList.robustBegin();
+        while (it != mSequenceFileList.robustEnd()) { LOG_FMT("  SeqFile[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
+    }
+    {
+        auto it = mWaveArchiveList.robustBegin();
+        while (it != mWaveArchiveList.robustEnd()) { LOG_FMT("  WaveArchive[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
+    }
+    {
+        auto it = mWaveFileList.robustBegin();
+        while (it != mWaveFileList.robustEnd()) { LOG_FMT("  WaveFile[%d]: \"%s\"", it->val()->getId(), it->val()->getNameOrNull().cstr()); ++it; }
     }
 }
 
 void Bfsar::close_()
 {
+    LOG_FUNC();
     mSoundList.clear();
     mSoundSetList.clear();
     mBankList.clear();
@@ -5152,6 +5289,7 @@ void Bfsar::close_()
 
 bool Bfsar::validate_()
 {
+    LOG_FUNC();
     sead::FixedSafeString<1024> error;
 
     auto validateList = [&error, this](const ItemList& list, bool validateWaveSoundSet = false, bool validateStreams = false)

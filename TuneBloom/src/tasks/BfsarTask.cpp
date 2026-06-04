@@ -26,6 +26,8 @@
 #include <Utilll.h>
 #include <stb/stb_image.h>
 
+#include <Debug.h>
+
 #if defined(SEAD_PLATFORM_MACOSX)
 #include "macos/dockIcon.h"
 #endif
@@ -57,6 +59,7 @@ const char* sRegionTypes[] = {
 
 RegionType GetRegionType(u16 typeId)
 {
+    LOG_U16("typeId", typeId);
     switch (typeId)
     {
         case nw::snd::internal::ElementType_BankFile_DirectReferenceTable:
@@ -75,6 +78,7 @@ RegionType GetRegionType(u16 typeId)
 
 const char* GetRegionTypeStr(u16 typeId)
 {
+    LOG_U16("typeId", typeId);
     return sRegionTypes[GetRegionType(typeId)];
 }
 
@@ -124,6 +128,7 @@ snd::WavePlayer sWavePlayerOld;
 
 void PlayWave(const nw::snd::internal::WaveInfo& waveInfo)
 {
+    LOG_FMT("sampleFormat=%d channelCount=%d sampleRate=%d", waveInfo.sampleFormat, waveInfo.channelCount, waveInfo.sampleRate);
     sWavePlayerOld.finalize();
 
     sWavePlayerOld.initialize(waveInfo.channelCount, snd::WavePlayer::cPriorityNoDrop, nullptr, nullptr);
@@ -290,6 +295,7 @@ void BfsarTask::prepare()
 */
 
     adjustHeapAll();
+    LOG_STR("BfsarTask prepared");
 }
 
 void BfsarTask::enter()
@@ -1215,6 +1221,8 @@ void BfsarTask::draw()
 
 static void LoadWav(const sead::SafeString& file, snd::WaveBuffer* leftBuffer, snd::WaveBuffer* rightBuffer, snd::SampleFormat* outFormat, u32* outSampleRate, u32* outChannels, sead::Heap* heap)
 {
+    LOG_STR(file.cstr());
+    LOG_PTR("heap", heap);
     sead::FileHandle handle;
     sead::FileDeviceMgr::instance()->open(&handle, file, sead::FileDevice::FileOpenFlag::eReadOnly, 0);
 
@@ -1303,6 +1311,8 @@ static void LoadWav(const sead::SafeString& file, snd::WaveBuffer* leftBuffer, s
     SEAD_ASSERT_MSG(numChannels == 1 || numChannels == 2, "invalid wChannels[%u]", numChannels);
 
     *outChannels = numChannels;
+
+    LOG_FMT("WAV loaded: sampleRate=%u channels=%u format=%d chunkSize=%u", *outSampleRate, *outChannels, static_cast<int>(*outFormat), data.chunkSize);
 
     u32 numSamples = data.chunkSize;
 

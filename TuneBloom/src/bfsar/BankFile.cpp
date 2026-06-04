@@ -2,6 +2,8 @@
 
 #include <bfsar/SeqCommand.h>
 
+#include <Debug.h>
+
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
@@ -73,6 +75,8 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
 
 void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
 {
+    LOG_FUNC();
+    LOG_U32("instrumentId", instrumentId);
     //? waveId->waveIndex is patched with global wave index already
     const nw::snd::internal::Util::WaveId* waveId = waveIdTable.GetWaveId(velocityRegionInfo->waveIdTableIndex);
     if (waveId && waveId->waveArchiveId == 0)
@@ -248,6 +252,8 @@ void BankFile::VelocityRegion::drawUI()
 
 void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
 {
+    LOG_FUNC();
+    LOG_U32("instrumentId", instrumentId);
     SEAD_ASSERT(keyRegionInfo);
 
     switch (nw::snd::internal::GetRegionType(keyRegionInfo->toVelocityRegionChunk.typeId))
@@ -408,6 +414,7 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
 
 void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* instrumentInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable)
 {
+    LOG_FUNC();
     SEAD_ASSERT(instrumentInfo);
 
     switch (nw::snd::internal::GetRegionType(instrumentInfo->toKeyRegionChunk.typeId))
@@ -1717,11 +1724,15 @@ void BankFile::drawFileUI()
 
 bool BankFile::doRead(const void* fileAddr)
 {
+    LOG_FUNC();
     nw::snd::internal::BankFileReader reader(fileAddr);
     if (!reader.IsInitialized())
     {
+        LOG("BankFile::doRead - reader not initialized\n");
         return false;
     }
+
+    LOG_S32("GetInstrumentCount", reader.GetInstrumentCount());
 
     using InstrumentItemPair = std::pair<s16, const nw::snd::internal::BankFile::Instrument*>;
     std::vector<InstrumentItemPair> instruments;
@@ -1741,6 +1752,8 @@ bool BankFile::doRead(const void* fileAddr)
         }
     );
 
+    LOG_SIZE("instruments", instruments.size());
+
     for (const InstrumentItemPair& pair : instruments)
     {
         const s16& programNo = pair.first;
@@ -1758,11 +1771,14 @@ bool BankFile::doRead(const void* fileAddr)
         mInstrumentList.pushBack(instrument);
     }
 
+    LOG_SIZE("mInstrumentList", mInstrumentList.size());
     return true;
 }
 
 u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
+    LOG_FUNC();
+    LOG_SIZE("getInstrumentList()", getInstrumentList().size());
     SEAD_ASSERT(mBank);
     SEAD_ASSERT(mWaveArchive);
 
@@ -1781,6 +1797,7 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     std::unordered_map<const WaveFile*, u32> waveIdIndexes;
     std::vector<WaveId> waveIds;
 
+    LOG_SIZE("getInstrumentList() iterating", getInstrumentList().size());
     for (const Item* instrumentItem : getInstrumentList())
     {
         SEAD_ASSERT(instrumentItem->getItemType() == Item::ItemType::BankFileInstrument);
@@ -2041,6 +2058,9 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
             }
         }
     }
+
+    LOG_SIZE("waveIds", waveIds.size());
+    LOG_SIZE("instruments (pre-write)", instruments.size());
 
     FileWriter writer(handle, stream);
     writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CBNK" : "FBNK", 1, mVersion);
@@ -2326,6 +2346,7 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     }
 
     u32 fileSize = writer.getPosition();
+    LOG_U32("fileSize", fileSize);
 
     writer.closeFile();
 

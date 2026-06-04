@@ -13,6 +13,8 @@
 
 #include <filedevice/seadFileDeviceMgr.h>
 
+#include <Debug.h>
+
 const char* WaveFile::sEncodingTypes[3] = {
     "Pcm8",
     "Pcm16",
@@ -108,6 +110,7 @@ const Item* WaveFile::validate(sead::BufferedSafeString& error) const
 
 void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam)
 {
+    LOG_FUNC();
     SEAD_ASSERT(adpcmInfo);
 
     adpcmInfo->coef[0]  = param.coef[0][0];
@@ -138,6 +141,7 @@ void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const 
 
 void FillAdpcmParam(snd::DspAdpcmParam* param, snd::internal::DspAdpcmLoopParam* loopParam, const ADPCMINFO& adpcmInfo)
 {
+    LOG_FUNC();
     SEAD_ASSERT(param);
     SEAD_ASSERT(loopParam);
 
@@ -169,6 +173,7 @@ void FillAdpcmParam(snd::DspAdpcmParam* param, snd::internal::DspAdpcmLoopParam*
 
 void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo)
 {
+    LOG_FUNC();
     SEAD_ASSERT(param);
 
     param->coef[0][0] = adpcmInfo.coef[0];
@@ -508,14 +513,27 @@ void WaveFile::drawUI()
 
 bool WaveFile::doRead(const void* fileAddr)
 {
+    LOG_FUNC();
+
     nw::snd::internal::WaveFileReader reader(fileAddr);
     if (!reader.IsAvailable())
     {
+        LOG_FMT("WaveFileReader not available");
         return false;
     }
 
     nw::snd::internal::WaveInfo waveInfo;
     reader.ReadWaveInfo(&waveInfo);
+
+    LOG_U32("endian", waveInfo.endian);
+    LOG_U32("encoding", reader.mInfoBlockBody->encoding);
+    LOG_U32("sampleRate", waveInfo.sampleRate);
+    LOG_U32("channelCount", waveInfo.channelCount);
+    LOG_BOOL("loopFlag", waveInfo.loopFlag);
+    LOG_U32("loopStartFrame", waveInfo.loopStartFrame);
+    LOG_U32("loopEndFrame", waveInfo.loopEndFrame);
+    LOG_U32("originalLoopStartFrame", waveInfo.originalLoopStartFrame);
+    LOG_U32("dataBlockSize", reader.mHeader->GetDataBlock()->header.size);
 
     mDataEndian = waveInfo.endian;
     mEncoding = static_cast<Encoding>(reader.mInfoBlockBody->encoding);
@@ -537,6 +555,9 @@ bool WaveFile::doRead(const void* fileAddr)
     }
 
     mSampleCount = mLoopEndFrame;
+
+    LOG_U32("originalDataSize", reader.mHeader->GetDataBlock()->header.size - 0x20);
+    LOG_U32("channelCount", mChannels.size());
 
     mUseOriginalData = true;
     mOriginalDataSize = reader.mHeader->GetDataBlock()->header.size - 0x20;
@@ -601,6 +622,16 @@ bool WaveFile::doRead(const void* fileAddr)
 
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
+    LOG_FUNC();
+    LOG_U32("encoding", (u32)mEncoding);
+    LOG_U32("sampleRate", mSampleRate);
+    LOG_U32("sampleCount", mSampleCount);
+    LOG_U32("channels", mChannels.size());
+    LOG_BOOL("isLoop", mIsLoop);
+    LOG_U32("version", mVersion);
+    LOG_U32("endian", mEndian);
+    LOG_BOOL("useOriginalData", mUseOriginalData);
+
     FileWriter writer(handle, stream);
     writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWAV" : "FWAV", 2, mVersion);
 
@@ -688,6 +719,9 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
 
         if (mUseOriginalData)
         {
+            LOG_STR("using original data for write");
+            LOG_U32("originalDataSize", mOriginalDataSize);
+
             for (u32 i = 0; i < mChannels.size(); i++)
             {
                 const Channel* channel = mChannels.nth(i);
@@ -703,7 +737,9 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         }
         else
         {
+            LOG_STR("encoding new data for write");
             u32 sampleBytes = mChannels.front()->mDataSizeMin;
+            LOG_U32("sampleBytes", sampleBytes);
 
             for (u32 i = 0; i < mChannels.size(); i++)
             {
@@ -769,6 +805,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
 
 bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
 {
+    LOG_FUNC();
     SEAD_ASSERT(out);
     out->isValid = false;
 
@@ -821,6 +858,8 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
 
     out->chunkSize = stream.readU32();
 
+    LOG_STR("RIFF header OK");
+
     out->format = stream.readU16();
     if (out->format != 1) // (1 = Pcm)
     {
@@ -840,6 +879,13 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
     out->blockAlign = stream.readU16();
 
     out->bitsPerSample = stream.readU16();
+
+    LOG_U16("format", out->format);
+    LOG_U16("numChannels", out->numChannels);
+    LOG_U32("sampleRate", out->sampleRate);
+    LOG_U32("byteRate", out->byteRate);
+    LOG_U16("blockAlign", out->blockAlign);
+    LOG_U16("bitsPerSample", out->bitsPerSample);
     if (out->bitsPerSample != 8 && out->bitsPerSample != 16)
     {
         PopupMgr::instance()->addPopup({ "Only Pcm8 and Pcm16 .wav files supported" });
@@ -870,8 +916,14 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
         return false;
     }
 
+    LOG_U32("sampleBytes", out->sampleBytes);
+    LOG_U32("dataStart", out->dataStart);
+
     out->sampleFormat = out->bitsPerSample == 8 ? snd::SampleFormat::PcmS8 : snd::SampleFormat::PcmS16;
     out->sampleCount = out->sampleBytes / out->numChannels / (out->bitsPerSample / 8);
+
+    LOG_U32("sampleCount", out->sampleCount);
+    LOG_STR("RIFF WAV parse complete");
 
     // TODO: Loop info ?
     out->isLoop = false;
@@ -885,6 +937,15 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
 
 bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
 {
+    LOG_FUNC();
+    LOG_STR("path");
+    LOG_STR(info.path.cstr());
+    LOG_U32("encoding", (u32)encoding);
+    LOG_U32("sampleRate", info.sampleRate);
+    LOG_U32("sampleCount", info.sampleCount);
+    LOG_U16("numChannels", info.numChannels);
+    LOG_U16("bitsPerSample", info.bitsPerSample);
+
     if (!info.isValid)
     {
         PopupMgr::instance()->addPopup({ "Invalid .wav info" });
@@ -977,6 +1038,8 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
         delete[] samples;
     }
 
+    LOG_U32("numChannels", info.numChannels);
+
     mDataEndian = info.endian;
     mEncoding = encoding;
     mSampleRate = info.sampleRate;
@@ -1029,6 +1092,14 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
 
 bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
 {
+    LOG_FUNC();
+    LOG_STR(path.cstr());
+    LOG_S32("channelIdx", channelIdx);
+    LOG_U32("sampleRate", mSampleRate);
+    LOG_U32("sampleCount", mSampleCount);
+    LOG_U32("encoding", (u32)mEncoding);
+    LOG_U32("channels", mChannels.size());
+
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);
 
@@ -1208,6 +1279,7 @@ bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)
 
 void WaveFile::buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel::SeekData* outSeekData, const Channel::SeekData* srcSeekData, u32 preserveSamples)
 {
+    LOG_FUNC();
     const u32 cSamplesPerBlock = 0x3800;
 
     SEAD_ASSERT(outSeekData);
@@ -1375,6 +1447,16 @@ void* WaveFile::convertChannel_(
     snd::DspAdpcmParam* outAdpcmParamStream, snd::internal::DspAdpcmLoopParam* outAdpcmLoopParamStream,
     Channel::SeekData* outSeekData)
 {
+    LOG_U32("from", (u32)from);
+    LOG_U32("to", (u32)to);
+    LOG_U32("sampleCount", sampleCount);
+    LOG_U32("targetSampleCount", targetSampleCount);
+    LOG_BOOL("isLoop", isLoop);
+    LOG_U32("loopStartFrame", loopStartFrame);
+    LOG_U32("loopEndFrame", loopEndFrame);
+    LOG_U32("loopStartFrameStream", loopStartFrameStream);
+    LOG_U32("loopEndFrameStream", loopEndFrameStream);
+
     if (from != Encoding::Pcm8 && from != Encoding::Pcm16 && from != Encoding::DspAdpcm)
     {
         SEAD_ASSERT_MSG(false, "Invalid source encoding");

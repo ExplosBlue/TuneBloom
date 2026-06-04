@@ -15,8 +15,13 @@
 #include <filedevice/seadFileDevice.h>
 #include <stream/seadFileDeviceStream.h>
 
+#include <Debug.h>
+
 bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format)
 {
+    LOG_FUNC();
+    LOG_FMT("format=%s, version=0x%04X, endian=%d", format == ArchiveFormat::BCSAR ? "CSTM" : "FSTM", version, endian);
+
     sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(endian);
 
@@ -93,12 +98,25 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     bool isLoop = mainWave.getIsLoop();
     bool isDspAdpcm = mainWave.getEncoding() == WaveFile::Encoding::DspAdpcm;
 
+    LOG_U32("channelNum", channelNum);
+    LOG_U32("trackNum", trackNum);
+    LOG_U32("sampleRate", mainWave.getSampleRate());
+    LOG_U32("loopStartFrame", loopStartFrame);
+    LOG_U32("loopEndFrame", loopEndFrame);
+    LOG_BOOL("isLoop", isLoop);
+    LOG_BOOL("isDspAdpcm", isDspAdpcm);
+    LOG_U32("sampleFormat", (u32)sampleFormat);
+
     u32 sampleCount = loopEndFrame;
     u32 samplePerBlock = nw::snd::internal::Util::GetSampleByByte(cDefaultBytesPerBlock, sampleFormat);
-    u32 blockNum = sampleCount / samplePerBlock + (sampleCount % samplePerBlock != 0); // Divide sampleCount by samplePerBlock and ceil
-
+    u32 blockNum = sampleCount / samplePerBlock + (sampleCount % samplePerBlock != 0);
     u32 lastBlockSamples = sampleCount - ((blockNum - 1) * samplePerBlock);
     u32 lastBlockBytes = nw::snd::internal::Util::GetByteBySample(lastBlockSamples, sampleFormat);
+
+    LOG_U32("sampleCount", sampleCount);
+    LOG_U32("blockNum", blockNum);
+    LOG_U32("lastBlockSamples", lastBlockSamples);
+    LOG_U32("lastBlockBytes", lastBlockBytes);
     u32 lastBlockBytesPadded = sead::Mathu::roundUpPow2(lastBlockBytes, 0x20);
 
     {
@@ -193,8 +211,11 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     FileWriter writer(&handle, &stream);
     writer.openFile(format == ArchiveFormat::BCSAR ? "CSTM" : "FSTM", fileBlockCount, version);
 
+    LOG_FMT("File opened: magic=%s, blockCount=%u, version=0x%04X", format == ArchiveFormat::BCSAR ? "CSTM" : "FSTM", fileBlockCount, version);
+
     //? Info Block
     {
+        LOG_FMT("Writing InfoBlock");
         writer.openBlock(nw::snd::internal::ElementType_StreamSoundFile_InfoBlock, "INFO");
 
         writer.openReference("StreamSoundInfoRef");
@@ -351,6 +372,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     //? Seek Block
     if (hasSeekBlock)
     {
+        LOG_FMT("Writing SeekBlock, blockNum=%u, channelNum=%u", blockNum, channelNum);
         writer.openBlock(nw::snd::internal::ElementType_StreamSoundFile_SeekBlock, "SEEK");
 
         for (u32 blockNo = 0; blockNo < blockNum; blockNo++)
@@ -374,6 +396,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     //? Region Block
     if (hasRegionBlock)
     {
+        LOG_FMT("Writing RegionBlock");
         writer.openBlock(nw::snd::internal::ElementType_StreamSoundFile_RegionBlock, "REGN");
 
         writer.closeReference("RegionDataRef", nw::snd::internal::ElementType_General_ByteStream);
@@ -386,10 +409,13 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
 
     //? Data Block
     {
+        LOG_FMT("Writing DataBlock");
         writer.openBlock(nw::snd::internal::ElementType_StreamSoundFile_DataBlock, "DATA");
 
         u32 dataBlockPos = writer.getPosition();
         writer.align(0x20);
+
+        LOG_U32("dataBlockAlignedOffset", dataBlockPos);
 
         writer.closeReference("SampleDataRef", nw::snd::internal::ElementType_General_ByteStream, writer.getPosition() - dataBlockPos);
 
@@ -428,10 +454,13 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
 
 bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
 {
+    LOG_FUNC();
+
     Sound::StreamSoundInfo::Track::List& tracks = sound->getStreamSoundInfo().getTrackList();
 
     if (tracks.isEmpty())
     {
+        LOG("ReadStreamWaves: tracks is empty");
         return false;
     }
 
@@ -464,14 +493,28 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
 
     if (!reader.IsAvailable())
     {
+        LOG("ReadStreamWaves: reader not available");
         return false;
     }
 
     nw::snd::internal::StreamSoundFile::StreamSoundInfo streamSoundInfo;
     if (!reader.ReadStreamSoundInfo(&streamSoundInfo))
     {
+        LOG("ReadStreamWaves: failed to read StreamSoundInfo");
         return false;
     }
+
+    LOG_U32("encodeMethod", streamSoundInfo.encodeMethod);
+    LOG_BOOL("isLoop", streamSoundInfo.isLoop);
+    LOG_U32("channelCount", streamSoundInfo.channelCount);
+    LOG_U32("sampleRate", streamSoundInfo.sampleRate);
+    LOG_U32("blockCount", streamSoundInfo.blockCount);
+    LOG_U32("oneBlockBytes", streamSoundInfo.oneBlockBytes);
+    LOG_U32("lastBlockPaddedBytes", streamSoundInfo.lastBlockPaddedBytes);
+    LOG_U32("frameCount", streamSoundInfo.frameCount);
+    LOG_U32("loopStart", streamSoundInfo.loopStart);
+    LOG_U32("originalLoopStart", streamSoundInfo.originalLoopStart);
+    LOG_U32("originalLoopEnd", streamSoundInfo.originalLoopEnd);
 
     bool channelBuffersUsed[cStrmChannelNum];
     u8* channelBuffers[cStrmChannelNum];
@@ -489,6 +532,10 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
     {
         channelBuffers[i] = new u8[channelSize];
     }
+
+    LOG_U32("sampleDataOffset", reader.GetSampleDataOffset());
+    LOG_U32("seekBlockOffset", reader.GetSeekBlockOffset());
+    LOG_U32("channelSize", channelSize);
 
     const u8* sampleData = (u8*)strmFile + reader.GetSampleDataOffset();
 

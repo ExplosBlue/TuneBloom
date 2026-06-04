@@ -1,5 +1,7 @@
 #include <bfsar/BfgrpFile.h>
 
+#include <Debug.h>
+
 #include <bfsar/Bank.h>
 #include <bfsar/BankFile.h>
 #include <bfsar/BfwarFile.h>
@@ -17,6 +19,8 @@
 
 u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
+    LOG_FUNC();
+    LOG_U32("mItemFiles->size()", mItemFiles->size());
     SEAD_ASSERT(mGroup);
     SEAD_ASSERT(mItemFiles);
     SEAD_ASSERT(mFiles);
@@ -33,6 +37,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
     //? Info Block
     {
+        LOG_FMT("Writing INFO block with %u items", mItemFiles->size());
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoBlock, "INFO");
 
         writer.openReferenceTable("ItemInfoTable", mItemFiles->size());
@@ -62,6 +67,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
     //? File Block
     {
+        LOG_FMT("Writing FILE block, outputType=%d", (int)mGroup->getOutputType());
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_FileBlock, "FILE");
 
         writer.align(0x20);
@@ -199,6 +205,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                     innerFile->write(handle, stream, mEndian, file.id == mItemFiles->size() - 1);
                 }
                 u32 size = writer.getPosition() - pos;
+                LOG_FMT("Embedded file %u at pos=%u size=%u", file.id, pos, size);
 
                 mEmbeddedFileInfos[file.id] = {pos, size};
 
@@ -223,9 +230,9 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
     //? InfoEx Block
     {
-        writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoExBlock, "INFX");
-
         u32 itemInfoCount = mGroup->getItemInfoList().size();
+        LOG_FMT("Writing INFX block with %u itemInfo entries", itemInfoCount);
+        writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoExBlock, "INFX");
         // if (sBfsar.getVersion() > cIncludeDisabledItemsVersion)
         // {
         //     itemInfoCount = 0;
@@ -342,6 +349,8 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     }
 
     writer.closeFile();
+
+    LOG_U32("fileSize", fileSize);
 
     mGroup = nullptr;
     mItemFiles = nullptr;

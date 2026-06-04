@@ -4,8 +4,13 @@
 
 #include <math/seadMathCalcCommon.h>
 
+#include <Debug.h>
+
 void FileWriter::openFile(const sead::SafeString& magic, u32 numBlocks, u32 version)
 {
+    LOG_FUNC();
+    LOG_FMT("magic=\"%.*s\" numBlocks=%u version=%u", magic.calcLength(), magic.cstr(), numBlocks, version);
+
     mBlocks.allocBuffer(numBlocks);
 
     mHeaderPos = getPosition();
@@ -45,6 +50,8 @@ void FileWriter::openFile(const sead::SafeString& magic, u32 numBlocks, u32 vers
 
 void FileWriter::closeFile()
 {
+    LOG_FUNC();
+
     if (mBlockOpen)
     {
         SEAD_ASSERT_MSG(false, "tried to close file with open block");
@@ -87,6 +94,8 @@ void FileWriter::closeFile()
         size += block->size;
     }
 
+    LOG_FMT("mHeaderPos=%u totalSize=%u", mHeaderPos, size);
+
     seek(mHeaderPos + offsetof(nw::ut::BinaryFileHeader, fileSize));
     mStream->writeU32(size);
 
@@ -119,6 +128,9 @@ void FileWriter::closeFile()
 
 void FileWriter::openBlock(u16 typeId, const sead::SafeString& magic)
 {
+    LOG_FUNC();
+    LOG_FMT("typeId=0x%04X magic=\"%.*s\"", typeId, magic.calcLength(), magic.cstr());
+
     if (mBlockOpen)
     {
         SEAD_ASSERT_MSG(false, "block open/close mismatch");
@@ -132,6 +144,7 @@ void FileWriter::openBlock(u16 typeId, const sead::SafeString& magic)
     block->size = 0;
 
     mBlockPos = getPosition();
+    LOG_FMT("mBlockPos=%u", mBlockPos);
 
     mOffsetBase = mBlockPos + sizeof(nw::ut::BinaryBlockHeader);
 
@@ -144,6 +157,8 @@ void FileWriter::openBlock(u16 typeId, const sead::SafeString& magic)
 
 void FileWriter::closeBlock()
 {
+    LOG_FUNC();
+
     if (!mBlockOpen)
     {
         SEAD_ASSERT_MSG(false, "block open/close mismatch");
@@ -157,6 +172,7 @@ void FileWriter::closeBlock()
     }
 
     u32 blockSize = getPosition() - mBlockPos;
+    LOG_FMT("mBlockPos=%u blockSize=%u", mBlockPos, blockSize);
 
     seek(mBlockPos + offsetof(nw::ut::BinaryBlockHeader, size));
     mStream->writeU32(blockSize);
@@ -173,6 +189,9 @@ void FileWriter::closeBlock()
 
 void FileWriter::nullBlock(u16 typeId)
 {
+    LOG_FUNC();
+    LOG_U16("typeId", typeId);
+
     Block* block = mBlocks.birthBack();
     block->type = typeId;
     block->size = 0;
@@ -180,6 +199,9 @@ void FileWriter::nullBlock(u16 typeId)
 
 void FileWriter::align(u32 alignment)
 {
+    LOG_FUNC();
+    LOG_U32("alignment", alignment);
+
     if (!mBlockOpen)
     {
         SEAD_ASSERT_MSG(false, "block not open");
@@ -194,6 +216,9 @@ void FileWriter::align(u32 alignment)
 
 void FileWriter::openReference(const sead::SafeString& name)
 {
+    LOG_FUNC();
+    LOG_STR(name.cstr());
+
     if (mReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference already exists");
@@ -201,6 +226,7 @@ void FileWriter::openReference(const sead::SafeString& name)
     }
 
     u32 pos = getPosition();
+    LOG_FMT("pos=%u mOffsetBase=%u mBlockPos=%u", pos, mOffsetBase, mBlockPos);
 
     {
         nw::snd::internal::Util::Reference ref;
@@ -214,6 +240,9 @@ void FileWriter::openReference(const sead::SafeString& name)
 
 void FileWriter::closeReference(const sead::SafeString& name, u16 typeId)
 {
+    LOG_FUNC();
+    LOG_STR(name.cstr());
+
     if (!mReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference not found");
@@ -223,6 +252,7 @@ void FileWriter::closeReference(const sead::SafeString& name, u16 typeId)
     const Reference& ref = mReferences[name.cstr()];
 
     s32 offset = getPosition() - ref.offset - mBlockPos;
+    LOG_FMT("typeId=0x%04X offset=%d ref.pos=%u ref.offset=%u", typeId, offset, ref.pos, ref.offset);
 
     u32 prevPos = getPosition();
     seek(ref.pos);
@@ -238,6 +268,9 @@ void FileWriter::closeReference(const sead::SafeString& name, u16 typeId)
 
 void FileWriter::closeReference(const sead::SafeString& name, u16 typeId, s32 offset)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" typeId=0x%04X offset=%d", name.cstr(), typeId, offset);
+
     if (!mReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference not found");
@@ -260,6 +293,9 @@ void FileWriter::closeReference(const sead::SafeString& name, u16 typeId, s32 of
 
 void FileWriter::closeNullReference(const sead::SafeString& name)
 {
+    LOG_FUNC();
+    LOG_STR(name.cstr());
+
     if (!mReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference not found");
@@ -284,6 +320,9 @@ void FileWriter::closeNullReference(const sead::SafeString& name)
 
 void FileWriter::openSizedReference(const sead::SafeString& name)
 {
+    LOG_FUNC();
+    LOG_STR(name.cstr());
+
     if (mSizedReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference already exists");
@@ -291,6 +330,7 @@ void FileWriter::openSizedReference(const sead::SafeString& name)
     }
 
     u32 pos = getPosition();
+    LOG_FMT("pos=%u mOffsetBase=%u mBlockPos=%u", pos, mOffsetBase, mBlockPos);
 
     {
         nw::snd::internal::Util::ReferenceWithSize ref;
@@ -304,6 +344,9 @@ void FileWriter::openSizedReference(const sead::SafeString& name)
 
 void FileWriter::closeSizedReference(const sead::SafeString& name, u16 typeId, u32 size)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" typeId=0x%04X size=%u", name.cstr(), typeId, size);
+
     if (!mSizedReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference not found");
@@ -313,6 +356,7 @@ void FileWriter::closeSizedReference(const sead::SafeString& name, u16 typeId, u
     const Reference& ref = mSizedReferences[name.cstr()];
 
     s32 offset = getPosition() - ref.offset - mBlockPos - size;
+    LOG_FMT("computed offset=%d ref.pos=%u ref.offset=%u", offset, ref.pos, ref.offset);
 
     u32 prevPos = getPosition();
     seek(ref.pos);
@@ -329,6 +373,9 @@ void FileWriter::closeSizedReference(const sead::SafeString& name, u16 typeId, u
 
 void FileWriter::closeSizedReference(const sead::SafeString& name, u16 typeId, s32 offset, u32 size)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" typeId=0x%04X offset=%d size=%u", name.cstr(), typeId, offset, size);
+
     if (!mSizedReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference not found");
@@ -352,6 +399,9 @@ void FileWriter::closeSizedReference(const sead::SafeString& name, u16 typeId, s
 
 void FileWriter::closeNullSizedReference(const sead::SafeString& name)
 {
+    LOG_FUNC();
+    LOG_STR(name.cstr());
+
     if (!mSizedReferences.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference not found");
@@ -377,6 +427,9 @@ void FileWriter::closeNullSizedReference(const sead::SafeString& name)
 
 void FileWriter::pushOffsetBase()
 {
+    LOG_FUNC();
+    LOG_FMT("mOffsetBase=%u -> new=%u", mOffsetBase, getPosition());
+
     mOffsetBases.push(mOffsetBase);
 
     mOffsetBase = getPosition();
@@ -384,12 +437,18 @@ void FileWriter::pushOffsetBase()
 
 void FileWriter::popOffsetBase()
 {
+    LOG_FUNC();
+    LOG_FMT("restored mOffsetBase=%u", mOffsetBases.top());
+
     mOffsetBase = mOffsetBases.top();
     mOffsetBases.pop();
 }
 
 void FileWriter::openReferenceTable(const sead::SafeString& name, u32 count)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" count=%u", name.cstr(), count);
+
     if (mReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference table already exists");
@@ -397,6 +456,7 @@ void FileWriter::openReferenceTable(const sead::SafeString& name, u32 count)
     }
 
     u32 pos = getPosition();
+    LOG_FMT("pos=%u mOffsetBase=%u mBlockPos=%u", pos, mOffsetBase, mBlockPos);
 
     {
         mStream->writeU32(count);
@@ -415,6 +475,9 @@ void FileWriter::openReferenceTable(const sead::SafeString& name, u32 count)
 
 void FileWriter::closeReferenceTable(const sead::SafeString& name)
 {
+    LOG_FUNC();
+    LOG_STR(name.cstr());
+
     if (!mReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference table not found");
@@ -422,6 +485,7 @@ void FileWriter::closeReferenceTable(const sead::SafeString& name)
     }
 
     const ReferenceTable& table = mReferenceTables[name.cstr()];
+    LOG_FMT("count=%d pos=%u", (s32)table.references.size(), table.pos);
 
     u32 prevPos = getPosition();
     seek(table.pos + offsetof(nw::snd::internal::Util::ReferenceTable, item));
@@ -442,6 +506,9 @@ void FileWriter::closeReferenceTable(const sead::SafeString& name)
 
 void FileWriter::addReferenceTableReference(const sead::SafeString& name, u16 typeId)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" typeId=0x%04X", name.cstr(), typeId);
+
     if (!mReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference table not found");
@@ -450,11 +517,17 @@ void FileWriter::addReferenceTableReference(const sead::SafeString& name, u16 ty
 
     ReferenceTable& table = mReferenceTables[name.cstr()];
 
-    table.add(typeId, getPosition() - table.offset - mBlockPos);
+    s32 offset = getPosition() - table.offset - mBlockPos;
+    LOG_FMT("offset=%d table.offset=%u mBlockPos=%u", offset, table.offset, mBlockPos);
+
+    table.add(typeId, offset);
 }
 
 void FileWriter::addReferenceTableNullReference(const sead::SafeString& name, u16 typeId)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" typeId=0x%04X", name.cstr(), typeId);
+
     if (!mReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "reference table not found");
@@ -468,6 +541,9 @@ void FileWriter::addReferenceTableNullReference(const sead::SafeString& name, u1
 
 void FileWriter::openSizedReferenceTable(const sead::SafeString& name, u32 count)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" count=%u", name.cstr(), count);
+
     if (mSizedReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference table already exists");
@@ -475,6 +551,7 @@ void FileWriter::openSizedReferenceTable(const sead::SafeString& name, u32 count
     }
 
     u32 pos = getPosition();
+    LOG_FMT("pos=%u mOffsetBase=%u mBlockPos=%u", pos, mOffsetBase, mBlockPos);
 
     {
         mStream->writeU32(count);
@@ -493,6 +570,9 @@ void FileWriter::openSizedReferenceTable(const sead::SafeString& name, u32 count
 
 void FileWriter::closeSizedReferenceTable(const sead::SafeString& name)
 {
+    LOG_FUNC();
+    LOG_STR(name.cstr());
+
     if (!mSizedReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference table not found");
@@ -500,6 +580,7 @@ void FileWriter::closeSizedReferenceTable(const sead::SafeString& name)
     }
 
     const ReferenceTable& table = mSizedReferenceTables[name.cstr()];
+    LOG_FMT("count=%d pos=%u", (s32)table.references.size(), table.pos);
 
     u32 prevPos = getPosition();
     seek(table.pos + offsetof(nw::snd::internal::Util::ReferenceWithSizeTable, item));
@@ -521,6 +602,9 @@ void FileWriter::closeSizedReferenceTable(const sead::SafeString& name)
 
 void FileWriter::addSizedReferenceTableReference(const sead::SafeString& name, u16 typeId, u32 size)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" typeId=0x%04X size=%u", name.cstr(), typeId, size);
+
     if (!mSizedReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference table not found");
@@ -529,11 +613,17 @@ void FileWriter::addSizedReferenceTableReference(const sead::SafeString& name, u
 
     ReferenceTable& table = mSizedReferenceTables[name.cstr()];
 
-    table.add(typeId, getPosition() - table.offset - mBlockPos, size);
+    s32 offset = getPosition() - table.offset - mBlockPos;
+    LOG_FMT("offset=%d table.offset=%u mBlockPos=%u", offset, table.offset, mBlockPos);
+
+    table.add(typeId, offset, size);
 }
 
 void FileWriter::setSizedReferenceTableReferenceSize(const sead::SafeString& name, u32 size)
 {
+    LOG_FUNC();
+    LOG_FMT("name=\"%s\" size=%u", name.cstr(), size);
+
     if (!mSizedReferenceTables.contains(name.cstr()))
     {
         SEAD_ASSERT_MSG(false, "sized reference table not found");

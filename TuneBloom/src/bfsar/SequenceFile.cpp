@@ -620,6 +620,8 @@ void SequenceFile::compile_(bool setCursorPos)
     {
         LOG_FMT("--- sequence code for %s ---\n%s\n--- end sequence code ---", getNameOrNull().cstr(), mSeqText->cstr());
     }
+    mVersion = sBfsar.getVersionForBfseq();
+    mEndian = sBfsar.getEndian();
     mIsValid = false;
     mLabelsStartInfo.clear();
     mLabels.clear();

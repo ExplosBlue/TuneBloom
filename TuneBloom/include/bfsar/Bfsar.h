@@ -265,6 +265,9 @@ public:
 
     u32 getVersionForBfbnk() const
     {
+        if (mFormat == ArchiveFormat::BCSAR)
+            return 0x01000100;      // 1.0.1.0 - CTR SDK current version
+
         return 0x00010000;
     }
 
@@ -288,10 +291,7 @@ public:
     {
         if (mFormat == ArchiveFormat::BCSAR)
         {
-            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
-                return 0x01010000;  // 1.1.0.0 - NW4C current
-
-            return 0x01000000;      // 1.0.0.0 - minimum supported
+            return 0x01000000;      // 1.0.0.0 - CTR SDK only supports this version
         }
         else
         {
@@ -306,10 +306,8 @@ public:
     {
         if (mFormat == ArchiveFormat::BCSAR)
         {
-            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
-                return 0x02010100;  // 2.1.1.0 - NW4C current, includes original loop
-            else if (getDecodedMajor() >= 2)
-                return 0x02010000;  // 2.1.0.0 - base version with track info
+            if (getDecodedMajor() >= 2)
+                return 0x02010000;  // 2.1.0.0 - CTR SDK current version (max supported)
 
             return 0x02000000;      // 2.0.0.0 - minimum supported
         }
@@ -328,11 +326,7 @@ public:
     {
         if (mFormat == ArchiveFormat::BCSAR)
         {
-            // NW4C format: 0xMMmmμμbb (major/minor/micro/bugfix)
-            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
-                return 0x02010000;  // 2.1.0.0 - track info available, no original loop
-
-            return 0x02000000;      // 2.0.0.0 - base version
+            return 0x02000000;      // 2.0.0.0 - CTR SDK only supports this version
         }
         else
         {

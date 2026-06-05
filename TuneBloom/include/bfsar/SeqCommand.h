@@ -1515,8 +1515,11 @@ public:
 
         ret.push_back(MmlCommand::MML_ALLOC_TRACK);
 
-        const auto& argBytes = mArg->encode();
-        ret.insert(ret.end(), argBytes.begin(), argBytes.end());
+        SeqArg16* arg = sead::DynamicCast<SeqArg16>(mArg);
+        SEAD_ASSERT(arg);
+        u16 value = arg->mValue;
+        ret.push_back((u8)(value >> 8));
+        ret.push_back((u8)value);
 
         return ret;
     }

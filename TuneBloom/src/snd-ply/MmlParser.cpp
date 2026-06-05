@@ -1190,7 +1190,8 @@ u32 MmlParser::ParseAllocTrack( const void* baseAddress, u32 seqOffset, u32* all
     else
     {
         ++ptr;
-        u32 tracks = MmlParser::Read16(&ptr);
+        u32 tracks = ReadByte(&ptr);
+        tracks = (tracks << 8) | ReadByte(&ptr);
         tracks |= (1 << 0);
         *allocTrack = tracks;
         return seqOffset + 3;

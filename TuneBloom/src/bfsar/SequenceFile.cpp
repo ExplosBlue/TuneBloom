@@ -345,6 +345,8 @@ u32 SequenceFile::getLabelAllocTracks(const sead::SafeString& label) const
 
 std::string SequenceFile::getLabelFromParsedOffset(u32 offset, u32 allocTrackFlags) const
 {
+    LOG_FMT("getLabelFromParsedOffset: look for offset=%u allocTrackFlags=0x%x in %s (%zu labels)",
+        offset, allocTrackFlags, mName.cstr(), mLabelsStartInfo.size());
     for (auto pair : mLabelsStartInfo)
     {
         const std::string& label = pair.first;
@@ -355,12 +357,19 @@ std::string SequenceFile::getLabelFromParsedOffset(u32 offset, u32 allocTrackFla
 
         const LabelStartInfo& startInfo = pair.second;
 
-        if (offset == startInfo.parsedOffset && allocTrackFlags == startInfo.allocTrackFlags)
+        if ((offset == startInfo.parsedOffset || offset == startInfo.offset) && allocTrackFlags == startInfo.allocTrackFlags)
         {
+            LOG_FMT("  MATCH: '%s' offset=%u parsedOffset=%u allocTrackFlags=0x%x",
+                label.c_str(), startInfo.offset, startInfo.parsedOffset, startInfo.allocTrackFlags);
             return pair.first;
         }
+        LOG_FMT("  CHECK '%s': offset=%u parsedOffset=%u allocTrackFlags=0x%x (match_off=%d match_flags=%d)",
+            label.c_str(), startInfo.offset, startInfo.parsedOffset, startInfo.allocTrackFlags,
+            (offset == startInfo.parsedOffset || offset == startInfo.offset),
+            allocTrackFlags == startInfo.allocTrackFlags);
     }
 
+    LOG_FMT("  NO MATCH found");
     return "";
 }
 
@@ -477,6 +486,16 @@ bool SequenceFile::doRead(const void* fileAddr)
     u32 parsedOffset = MmlParser::ParseAllocTrack(reader.GetSequenceData(), offset, &allocTrackFlags);
 
     mLabelsStartInfo[""] = { offset, parsedOffset, allocTrackFlags };
+
+    if (mName.startsWith("SE_DEMO_OP_LOGO_LAND") || mName.startsWith("GUESS"))
+    {
+        LOG_FMT("CSEQ %s labels:", mName.cstr());
+        for (const auto& [lbl, info] : mLabelsStartInfo)
+        {
+            LOG_FMT("  '%s': offset=%u parsedOffset=%u allocTrackFlags=0x%x",
+                lbl.empty() ? "(empty)" : lbl.c_str(), info.offset, info.parsedOffset, info.allocTrackFlags);
+        }
+    }
 
     mOffsetToLine = offsetToLine;
 

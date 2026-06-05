@@ -379,9 +379,12 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
             switch (cmd)
             {
             case MmlCommand::MML_ALLOC_TRACK:
-                arg = nw__snd__internal__driver__MmlParser__ReadArg(&trackData, MmlParser::SEQ_ARG_S16);
+            {
+                u16 tracks = (MmlParser::ReadByte(&trackData) << 8) | MmlParser::ReadByte(&trackData);
+                arg = new SeqArg16(tracks, false);
                 cmdInst = new MmlCommandAllocTrack(arg, conditional);
                 break;
+            }
 
             case MmlCommand::MML_FIN:
                 cmdInst = new MmlCommandFin(conditional);

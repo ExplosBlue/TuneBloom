@@ -190,7 +190,7 @@ public:
                 return 0;
 
             const SequenceFile* seqFile = static_cast<const SequenceFile*>(item);
-            return seqFile->getLabelOffset(mStartLabel);
+            return seqFile->getLabelOffset(mStartLabel, false);
         }
 
         // void setStartOffset(u32 startOffset)

@@ -1747,8 +1747,12 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             sound->mSequenceSoundInfo.mEnableStartOffset = seqSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::SEQ_SOUND_INFO_START_OFFSET) != 0;
             if (sound->mSequenceSoundInfo.mEnableStartOffset && seqFile)
             {
-                std::string label = seqFile->getLabelFromParsedOffset(seqSoundInfo.GetStartOffset(), seqSoundInfo.allocateTrackFlags);
+                u32 startOff = seqSoundInfo.GetStartOffset();
+                u32 allocFlags = seqSoundInfo.allocateTrackFlags;
+                std::string label = seqFile->getLabelFromParsedOffset(startOff, allocFlags);
                 sound->mSequenceSoundInfo.mStartLabel.copy(label.c_str());
+                LOG_FMT("Sound %s: startOffset=%u allocTrackFlags=0x%x label='%s'",
+                    sound->mName.cstr(), startOff, allocFlags, label.c_str());
             }
 
             sound->mSequenceSoundInfo.mEnablePriority = seqSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::SEQ_SOUND_INFO_PRIORITY) != 0;

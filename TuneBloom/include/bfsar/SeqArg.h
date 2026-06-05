@@ -102,9 +102,6 @@ public:
 
     std::vector<u8> encode() const override
     {
-        if (sFileEndian == sead::Endian::eLittle)
-            return { (u8)mValue, (u8)(mValue >> 8) };
-
         return { (u8)(mValue >> 8), (u8)mValue };
     }
 
@@ -254,9 +251,6 @@ public:
 
     std::vector<u8> encode() const override
     {
-        if (sFileEndian == sead::Endian::eLittle)
-            return { (u8)mMin, (u8)(mMin >> 8), (u8)mMax, (u8)(mMax >> 8) };
-
         return { (u8)(mMin >> 8), (u8)mMin, (u8)(mMax >> 8), (u8)mMax };
     }
 

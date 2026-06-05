@@ -46,13 +46,15 @@ public:
     u32 GetChannelCount() const
     {
         SEAD_ASSERT(mInfoBlockBody);
-        return mInfoBlockBody->GetChannelInfoTable()->GetChannelCount();
+        const auto* table = mInfoBlockBody->GetChannelInfoTable();
+        return table ? table->GetChannelCount() : 0;
     }
 
     u32 GetTrackCount() const
     {
         SEAD_ASSERT(mInfoBlockBody);
-        return mInfoBlockBody->GetTrackInfoTable()->GetTrackCount();
+        const auto* table = mInfoBlockBody->GetTrackInfoTable();
+        return table ? table->GetTrackCount() : 0;
     }
 
     u32 GetSeekBlockOffset() const

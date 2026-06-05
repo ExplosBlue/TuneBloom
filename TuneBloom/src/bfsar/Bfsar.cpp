@@ -1766,10 +1766,13 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         {
             const nw::snd::internal::SoundArchiveFile::StreamSoundInfo& strmSoundInfo = soundInfo->GetStreamSoundInfo();
 
-            const nw::snd::internal::SoundArchiveFile::ExternalFileInfo* extFileInfo = soundArchive.detail_GetFileInfo(soundInfo->fileId)->GetExternalFileInfo();
-            SEAD_ASSERT(extFileInfo);
-
-            sound->mStreamSoundInfo.mPath = extFileInfo->filePath;
+            const nw::snd::internal::SoundArchiveFile::FileInfo* fileInfo = soundArchive.detail_GetFileInfo(soundInfo->fileId);
+            if (fileInfo)
+            {
+                const nw::snd::internal::SoundArchiveFile::ExternalFileInfo* extFileInfo = fileInfo->GetExternalFileInfo();
+                if (extFileInfo)
+                    sound->mStreamSoundInfo.mPath = extFileInfo->filePath;
+            }
             bool validPath = !sound->mStreamSoundInfo.mPath.isEmpty();
             if (!validPath)
             {
@@ -1779,12 +1782,13 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
             //sound->mStreamSoundInfo.mAllocateTrackFlags = strmSoundInfo.allocateTrackFlags;
             sound->mStreamSoundInfo.mAllocateChannelCount = strmSoundInfo.allocateChannelCount;
 
-            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-            SEAD_ASSERT(device);
+            sead::FileDevice* device = nullptr;
+            if (sead::FileDeviceMgr::instance() != nullptr)
+                device = sead::FileDeviceMgr::instance()->findDevice("native");
 
             u8* strmFile = nullptr;
             bool validStrmFile = false;
-            if (validPath)
+            if (validPath && device)
             {
                 sead::FixedSafeString<512> dir;
                 if (sead::Path::getDirectoryName(&dir, getFilePath()))

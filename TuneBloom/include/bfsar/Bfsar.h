@@ -105,24 +105,47 @@ public:
         return (mVersion >> 8) & 0xFF;
     }
 
+    u32 getDecodedPatch() const
+    {
+        return mVersion & 0xFF;
+    }
+
+    bool isVersionOrLater(u32 major, u32 minor, u32 patch) const
+    {
+        if (getDecodedMajor() > major) return true;
+        if (getDecodedMajor() < major) return false;
+        if (getDecodedMinor() > minor) return true;
+        if (getDecodedMinor() < minor) return false;
+        return getDecodedPatch() >= patch;
+    }
+
     bool isStreamTrackInfoAvailable() const
     {
-        return getDecodedMajor() >= 2;
+        return isVersionOrLater(2, 0, 0);
     }
 
     bool isStreamSendAvailable() const
     {
-        return getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1);
+        if (mFormat == ArchiveFormat::BCSAR)
+            return isVersionOrLater(2, 3, 1);
+
+        return isVersionOrLater(2, 1, 0);
     }
 
     bool isFilterSupportedVersion() const
     {
-        return getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1);
+        if (mFormat == ArchiveFormat::BCSAR)
+            return isVersionOrLater(2, 3, 1);
+
+        return isVersionOrLater(2, 1, 0);
     }
 
     bool isStreamPrefetchAvailable() const
     {
-        return getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2);
+        if (mFormat == ArchiveFormat::BCSAR)
+            return isVersionOrLater(2, 3, 2);
+
+        return isVersionOrLater(2, 2, 0);
     }
 
     bool isIncludeStringTable() const

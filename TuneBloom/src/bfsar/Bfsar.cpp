@@ -647,6 +647,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
         sequence->mEnableName = true;
         sequence->mName = "Sequence";
 
+        sequence->setFormat(mFormat);
+
         PopupMgr::instance()->setCurrentProcessItem(sequence);
         if (!sequence->read(seqFile))
         {

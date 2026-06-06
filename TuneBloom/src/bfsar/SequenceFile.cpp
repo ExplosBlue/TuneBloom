@@ -634,6 +634,7 @@ std::vector<std::string> split(std::string s, std::string delimiter)
 
 void SequenceFile::compile_(bool setCursorPos)
 {
+    MmlParser::sSeqParamEndian = getSeqParamEndian();
     LOG_FMT("%s: compiling...", getNameOrNull().cstr());
     if (mSeqText)
     {

@@ -8,6 +8,7 @@
 #include <heap/seadHeapMgr.h>
 
 #include <snd/snd_SequenceSoundFileReader.h>
+#include <snd/ut/res/ut_ResTypes.h>
 
 #include <unordered_map>
 
@@ -34,6 +35,14 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     const u8* seqDataEnd = (u8*)seqDataBlockHeader + seqDataBlockHeader->size;
 
     const u8* trackPtr = (const u8*)seqData;
+
+    // Set the correct endianness for sequence parameter values:
+    // For 'C' format (CSEQ), parameter endianness is OPPOSITE of the file header BOM.
+    // For 'F' format (FSEQ), parameter endianness MATCHES the file header BOM.
+    if (sead::MemUtil::compare(seqFile, "CSEQ", 4) == 0)
+        MmlParser::sSeqParamEndian = sFileEndian == sead::Endian::eLittle ? sead::Endian::eBig : sead::Endian::eLittle;
+    else
+        MmlParser::sSeqParamEndian = sFileEndian;
 
     std::map<u32, MmlCommandBase*> commands;
     while (true)

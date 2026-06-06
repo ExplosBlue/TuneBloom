@@ -80,6 +80,21 @@ public:
         return mFormat;
     }
 
+    sead::Endian::Types getEndian() const
+    {
+        return mEndian;
+    }
+
+    // Returns the endianness of multi-byte parameter values within sequence data.
+    // For 'C' format archives (BCSAR), parameter endianness is the OPPOSITE of
+    // the file header BOM; for 'F' format (BFSAR), they MATCH.
+    sead::Endian::Types getSeqParamEndian() const
+    {
+        if (mFormat == ArchiveFormat::BCSAR)
+            return mEndian == sead::Endian::eLittle ? sead::Endian::eBig : sead::Endian::eLittle;
+        return mEndian;
+    }
+
     void setFormat(ArchiveFormat format) const
     {
         mFormat = format;

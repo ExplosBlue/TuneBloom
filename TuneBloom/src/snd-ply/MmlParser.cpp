@@ -1,6 +1,7 @@
 #include "snd/MmlParser.h"
 
 #include "snd/MmlCommand.h"
+#include "snd/ut/res/ut_ResTypes.h"
 #include "snd/SequenceSoundPlayer.h"
 
 #include <bfsar/SequenceFile.h>
@@ -12,6 +13,7 @@
 const f32 MOD_SPEED_BASE = 0.390625f;                   // 6.25Hz because it is x 16.
 
 bool MmlParser::mPrintVarEnabledFlag = true;
+sead::Endian::Types MmlParser::sSeqParamEndian = sead::Endian::eBig;
 
 void pushHistory(SequenceSoundPlayer* player, SequenceTrack* track, u32 offset)
 {
@@ -1063,6 +1065,8 @@ u16 MmlParser::Read16(const u8** ptr)
     u16 ret = ReadByte(ptr);
     ret <<= 8;
     ret |= ReadByte(ptr);
+    if (sSeqParamEndian == sead::Endian::eLittle)
+        ret = sead::Endian::swapU16(ret);
     return ret;
 }
 

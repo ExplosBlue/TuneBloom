@@ -2,6 +2,8 @@
 
 #include "SequenceTrack.h"
 
+#include <prim/seadEndian.h>
+
 class MmlParser
 {
 public:
@@ -50,6 +52,8 @@ public:
 
     static void EnablePrintVar(bool enable) { mPrintVarEnabledFlag = enable; }
     static bool IsEnabledPrintVar() { return mPrintVarEnabledFlag; }
+
+    static sead::Endian::Types sSeqParamEndian;
 
 private:
     static bool mPrintVarEnabledFlag;

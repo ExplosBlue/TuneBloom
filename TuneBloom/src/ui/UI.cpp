@@ -166,7 +166,7 @@ void DrawMenuBar()
         if (ImGui::BeginMenu("File"))
         {
             bool bfsarOpen = sBfsar.isOpen();
-            if (ImGui::MenuItem(ICON_LC_FILE " New"))
+            if (ImGui::MenuItem(ICON_LC_FILE " New", "Ctrl+Shift+N"))
             {
                 if (bfsarOpen)
                 {
@@ -178,7 +178,7 @@ void DrawMenuBar()
                 }
             }
 
-            if (ImGui::MenuItem(ICON_LC_FOLDER_OPEN " Open"))
+            if (ImGui::MenuItem(ICON_LC_FOLDER_OPEN " Open", "Ctrl+O"))
             {
                 if (bfsarOpen)
                 {
@@ -195,12 +195,12 @@ void DrawMenuBar()
                 ImGui::BeginDisabled();
             }
 
-            if (ImGui::MenuItem(ICON_LC_SAVE " Save"))
+            if (ImGui::MenuItem(ICON_LC_SAVE " Save", "Ctrl+S"))
             {
                 SaveFile();
             }
 
-            if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As"))
+            if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As", "Ctrl+Shift+S"))
             {
                 SaveFileAs();
             }
@@ -575,6 +575,37 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 
 void DrawUI()
 {
+    if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
+    {
+        if (ImGui::IsKeyDown(ImGuiKey_ModCtrl) && !ImGui::IsKeyDown(ImGuiKey_ModShift))
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_S) && sBfsar.isOpen())
+                SaveFile();
+
+            if (ImGui::IsKeyPressed(ImGuiKey_O))
+            {
+                if (sBfsar.isOpen())
+                    sWantsOpen = true;
+                else
+                    OpenFile();
+            }
+        }
+
+        if (ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyDown(ImGuiKey_ModShift))
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_N))
+            {
+                if (sBfsar.isOpen())
+                    sWantsNew = true;
+                else
+                    NewFile();
+            }
+
+            if (ImGui::IsKeyPressed(ImGuiKey_S) && sBfsar.isOpen())
+                SaveFileAs();
+        }
+    }
+
     ImGuiID dockspaceId = DockSpaceOverViewport();
 
     DrawProjectUI();
@@ -1802,6 +1833,26 @@ void DrawFileUI(ImGuiID dockspaceId)
 
         if (!window->isOpen() || !window->getFileRef().isAttached())
         {
+            auto* prevNode = sFileWindows.prev(window);
+            if (prevNode)
+            {
+                FileWindow* prev = static_cast<FileWindow*>(prevNode->val());
+                ImGui::SetWindowFocus(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%u",
+                    prev->getFileRef().getItem()->getFormattedName().cstr(),
+                    prev->getFileRef().getItem()).cstr());
+            }
+            else
+            {
+                auto* nextNode = sFileWindows.next(window);
+                if (nextNode)
+                {
+                    FileWindow* next = static_cast<FileWindow*>(nextNode->val());
+                    ImGui::SetWindowFocus(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%u",
+                        next->getFileRef().getItem()->getFormattedName().cstr(),
+                        next->getFileRef().getItem()).cstr());
+                }
+            }
+
             delete window;
         }
     }
@@ -1826,6 +1877,9 @@ void DrawFileUI(ImGuiID dockspaceId)
         }
 
         bool visible = ImGui::Begin(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%u", file->getFormattedName().cstr(), file).cstr(), window->getOpenPtr(), flags);
+
+        if (visible && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyPressed(ImGuiKey_W) && !dirty)
+            *window->getOpenPtr() = false;
 
         if (!window->isOpen() && dirty)
         {

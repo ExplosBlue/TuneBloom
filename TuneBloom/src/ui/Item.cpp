@@ -290,6 +290,82 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 }
             }
 
+            if (ImGui::IsKeyPressed(ImGuiKey_PageUp))
+            {
+                Item* target = selectedItem;
+                for (int i = 0; i < 20; i++)
+                {
+                    Item::ListNode* prev = list.prev(target);
+                    if (prev)
+                        target = prev->val();
+                    else
+                        break;
+                }
+                if (target != selectedItem)
+                {
+                    selectedItem = target;
+                    sScrollItem = selectedItem;
+                    if (sSubSelectedItem && sSubSelectedItem->getItemType() != sScrollItem->getItemType())
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                    }
+                }
+            }
+
+            if (ImGui::IsKeyPressed(ImGuiKey_PageDown))
+            {
+                Item* target = selectedItem;
+                for (int i = 0; i < 20; i++)
+                {
+                    Item::ListNode* next = list.next(target);
+                    if (next)
+                        target = next->val();
+                    else
+                        break;
+                }
+                if (target != selectedItem)
+                {
+                    selectedItem = target;
+                    sScrollItem = selectedItem;
+                    if (sSubSelectedItem && sSubSelectedItem->getItemType() != sScrollItem->getItemType())
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                    }
+                }
+            }
+
+            if (ImGui::IsKeyPressed(ImGuiKey_Home))
+            {
+                Item::ListNode* first = list.front();
+                if (first)
+                {
+                    selectedItem = first->val();
+                    sScrollItem = selectedItem;
+                    if (sSubSelectedItem && sSubSelectedItem->getItemType() != sScrollItem->getItemType())
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                    }
+                }
+            }
+
+            if (ImGui::IsKeyPressed(ImGuiKey_End))
+            {
+                Item::ListNode* last = list.back();
+                if (last && last->val() != selectedItem)
+                {
+                    selectedItem = last->val();
+                    sScrollItem = selectedItem;
+                    if (sSubSelectedItem && sSubSelectedItem->getItemType() != sScrollItem->getItemType())
+                    {
+                        sSubSelectedItem = nullptr;
+                        sSelectedItemIsSubWindow = false;
+                    }
+                }
+            }
+
             if (ImGui::IsKeyPressed(ImGuiKey_G))
             {
                 sScrollItem = selectedItem;

@@ -69,6 +69,12 @@ extern Item* sSubSelectedItem;
 
 extern bool sSelectedItemIsSubWindow;
 
+extern ImVec4 gAccentColor;
+extern f32 gThemeBrightness;
+void ApplyThemeFromAccent(ImVec4 accent);
+void SaveAccentColor();
+void LoadAccentColor();
+
 class FileWindow : public Item
 {
 public:

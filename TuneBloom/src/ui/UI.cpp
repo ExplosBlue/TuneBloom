@@ -17,9 +17,15 @@
 #include <shellapi.h>
 #elif defined(SEAD_PLATFORM_LINUX) || defined(SEAD_PLATFORM_MACOSX)
 #include <cstdlib>
+#include <sys/stat.h>
 #endif
 
+#include <cstdio>
+
 UIType sSelectedUIType = UIType::ProjectInfo;
+
+ImVec4 gAccentColor = ImVec4(0.24f, 0.50f, 0.88f, 1.00f);
+f32 gThemeBrightness = 1.0f;
 
 void SetUITab(UIType type)
 {
@@ -221,6 +227,41 @@ void DrawMenuBar()
         {
             ImGui::MenuItem(ICON_LC_CPU " System Window", nullptr, &sShowSystemWindow);
             // ImGui::MenuItem("Demo Window", nullptr, &sShowDemoWindow);
+            ImGui::Separator();
+            {
+                float h, s, v;
+                ImGui::ColorConvertRGBtoHSV(gAccentColor.x, gAccentColor.y, gAccentColor.z, h, s, v);
+
+                bool changed = false;
+                bool done = false;
+
+                ImVec4 ctPreview;
+                ImGui::ColorConvertHSVtoRGB(h, 0.50f, 0.60f, ctPreview.x, ctPreview.y, ctPreview.z);
+                ctPreview.w = 1.0f;
+                ImGui::ColorButton("##ct", ctPreview, ImGuiColorEditFlags_NoTooltip, ImVec2(14, 14));
+                ImGui::SameLine();
+                if (ImGui::SliderFloat("Color", &h, 0.0f, 1.0f, ""))
+                {
+                    ImVec4 c;
+                    ImGui::ColorConvertHSVtoRGB(h, 0.50f, 0.60f, c.x, c.y, c.z);
+                    c.w = 1.0f;
+                    gAccentColor = c;
+                    changed = true;
+                }
+                if (ImGui::IsItemDeactivatedAfterEdit())
+                    done = true;
+
+                if (ImGui::SliderFloat("Brightness", &gThemeBrightness, 0.3f, 1.7f, "%.1f"))
+                    changed = true;
+                if (ImGui::IsItemDeactivatedAfterEdit())
+                    done = true;
+
+                if (changed)
+                    ApplyThemeFromAccent(gAccentColor);
+
+                if (done)
+                    SaveAccentColor();
+            }
 
             ImGui::EndMenu();
         }
@@ -252,6 +293,138 @@ void OpenURL(const char* url)
 #else
     #error "Unsupported platform"
 #endif
+}
+
+static ImVec4 HSV(float h, float s, float v, float a = 1.0f)
+{
+    v *= gThemeBrightness;
+    if (v > 1.0f) v = 1.0f;
+    ImVec4 c;
+    ImGui::ColorConvertHSVtoRGB(h, s, v, c.x, c.y, c.z);
+    c.w = a;
+    return c;
+}
+
+void ApplyThemeFromAccent(ImVec4 accent)
+{
+    float h, s, v;
+    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, h, s, v);
+
+    if (s < 0.05f)
+        h = 0.0f;
+
+    ImVec4* colors = ImGui::GetStyle().Colors;
+
+    colors[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.93f, 0.90f);
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.52f, 1.00f);
+    colors[ImGuiCol_WindowBg] = HSV(h, 0.40f, 0.17f);
+    colors[ImGuiCol_ChildBg] = HSV(h, 0.35f, 0.13f);
+    colors[ImGuiCol_PopupBg] = HSV(h, 0.38f, 0.15f, 0.85f);
+    colors[ImGuiCol_Border] = HSV(h, 0.30f, 0.40f, 0.65f);
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg] = HSV(h, 0.42f, 0.22f);
+    colors[ImGuiCol_FrameBgHovered] = HSV(h, 0.45f, 0.32f, 0.40f);
+    colors[ImGuiCol_FrameBgActive] = HSV(h, 0.48f, 0.38f, 0.45f);
+    colors[ImGuiCol_TitleBg] = HSV(h, 0.30f, 0.12f, 0.83f);
+    colors[ImGuiCol_TitleBgActive] = HSV(h, 0.32f, 0.14f, 0.87f);
+    colors[ImGuiCol_TitleBgCollapsed] = HSV(h, 0.35f, 0.20f, 0.20f);
+    colors[ImGuiCol_MenuBarBg] = HSV(h, 0.35f, 0.13f, 0.80f);
+    colors[ImGuiCol_ScrollbarBg] = HSV(h, 0.38f, 0.20f, 0.60f);
+    colors[ImGuiCol_ScrollbarGrab] = HSV(h, 0.40f, 0.38f, 0.51f);
+    colors[ImGuiCol_ScrollbarGrabHovered] = HSV(h, 0.45f, 0.48f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive] = HSV(h, 0.50f, 0.56f, 0.91f);
+    colors[ImGuiCol_CheckMark] = HSV(h, 0.60f, 0.80f, 0.83f);
+    colors[ImGuiCol_SliderGrab] = HSV(h, 0.40f, 0.45f, 0.62f);
+    colors[ImGuiCol_SliderGrabActive] = HSV(h, 0.50f, 0.65f, 0.84f);
+    colors[ImGuiCol_Button] = HSV(h, 0.50f, 0.60f, 0.49f);
+    colors[ImGuiCol_ButtonHovered] = HSV(h, 0.50f, 0.70f, 0.68f);
+    colors[ImGuiCol_ButtonActive] = HSV(h, 0.55f, 0.50f, 1.00f);
+    colors[ImGuiCol_Header] = HSV(h, 0.45f, 0.50f, 0.53f);
+    colors[ImGuiCol_HeaderHovered] = HSV(h, 0.50f, 0.65f, 1.00f);
+    colors[ImGuiCol_HeaderActive] = HSV(h, 0.55f, 0.55f, 1.00f);
+    colors[ImGuiCol_Separator] = HSV(h, 0.15f, 0.30f, 0.50f);
+    colors[ImGuiCol_SeparatorHovered] = HSV(h, 0.40f, 0.55f, 0.78f);
+    colors[ImGuiCol_SeparatorActive] = HSV(h, 0.50f, 0.65f, 1.00f);
+    colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 1.00f, 1.00f, 0.85f);
+    colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 1.00f, 1.00f, 0.60f);
+    colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 1.00f, 1.00f, 0.90f);
+    colors[ImGuiCol_Tab] = HSV(h, 0.35f, 0.18f);
+    colors[ImGuiCol_TabHovered] = HSV(h, 0.50f, 0.55f, 0.80f);
+    colors[ImGuiCol_TabActive] = HSV(h, 0.38f, 0.24f);
+    colors[ImGuiCol_TabUnfocused] = HSV(h, 0.30f, 0.14f);
+    colors[ImGuiCol_TabUnfocusedActive] = HSV(h, 0.32f, 0.20f);
+    colors[ImGuiCol_DockingPreview] = HSV(h, 0.50f, 0.65f, 0.70f);
+    colors[ImGuiCol_DockingEmptyBg] = HSV(h, 0.00f, 0.20f);
+    colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogram] = HSV(h, 0.55f, 0.65f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered] = HSV(h, 0.55f, 0.80f, 1.00f);
+    colors[ImGuiCol_TableHeaderBg] = HSV(h, 0.35f, 0.22f);
+    colors[ImGuiCol_TableBorderStrong] = HSV(h, 0.20f, 0.25f);
+    colors[ImGuiCol_TableBorderLight] = HSV(h, 0.15f, 0.18f);
+    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
+    colors[ImGuiCol_TextSelectedBg] = HSV(h, 0.40f, 0.40f, 0.35f);
+    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight] = HSV(h, 0.50f, 0.60f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+}
+
+static std::string GetConfigDir()
+{
+#if defined(SEAD_PLATFORM_WINDOWS)
+    const char* appdata = getenv("APPDATA");
+    if (appdata && appdata[0])
+        return std::string(appdata) + "\\TuneBloom";
+    return ".\\TuneBloom";
+#elif defined(SEAD_PLATFORM_LINUX)
+    const char* xdg = getenv("XDG_CONFIG_HOME");
+    if (xdg && xdg[0])
+        return std::string(xdg) + "/TuneBloom";
+    const char* home = getenv("HOME");
+    if (home && home[0])
+        return std::string(home) + "/.config/TuneBloom";
+    return "./.config/TuneBloom";
+#else
+    const char* home = getenv("HOME");
+    if (home && home[0])
+        return std::string(home) + "/Library/Application Support/TuneBloom";
+    return "./TuneBloom";
+#endif
+}
+
+void SaveAccentColor()
+{
+    std::string path = GetConfigDir() + "/theme.cfg";
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    _mkdir(GetConfigDir().c_str());
+#else
+    mkdir(GetConfigDir().c_str(), 0755);
+#endif
+
+    FILE* f = fopen(path.c_str(), "w");
+    if (f)
+    {
+        fprintf(f, "%f %f %f %f %f\n", gAccentColor.x, gAccentColor.y, gAccentColor.z, gAccentColor.w, gThemeBrightness);
+        fclose(f);
+    }
+}
+
+void LoadAccentColor()
+{
+    std::string path = GetConfigDir() + "/theme.cfg";
+
+    FILE* f = fopen(path.c_str(), "r");
+    if (f)
+    {
+        int n = fscanf(f, "%f %f %f %f %f", &gAccentColor.x, &gAccentColor.y, &gAccentColor.z, &gAccentColor.w, &gThemeBrightness);
+        if (n < 5)
+            gThemeBrightness = 1.0f;
+        fclose(f);
+    }
 }
 
 void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)

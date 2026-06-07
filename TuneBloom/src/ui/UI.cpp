@@ -1203,6 +1203,264 @@ void DrawSubInfoUI()
     ImGui::End();
 }
 
+static const char* GetItemIcon(const Item* item)
+{
+    if (item->getItemType() == Item::ItemType::Sound)
+    {
+        const Sound* sound = static_cast<const Sound*>(item);
+        switch (sound->getSoundType())
+        {
+            case Sound::SoundType::Seq:  return ICON_LC_MUSIC_3 " ";
+            case Sound::SoundType::Strm: return ICON_LC_DISC_3 " ";
+            case Sound::SoundType::Wave: return ICON_LC_AUDIO_LINES " ";
+        }
+    }
+
+    switch (item->getItemType())
+    {
+        case Item::ItemType::SoundSet:     return ICON_LC_MUSIC_4 " ";
+        case Item::ItemType::Bank:         return ICON_LC_PIANO " ";
+        case Item::ItemType::WaveArchive:  return ICON_LC_FILE_MUSIC " ";
+        case Item::ItemType::Group:        return ICON_LC_FOLDERS " ";
+        case Item::ItemType::Player:       return ICON_LC_VOLUME_2 " ";
+        case Item::ItemType::WaveFile:     return ICON_LC_AUDIO_LINES " ";
+        case Item::ItemType::SequenceFile: return ICON_LC_MUSIC_3 " ";
+        case Item::ItemType::BankFile:     return ICON_LC_PIANO " ";
+        case Item::ItemType::StreamTrack:  return ICON_LC_MUSIC_2 " ";
+        default:                           return "";
+    }
+}
+
+static sead::FixedSafeString<512> BuildRefLabel(const Item* owner)
+{
+    sead::FixedSafeString<512> label;
+    const char* icon = GetItemIcon(owner);
+
+    if (owner->getItemType() == Item::ItemType::BankFileVelocityRegion)
+    {
+        for (const Item* bfItem : sBfsar.getBankFileList())
+        {
+            const BankFile* bankFile = static_cast<const BankFile*>(bfItem);
+            for (const Item* instItem : bankFile->getInstrumentList())
+            {
+                const BankFile::Instrument* inst = static_cast<const BankFile::Instrument*>(instItem);
+                for (const Item* krItem : inst->getKeyRegionList())
+                {
+                    const BankFile::KeyRegion* kr = static_cast<const BankFile::KeyRegion*>(krItem);
+                    for (const Item* vrItem : kr->getVelocityRegionList())
+                    {
+                        if (vrItem == owner)
+                        {
+                            label.appendWithFormat("%s%s \xe2\x86\x92 %s",
+                                icon, bfItem->getFormattedName().cstr(),
+                                instItem->getFormattedName().cstr());
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (owner->getItemType() == Item::ItemType::StreamTrack)
+    {
+        Sound::StreamSoundInfo::Track* track = const_cast<Sound::StreamSoundInfo::Track*>(static_cast<const Sound::StreamSoundInfo::Track*>(owner));
+        for (const Item* soundItem : sBfsar.getSoundList())
+        {
+            const Sound* sound = static_cast<const Sound*>(soundItem);
+            if (sound->getSoundType() != Sound::SoundType::Strm)
+                continue;
+            for (const Item* trackItem : sound->getStreamSoundInfo().getTrackList())
+            {
+                if (trackItem == track)
+                {
+                    label.appendWithFormat("%s%s - %s",
+                        icon, soundItem->getFormattedName().cstr(),
+                        owner->getFormattedName().cstr());
+                    return label;
+                }
+            }
+        }
+    }
+
+    label.appendWithFormat("%s%s", icon, owner->getFormattedName().cstr());
+    return label;
+}
+
+static bool DrawReferencesUI(Item* item)
+{
+    ImGui::SeparatorText("References");
+
+    const ItemReference::List& refs = item->getReferences();
+    if (refs.size() == 0)
+    {
+        ImGui::TextDisabled("No references");
+        return false;
+    }
+
+    struct RefEntry {
+        sead::FixedSafeString<512> label;
+        Item* navigateItem;
+        Item* selectSubItem = nullptr;
+    };
+
+    RefEntry entries[1024];
+    int entryCount = 0;
+
+    for (auto it = refs.robustBegin(); it != refs.robustEnd(); ++it)
+    {
+        ItemReference* ref = it->val();
+        if (!ref)
+            continue;
+
+        Item* owner = ref->getOwner();
+        if (!owner)
+            continue;
+
+        sead::FixedSafeString<512> label;
+
+        if (item->getItemType() == Item::ItemType::WaveFile && owner->getItemType() == Item::ItemType::BankFileVelocityRegion)
+        {
+            bool found = false;
+            for (Item* bfItem : sBfsar.getBankFileList())
+            {
+                BankFile* bankFile = static_cast<BankFile*>(bfItem);
+                for (Item* instItem : bankFile->getInstrumentList())
+                {
+                    BankFile::Instrument* inst = static_cast<BankFile::Instrument*>(instItem);
+                    for (Item* krItem : inst->getKeyRegionList())
+                    {
+                        BankFile::KeyRegion* kr = static_cast<BankFile::KeyRegion*>(krItem);
+                        for (Item* vrItem : kr->getVelocityRegionList())
+                        {
+                            if (vrItem == owner)
+                            {
+                                for (Item* bankItem : sBfsar.getBankList())
+                                {
+                                    Bank* bank = static_cast<Bank*>(bankItem);
+                                    if (bank->getFileRef().getItem() == bfItem)
+                                    {
+                                        label.appendWithFormat("%s%s - %s",
+                                            ICON_LC_PIANO " ",
+                                            bankItem->getFormattedName().cstr(),
+                                            instItem->getFormattedName().cstr());
+                                        for (int i = 0; i < entryCount; i++)
+                                        {
+                                            if (entries[i].label == label)
+                                                found = true;
+                                        }
+                                        if (!found && entryCount < 1024)
+                                        {
+                                            entries[entryCount].label = label;
+                                            entries[entryCount].navigateItem = bfItem;
+                                            entries[entryCount].selectSubItem = instItem;
+                                            entryCount++;
+                                        }
+                                        found = true;
+                                        break;
+                                    }
+                                }
+                                if (found) break;
+                            }
+                        }
+                        if (found) break;
+                    }
+                    if (found) break;
+                }
+                if (found) break;
+            }
+        }
+        else
+        {
+            bool dup = false;
+
+            Item* navigateItem = owner;
+            Item* selectSubItem = nullptr;
+
+            if (owner->getItemType() == Item::ItemType::StreamTrack)
+            {
+                Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(owner);
+                for (Item* soundItem : sBfsar.getSoundList())
+                {
+                    Sound* sound = static_cast<Sound*>(soundItem);
+                    if (sound->getSoundType() != Sound::SoundType::Strm)
+                        continue;
+                    for (Item* trackItem : sound->getStreamSoundInfo().getTrackList())
+                    {
+                        if (trackItem == track)
+                        {
+                            navigateItem = sound;
+                            selectSubItem = track;
+                            break;
+                        }
+                    }
+                    if (selectSubItem) break;
+                }
+            }
+
+            label = BuildRefLabel(owner);
+            for (int i = 0; i < entryCount; i++)
+            {
+                if (entries[i].label == label)
+                {
+                    dup = true;
+                    break;
+                }
+            }
+            if (!dup && entryCount < 1024)
+            {
+                entries[entryCount].label = label;
+                entries[entryCount].navigateItem = navigateItem;
+                entries[entryCount].selectSubItem = selectSubItem;
+                entryCount++;
+            }
+        }
+    }
+
+    bool clicked = false;
+    if (ImGui::BeginChild("###ReferencesList", ImVec2(0, ImGui::GetContentRegionAvail().y), ImGuiChildFlags_Border))
+    {
+        for (int i = 0; i < entryCount; i++)
+        {
+            if (ImGui::Selectable(entries[i].label.cstr()))
+            {
+                SelectItem(entries[i].navigateItem);
+
+                if (entries[i].selectSubItem)
+                {
+                    if (entries[i].selectSubItem->getItemType() == Item::ItemType::BankFileInstrument)
+                    {
+                        sSelectedItem = entries[i].selectSubItem;
+                        sSubSelectedItem = nullptr;
+                        OpenFileWindow(entries[i].navigateItem);
+                    }
+                    else
+                    {
+                        sSubSelectedItem = entries[i].selectSubItem;
+                        sSelectedItemIsSubWindow = true;
+                    }
+                }
+
+                if (entries[i].navigateItem->getItemType() == Item::ItemType::Sound)
+                {
+                    const Sound* sound = static_cast<const Sound*>(entries[i].navigateItem);
+                    switch (sound->getSoundType())
+                    {
+                        case Sound::SoundType::Seq:  SetUITab(UIType::SequenceSounds); break;
+                        case Sound::SoundType::Strm: SetUITab(UIType::StreamSounds); break;
+                        case Sound::SoundType::Wave: SetUITab(UIType::WaveSounds); break;
+                    }
+                }
+
+                clicked = true;
+            }
+        }
+    }
+    ImGui::EndChild();
+
+    return clicked;
+}
+
 void DrawPropertiesUI()
 {
     sead::FixedSafeString<512> name(ICON_LC_TABLE_PROPERTIES " Properties");
@@ -1265,6 +1523,13 @@ void DrawPropertiesUI()
                 {
                     Group::ItemInfo* itemInfo = static_cast<Group::ItemInfo*>(sSubSelectedItem);
                     itemInfo->drawUI();
+                    break;
+                }
+
+                case Item::ItemType::BankFileInstrument:
+                {
+                    BankFile::Instrument* instrument = static_cast<BankFile::Instrument*>(sSubSelectedItem);
+                    instrument->drawUI();
                     break;
                 }
             }
@@ -1340,6 +1605,16 @@ void DrawPropertiesUI()
                 instrument->drawUI();
                 break;
             }
+        }
+
+        switch (sSelectedItem->getItemType())
+        {
+            case Item::ItemType::WaveFile:
+            case Item::ItemType::SequenceFile:
+            case Item::ItemType::BankFile:
+            case Item::ItemType::Bank:
+                DrawReferencesUI(sSelectedItem);
+                break;
         }
     }
     ImGui::End();

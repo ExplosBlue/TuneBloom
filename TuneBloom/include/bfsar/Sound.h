@@ -444,6 +444,14 @@ public:
                 mBiquadValue = biquadValue;
             }
 
+            sead::FixedSafeString<256> getFormattedName() const override
+            {
+                sead::FixedSafeString<256> name;
+                u32 id = getId();
+                name.appendWithFormat("Track %u", id);
+                return name;
+            }
+
         private:
             ItemReference mWaveFileRef;
 

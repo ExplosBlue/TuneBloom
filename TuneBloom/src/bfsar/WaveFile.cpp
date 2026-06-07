@@ -413,7 +413,10 @@ void WaveFile::drawUI()
 
     ImGui::SeparatorText(sead::FormatFixedSafeString<32>("Channels (%d) - %s", mChannels.size(), mChannels.size() == 1 ? "Mono" : "Stereo").cstr());
 
-    if (ImGui::BeginChild("Channels", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
+    float channelsHeight = ImGui::GetFrameHeightWithSpacing() * mChannels.size() + ImGui::GetStyle().WindowPadding.y * 2;
+    channelsHeight = sead::Mathf::min(channelsHeight, ImGui::GetContentRegionAvail().y * 0.35f);
+
+    if (ImGui::BeginChild("Channels", ImVec2(0.0f, channelsHeight), ImGuiChildFlags_Border))
     {
         for (u32 i = 0; i < mChannels.size(); i++)
         {

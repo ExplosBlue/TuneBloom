@@ -323,6 +323,13 @@ public:
             return mKeyRegionList;
         }
 
+        sead::FixedSafeString<256> getFormattedName() const override
+        {
+            sead::FixedSafeString<256> name;
+            name.appendWithFormat("Instrument %d", mProgramNo);
+            return name;
+        }
+
     private:
         s16 mProgramNo;
         KeyRegion::List mKeyRegionList;

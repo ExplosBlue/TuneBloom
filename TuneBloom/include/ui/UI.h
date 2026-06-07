@@ -53,7 +53,7 @@ struct FileFilter
 };
 
 bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title = nullptr, u32 filterCount = 0, FileFilter* filters = nullptr);
-bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title = nullptr, u32 filterCount = 0, FileFilter* filters = nullptr, const char* defaultExt = nullptr);
+bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title = nullptr, u32 filterCount = 0, FileFilter* filters = nullptr, const char* defaultExt = nullptr, const char* defaultName = "");
 
 extern Bfsar sBfsar;
 extern SoundPlayer sSoundPlayer;

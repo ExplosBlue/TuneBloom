@@ -386,6 +386,16 @@ static void QuitSDK()
     ma_device_uninit(&device);
 }
 
+void SoundSystem::pauseAudio()
+{
+    ma_device_stop(&device);
+}
+
+void SoundSystem::resumeAudio()
+{
+    ma_device_start(&device);
+}
+
 /*
 class AudioDataCallback : public oboe::AudioStreamDataCallback
 {

@@ -1,9 +1,12 @@
 #pragma once
 
+#include <snd/FinalMixCallback.h>
 #include <snd/SequenceNoteOnCallback.h>
 #include <snd/SequenceSoundPlayer.h>
 #include <snd/StreamSoundPlayer.h>
 #include <snd/WaveSoundPlayer.h>
+
+#include <vector>
 
 class SoundPlayer
 {
@@ -52,6 +55,9 @@ public:
     bool playWaveSound(const Sound* sound, u32 startOffsetSample = 0);
 
     bool playSeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, const Sound* sound = nullptr);
+
+    void exportSeqToWav(const sead::SafeString& path, const Sound* sound, u32 maxDurationSecs = 180);
+    bool writeSeqWavFile(const sead::SafeString& path, const std::vector<f32>& left, const std::vector<f32>& right);
     bool playWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0);
     bool playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
 
@@ -120,6 +126,47 @@ private:
         s16 value;
     };
 
+    struct SeqCapture : public snd::FinalMixCallback
+    {
+        SeqCapture()
+            : mActive(false)
+        {
+        }
+
+        void prepare()
+        {
+            mActive = true;
+            mSamplesLeft.clear();
+            mSamplesRight.clear();
+        }
+
+        void finish()
+        {
+            mActive = false;
+        }
+
+        bool isActive() const { return mActive; }
+
+        u32 getSampleCount() const { return (u32)mSamplesLeft.size(); }
+        std::vector<f32> mSamplesLeft;
+        std::vector<f32> mSamplesRight;
+
+        virtual void onFinalMix(const snd::FinalMixData* data) override
+        {
+            if (!mActive)
+                return;
+
+            for (u32 i = 0; i < data->sampleCount; i++)
+            {
+                mSamplesLeft.push_back(data->left[i]);
+                mSamplesRight.push_back(data->right[i]);
+            }
+        }
+
+    private:
+        bool mActive;
+    };
+
 private:
     f32 mVolume;
     f32 mPitch;
@@ -147,4 +194,8 @@ private:
 
     // SequenceNoteOnCallback mSequenceNoteOnCallback;
     SequenceNoteOnCallback2 mSequenceNoteOnCallback2;
+
+    SeqCapture mSeqCapture;
+    bool mSeqCaptureRegistered = false;
+    sead::FixedSafeString<512> mSeqExportPath;
 };

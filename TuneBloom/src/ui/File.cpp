@@ -69,9 +69,9 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     return true;
 }
 
-bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters, const char* defaultExt)
+bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters, const char* defaultExt, const char* defaultName)
 {
-    LOG_FMT("title=\"%s\" filterCount=%u defaultExt=\"%s\"", title ? title : "nullptr", filterCount, defaultExt ? defaultExt : "nullptr");
+    LOG_FMT("title=\"%s\" filterCount=%u defaultExt=\"%s\" defaultName=\"%s\"", title ? title : "nullptr", filterCount, defaultExt ? defaultExt : "nullptr", defaultName ? defaultName : "nullptr");
     SEAD_ASSERT(outPath);
 
     std::vector<std::string> filtersVec;
@@ -87,7 +87,7 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
         }
     }
 
-    std::string result = pfd::save_file(title ? title : "", "", filtersVec, pfd::opt::none).result();
+    std::string result = pfd::save_file(title ? title : "", defaultName ? defaultName : "", filtersVec, pfd::opt::none).result();
     if (result.empty())
     {
         return false;

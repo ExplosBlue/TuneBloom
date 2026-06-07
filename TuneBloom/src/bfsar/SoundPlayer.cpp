@@ -3,8 +3,14 @@
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
+#include <snd/HardwareMgr.h>
 #include <snd/MultiVoiceMgr.h>
 #include <snd/SoundSystem.h>
+
+#include <filedevice/seadFileDevice.h>
+#include <filedevice/seadFileDeviceMgr.h>
+#include <math/seadMathCalcCommon.h>
+#include <stream/seadFileDeviceStream.h>
 
 #include <imgui/imgui.h>
 
@@ -13,6 +19,17 @@ void SoundPlayer::update()
     if (mPlayingSound && !isActive())
     {
         mPlayingSound = nullptr;
+    }
+
+    if (mSeqCapture.isActive() && !isActive())
+    {
+        mSeqCapture.finish();
+
+        writeSeqWavFile(mSeqExportPath, mSeqCapture.mSamplesLeft, mSeqCapture.mSamplesRight);
+
+        PopupMgr::instance()->addPopup({
+            sead::FormatFixedSafeString<256>("Exported sequence to %s", mSeqExportPath.cstr()), nullptr
+        });
     }
 }
 
@@ -111,6 +128,165 @@ bool SoundPlayer::playSeqSound(const Sound* sound)
 
     sSelectedItem = const_cast<Sound*>(sound);
     mPlayingSound = sound;
+
+    return true;
+}
+
+void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* sound, u32 maxDurationSecs)
+{
+    mSeqExportPath = path;
+    mSeqCapture.prepare();
+
+    if (!mSeqCaptureRegistered)
+    {
+        snd::internal::driver::HardwareMgr::instance()->appendFinalMixCallback(&mSeqCapture);
+        mSeqCaptureRegistered = true;
+    }
+
+    snd::SoundSystem::pauseAudio();
+
+    if (!playSound(sound))
+    {
+        mSeqCapture.finish();
+        snd::SoundSystem::resumeAudio();
+        return;
+    }
+
+    snd::internal::driver::SoundThread* soundThread = snd::internal::driver::SoundThread::instance();
+
+    const u32 cMaxLoops = 2;
+    const u32 cMaxFrames = maxDurationSecs * snd::internal::driver::HardwareMgr::cSampleRate / snd::internal::driver::HardwareMgr::cSamplePerFrame;
+    u32 frameCount = 0;
+    u32 minTrackLoopCount = 0;
+
+    struct {
+        const u8* prevAddr;
+        s32 prevLoopRemaining;
+        u32 loopCount;
+    } trackState[SequenceSoundPlayer::cTrackNumPerPlayer] = {};
+
+    while (isActive() && minTrackLoopCount < cMaxLoops && frameCount < cMaxFrames)
+    {
+        soundThread->frameProcess(snd::UpdateType::AudioFrame);
+        frameCount++;
+
+        f32* dataBuffers[2] = {
+            snd::internal::driver::HardwareMgr::sLeftDataBuffer,
+            snd::internal::driver::HardwareMgr::sRightDataBuffer
+        };
+        snd::internal::driver::HardwareMgr::resetFinalMixCallbackData();
+        snd::internal::driver::HardwareMgr::processFinalMixCallback(
+            dataBuffers,
+            snd::internal::driver::HardwareMgr::cSamplePerFrame,
+            snd::internal::driver::HardwareMgr::cChannelCount
+        );
+
+        for (u32 i = 0; i < SequenceSoundPlayer::cTrackNumPerPlayer; i++)
+        {
+            const SequenceTrack* track = mSequencePlayer.getPlayerTrack(i);
+            if (!track || !track->isOpened())
+                continue;
+
+            const auto& param = track->getParserTrackParam();
+            const u8* curAddr = param.currentAddr;
+
+            if (trackState[i].prevAddr && curAddr < trackState[i].prevAddr)
+                trackState[i].loopCount++;
+            trackState[i].prevAddr = curAddr;
+
+            s32 currentRemaining = 0;
+            for (s32 j = 0; j < param.callStackDepth; j++)
+                if (param.callStack[j].loopFlag)
+                    currentRemaining += param.callStack[j].loopCount;
+            if (trackState[i].prevLoopRemaining >= 0 && currentRemaining < trackState[i].prevLoopRemaining)
+                trackState[i].loopCount += trackState[i].prevLoopRemaining - currentRemaining;
+            trackState[i].prevLoopRemaining = currentRemaining;
+        }
+
+        minTrackLoopCount = UINT32_MAX;
+        for (u32 i = 0; i < SequenceSoundPlayer::cTrackNumPerPlayer; i++)
+        {
+            const SequenceTrack* track = mSequencePlayer.getPlayerTrack(i);
+            if (track && track->isOpened() && trackState[i].loopCount < minTrackLoopCount)
+                minTrackLoopCount = trackState[i].loopCount;
+        }
+        if (minTrackLoopCount == UINT32_MAX)
+            minTrackLoopCount = 0;
+    }
+
+    mSequencePlayer.finishPlayer(false);
+
+    for (u32 i = 0; i < 300; i++)
+    {
+        soundThread->frameProcess(snd::UpdateType::AudioFrame);
+
+        f32* dataBuffers[2] = {
+            snd::internal::driver::HardwareMgr::sLeftDataBuffer,
+            snd::internal::driver::HardwareMgr::sRightDataBuffer
+        };
+        snd::internal::driver::HardwareMgr::resetFinalMixCallbackData();
+        snd::internal::driver::HardwareMgr::processFinalMixCallback(
+            dataBuffers,
+            snd::internal::driver::HardwareMgr::cSamplePerFrame,
+            snd::internal::driver::HardwareMgr::cChannelCount
+        );
+    }
+
+    mSeqCapture.finish();
+    snd::SoundSystem::resumeAudio();
+    writeSeqWavFile(mSeqExportPath, mSeqCapture.mSamplesLeft, mSeqCapture.mSamplesRight);
+
+    PopupMgr::instance()->addPopup({
+        sead::FormatFixedSafeString<256>("Exported sequence to %s", mSeqExportPath.cstr()), nullptr
+    });
+}
+
+bool SoundPlayer::writeSeqWavFile(const sead::SafeString& path, const std::vector<f32>& left, const std::vector<f32>& right)
+{
+    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+    if (!device)
+        return false;
+
+    sead::FileHandle handle;
+    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+    if (!handle.getDevice())
+        return false;
+
+    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+    stream.setBinaryEndian(sead::Endian::eLittle);
+
+    u32 numSamples = (u32)left.size();
+    if (numSamples == 0)
+        return false;
+
+    u32 sampleRate = snd::internal::driver::HardwareMgr::cSampleRate;
+    u32 numChannels = 2;
+    u32 bitsPerSample = 16;
+    u32 dataSize = numSamples * numChannels * (bitsPerSample / 8);
+
+    stream.writeString("RIFF", 4);
+    stream.writeU32(36 + dataSize);
+    stream.writeString("WAVE", 4);
+
+    stream.writeString("fmt ", 4);
+    stream.writeU32(16);
+    stream.writeU16(1);
+    stream.writeU16(numChannels);
+    stream.writeU32(sampleRate);
+    stream.writeU32(sampleRate * numChannels * (bitsPerSample / 8));
+    stream.writeU16(numChannels * (bitsPerSample / 8));
+    stream.writeU16(bitsPerSample);
+
+    stream.writeString("data", 4);
+    stream.writeU32(dataSize);
+
+    for (u32 i = 0; i < numSamples; i++)
+    {
+        s16 l = (s16)sead::Mathi::clamp2(-32768, (s32)(left[i]), 32767);
+        s16 r = (s16)sead::Mathi::clamp2(-32768, (s32)(right[i]), 32767);
+        stream.writeS16(l);
+        stream.writeS16(r);
+    }
 
     return true;
 }
@@ -498,6 +674,11 @@ bool SoundPlayer::seek(f32 progress)
 
 void SoundPlayer::reset()
 {
+    if (mSeqCapture.isActive())
+        mSeqCapture.finish();
+
+    mSeqExportPath.clear();
+
     resetLastPlayedSound();
     resetPlayingWaveFile();
 

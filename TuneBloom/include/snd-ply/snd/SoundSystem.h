@@ -83,6 +83,9 @@ public:
     static void enterSleep();
     static void leaveSleep();
 
+    static void pauseAudio();
+    static void resumeAudio();
+
     static bool detail_isStreamLoadWait()
     {
         return sIsStreamLoadWait;

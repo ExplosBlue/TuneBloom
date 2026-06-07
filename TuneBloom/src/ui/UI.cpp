@@ -18,9 +18,11 @@
 #elif defined(SEAD_PLATFORM_LINUX) || defined(SEAD_PLATFORM_MACOSX)
 #include <cstdlib>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 #include <cstdio>
+#include <cctype>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -56,6 +58,12 @@ bool sShowDemoWindow = false;
 sead::FixedSafeString<512> sDroppedFilePath;
 sead::FixedSafeString<512> sRecentFileClick;
 
+static bool sPendingExport = false;
+static Sound* sPendingExportSound = nullptr;
+static Sound::SoundType sPendingExportType;
+static int sPendingExportDurationMin = 2;
+static int sPendingExportDurationSec = 0;
+
 ItemList sFileWindows;
 
 // Windows
@@ -64,6 +72,7 @@ void DrawInfoUI();
 void DrawSubInfoUI();
 void DrawFileUI(ImGuiID dockspaceId);
 void DrawPropertiesUI();
+void DrawExportDialog();
 
 void DrawAllSoundsUI();
 void DrawStreamSoundsUI();
@@ -821,6 +830,129 @@ void DrawUI()
         }
 
         DrawTuneBloomSplash(icon, ImVec2(130, 130));
+    }
+
+    DrawExportDialog();
+}
+
+static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Sound* sound, const char* ext)
+{
+    const char* rawName = sound->getName().cstr();
+    sead::FixedSafeString<256> upperName;
+    upperName.format("%s", rawName);
+    for (s32 i = 0; i < upperName.calcLength(); i++)
+        upperName.getBuffer()[i] = ::toupper((unsigned char)upperName.getBuffer()[i]);
+
+    char cwdBuf[4096];
+    const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
+    outPath->format("%s/%s.%s", cwd ? cwd : ".", upperName.cstr(), ext);
+}
+
+void DrawExportDialog()
+{
+    if (!sPendingExport)
+        return;
+
+    if (sPendingExportType == Sound::SoundType::Seq)
+    {
+        ImGui::OpenPopup("Export Sequence Duration");
+
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Export Sequence Duration", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Set maximum duration for sequence export:");
+            ImGui::Text("The export will stop after 2 loops or this duration, whichever comes first.");
+            ImGui::Separator();
+
+            ImGui::SetNextItemWidth(100);
+            ImGui::InputInt("min", &sPendingExportDurationMin, 1, 5);
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100);
+            ImGui::InputInt("sec", &sPendingExportDurationSec, 1, 15);
+            if (sPendingExportDurationMin < 0) sPendingExportDurationMin = 0;
+            if (sPendingExportDurationMin > 60) sPendingExportDurationMin = 60;
+            if (sPendingExportDurationSec < 0) sPendingExportDurationSec = 0;
+            if (sPendingExportDurationSec > 59) sPendingExportDurationSec = 59;
+
+            ImGui::Separator();
+
+            if (ImGui::Button("Export", ImVec2(120, 0)))
+            {
+                u32 totalSecs = (u32)(sPendingExportDurationMin * 60 + sPendingExportDurationSec);
+                if (totalSecs == 0) totalSecs = 1;
+
+                sead::FixedSafeString<512> path;
+                const u32 filterCount = 1;
+                FileFilter filters[filterCount] = { { "Wave (*.wav)", "*.wav" } };
+
+                sead::FixedSafeString<512> defaultPath;
+                BuildDefaultExportPath(&defaultPath, sPendingExportSound, "wav");
+
+                if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+                    sSoundPlayer.exportSeqToWav(path, sPendingExportSound, totalSecs);
+
+                sPendingExport = false;
+                sPendingExportSound = nullptr;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                sPendingExport = false;
+                sPendingExportSound = nullptr;
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+    else
+    {
+        sead::FixedSafeString<512> path;
+
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { "Wave (*.wav)", "*.wav" }
+        };
+
+        sead::FixedSafeString<512> defaultPath;
+        BuildDefaultExportPath(&defaultPath, sPendingExportSound, "wav");
+
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+        {
+            if (sPendingExportType == Sound::SoundType::Wave)
+            {
+                Item* waveItem = sPendingExportSound->getWaveSoundInfo().getWaveFileRef().getItem();
+                if (waveItem)
+                    static_cast<WaveFile*>(waveItem)->writeWavFile(path);
+            }
+            else if (sPendingExportType == Sound::SoundType::Strm)
+            {
+                auto& trackList = sPendingExportSound->getStreamSoundInfo().getTrackList();
+                u32 trackIdx = 0;
+                for (auto it = trackList.robustBegin(); it != trackList.robustEnd(); ++it)
+                {
+                    Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(it->val());
+                    Item* waveItem = track->getWaveFileRef().getItem();
+                    if (waveItem)
+                    {
+                        sead::FixedSafeString<512> trackPath;
+                        const char* dot = strrchr(path.cstr(), '.');
+                        if (dot)
+                            trackPath.format("%.*s_track%u%s", (s32)(dot - path.cstr()), path.cstr(), trackIdx, dot);
+                        else
+                            trackPath.format("%s_track%u.wav", path.cstr(), trackIdx);
+                        static_cast<WaveFile*>(waveItem)->writeWavFile(trackPath);
+                        trackIdx++;
+                    }
+                }
+            }
+        }
+
+        sPendingExport = false;
+        sPendingExportSound = nullptr;
     }
 }
 
@@ -2181,10 +2313,36 @@ const char* SoundNamePrefixFunc(Item* item)
     return icon;
 }
 
+void SoundContextMenuFunc(Item* item)
+{
+    Sound* sound = static_cast<Sound*>(item);
+    bool canExport = false;
+    if (sound)
+    {
+        Sound::SoundType type = sound->getSoundType();
+        canExport = (type == Sound::SoundType::Wave || type == Sound::SoundType::Strm || type == Sound::SoundType::Seq);
+    }
+
+    ImGui::Separator();
+
+    if (!canExport)
+        ImGui::BeginDisabled();
+
+    if (ImGui::MenuItem("Export to WAV"))
+    {
+        sPendingExportSound = sound;
+        sPendingExportType = sound->getSoundType();
+        sPendingExport = true;
+    }
+
+    if (!canExport)
+        ImGui::EndDisabled();
+}
+
 void DrawAllSoundsUI()
 {
     DrawAllItemsUI("Sound", sBfsar.getSoundList(),
-        &CreateSoundFunc, &SoundNamePrefixFunc, nullptr, GetItemFilterCallback()
+        &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback()
     );
 }
 

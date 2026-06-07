@@ -1895,6 +1895,7 @@ void DrawPropertiesUI()
 
         switch (sSelectedItem->getItemType())
         {
+            case Item::ItemType::Player:
             case Item::ItemType::WaveFile:
             case Item::ItemType::SequenceFile:
             case Item::ItemType::BankFile:

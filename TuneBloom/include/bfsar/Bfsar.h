@@ -280,48 +280,62 @@ public:
 
     u32 getVersionForBfwsd() const
     {
-        if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
-            return 0x01000000;
+        if (mFormat == ArchiveFormat::BCSAR)
+            return makeVersion(1, 0, 1);
 
-        return 0x00010000;
+        if (isVersionOrLater(2, 1, 0))
+            return makeVersion(1, 0, 0);
+
+        return makeVersion(0, 1, 0);
     }
 
     u32 getVersionForBfbnk() const
     {
         if (mFormat == ArchiveFormat::BCSAR)
-            return 0x01000100;      // 1.0.1.0 - CTR SDK current version
+            return makeVersion(1, 0, 1);
 
-        return 0x00010000;
+        return makeVersion(0, 1, 0);
     }
 
     u32 getVersionForBfwar() const
     {
-        if (getDecodedMajor() > 2 || (getDecodedMajor() >= 2 && getDecodedMinor() >= 1))
-            return 0x01000000;
+        if (mFormat == ArchiveFormat::BCSAR)
+            return makeVersion(1, 0, 0);
 
-        return 0x00010000;
+        if (isVersionOrLater(2, 1, 0))
+            return makeVersion(1, 0, 0);
+
+        return makeVersion(0, 1, 0);
     }
 
     u32 getVersionForBfgrp() const
     {
-        if (getDecodedMajor() > 2 || (getDecodedMajor() >= 2 && getDecodedMinor() >= 1))
-            return 0x01010000;
+        if (mFormat == ArchiveFormat::BCSAR)
+        {
+            if (isVersionOrLater(2, 1, 0))
+                return makeVersion(1, 1, 0);
 
-        return 0x00010000;
+            return makeVersion(1, 0, 0);
+        }
+
+        if (isVersionOrLater(2, 1, 0))
+            return makeVersion(1, 1, 0);
+
+        return makeVersion(0, 1, 0);
     }
 
     u32 getVersionForBfseq() const
     {
         if (mFormat == ArchiveFormat::BCSAR)
         {
-            return 0x01000000;      // 1.0.0.0 - CTR SDK only supports this version
+            return makeVersion(1, 0, 0);
         }
         else
         {
-            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 1))
-                return 0x00020000;
+            if (isVersionOrLater(2, 1, 0))
+                return makeVersion(0, 2, 0);
 
-            return 0x00010000;
+            return makeVersion(0, 1, 0);
         }
     }
 
@@ -330,18 +344,18 @@ public:
         if (mFormat == ArchiveFormat::BCSAR)
         {
             if (getDecodedMajor() >= 2)
-                return 0x02010000;  // 2.1.0.0 - CTR SDK current version (max supported)
+                return makeVersion(2, 1, 0);
 
-            return 0x02000000;      // 2.0.0.0 - minimum supported
+            return makeVersion(2, 0, 0);
         }
         else
         {
-            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
-                return 0x00010200;
+            if (isVersionOrLater(2, 2, 0))
+                return makeVersion(0, 1, 2);
             else if (getDecodedMajor() >= 2)
-                return 0x00010100;
+                return makeVersion(0, 1, 1);
 
-            return 0x00010000;
+            return makeVersion(0, 1, 0);
         }
     }
 
@@ -349,16 +363,22 @@ public:
     {
         if (mFormat == ArchiveFormat::BCSAR)
         {
-            return 0x02000000;      // 2.0.0.0 - CTR SDK only supports this version
+            if (isVersionOrLater(2, 3, 2))
+                return makeVersion(2, 3, 1);
+            if (isVersionOrLater(2, 3, 0))
+                return makeVersion(2, 3, 0);
+            if (isVersionOrLater(2, 1, 0))
+                return makeVersion(2, 1, 0);
+            return makeVersion(2, 0, 0);
         }
         else
         {
-            if (getDecodedMajor() > 2 || (getDecodedMajor() == 2 && getDecodedMinor() >= 2))
-                return 0x00040000;
+            if (isVersionOrLater(2, 2, 0))
+                return makeVersion(0, 4, 0);
             else if (getDecodedMajor() >= 2)
-                return 0x00030000;
+                return makeVersion(0, 3, 0);
 
-            return 0x00010000;
+            return makeVersion(0, 1, 0);
         }
     }
 

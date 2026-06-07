@@ -8,6 +8,11 @@ enum class ArchiveFormat
     BCSAR
 };
 
+static constexpr u32 makeVersion(u32 major, u32 minor, u32 patch)
+{
+    return (major << 24) | (minor << 16) | (patch << 8);
+}
+
 #include <snd/ut/ut_BinaryFileFormat.h>
 
 #include <prim/seadPtrUtil.h>

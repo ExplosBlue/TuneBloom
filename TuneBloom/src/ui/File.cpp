@@ -18,6 +18,8 @@
 
 #include <portable-file-dialogs.h>
 
+#include <bfsar/InnerFile.h>
+
 bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters)
 {
     LOG_FMT("title=\"%s\" filterCount=%u", title ? title : "nullptr", filterCount);
@@ -164,6 +166,15 @@ bool ValidBCSARHeader(const void* file)
     if (sead::MemUtil::compare(file, "CSAR", 4) != 0)
     {
         PopupMgr::instance()->addPopup({ "Selected file is not a valid BCSAR file", nullptr });
+        return false;
+    }
+
+    const nw::snd::internal::SoundArchiveFile::FileHeader& header = *reinterpret_cast<const nw::snd::internal::SoundArchiveFile::FileHeader*>(file);
+
+    if (!(makeVersion(2, 0, 0) <= header.version && header.version <= makeVersion(2, 3, 2)))
+    {
+        sead::FormatFixedSafeString<64> msg("BCSAR version not supported (0x%08X)", (u32)header.version);
+        PopupMgr::instance()->addPopup({ msg, nullptr });
         return false;
     }
 

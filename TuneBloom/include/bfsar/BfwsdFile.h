@@ -46,7 +46,7 @@ public:
 
     static bool isFilterSupportedVersion(u32 version)
     {
-        return version >= 0x01010000;
+        return version >= makeVersion(1, 0, 1);
     }
 
 private:

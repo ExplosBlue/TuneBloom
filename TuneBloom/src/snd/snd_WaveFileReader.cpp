@@ -36,14 +36,18 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
     {
         case WAVE_TYPE_NWWAV:
         {
+            const char* waveFmt;
+
             {
                 const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveFile);
 
                 if (sead::MemUtil::compare(header->signature, "FWAV", 4) != 0 && sead::MemUtil::compare(header->signature, "CWAV", 4) != 0)
                 {
-                    PopupMgr::instance()->pushCurrentItemError("File is not a valid BFWAV");
+                    PopupMgr::instance()->pushCurrentItemError("File is not a valid wave file");
                     return;
                 }
+
+                waveFmt = sead::MemUtil::compare(header->signature, "CWAV", 4) == 0 ? "CWAV" : "FWAV";
 
                 if (sead::MemUtil::compare(header->signature, "CWAV", 4) == 0)
                 {
@@ -59,7 +63,7 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
                 {
                     if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010200))
                     {
-                        sead::FormatFixedSafeString<64> msg("BFWAV version not supported (0x%08X)", (u32)header->version);
+                        sead::FormatFixedSafeString<64> msg("FWAV version not supported (0x%08X)", (u32)header->version);
                         PopupMgr::instance()->pushCurrentItemError(msg);
                         return;
                     }
@@ -72,22 +76,22 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
 
             if (!infoBlock)
             {
-                PopupMgr::instance()->pushCurrentItemError("BFWAV: INFO block not found");
+                PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: INFO block not found", waveFmt).cstr());
                 return;
             }
 
             if (!dataBlock)
             {
-                PopupMgr::instance()->pushCurrentItemError("BFWAV: DATA block not found");
+                PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: DATA block not found", waveFmt).cstr());
                 return;
             }
 
-            if (!CheckBlockCorruptError("BFWAV", "INFO", infoBlock))
+            if (!CheckBlockCorruptError(waveFmt, "INFO", infoBlock))
             {
                 return;
             }
 
-            if (!CheckBlockCorruptError("BFWAV", "DATA", dataBlock))
+            if (!CheckBlockCorruptError(waveFmt, "DATA", dataBlock))
             {
                 return;
             }

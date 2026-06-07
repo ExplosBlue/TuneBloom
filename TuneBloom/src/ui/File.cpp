@@ -135,7 +135,7 @@ bool ValidBFSARHeader(const void* file)
 
     if (!isFSAR && !isCSAR)
     {
-        PopupMgr::instance()->addPopup({ "Selected file is not a valid BFSAR/BCSAR file", nullptr });
+        PopupMgr::instance()->addPopup({ "Selected file is not a valid archive file", nullptr });
         return false;
     }
 
@@ -183,12 +183,14 @@ bool ValidBCSARHeader(const void* file)
 
 bool NewFile()
 {
-    LOG_STR("Creating new BFSAR file");
+    ArchiveFormat prevFormat = sBfsar.getFormat();
     CloseFile();
 
-    sBfsar.create();
+    sBfsar.create(prevFormat);
 
-    util::updateTitle("*New.bfsar");
+    const char* fmtName = prevFormat == ArchiveFormat::BCSAR ? "BCSAR" : "BFSAR";
+    LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", fmtName).cstr());
+    util::updateTitle(sead::FormatFixedSafeString<64>("*New.%s", prevFormat == ArchiveFormat::BCSAR ? "bcsar" : "bfsar").cstr());
 
     return true;
 }

@@ -16,14 +16,17 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
         return;
     }
 
+    const char* wsdFmt;
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveSoundFile);
 
         if (sead::MemUtil::compare(header->signature, "FWSD", 4) != 0 && sead::MemUtil::compare(header->signature, "CWSD", 4) != 0)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFWSD");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid wave sound file");
             return;
         }
+
+        wsdFmt = sead::MemUtil::compare(header->signature, "CWSD", 4) == 0 ? "CWSD" : "FWSD";
 
         if (sead::MemUtil::compare(header->signature, "CWSD", 4) == 0)
         {
@@ -39,7 +42,7 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
         {
             if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010100))
             {
-                sead::FormatFixedSafeString<64> msg("BFWSD version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("FWSD version not supported (0x%08X)", (u32)header->version);
                 return;
             }
         }
@@ -50,11 +53,11 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
     const WaveSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFWSD: INFO block not found");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: INFO block not found", wsdFmt).cstr());
         return;
     }
 
-    if (!CheckBlockCorruptError("BFWSD", "INFO", infoBlock))
+    if (!CheckBlockCorruptError(wsdFmt, "INFO", infoBlock))
     {
         return;
     }

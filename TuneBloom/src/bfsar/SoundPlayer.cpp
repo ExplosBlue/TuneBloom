@@ -119,7 +119,8 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
 {
     if (sound->getStreamSoundInfo().getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
     {
-        PopupMgr::instance()->addPopup({ "Only BFSTM streams are supported", nullptr });
+        const char* streamFmtP = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>("Only %s streams are supported", streamFmtP).cstr(), nullptr });
         return false;
     }
 

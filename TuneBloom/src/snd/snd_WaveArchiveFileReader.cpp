@@ -39,7 +39,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
 
         if (sead::MemUtil::compare(header->signature, "FWAR", 4) != 0 && sead::MemUtil::compare(header->signature, "CWAR", 4) != 0)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFWAR");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid wave archive file");
             return;
         }
 
@@ -57,7 +57,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
         {
             if ((u32)header->version != 0x00010000)
             {
-                sead::FormatFixedSafeString<64> msg("BFWAR version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("FWAR version not supported (0x%08X)", (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }

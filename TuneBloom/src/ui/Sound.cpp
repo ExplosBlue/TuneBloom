@@ -765,10 +765,11 @@ void DrawSoundPropertiesUI()
                         ImGui::BeginDisabled();
 
                     {
-                        static const char* sStreamTypes[] = { "BFSTM", "ADTS (AAC)" };
+                        const char* streamFmt = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+                        const char* streamTypeLabels[] = { streamFmt, "ADTS (AAC)" };
 
                         u32 streamType = (enableSend ? strmSoundInfo.getStreamType() : Sound::StreamSoundInfo::StreamType::NwStreamBinary) - 1;
-                        if (ImGui::Combo("Stream Type", (s32*)&streamType, sStreamTypes, IM_ARRAYSIZE(sStreamTypes)))
+                        if (ImGui::Combo("Stream Type", (s32*)&streamType, streamTypeLabels, IM_ARRAYSIZE(streamTypeLabels)))
                         {
                             strmSoundInfo.setStreamType(static_cast<Sound::StreamSoundInfo::StreamType>(streamType + 1));
                         }
@@ -790,10 +791,13 @@ void DrawSoundPropertiesUI()
                                 ImGui::EndDisabled();
                             }
 
-                            HelpMarker(
-                                "Note: For BFSTM Streams this looping info is ignored\n"
-                                "and instead is taken from the first Track attached Wave File"
+                            const char* loopHelpFmt = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+                            sead::FormatFixedSafeString<128> helpMsg(
+                                "Note: For %s Streams this looping info is ignored\n"
+                                "and instead is taken from the first Track attached Wave File",
+                                loopHelpFmt
                             );
+                            HelpMarker(helpMsg.cstr());
 
                             if (!enableSoundExt)
                             {

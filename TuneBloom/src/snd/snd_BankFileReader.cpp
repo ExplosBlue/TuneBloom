@@ -28,14 +28,17 @@ void BankFileReader::Initialize(const void* bankFile)
     if (!bankFile)
         return;
 
+    const char* bankFmt;
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(bankFile);
 
         if (sead::MemUtil::compare(header->signature, "FBNK", 4) != 0 && sead::MemUtil::compare(header->signature, "CBNK", 4) != 0)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFBNK");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid bank file");
             return;
         }
+
+        bankFmt = sead::MemUtil::compare(header->signature, "CBNK", 4) == 0 ? "CBNK" : "FBNK";
 
         if (sead::MemUtil::compare(header->signature, "CBNK", 4) == 0)
         {
@@ -51,7 +54,7 @@ void BankFileReader::Initialize(const void* bankFile)
         {
             if ((u32)header->version != 0x00010000)
             {
-                sead::FormatFixedSafeString<64> msg("BFBNK version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("FBNK version not supported (0x%08X)", (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -63,11 +66,11 @@ void BankFileReader::Initialize(const void* bankFile)
     const BankFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFBNK: INFO block not found");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: INFO block not found", bankFmt).cstr());
         return;
     }
 
-    if (!CheckBlockCorruptError("BFBNK", "INFO", infoBlock))
+    if (!CheckBlockCorruptError(bankFmt, "INFO", infoBlock))
     {
         return;
     }

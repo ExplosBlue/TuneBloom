@@ -35,8 +35,10 @@ bool MemorySoundArchive::Initialize(const void* soundArchiveData)
 
     mHeader = header; // Copy
 
+    const char* archiveFmt = sead::MemUtil::compare(soundArchiveData, "CSAR", 4) == 0 ? "CSAR" : "FSAR";
+
     const void* infoBlock = sead::PtrUtil::addOffset(soundArchiveData, mHeader.GetInfoBlockOffset());
-    if (!CheckBlockCorrupt("BFSAR", "INFO", infoBlock))
+    if (!CheckBlockCorrupt(archiveFmt, "INFO", infoBlock))
     {
         return false;
     }
@@ -46,7 +48,7 @@ bool MemorySoundArchive::Initialize(const void* soundArchiveData)
     if (mHeader.GetStringBlockOffset() != 0xFFFFFFFF && mHeader.GetStringBlockSize() != 0xFFFFFFFF)
     {
         const void* stringBlock = sead::PtrUtil::addOffset(soundArchiveData, mHeader.GetStringBlockOffset());
-        if (!CheckBlockCorrupt("BFSAR", "STRG", stringBlock))
+        if (!CheckBlockCorrupt(archiveFmt, "STRG", stringBlock))
         {
             return false;
         }

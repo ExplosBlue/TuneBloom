@@ -23,16 +23,17 @@ void StreamSoundFileReader::Initialize(const void* streamSoundFile)
     if (!IsValidFileHeader(streamSoundFile))
         return;
 
+    const char* streamFmt = sead::MemUtil::compare(streamSoundFile, "CSTM", 4) == 0 ? "CSTM" : "FSTM";
     const StreamSoundFile::FileHeader* header = reinterpret_cast<const StreamSoundFile::FileHeader*>(streamSoundFile);
 
     const StreamSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFSTM: INFO block not found");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: INFO block not found", streamFmt).cstr());
         return;
     }
 
-    if (!CheckBlockCorruptError("BFSTM", "INFO", infoBlock))
+    if (!CheckBlockCorruptError(streamFmt, "INFO", infoBlock))
     {
         return;
     }
@@ -40,13 +41,13 @@ void StreamSoundFileReader::Initialize(const void* streamSoundFile)
     mInfoBlockBody = &infoBlock->body;
     if (mInfoBlockBody->GetStreamSoundInfo()->oneBlockBytes % 32 != 0)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFSTM: Block bytes not aligned");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: Block bytes not aligned", streamFmt).cstr());
         return;
     }
 
     if (mInfoBlockBody->GetStreamSoundInfo()->lastBlockPaddedBytes % 32 != 0)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFSTM: Block bytes not aligned");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: Block bytes not aligned", streamFmt).cstr());
         return;
     }
 
@@ -95,7 +96,7 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
 
     if (sead::MemUtil::compare(header->signature, "FSTM", 4) != 0 && sead::MemUtil::compare(header->signature, "CSTM", 4) != 0)
     {
-        PopupMgr::instance()->pushCurrentItemError("File is not a valid BFSTM");
+        PopupMgr::instance()->pushCurrentItemError("File is not a valid stream file");
         return false;
     }
 

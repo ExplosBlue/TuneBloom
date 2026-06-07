@@ -17,14 +17,17 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         return;
     }
 
+    const char* seqFmt;
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(sequenceFile);
 
         if (sead::MemUtil::compare(header->signature, "FSEQ", 4) != 0 && sead::MemUtil::compare(header->signature, "CSEQ", 4) != 0)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFSEQ");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid sequence file");
             return;
         }
+
+        seqFmt = sead::MemUtil::compare(header->signature, "CSEQ", 4) == 0 ? "CSEQ" : "FSEQ";
 
         if (sead::MemUtil::compare(header->signature, "CSEQ", 4) == 0)
         {
@@ -40,7 +43,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         {
             if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00020000))
             {
-                sead::FormatFixedSafeString<64> msg("BFSEQ version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("FSEQ version not supported (0x%08X)", (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -52,11 +55,11 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::DataBlock* dataBlock = header->GetDataBlock();
     if (!dataBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFSEQ: DATA block not found");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: DATA block not found", seqFmt).cstr());
         return;
     }
 
-    if (!CheckBlockCorruptError("BFSEQ", "DATA", dataBlock))
+    if (!CheckBlockCorruptError(seqFmt, "DATA", dataBlock))
     {
         return;
     }
@@ -64,11 +67,11 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::LabelBlock* labelBlock = header->GetLabelBlock();
     if (!labelBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFSEQ: LABL block not found");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: LABL block not found", seqFmt).cstr());
         return;
     }
 
-    if (!CheckBlockCorruptError("BFSEQ", "LABL", labelBlock))
+    if (!CheckBlockCorruptError(seqFmt, "LABL", labelBlock))
     {
         return;
     }

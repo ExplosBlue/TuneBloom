@@ -16,14 +16,17 @@ GroupFileReader::GroupFileReader(const void* groupFile)
     if (!groupFile)
         return;
 
+    const char* grpFmt;
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(groupFile);
 
         if (sead::MemUtil::compare(header->signature, "FGRP", 4) != 0 && sead::MemUtil::compare(header->signature, "CGRP", 4) != 0)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid BFGRP");
+            PopupMgr::instance()->pushCurrentItemError("File is not a valid group file");
             return;
         }
+
+        grpFmt = sead::MemUtil::compare(header->signature, "CGRP", 4) == 0 ? "CGRP" : "FGRP";
 
         if (sead::MemUtil::compare(header->signature, "CGRP", 4) == 0)
         {
@@ -40,7 +43,7 @@ GroupFileReader::GroupFileReader(const void* groupFile)
         {
             if ((u32)header->version != 0x00010000)
             {
-                sead::FormatFixedSafeString<64> msg("BFGRP version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("FGRP version not supported (0x%08X)", (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -55,29 +58,29 @@ GroupFileReader::GroupFileReader(const void* groupFile)
 
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFGRP: INFO block not found");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: INFO block not found", grpFmt).cstr());
         return;
     }
 
     if (!fileBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError("BFGRP: FILE block not found");
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: FILE block not found", grpFmt).cstr());
         return;
     }
 
-    if (!CheckBlockCorruptError("BFGRP", "INFO", infoBlock))
+    if (!CheckBlockCorruptError(grpFmt, "INFO", infoBlock))
     {
         return;
     }
 
-    if (!CheckBlockCorruptError("BFGRP", "FILE", fileBlock))
+    if (!CheckBlockCorruptError(grpFmt, "FILE", fileBlock))
     {
         return;
     }
 
     if (infoExBlock)
     {
-        if (!CheckBlockCorruptError("BFGRP", "INFX", infoExBlock))
+        if (!CheckBlockCorruptError(grpFmt, "INFX", infoExBlock))
         {
             return;
         }

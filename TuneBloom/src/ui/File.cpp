@@ -206,10 +206,9 @@ bool OpenFile()
     }
     else
     {
-        const u32 filterCount = 2;
+        const u32 filterCount = 1;
         FileFilter filters[filterCount] = {
-            { "Cafe Sound Archive (*.bfsar)", "*.bfsar" },
-            { "CTR Sound Archive (*.bcsar)", "*.bcsar" }
+            { "Sound Archive (*.bfsar, *.bcsar)", "*.bfsar *.bcsar" }
         };
 
         if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))

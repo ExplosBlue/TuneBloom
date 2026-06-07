@@ -114,7 +114,7 @@ void InnerFile::drawUI()
         CenteredTextX("Version");
 
         u32 version = mVersion;
-        if (DrawVersionUI(&version))
+        if (DrawVersionUI(&version, mFormat == ArchiveFormat::BCSAR ? 4 : 3))
         {
             mVersion = version;
         }

@@ -358,7 +358,7 @@ void WaveFile::drawUI()
     CenteredTextX("Version (For Stream)");
 
     u32 version = sBfsar.getVersionForBfstm();
-    DrawVersionUI(&version);
+    DrawVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3);
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("");

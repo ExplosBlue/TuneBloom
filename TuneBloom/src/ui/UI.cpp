@@ -1431,7 +1431,7 @@ void DrawProjectInfoUI()
         CenteredTextX("Version");
 
         u32 version = sBfsar.getVersion();
-        if (DrawVersionUI(&version))
+        if (DrawVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3))
         {
             sBfsar.setVersion(version);
         }

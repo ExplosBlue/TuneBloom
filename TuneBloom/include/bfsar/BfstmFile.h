@@ -20,10 +20,7 @@ public:
     static bool IsOriginalLoopAvailable(u32 version, ArchiveFormat format)
     {
         if (format == ArchiveFormat::BCSAR)
-        {
-            u32 major = (version >> 24) & 0xFF;
-            return major >= 4;                  // CSTM: original loop from v4.0.0.0+
-        }
+            return version >= makeVersion(2, 3, 0);
 
         return version >= 0x00040000;           // FSTM
     }

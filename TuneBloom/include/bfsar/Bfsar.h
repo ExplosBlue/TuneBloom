@@ -365,8 +365,10 @@ public:
         {
             if (isVersionOrLater(2, 3, 2))
                 return makeVersion(2, 3, 1);
-            if (isVersionOrLater(2, 3, 0))
+            if (isVersionOrLater(2, 3, 1))
                 return makeVersion(2, 3, 0);
+            if (isVersionOrLater(2, 3, 0))
+                return makeVersion(2, 2, 0);
             if (isVersionOrLater(2, 1, 0))
                 return makeVersion(2, 1, 0);
             return makeVersion(2, 0, 0);

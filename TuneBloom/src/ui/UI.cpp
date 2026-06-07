@@ -441,7 +441,7 @@ void SaveAccentColor()
     std::string path = GetConfigDir() + "/theme.cfg";
 
 #if defined(SEAD_PLATFORM_WINDOWS)
-    _mkdir(GetConfigDir().c_str());
+    CreateDirectoryA(GetConfigDir().c_str(), NULL);
 #else
     mkdir(GetConfigDir().c_str(), 0755);
 #endif

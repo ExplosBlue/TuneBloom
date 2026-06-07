@@ -54,6 +54,7 @@ bool sShowSystemWindow = false;
 bool sShowDemoWindow = false;
 
 sead::FixedSafeString<512> sDroppedFilePath;
+sead::FixedSafeString<512> sRecentFileClick;
 
 ItemList sFileWindows;
 
@@ -188,6 +189,46 @@ void DrawMenuBar()
                 {
                     OpenFile();
                 }
+            }
+
+            if (ImGui::BeginMenu(ICON_LC_CLOCK " Open Recent"))
+            {
+                for (size_t i = 0; i < GetRecentFiles().size(); i++)
+                {
+                    const char* path = GetRecentFiles()[i].c_str();
+                    const char* name = path;
+                    if (const char* sep = strrchr(path, '/'))
+                        name = sep + 1;
+                    else if (const char* sep = strrchr(path, '\\'))
+                        name = sep + 1;
+                    if (ImGui::MenuItem(name, nullptr))
+                    {
+                        if (bfsarOpen)
+                        {
+                            sWantsOpen = true;
+                            sRecentFileClick = path;
+                        }
+                        else
+                        {
+                            OpenFile(path);
+                        }
+                    }
+                    if (ImGui::IsItemHovered())
+                        ImGui::SetTooltip("%s", path);
+                }
+                if (GetRecentFiles().empty())
+                {
+                    ImGui::BeginDisabled();
+                    ImGui::MenuItem("(empty)");
+                    ImGui::EndDisabled();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Clear recents"))
+                {
+                    GetRecentFiles().clear();
+                    SaveRecentFiles();
+                }
+                ImGui::EndMenu();
             }
 
             if (!bfsarOpen)
@@ -423,6 +464,47 @@ void LoadAccentColor()
         int n = fscanf(f, "%f %f %f %f %f", &gAccentColor.x, &gAccentColor.y, &gAccentColor.z, &gAccentColor.w, &gThemeBrightness);
         if (n < 5)
             gThemeBrightness = 1.0f;
+        fclose(f);
+    }
+}
+
+std::vector<std::string>& GetRecentFiles()
+{
+    static std::vector<std::string>* files = new std::vector<std::string>();
+    return *files;
+}
+
+void SaveRecentFiles()
+{
+    std::string path = GetConfigDir() + "/recent.cfg";
+
+    FILE* f = fopen(path.c_str(), "w");
+    if (f)
+    {
+        for (size_t i = 0; i < GetRecentFiles().size(); i++)
+            fprintf(f, "%s\n", GetRecentFiles()[i].c_str());
+        fclose(f);
+    }
+}
+
+void LoadRecentFiles()
+{
+    GetRecentFiles().clear();
+
+    std::string path = GetConfigDir() + "/recent.cfg";
+
+    FILE* f = fopen(path.c_str(), "r");
+    if (f)
+    {
+        char buf[1024];
+        while (fgets(buf, sizeof(buf), f))
+        {
+            size_t len = strlen(buf);
+            if (len > 0 && buf[len - 1] == '\n')
+                buf[len - 1] = '\0';
+            if (buf[0])
+                GetRecentFiles().push_back(buf);
+        }
         fclose(f);
     }
 }

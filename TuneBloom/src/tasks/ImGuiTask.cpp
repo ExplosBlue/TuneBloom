@@ -383,5 +383,6 @@ static void SetupImGuiStyle()
     style.GrabRounding = 2;
 
     LoadAccentColor();
+    LoadRecentFiles();
     ApplyThemeFromAccent(gAccentColor);
 }

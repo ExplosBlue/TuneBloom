@@ -59,6 +59,7 @@ extern Bfsar sBfsar;
 extern SoundPlayer sSoundPlayer;
 
 extern sead::FixedSafeString<512> sDroppedFilePath;
+extern sead::FixedSafeString<512> sRecentFileClick;
 
 //
 
@@ -74,6 +75,12 @@ extern f32 gThemeBrightness;
 void ApplyThemeFromAccent(ImVec4 accent);
 void SaveAccentColor();
 void LoadAccentColor();
+
+#include <vector>
+#include <string>
+std::vector<std::string>& GetRecentFiles();
+void SaveRecentFiles();
+void LoadRecentFiles();
 
 class FileWindow : public Item
 {
@@ -129,6 +136,7 @@ void DrawUI();
 
 bool NewFile();
 bool OpenFile();
+bool OpenFile(const char* path);
 bool SaveFile();
 bool SaveFileAs();
 bool CloseFile();

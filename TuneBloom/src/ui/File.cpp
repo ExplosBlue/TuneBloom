@@ -15,10 +15,27 @@
 
 #include <string>
 #include <filesystem>
+#include <algorithm>
 
 #include <portable-file-dialogs.h>
 
 #include <bfsar/InnerFile.h>
+
+static void AddToRecentFiles(const char* path)
+{
+    const size_t maxRecent = 10;
+
+    auto it = std::find(GetRecentFiles().begin(), GetRecentFiles().end(), path);
+    if (it != GetRecentFiles().end())
+        GetRecentFiles().erase(it);
+
+    GetRecentFiles().insert(GetRecentFiles().begin(), path);
+
+    if (GetRecentFiles().size() > maxRecent)
+        GetRecentFiles().resize(maxRecent);
+
+    SaveRecentFiles();
+}
 
 bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters)
 {
@@ -195,11 +212,22 @@ bool NewFile()
     return true;
 }
 
+bool OpenFile(const char* path)
+{
+    sRecentFileClick = path;
+    return OpenFile();
+}
+
 bool OpenFile()
 {
     sead::FixedSafeString<512> filePath;
 
-    if (!sDroppedFilePath.isEmpty())
+    if (!sRecentFileClick.isEmpty())
+    {
+        filePath = sRecentFileClick;
+        sRecentFileClick.clear();
+    }
+    else if (!sDroppedFilePath.isEmpty())
     {
         filePath = sDroppedFilePath;
         sDroppedFilePath.clear();
@@ -254,6 +282,8 @@ bool OpenFile()
     sead::Path::getFileName(&fileName, filePath);
 
     util::updateTitle(fileName.cstr());
+
+    AddToRecentFiles(filePath.cstr());
 
     return true;
 }
@@ -328,6 +358,8 @@ bool CloseFile()
 bool Exit()
 {
     CloseFile();
+
+    GetRecentFiles().clear();
 
     sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
     SEAD_ASSERT(fw);

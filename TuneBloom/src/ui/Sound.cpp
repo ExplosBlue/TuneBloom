@@ -689,7 +689,14 @@ void DrawSoundPropertiesUI()
         }
 
         if (!isSeq)
+        {
             ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                sound->setSoundType(Sound::SoundType::Seq);
+                SetUnsavedChanges(true);
+            }
+        }
 
         if (!isStrm)
             ImGui::BeginDisabled();
@@ -909,7 +916,14 @@ void DrawSoundPropertiesUI()
         }
 
         if (!isStrm)
+        {
             ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                sound->setSoundType(Sound::SoundType::Strm);
+                SetUnsavedChanges(true);
+            }
+        }
 
         if (!isWave)
             ImGui::BeginDisabled();
@@ -1187,7 +1201,14 @@ void DrawSoundPropertiesUI()
         }
 
         if (!isWave)
+        {
             ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            {
+                sound->setSoundType(Sound::SoundType::Wave);
+                SetUnsavedChanges(true);
+            }
+        }
 
         ImGui::EndTabBar();
     }

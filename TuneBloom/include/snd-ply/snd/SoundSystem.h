@@ -86,6 +86,9 @@ public:
     static void pauseAudio();
     static void resumeAudio();
 
+    static void setOutputSampleRate(u32 rate);
+    static u32 getOutputSampleRate();
+
     static bool detail_isStreamLoadWait()
     {
         return sIsStreamLoadWait;

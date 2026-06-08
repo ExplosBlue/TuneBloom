@@ -320,54 +320,20 @@ f32* SoundSystem::calcFFT()
     return sFFTData;
 }
 
-static void DataCallback(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount)
-{
-    const u32 cChannelCount = internal::driver::HardwareMgr::cChannelCount;
-
-    internal::driver::HardwareMgr::callHwCallback();
-    //internal::driver::HardwareMgr::callHwCallback(); // do twice ???
-    //internal::driver::HardwareMgr::callHwCallback(); // do thrice ???
-
-    f32* dataBuffers[cChannelCount] = { internal::driver::HardwareMgr::sLeftDataBuffer, internal::driver::HardwareMgr::sRightDataBuffer };
-
-    internal::driver::HardwareMgr::resetFinalMixCallbackData();
-    internal::driver::HardwareMgr::processFinalMixCallback(dataBuffers, frameCount, cChannelCount);
-
-    f32* outData = (f32*)pOutput;
-    u32 idx = 0;
-
-    for (u32 i = 0; i < frameCount * cChannelCount; i += cChannelCount)
-    {
-        const f32 cClampValue = 1.0f;
-
-        f32 leftSample = internal::driver::HardwareMgr::sLeftDataBuffer[idx];
-        leftSample = leftSample / 32767.0f;
-        leftSample = sead::Mathf::clamp2(-cClampValue, leftSample, cClampValue);
-
-        f32 rightSample = internal::driver::HardwareMgr::sRightDataBuffer[idx];
-        rightSample = rightSample / 32767.0f;
-        rightSample = sead::Mathf::clamp2(-cClampValue, rightSample, cClampValue);
-
-        outData[i + 0] = leftSample;
-        outData[i + 1] = rightSample;
-
-        idx++;
-    }
-}
-
+static u32 sOutputSampleRate = 48000;
 static ma_device device;
 
-static void InitSDK(sead::Heap* heap)
-{
-    sead::CurrentHeapSetter chs(heap);
+static void DataCallback(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount);
 
+static void InitDevice()
+{
     ma_device_config config    = ma_device_config_init(ma_device_type_playback);
     config.playback.format     = ma_format_f32;
     config.playback.channels   = internal::driver::HardwareMgr::cChannelCount;
-    config.sampleRate          = internal::driver::HardwareMgr::cSampleRate;
+    config.sampleRate          = sOutputSampleRate;
     config.dataCallback        = DataCallback;
     config.pUserData           = nullptr;
-    config.periodSizeInFrames  = internal::driver::HardwareMgr::cSamplePerFrame;
+    config.periodSizeInFrames  = sOutputSampleRate * internal::driver::HardwareMgr::cSoundFrameIntervalMSEC / 1000;
 
     config.noPreSilencedOutputBuffer = false;
     config.noClip = false;
@@ -378,7 +344,58 @@ static void InitSDK(sead::Heap* heap)
         return;
     }
 
-    ma_device_start(&device); // The device is sleeping by default so you'll need to start it manually.
+    ma_device_start(&device);
+}
+
+static void DataCallback(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount)
+{
+    const u32 cChannelCount   = internal::driver::HardwareMgr::cChannelCount;
+    const u32 cInternalFrames = internal::driver::HardwareMgr::cSamplePerFrame;
+
+    internal::driver::HardwareMgr::callHwCallback();
+
+    f32* dataBuffers[cChannelCount] = { internal::driver::HardwareMgr::sLeftDataBuffer, internal::driver::HardwareMgr::sRightDataBuffer };
+
+    internal::driver::HardwareMgr::resetFinalMixCallbackData();
+    internal::driver::HardwareMgr::processFinalMixCallback(dataBuffers, cInternalFrames, cChannelCount);
+
+    f32* outData = (f32*)pOutput;
+
+    if (sOutputSampleRate == 48000)
+    {
+        for (u32 i = 0; i < frameCount; i++)
+        {
+            for (u32 ch = 0; ch < cChannelCount; ch++)
+            {
+                f32 s = dataBuffers[ch][i];
+                outData[i * cChannelCount + ch] = sead::Mathf::clamp2(-1.0f, s / 32767.0f, 1.0f);
+            }
+        }
+    }
+    else
+    {
+        for (u32 i = 0; i < frameCount; i++)
+        {
+            f32 pos = (static_cast<f32>(i) * cInternalFrames) / frameCount;
+            u32 idx = static_cast<u32>(pos);
+            f32 frac = pos - static_cast<f32>(idx);
+            u32 idx0 = sead::Mathu::min(idx, cInternalFrames - 1);
+            u32 idx1 = sead::Mathu::min(idx + 1, cInternalFrames - 1);
+
+            for (u32 ch = 0; ch < cChannelCount; ch++)
+            {
+                f32 s = dataBuffers[ch][idx0] + (dataBuffers[ch][idx1] - dataBuffers[ch][idx0]) * frac;
+                outData[i * cChannelCount + ch] = sead::Mathf::clamp2(-1.0f, s / 32767.0f, 1.0f);
+            }
+        }
+    }
+}
+
+static void InitSDK(sead::Heap* heap)
+{
+    sead::CurrentHeapSetter chs(heap);
+    sOutputSampleRate = internal::driver::HardwareMgr::cSampleRate;
+    InitDevice();
 }
 
 static void QuitSDK()
@@ -394,6 +411,22 @@ void SoundSystem::pauseAudio()
 void SoundSystem::resumeAudio()
 {
     ma_device_start(&device);
+}
+
+void SoundSystem::setOutputSampleRate(u32 rate)
+{
+    if (rate == sOutputSampleRate) return;
+
+    sOutputSampleRate = rate;
+
+    ma_device_stop(&device);
+    ma_device_uninit(&device);
+    InitDevice();
+}
+
+u32 SoundSystem::getOutputSampleRate()
+{
+    return sOutputSampleRate;
 }
 
 /*

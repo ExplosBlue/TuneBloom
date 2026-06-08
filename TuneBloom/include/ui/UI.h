@@ -72,6 +72,7 @@ extern bool sSelectedItemIsSubWindow;
 
 extern ImVec4 gAccentColor;
 extern f32 gThemeBrightness;
+extern u32 gOutputSampleRate;
 void ApplyThemeFromAccent(ImVec4 accent);
 void SaveAccentColor();
 void LoadAccentColor();

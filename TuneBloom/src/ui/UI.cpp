@@ -4,6 +4,7 @@
 #include <ui/PopupMgr.h>
 
 //#include <snd/SoundThread.h>
+#include <snd/SoundSystem.h>
 
 #include <filedevice/seadPath.h>
 #include <filedevice/seadFileDeviceMgr.h>
@@ -72,6 +73,29 @@ static int sStrmLoopCount = 2;
 static float sStrmFadeSec = 12.0f;
 static int sStrmSampleRateIdx = 0;
 static int sSeqSampleRateIdx = 0;
+
+u32 gOutputSampleRate = 48000;
+
+static const char* sOutSampleRateItems[] = {
+    "8000 Hz",
+    "11025 Hz",
+    "16000 Hz",
+    "22050 Hz",
+    "32000 Hz",
+    "44100 Hz",
+    "48000 Hz",
+    "96000 Hz"
+};
+static const u32 sOutSampleRateValues[] = {
+    8000,
+    11025,
+    16000,
+    22050,
+    32000,
+    44100,
+    48000,
+    96000
+};
 
 static bool sShowExportConfirm = false;
 
@@ -312,6 +336,19 @@ void DrawMenuBar()
         {
             ImGui::MenuItem(ICON_LC_CPU " System Window", nullptr, &sShowSystemWindow);
             // ImGui::MenuItem("Demo Window", nullptr, &sShowDemoWindow);
+
+            int outRateIdx = 3;
+            for (u32 i = 0; i < sizeof(sOutSampleRateValues) / sizeof(sOutSampleRateValues[0]); i++)
+            {
+                if (sOutSampleRateValues[i] == gOutputSampleRate)
+                { outRateIdx = static_cast<int>(i); break; }
+            }
+            if (ImGui::Combo("Output Sample Rate", &outRateIdx, sOutSampleRateItems, IM_ARRAYSIZE(sOutSampleRateItems)))
+            {
+                gOutputSampleRate = sOutSampleRateValues[outRateIdx];
+                snd::SoundSystem::setOutputSampleRate(gOutputSampleRate);
+            }
+
             ImGui::Separator();
             {
                 float h, s, v;

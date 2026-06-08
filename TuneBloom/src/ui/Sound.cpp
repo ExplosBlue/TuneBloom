@@ -718,6 +718,25 @@ void DrawSoundPropertiesUI()
             // }
 
             {
+                u32 sampleRate = 0;
+                const Sound::StreamSoundInfo::Track::List& tracks = strmSoundInfo.getTrackList();
+                for (s32 i = 0; i < tracks.size(); i++)
+                {
+                    const auto& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
+                    if (track.getWaveFileRef().isAttached())
+                    {
+                        const WaveFile& wf = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
+                        sampleRate = wf.getSampleRate();
+                        break;
+                    }
+                }
+                if (sampleRate != 0)
+                {
+                    ImGui::Text("Sample Rate: %u Hz", sampleRate);
+                }
+            }
+
+            {
                 bool enableSend = sBfsar.isStreamSendAvailable();
 
                 if (!enableSend)

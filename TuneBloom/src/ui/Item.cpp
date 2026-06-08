@@ -140,6 +140,8 @@ void WarningPopup(const char* name, const char* content)
     }
 }
 
+static Item* sInsertAfterItem = nullptr;
+
 static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, ContextMenuCallback menuCallback, Item*& selectedItem)
 {
     bool add = false;
@@ -170,12 +172,22 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
 
             if (ImGui::MenuItem("Add"))
             {
+                sInsertAfterItem = nullptr;
                 add = true;
             }
 
             if (disableAdd)
             {
                 ImGui::EndDisabled();
+            }
+        }
+
+        if (item && createCallback)
+        {
+            if (ImGui::MenuItem("Insert After"))
+            {
+                sInsertAfterItem = item;
+                add = true;
             }
         }
 
@@ -577,12 +589,13 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal(sead::FormatFixedSafeString<32>(ICON_LC_PLUS " Add %s###Add", listName).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal(sead::FormatFixedSafeString<64>(ICON_LC_PLUS " Add %s###Add", listName).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             SEAD_ASSERT(createCallback);
             InstanciateItemCallback instanciateItemCallback = createCallback(ImGui::IsWindowAppearing());
             if (!instanciateItemCallback)
             {
+                sInsertAfterItem = nullptr;
                 ImGui::CloseCurrentPopup();
             }
 
@@ -610,7 +623,15 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                         sSelectedItemIsSubWindow = true;
                     }
 
-                    list.pushBack(addedItem);
+                    if (sInsertAfterItem)
+                    {
+                        sInsertAfterItem->insertBack(addedItem);
+                        sInsertAfterItem = nullptr;
+                    }
+                    else
+                    {
+                        list.pushBack(addedItem);
+                    }
 
                     sBfsar.updateList(list);
                     SetUnsavedChanges(true);
@@ -623,6 +644,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (ImGui::Button("Cancel", buttonSize))
             {
+                sInsertAfterItem = nullptr;
                 ImGui::CloseCurrentPopup();
             }
 

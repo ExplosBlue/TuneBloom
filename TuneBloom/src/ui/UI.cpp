@@ -2793,6 +2793,66 @@ InstanciateItemCallback CreateSoundFunc(bool clear)
     return CreateItemFunc(clear, []() -> Item* { return new Sound(); }, innerFunc);
 }
 
+template <Sound::SoundType FixedType>
+static InstanciateItemCallback CreateFixedSoundTypeFunc(bool clear)
+{
+    auto innerFunc = [](bool clear, Item* item, bool* validate)
+    {
+        static Item* sPlayer = nullptr;
+
+        if (clear)
+        {
+            sPlayer = nullptr;
+        }
+
+        if (!item && !validate)
+        {
+            ImGui::Separator();
+
+            ItemSelector("Player", sBfsar.getPlayerList(), &sPlayer, false);
+
+            WarningPopup("###Player", "Select a valid Player !" "\nIf there are none please add one first.");
+        }
+        else if (validate)
+        {
+            if (!sPlayer)
+            {
+                ImGui::OpenPopup("###Player");
+                *validate = false;
+            }
+        }
+        else
+        {
+            Sound* sound = static_cast<Sound*>(item);
+
+            sound->getPlayerRef().attach(sPlayer);
+            sound->setSoundType(FixedType);
+
+            if (FixedType == Sound::SoundType::Strm)
+            {
+                sound->setPanMode(snd::PanMode::Balance); // Default for streams
+            }
+        }
+    };
+
+    return CreateItemFunc(clear, []() -> Item* { return new Sound(); }, innerFunc);
+}
+
+InstanciateItemCallback CreateStreamSoundFunc(bool clear)
+{
+    return CreateFixedSoundTypeFunc<Sound::SoundType::Strm>(clear);
+}
+
+InstanciateItemCallback CreateWaveSoundFunc(bool clear)
+{
+    return CreateFixedSoundTypeFunc<Sound::SoundType::Wave>(clear);
+}
+
+InstanciateItemCallback CreateSequenceSoundFunc(bool clear)
+{
+    return CreateFixedSoundTypeFunc<Sound::SoundType::Seq>(clear);
+}
+
 const char* SoundNamePrefixFunc(Item* item)
 {
     Sound* sound = (Sound*)item;
@@ -2885,7 +2945,7 @@ const char* SoundNamePrefixFunc2(Item* item)
 
 void DrawStreamSoundsUI()
 {
-    DrawAllItemsUI("Stream Sound", sBfsar.getSoundList(), nullptr, &SoundNamePrefixFunc2, nullptr,
+    DrawAllItemsUI("Stream Sound", sBfsar.getSoundList(), &CreateStreamSoundFunc, &SoundNamePrefixFunc2, nullptr,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
@@ -2896,7 +2956,7 @@ void DrawStreamSoundsUI()
 
 void DrawWaveSoundsUI()
 {
-    DrawAllItemsUI("Wave Sound", sBfsar.getSoundList(), nullptr, &SoundNamePrefixFunc2, nullptr,
+    DrawAllItemsUI("Wave Sound", sBfsar.getSoundList(), &CreateWaveSoundFunc, &SoundNamePrefixFunc2, nullptr,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
@@ -2907,7 +2967,7 @@ void DrawWaveSoundsUI()
 
 void DrawSequenceSoundsUI()
 {
-    DrawAllItemsUI("Sequence Sound", sBfsar.getSoundList(), nullptr, &SoundNamePrefixFunc2, nullptr,
+    DrawAllItemsUI("Sequence Sound", sBfsar.getSoundList(), &CreateSequenceSoundFunc, &SoundNamePrefixFunc2, nullptr,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
@@ -2965,6 +3025,37 @@ InstanciateItemCallback CreateSoundSetFunc(bool clear)
     };
 
     return CreateItemFunc(clear, []() -> Item* { return new SoundSet(); }, innerFunc);
+}
+
+template <SoundSet::SoundSetType FixedType>
+static InstanciateItemCallback CreateFixedSoundSetTypeFunc(bool clear)
+{
+    auto innerFunc = [](bool clear, Item* item, bool* validate)
+    {
+        if (!item && !validate)
+        {
+        }
+        else if (validate)
+        {
+        }
+        else
+        {
+            SoundSet* soundSet = static_cast<SoundSet*>(item);
+            soundSet->setSoundSetType(FixedType);
+        }
+    };
+
+    return CreateItemFunc(clear, []() -> Item* { return new SoundSet(); }, innerFunc);
+}
+
+InstanciateItemCallback CreateWaveSoundSetFunc(bool clear)
+{
+    return CreateFixedSoundSetTypeFunc<SoundSet::SoundSetType::Wave>(clear);
+}
+
+InstanciateItemCallback CreateSequenceSoundSetFunc(bool clear)
+{
+    return CreateFixedSoundSetTypeFunc<SoundSet::SoundSetType::Seq>(clear);
 }
 
 static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterByType, SoundSet::SoundSetType filterType)
@@ -3158,7 +3249,7 @@ void DrawWaveSoundSetsUI()
     f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
-    DrawAllItemsUI("Wave Sound Set", sBfsar.getSoundSetList(), nullptr, nullptr, nullptr,
+    DrawAllItemsUI("Wave Sound Set", sBfsar.getSoundSetList(), &CreateWaveSoundSetFunc, nullptr, nullptr,
         [](const Item* item)
         {
             const SoundSet* soundSet = static_cast<const SoundSet*>(item);
@@ -3181,7 +3272,7 @@ void DrawSequenceSoundSetsUI()
     f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
-    DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), nullptr, nullptr, nullptr,
+    DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), &CreateSequenceSoundSetFunc, nullptr, nullptr,
         [](const Item* item)
         {
             const SoundSet* soundSet = static_cast<const SoundSet*>(item);

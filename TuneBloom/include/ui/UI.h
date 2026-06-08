@@ -65,10 +65,14 @@ extern sead::FixedSafeString<512> sRecentFileClick;
 
 void SelectItem(Item* item);
 
-extern Item* sSelectedItem;
-extern Item* sSubSelectedItem;
+extern UIType sSelectedUIType;
+extern Item* sSelectedItemArr[];
+extern Item* sSubSelectedItemArr[];
+extern bool sSelectedItemIsSubWindowArr[];
 
-extern bool sSelectedItemIsSubWindow;
+#define sSelectedItem sSelectedItemArr[(size_t)sSelectedUIType]
+#define sSubSelectedItem sSubSelectedItemArr[(size_t)sSelectedUIType]
+#define sSelectedItemIsSubWindow sSelectedItemIsSubWindowArr[(size_t)sSelectedUIType]
 
 extern ImVec4 gAccentColor;
 extern f32 gThemeBrightness;

@@ -1444,27 +1444,10 @@ void DrawProjectUI()
     {
         bool selected = false;
 
-        auto resetSelectedItemAndSubWindow = []()
-        {
-            sSelectedItem = nullptr;
-            sSubSelectedItem = nullptr;
-            sSelectedItemIsSubWindow = false;
-        };
-
-        auto resetSelectedItemAndSubWindowIfNotType = [&](Item::ItemType type)
-        {
-            if (sSelectedItem && sSelectedItem->getItemType() != type)
-            {
-                resetSelectedItemAndSubWindow();
-            }
-        };
-
         if (ImGui::Selectable(ICON_LC_INFO " Project Info", sSelectedUIType == UIType::ProjectInfo))
         {
             sSelectedUIType = UIType::ProjectInfo;
             selected = true;
-
-            resetSelectedItemAndSubWindow();
         }
 
         ImGui::Separator();
@@ -1473,32 +1456,24 @@ void DrawProjectUI()
         {
             sSelectedUIType = UIType::AllSounds;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
         }
 
         if (ImGui::Selectable(ICON_LC_DISC_3 " Stream Sounds", sSelectedUIType == UIType::StreamSounds, ImGuiSelectableFlags_SpanAvailWidth))
         {
             sSelectedUIType = UIType::StreamSounds;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
         }
 
         if (ImGui::Selectable(ICON_LC_AUDIO_LINES " Wave Sounds", sSelectedUIType == UIType::WaveSounds))
         {
             sSelectedUIType = UIType::WaveSounds;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
         }
 
         if (ImGui::Selectable(ICON_LC_MUSIC_3 " Sequence Sounds", sSelectedUIType == UIType::SequenceSounds))
         {
             sSelectedUIType = UIType::SequenceSounds;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Sound);
         }
 
         ImGui::Separator();
@@ -1507,24 +1482,18 @@ void DrawProjectUI()
         {
             sSelectedUIType = UIType::AllSoundSets;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::SoundSet);
         }
 
         if (ImGui::Selectable(ICON_LC_AUDIO_LINES " Wave Sound Sets", sSelectedUIType == UIType::WaveSoundSets))
         {
             sSelectedUIType = UIType::WaveSoundSets;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::SoundSet);
         }
 
         if (ImGui::Selectable(ICON_LC_MUSIC_2 " Sequence Sound Sets", sSelectedUIType == UIType::SequenceSoundSets))
         {
             sSelectedUIType = UIType::SequenceSoundSets;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::SoundSet);
         }
 
         ImGui::Separator();
@@ -1533,32 +1502,24 @@ void DrawProjectUI()
         {
             sSelectedUIType = UIType::Banks;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Bank);
         }
 
         if (ImGui::Selectable(ICON_LC_FILE_MUSIC " Wave Archives", sSelectedUIType == UIType::WaveArchives))
         {
             sSelectedUIType = UIType::WaveArchives;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::WaveArchive);
         }
 
         if (ImGui::Selectable(ICON_LC_FOLDERS " Groups", sSelectedUIType == UIType::Groups))
         {
             sSelectedUIType = UIType::Groups;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Group);
         }
 
         if (ImGui::Selectable(ICON_LC_VOLUME_2 " Players", sSelectedUIType == UIType::Players))
         {
             sSelectedUIType = UIType::Players;
             selected = true;
-
-            resetSelectedItemAndSubWindowIfNotType(Item::ItemType::Player);
         }
 
         ImGui::Separator();

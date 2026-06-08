@@ -2,7 +2,7 @@
 
 #include <bfsar/Sound.h>
 
-bool sSelectedItemIsSubWindow = false;
+
 
 static Item* sDeleteItem = nullptr;
 static Item* sDuplicateItem = nullptr;
@@ -572,15 +572,18 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
             }
             else
             {
+                for (size_t i = 0; i <= (size_t)UIType::Max; i++)
+                {
+                    if (sSelectedItemArr[i] == sDeleteItem)
+                        sSelectedItemArr[i] = nullptr;
+                    if (sSubSelectedItemArr[i] == sDeleteItem)
+                        sSubSelectedItemArr[i] = nullptr;
+                }
+
                 delete sDeleteItem;
                 selectedItem = nullptr;
                 sBfsar.updateList(list);
                 SetUnsavedChanges(true);
-
-                // if (isSubWindow)
-                // {
-                //     sSelectedItemIsSubWindow = false;
-                // }
 
                 sDeleteItem = nullptr;
             }
@@ -662,6 +665,14 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (ImGui::Button("Delete", buttonSize))
             {
+                for (size_t i = 0; i <= (size_t)UIType::Max; i++)
+                {
+                    if (sSelectedItemArr[i] == sDeleteItem)
+                        sSelectedItemArr[i] = nullptr;
+                    if (sSubSelectedItemArr[i] == sDeleteItem)
+                        sSubSelectedItemArr[i] = nullptr;
+                }
+
                 delete sDeleteItem;
                 selectedItem = nullptr;
                 sBfsar.updateList(list);
@@ -958,50 +969,54 @@ void SelectItem(Item* item)
 {
     SEAD_ASSERT(item);
 
-    sSelectedItem = item;
-    sSubSelectedItem = nullptr;
-    sSelectedItemIsSubWindow = false;
-
     sScrollItem = item;
 
+    UIType tab = UIType::ProjectInfo;
     switch (item->getItemType())
     {
         case Item::ItemType::Sound:
-            SetUITab(UIType::AllSounds);
+            tab = UIType::AllSounds;
             break;
 
         case Item::ItemType::SoundSet:
-            SetUITab(UIType::AllSoundSets);
+            tab = UIType::AllSoundSets;
             break;
 
         case Item::ItemType::Bank:
-            SetUITab(UIType::Banks);
+            tab = UIType::Banks;
             break;
 
         case Item::ItemType::WaveArchive:
-            SetUITab(UIType::WaveArchives);
+            tab = UIType::WaveArchives;
             break;
 
         case Item::ItemType::Group:
-            SetUITab(UIType::Groups);
+            tab = UIType::Groups;
             break;
 
         case Item::ItemType::Player:
-            SetUITab(UIType::Players);
+            tab = UIType::Players;
             break;
 
         case Item::ItemType::WaveFile:
-            SetUITab(UIType::WaveFiles);
+            tab = UIType::WaveFiles;
             break;
 
         case Item::ItemType::SequenceFile:
-            SetUITab(UIType::SequenceFiles);
+            tab = UIType::SequenceFiles;
             break;
 
         case Item::ItemType::BankFile:
-            SetUITab(UIType::BankFiles);
+            tab = UIType::BankFiles;
             break;
     }
+
+    size_t tabIdx = (size_t)tab;
+    sSelectedItemArr[tabIdx] = item;
+    sSubSelectedItemArr[tabIdx] = nullptr;
+    sSelectedItemIsSubWindowArr[tabIdx] = false;
+
+    SetUITab(tab);
 
     FocusInfoWindow();
     FocusPropertiesWindow();

@@ -144,8 +144,9 @@ Bfsar sBfsar;
 
 //const nw::snd::MemorySoundArchive* sSoundArchive = nullptr;
 
-Item* sSelectedItem = nullptr;
-Item* sSubSelectedItem = nullptr;
+Item* sSelectedItemArr[(size_t)UIType::Max + 1] = {};
+Item* sSubSelectedItemArr[(size_t)UIType::Max + 1] = {};
+bool sSelectedItemIsSubWindowArr[(size_t)UIType::Max + 1] = {};
 
 bool ValidBFSARHeader(const void* file)
 {
@@ -366,9 +367,12 @@ bool CloseFile()
 {
     PopupMgr::instance()->closeFile();
 
-    sSelectedItem = nullptr;
-    sSubSelectedItem = nullptr;
-    sSelectedItemIsSubWindow = false;
+    for (size_t i = 0; i <= (size_t)UIType::Max; i++)
+    {
+        sSelectedItemArr[i] = nullptr;
+        sSubSelectedItemArr[i] = nullptr;
+        sSelectedItemIsSubWindowArr[i] = false;
+    }
     sFileWindows.clear();
     CloseFilter();
 

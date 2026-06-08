@@ -981,7 +981,16 @@ void SelectItem(Item* item)
             break;
 
         case Item::ItemType::SoundSet:
-            tab = UIType::AllSoundSets;
+            switch (sSelectedUIType)
+            {
+                case UIType::WaveSoundSets:
+                case UIType::SequenceSoundSets:
+                    tab = sSelectedUIType;
+                    break;
+                default:
+                    tab = UIType::AllSoundSets;
+                    break;
+            }
             break;
 
         case Item::ItemType::Bank:

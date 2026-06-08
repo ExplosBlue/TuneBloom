@@ -59,6 +59,7 @@ void FocusPropertiesWindow()
 
 bool sShowSystemWindow = false;
 bool sShowDemoWindow = false;
+bool sSoundSetStickyEdit = false;
 
 sead::FixedSafeString<512> sDroppedFilePath;
 sead::FixedSafeString<512> sRecentFileClick;
@@ -2844,13 +2845,25 @@ InstanciateItemCallback CreateSoundSetFunc(bool clear)
 
 void DrawAllSoundSetsUI()
 {
+    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+
+    ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Sound Set", sBfsar.getSoundSetList(),
         &CreateSoundSetFunc, &SoundSetNamePrefixFunc, nullptr, GetItemFilterCallback()
     );
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
 }
 
 void DrawWaveSoundSetsUI()
 {
+    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+
+    ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Wave Sound Set", sBfsar.getSoundSetList(), nullptr, nullptr, nullptr,
         [](const Item* item)
         {
@@ -2858,10 +2871,19 @@ void DrawWaveSoundSetsUI()
             return soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave && ItemMatchesFilter(soundSet);
         }
     );
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
 }
 
 void DrawSequenceSoundSetsUI()
 {
+    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+
+    ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), nullptr, nullptr, nullptr,
         [](const Item* item)
         {
@@ -2869,6 +2891,12 @@ void DrawSequenceSoundSetsUI()
             return soundSet->getSoundSetType() == SoundSet::SoundSetType::Seq && ItemMatchesFilter(soundSet);
         }
     );
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
 }
 
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)

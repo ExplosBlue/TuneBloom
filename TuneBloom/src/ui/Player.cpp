@@ -110,6 +110,10 @@ void DrawPlayerUI()
 
     if (ImGui::Begin(ICON_LC_MUSIC " Player###PlayerWindow"))
     {
+        ImGuiWindow* win = ImGui::GetCurrentWindow();
+        if (win && win->DockNode)
+            win->DockNode->LocalFlags |= ImGuiDockNodeFlags_NoResize;
+
         bool isPause = sSoundPlayer.isPause();
 
         if (ImGui::Button(isPause ? ICON_LC_PLAY : ICON_LC_PAUSE) && sSoundPlayer.isCurrentPlayer())

@@ -1973,9 +1973,13 @@ void DrawSubInfoUI()
     //bool windowOpen = ImGui::Begin(name.cstr(), nullptr, ImGuiWindowFlags_NoMove);
     bool windowOpen = ImGui::Begin(name.cstr(), nullptr, ImGuiWindowFlags_NoFocusOnAppearing);
     ImGui::PopStyleVar();
-    
+
     if (windowOpen)
     {
+        ImGuiWindow* win = ImGui::GetCurrentWindow();
+        if (win && win->DockNode)
+            win->DockNode->LocalFlags &= ~ImGuiDockNodeFlags_NoResize;
+
         if (sSelectedItem)
         {
             switch (sSelectedItem->getItemType())

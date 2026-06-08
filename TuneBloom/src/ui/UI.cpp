@@ -2843,9 +2843,161 @@ InstanciateItemCallback CreateSoundSetFunc(bool clear)
     return CreateItemFunc(clear, []() -> Item* { return new SoundSet(); }, innerFunc);
 }
 
+static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterByType, SoundSet::SoundSetType filterType)
+{
+    u32 totalSounds = sBfsar.getSoundList().size();
+    if (totalSounds == 0)
+        return;
+
+    struct SetVisual
+    {
+        const SoundSet* set;
+        u32 start;
+        u32 end;
+        u32 index;
+    };
+    std::vector<SetVisual> sets;
+    u32 index = 0;
+    for (auto it = list.begin(); it != list.end(); ++it)
+    {
+        const SoundSet* soundSet = static_cast<const SoundSet*>(*it);
+        if (filterByType && soundSet->getSoundSetType() != filterType)
+        {
+            index++;
+            continue;
+        }
+        if (soundSet->getIsEmpty())
+        {
+            index++;
+            continue;
+        }
+        u32 start = soundSet->getStartId();
+        u32 end = soundSet->getEndId();
+        if (start == Item::cInvalidId || end == Item::cInvalidId || end < start)
+        {
+            index++;
+            continue;
+        }
+        sets.push_back({ soundSet, start, end, index });
+        index++;
+    }
+
+    if (sets.empty())
+        return;
+
+    u32 globalMin = totalSounds;
+    u32 globalMax = 0;
+    for (auto& s : sets)
+    {
+        if (s.start < globalMin) globalMin = s.start;
+        if (s.end > globalMax) globalMax = s.end;
+    }
+    if (globalMax < globalMin) globalMax = globalMin;
+    f32 floatRange = (f32)(globalMax - globalMin + 1);
+    if (floatRange <= 0.0f) floatRange = 1.0f;
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+    f32 width = ImGui::GetContentRegionAvail().x;
+    if (width < 10.0f) width = 10.0f;
+    const f32 height = 28.0f;
+    const f32 outerPad = 2.0f;
+
+    ImVec2 barMin(cursorPos.x, cursorPos.y + outerPad);
+    ImVec2 barMax(cursorPos.x + width, cursorPos.y + outerPad + height);
+
+    drawList->AddRectFilled(barMin, barMax, IM_COL32(25, 25, 25, 255));
+
+    static const ImU32 sColors[] = {
+        IM_COL32(70, 130, 180, 200),
+        IM_COL32(60, 179, 113, 200),
+        IM_COL32(218, 165, 32, 200),
+        IM_COL32(147, 112, 219, 200),
+        IM_COL32(205, 92, 92, 200),
+        IM_COL32(0, 139, 139, 200),
+        IM_COL32(255, 140, 0, 200),
+        IM_COL32(100, 149, 237, 200),
+    };
+    const u32 colorCount = IM_ARRAYSIZE(sColors);
+
+    for (size_t i = 0; i < sets.size(); i++)
+    {
+        f32 x1 = cursorPos.x + ((f32)(sets[i].start - globalMin) / floatRange) * width;
+        f32 x2 = cursorPos.x + ((f32)(sets[i].end - globalMin + 1) / floatRange) * width;
+        if (x2 - x1 < 1.0f) x2 = x1 + 1.0f;
+
+        ImU32 color = sColors[sets[i].index % colorCount];
+        drawList->AddRectFilled(ImVec2(x1, barMin.y), ImVec2(x2, barMax.y), color);
+
+        const char* name = sets[i].set->getNameOrNull().cstr();
+        ImVec2 textSize = ImGui::CalcTextSize(name);
+        if (x2 - x1 > textSize.x + 6.0f)
+        {
+            f32 textX = x1 + (x2 - x1 - textSize.x) * 0.5f;
+            if (textX < barMin.x + 2.0f) textX = barMin.x + 2.0f;
+            if (textX + textSize.x > barMax.x - 2.0f) textX = barMax.x - textSize.x - 2.0f;
+            drawList->AddText(ImVec2(textX, barMin.y + (height - textSize.y) * 0.5f), IM_COL32(255, 255, 255, 220), name);
+        }
+        else
+        {
+            char idStr[16];
+            snprintf(idStr, sizeof(idStr), "%u", sets[i].set->getId());
+            ImVec2 idSize = ImGui::CalcTextSize(idStr);
+            if (x2 - x1 > idSize.x + 4.0f)
+            {
+                f32 textX = x1 + (x2 - x1 - idSize.x) * 0.5f;
+                drawList->AddText(ImVec2(textX, barMin.y + (height - idSize.y) * 0.5f), IM_COL32(255, 255, 255, 180), idStr);
+            }
+        }
+    }
+
+    // Overlap detection
+    for (size_t i = 0; i < sets.size(); i++)
+    {
+        for (size_t j = i + 1; j < sets.size(); j++)
+        {
+            u32 ovStart = sets[i].start > sets[j].start ? sets[i].start : sets[j].start;
+            u32 ovEnd = sets[i].end < sets[j].end ? sets[i].end : sets[j].end;
+            if (ovStart <= ovEnd)
+            {
+                f32 ox1 = cursorPos.x + ((f32)(ovStart - globalMin) / floatRange) * width;
+                f32 ox2 = cursorPos.x + ((f32)(ovEnd - globalMin + 1) / floatRange) * width;
+                if (ox2 - ox1 < 1.0f) ox2 = ox1 + 1.0f;
+                drawList->AddRectFilled(ImVec2(ox1, barMin.y), ImVec2(ox2, barMax.y), IM_COL32(255, 40, 40, 180));
+            }
+        }
+    }
+
+    drawList->AddRect(barMin, barMax, IM_COL32(60, 60, 60, 255));
+
+    ImGui::SetCursorScreenPos(ImVec2(cursorPos.x, cursorPos.y));
+    ImGui::InvisibleButton("##rangeVis", ImVec2(width, height + outerPad * 2.0f));
+
+    if (ImGui::IsItemHovered())
+    {
+        ImVec2 mousePos = ImGui::GetMousePos();
+        f32 relX = mousePos.x - barMin.x;
+        if (relX >= 0.0f && relX <= width)
+        {
+            f32 hoveredId = (f32)globalMin + (relX / width) * floatRange;
+            for (auto& s : sets)
+            {
+                if (hoveredId >= (f32)s.start && hoveredId < (f32)(s.end + 1))
+                {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("%s [%u, %u]", s.set->getNameOrNull().cstr(), s.start, s.end);
+                    ImGui::EndTooltip();
+                    break;
+                }
+            }
+        }
+    }
+}
+
 void DrawAllSoundSetsUI()
 {
-    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+    const f32 cVisHeight = 32.0f;
+    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Sound Set", sBfsar.getSoundSetList(),
@@ -2857,11 +3009,14 @@ void DrawAllSoundSetsUI()
     ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
+
+    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), false, SoundSet::SoundSetType::Wave);
 }
 
 void DrawWaveSoundSetsUI()
 {
-    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+    const f32 cVisHeight = 32.0f;
+    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Wave Sound Set", sBfsar.getSoundSetList(), nullptr, nullptr, nullptr,
@@ -2877,11 +3032,14 @@ void DrawWaveSoundSetsUI()
     ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
+
+    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), true, SoundSet::SoundSetType::Wave);
 }
 
 void DrawSequenceSoundSetsUI()
 {
-    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 2.0f;
+    const f32 cVisHeight = 32.0f;
+    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), nullptr, nullptr, nullptr,
@@ -2897,6 +3055,8 @@ void DrawSequenceSoundSetsUI()
     ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
+
+    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), true, SoundSet::SoundSetType::Seq);
 }
 
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)

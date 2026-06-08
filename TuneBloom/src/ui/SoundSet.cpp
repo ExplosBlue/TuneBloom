@@ -339,6 +339,8 @@ void DrawSoundSetPropertiesUI()
                 ImGui::PopStyleColor();
                 ImGui::PopStyleVar();
             }
+            if (stickyEdit && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                ImGui::SetTooltip("Sticky Edit enabled: shifting this value offsets adjacent touched sets.");
             if (startChanged)
             {
                 if (stickyEdit)
@@ -428,6 +430,8 @@ void DrawSoundSetPropertiesUI()
                 ImGui::PopStyleColor();
                 ImGui::PopStyleVar();
             }
+            if (stickyEdit && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                ImGui::SetTooltip("Sticky Edit enabled: shifting this value offsets adjacent touched sets.");
             if (endChanged)
             {
                 if (stickyEdit)

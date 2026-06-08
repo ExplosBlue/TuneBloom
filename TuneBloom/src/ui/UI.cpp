@@ -17,6 +17,8 @@
 #if defined(SEAD_PLATFORM_WINDOWS)
 #include <basis/win/seadWindows.h>
 #include <shellapi.h>
+#include <direct.h>
+#define getcwd _getcwd
 #elif defined(SEAD_PLATFORM_LINUX) || defined(SEAD_PLATFORM_MACOSX)
 #include <cstdlib>
 #include <sys/stat.h>

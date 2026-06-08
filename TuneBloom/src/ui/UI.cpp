@@ -1612,27 +1612,40 @@ void DrawProjectUI()
     ImGui::End();
 }
 
-static sead::FixedSafeString<256> sFilter;
-static bool sFilterActive = false;
-static bool sFilterCaseSensitive = false;
+struct TabFilterState
+{
+    sead::FixedSafeString<256> filter;
+    bool active = false;
+    bool caseSensitive = false;
+};
+
+static TabFilterState sTabFilterState[(size_t)UIType::Max + 1];
+
+static TabFilterState& GetCurrentTabFilter()
+{
+    return sTabFilterState[(size_t)sSelectedUIType];
+}
 
 void CloseFilter()
 {
-    sFilter.clear();
-    sFilterActive = false;
+    TabFilterState& state = GetCurrentTabFilter();
+    state.filter.clear();
+    state.active = false;
 }
 
 bool ItemMatchesFilter(const Item* item)
 {
-    if (sFilter.isEmpty())
+    TabFilterState& state = GetCurrentTabFilter();
+
+    if (state.filter.isEmpty())
     {
         return true;
     }
 
     std::string name = item->getFormattedName().cstr();
-    std::string filter = sFilter.cstr();
+    std::string filter = state.filter.cstr();
 
-    if (!sFilterCaseSensitive)
+    if (!state.caseSensitive)
     {
         for (char& c : name)
         {
@@ -1650,7 +1663,8 @@ bool ItemMatchesFilter(const Item* item)
 
 ItemFilterCallback GetItemFilterCallback()
 {
-    return !sFilter.isEmpty() ? &ItemMatchesFilter : nullptr;
+    TabFilterState& state = GetCurrentTabFilter();
+    return !state.filter.isEmpty() ? &ItemMatchesFilter : nullptr;
 }
 
 void DrawInfoUI()
@@ -1678,14 +1692,16 @@ void DrawInfoUI()
             return;
         }
 
+        TabFilterState& tabFilter = GetCurrentTabFilter();
+
         bool setFocus = false;
         if (notProjUI && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyDown(ImGuiKey_F))
         {
-            sFilterActive = true;
+            tabFilter.active = true;
             setFocus = true;
         }
 
-        if (notProjUI && sFilterActive)
+        if (notProjUI && tabFilter.active)
         {
             if (ImGui::BeginChild("##Filter", ImVec2(0, 0), ImGuiChildFlags_AlwaysAutoResize | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Border))
             {
@@ -1695,12 +1711,12 @@ void DrawInfoUI()
                 }
 
                 ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("   ").x * 2.0f - ImGui::GetStyle().ItemSpacing.x * 2.0f);
-                ImGui::InputTextWithHint("##Search", "Search...", sFilter.getBuffer(), sFilter.getBufferSize(), ImGuiInputTextFlags_CharsNoBlank);
+                ImGui::InputTextWithHint("##Search", "Search...", tabFilter.filter.getBuffer(), tabFilter.filter.getBufferSize(), ImGuiInputTextFlags_CharsNoBlank);
 
                 ImGui::SameLine();
 
                 bool popColor = false;
-                if (!sFilterCaseSensitive)
+                if (!tabFilter.caseSensitive)
                 {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
                     popColor = true;
@@ -1708,7 +1724,7 @@ void DrawInfoUI()
 
                 if (ImGui::Button(ICON_LC_CASE_SENSITIVE "##CaseSensitive"))
                 {
-                    sFilterCaseSensitive = !sFilterCaseSensitive;
+                    tabFilter.caseSensitive = !tabFilter.caseSensitive;
                 }
 
                 if (popColor)

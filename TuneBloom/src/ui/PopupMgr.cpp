@@ -239,7 +239,7 @@ void PopupMgr::updateErrors_()
 
         ImGui::Separator();
 
-        if (ImGui::Button("Oof", buttonSize))
+        if (ImGui::Button("OK", buttonSize))
         {
             mCurrentProcessItem = nullptr;
             mProcessedErrors.clear();

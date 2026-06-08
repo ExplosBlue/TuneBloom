@@ -216,6 +216,13 @@ static bool sWantsOpen = false;
 static bool sWantsClose = false;
 static bool sWantsExit = false;
 static bool sWantsAbout = false;
+static bool sNeedsNewFileFormat = false;
+
+static bool NewFileFormatTrigger()
+{
+    sNeedsNewFileFormat = true;
+    return true;
+}
 
 bool TryExit()
 {
@@ -246,7 +253,7 @@ void DrawMenuBar()
                 }
                 else
                 {
-                    NewFile();
+                    sNeedsNewFileFormat = true;
                 }
             }
 
@@ -764,7 +771,7 @@ void DrawUI()
                 if (sBfsar.isOpen())
                     sWantsNew = true;
                 else
-                    NewFile();
+                    sNeedsNewFileFormat = true;
             }
 
             if (ImGui::IsKeyPressed(ImGuiKey_S) && sBfsar.isOpen())
@@ -807,7 +814,7 @@ void DrawUI()
     {
         ImGui::OpenPopup("###Save");
         sWantsNew = false;
-        sFileAction = &NewFile;
+        sFileAction = &NewFileFormatTrigger;
     }
     else if (sWantsOpen)
     {
@@ -865,6 +872,41 @@ void DrawUI()
         }
 
         ImGui::EndPopup();
+    }
+
+    if (sNeedsNewFileFormat)
+    {
+        ImGui::OpenPopup("###NewFileFormat");
+        sNeedsNewFileFormat = false;
+    }
+
+    {
+        ImVec2 c = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(c, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("New Archive###NewFileFormat", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Select the archive format:");
+            ImGui::Separator();
+
+            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 3.0f) / 2.0f, 0.0f);
+
+            if (ImGui::Button("BFSAR", buttonSize))
+            {
+                NewFile(ArchiveFormat::BFSAR);
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("BCSAR", buttonSize))
+            {
+                NewFile(ArchiveFormat::BCSAR);
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
     }
 
     if (sShowSystemWindow)

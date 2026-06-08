@@ -198,18 +198,23 @@ bool ValidBCSARHeader(const void* file)
     return true;
 }
 
-bool NewFile()
+bool NewFile(ArchiveFormat format)
 {
-    ArchiveFormat prevFormat = sBfsar.getFormat();
     CloseFile();
 
-    sBfsar.create(prevFormat);
+    sBfsar.create(format);
 
-    const char* fmtName = prevFormat == ArchiveFormat::BCSAR ? "BCSAR" : "BFSAR";
+    const char* fmtName = format == ArchiveFormat::BCSAR ? "BCSAR" : "BFSAR";
     LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", fmtName).cstr());
-    util::updateTitle(sead::FormatFixedSafeString<64>("*New.%s", prevFormat == ArchiveFormat::BCSAR ? "bcsar" : "bfsar").cstr());
+    util::updateTitle(sead::FormatFixedSafeString<64>("*New.%s", format == ArchiveFormat::BCSAR ? "bcsar" : "bfsar").cstr());
 
+    SetUITab(UIType::ProjectInfo);
     return true;
+}
+
+bool NewFile()
+{
+    return NewFile(sBfsar.getFormat());
 }
 
 bool OpenFile(const char* path)
@@ -285,6 +290,7 @@ bool OpenFile()
 
     AddToRecentFiles(filePath.cstr());
 
+    SetUITab(UIType::ProjectInfo);
     return true;
 }
 
@@ -313,13 +319,25 @@ bool SaveFileAs()
 
     sead::FixedSafeString<512> path;
 
-    const u32 filterCount = 2;
+    bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+    const u32 filterCount = 1;
     FileFilter filters[filterCount] = {
-        { "Cafe Sound Archive (*.bfsar)", "*.bfsar" },
-        { "CTR Sound Archive (*.bcsar)", "*.bcsar" }
+        { isBcsar ? "CTR Sound Archive (*.bcsar)" : "Cafe Sound Archive (*.bfsar)", isBcsar ? "*.bcsar" : "*.bfsar" }
     };
 
-    if (SaveFileDialog(&path, nullptr, filterCount, filters, sBfsar.getFormat() == ArchiveFormat::BCSAR ? "bcsar" : "bfsar"))
+    sead::FixedSafeString<512> defaultPath;
+    if (sBfsar.getFilePath().isEmpty())
+    {
+        char cwdBuf[4096];
+        const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
+        defaultPath.format("%s/%s", cwd ? cwd : ".", isBcsar ? "Untitled.bcsar" : "Untitled.bfsar");
+    }
+    else
+    {
+        defaultPath = sBfsar.getFilePath();
+    }
+
+    if (SaveFileDialog(&path, nullptr, filterCount, filters, isBcsar ? "bcsar" : "bfsar", defaultPath.cstr()))
     {
         LOG_STR(path.cstr());
         if (sBfsar.saveAs(path))

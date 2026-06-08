@@ -137,6 +137,7 @@ void DrawMenuBar();
 void DrawUI();
 
 bool NewFile();
+bool NewFile(ArchiveFormat format);
 bool OpenFile();
 bool OpenFile(const char* path);
 bool SaveFile();

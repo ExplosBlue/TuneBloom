@@ -19,6 +19,7 @@ inline const sead::SafeString cAppVersion(COMMIT_SHA);
 inline const sead::SafeString cAppVersion("1.01");
 #endif
 
-bool updateTitle(const char* path);
+bool updateTitle(const char* path, bool dirty = false);
+void refreshTitleDirty(bool dirty);
 
 } // namespace util

@@ -52,6 +52,7 @@ void DrawPlayerPropertiesUI()
         if (ImGui::InputScalar("Playable Sound Max", ImGuiDataType_U32, &playableSoundMax, &cStepU32))
         {
             player->setPlayableSoundMax(playableSoundMax);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -59,6 +60,7 @@ void DrawPlayerPropertiesUI()
     if (ImGui::Checkbox("Enable Player Heap Size", &enablePlayerHeapSize))
     {
         player->setEnablePlayerHeapSize(enablePlayerHeapSize);
+        SetUnsavedChanges(true);
     }
 
     if (!enablePlayerHeapSize)
@@ -69,6 +71,7 @@ void DrawPlayerPropertiesUI()
         if (ImGui::InputScalar("Player Heap Size", ImGuiDataType_U32, &playerHeapSize, &cStepU32))
         {
             player->setPlayerHeapSize(playerHeapSize);
+            SetUnsavedChanges(true);
         }
     }
 

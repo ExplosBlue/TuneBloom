@@ -145,6 +145,7 @@ static void ApplyOffsetBefore(const SoundSet* current, s32 delta, Item::List& li
         if (ss->getIsEmpty()) continue;
         ss->setStartId(static_cast<u32>(static_cast<s32>(ss->getStartId()) + delta));
         ss->setEndId(static_cast<u32>(static_cast<s32>(ss->getEndId()) + delta));
+        SetUnsavedChanges(true);
     }
 }
 
@@ -160,6 +161,7 @@ static void ApplyOffsetAfter(const SoundSet* current, s32 delta, Item::List& lis
         if (ss->getIsEmpty()) continue;
         ss->setStartId(static_cast<u32>(static_cast<s32>(ss->getStartId()) + delta));
         ss->setEndId(static_cast<u32>(static_cast<s32>(ss->getEndId()) + delta));
+        SetUnsavedChanges(true);
     }
 }
 
@@ -237,6 +239,7 @@ static void CascadeOffsetAfter(const SoundSet* current, u32 newEndId, Item::List
         u32 shift = neededStart - ss->getStartId();
         ss->setStartId(ss->getStartId() + shift);
         ss->setEndId(ss->getEndId() + shift);
+        SetUnsavedChanges(true);
         prevEnd = ss->getEndId();
     }
 }
@@ -262,6 +265,7 @@ static void CascadeOffsetBefore(const SoundSet* current, u32 newStartId, Item::L
         u32 shift = ss->getEndId() - neededEnd;
         ss->setStartId(ss->getStartId() - shift);
         ss->setEndId(ss->getEndId() - shift);
+        SetUnsavedChanges(true);
         adjustedStart = ss->getStartId();
     }
 }
@@ -279,6 +283,7 @@ void DrawSoundSetPropertiesUI()
         if (ImGui::Combo("Sound Type", (s32*)&soundSetType, sSoundSetTypes, IM_ARRAYSIZE(sSoundSetTypes)))
         {
             soundSet->setSoundSetType(soundSetType);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -295,6 +300,7 @@ void DrawSoundSetPropertiesUI()
         {
             soundSet->getWaveArchiveRef().attach(warc);
             soundSet->setWaveArchiveType(warcType);
+            SetUnsavedChanges(true);
         }
 
         if (!enableWaveArchives)
@@ -308,6 +314,7 @@ void DrawSoundSetPropertiesUI()
         if (ImGui::Checkbox("Is Empty", &isEmpty))
         {
             soundSet->setIsEmpty(isEmpty);
+            SetUnsavedChanges(true);
         }
 
         bool stickyEdit = sSoundSetStickyEdit && !isEmpty;
@@ -354,6 +361,7 @@ void DrawSoundSetPropertiesUI()
                             {
                                 CascadeOffsetBefore(soundSet, startId, soundSetList);
                                 soundSet->setStartId(startId);
+                                SetUnsavedChanges(true);
                             }
                         }
                         else if (delta > 0)
@@ -362,19 +370,26 @@ void DrawSoundSetPropertiesUI()
                             {
                                 ApplyOffsetBefore(soundSet, delta, soundSetList);
                                 soundSet->setStartId(startId);
+                                SetUnsavedChanges(true);
                             }
                         }
                     }
                     else
                     {
                         if (startId <= soundSet->getEndId())
+                        {
                             soundSet->setStartId(startId);
+                            SetUnsavedChanges(true);
+                        }
                     }
                 }
                 else
                 {
                     if (startId <= soundSet->getEndId())
+                    {
                         soundSet->setStartId(startId);
+                        SetUnsavedChanges(true);
+                    }
                 }
             }
 
@@ -390,6 +405,7 @@ void DrawSoundSetPropertiesUI()
                 if (stickyEdit && IsTouchingPrev(soundSet, soundSetList))
                     CascadeOffsetBefore(soundSet, newId, soundSetList);
                 soundSet->setStartId(newId);
+                SetUnsavedChanges(true);
             }
             if (!canDec) ImGui::EndDisabled();
 
@@ -406,6 +422,7 @@ void DrawSoundSetPropertiesUI()
                 if (stickyEdit && IsTouchingPrev(soundSet, soundSetList))
                     ApplyOffsetBefore(soundSet, delta, soundSetList);
                 soundSet->setStartId(newId);
+                SetUnsavedChanges(true);
             }
             if (!canInc) ImGui::EndDisabled();
         }
@@ -445,6 +462,7 @@ void DrawSoundSetPropertiesUI()
                             {
                                 CascadeOffsetAfter(soundSet, endId, soundSetList);
                                 soundSet->setEndId(endId);
+                                SetUnsavedChanges(true);
                             }
                         }
                         else if (delta < 0)
@@ -453,19 +471,26 @@ void DrawSoundSetPropertiesUI()
                             {
                                 ApplyOffsetAfter(soundSet, delta, soundSetList);
                                 soundSet->setEndId(endId);
+                                SetUnsavedChanges(true);
                             }
                         }
                     }
                     else
                     {
                         if (endId >= soundSet->getStartId())
+                        {
                             soundSet->setEndId(endId);
+                            SetUnsavedChanges(true);
+                        }
                     }
                 }
                 else
                 {
                     if (endId >= soundSet->getStartId())
+                    {
                         soundSet->setEndId(endId);
+                        SetUnsavedChanges(true);
+                    }
                 }
             }
 
@@ -482,6 +507,7 @@ void DrawSoundSetPropertiesUI()
                 if (stickyEdit && IsTouchingNext(soundSet, soundSetList))
                     ApplyOffsetAfter(soundSet, delta, soundSetList);
                 soundSet->setEndId(newId);
+                SetUnsavedChanges(true);
             }
             if (!canDec) ImGui::EndDisabled();
 
@@ -497,6 +523,7 @@ void DrawSoundSetPropertiesUI()
                 if (stickyEdit && IsTouchingNext(soundSet, soundSetList))
                     CascadeOffsetAfter(soundSet, newId, soundSetList);
                 soundSet->setEndId(newId);
+                SetUnsavedChanges(true);
             }
             if (!canInc) ImGui::EndDisabled();
         }

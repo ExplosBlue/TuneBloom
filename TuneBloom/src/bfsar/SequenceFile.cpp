@@ -139,6 +139,7 @@ void SequenceFile::drawFileUI()
         if (ItemSelector(sead::FormatFixedSafeString<16>("Bank %u", i).cstr(), sBfsar.getBankList(), &bank, true))
         {
             mBankRefs[i]->attach(bank);
+            SetUnsavedChanges(true);
         }
 
         Item* bankFile = nullptr;
@@ -181,7 +182,14 @@ void SequenceFile::drawFileUI()
         }
     }
 
-    ImGui::InputTextCombo("Start Label", mStartLabel.getBuffer(), mStartLabel.getBufferSize(), labels, labelCount);
+    {
+        sead::FixedSafeString<128> startLabel = mStartLabel;
+        if (ImGui::InputTextCombo("Start Label", startLabel.getBuffer(), startLabel.getBufferSize(), labels, labelCount))
+        {
+            mStartLabel = startLabel;
+            SetUnsavedChanges(true);
+        }
+    }
 
     delete[] labels;
 
@@ -298,6 +306,7 @@ void SequenceFile::drawFileUI()
 
         mIsValid = false;
         mIsDirty = true;
+        SetUnsavedChanges(true);
 
         if (sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
         {

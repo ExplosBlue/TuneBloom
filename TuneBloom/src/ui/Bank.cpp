@@ -85,6 +85,7 @@ void DrawBankPropertiesUI()
         {
             bank->getWaveArchiveRef().attach(warc);
             bank->setWaveArchiveType(warcType);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -93,6 +94,7 @@ void DrawBankPropertiesUI()
         if (ItemSelector("Bank File", sBfsar.getBankFileList(), &file))
         {
             bank->getFileRef().attach(file);
+            SetUnsavedChanges(true);
         }
     }
 }

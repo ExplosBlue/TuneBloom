@@ -160,6 +160,7 @@ void DrawSoundPropertiesUI()
         if (ItemSelector("Player", sBfsar.getPlayerList(), &player))
         {
             sound->getPlayerRef().attach(player);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -168,6 +169,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
         {
             sound->setVolume(volume);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -176,6 +178,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::InputScalar("Remote Filter", ImGuiDataType_U8, &remoteFilter, &cStepU8))
         {
             sound->setRemoteFilter(remoteFilter);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -184,6 +187,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::Checkbox("Enable Pan Param", &enablePanParam))
         {
             sound->setEnablePanParam(enablePanParam);
+            SetUnsavedChanges(true);
         }
 
         if (!enablePanParam)
@@ -200,6 +204,7 @@ void DrawSoundPropertiesUI()
             if (ImGui::Combo("Pan Mode", (s32*)&panMode, sPanModes, IM_ARRAYSIZE(sPanModes)))
             {
                 sound->setPanMode(panMode);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -221,6 +226,7 @@ void DrawSoundPropertiesUI()
             if (ImGui::Combo("Pan Curve", (s32*)&panCurve, sPanCurves, IM_ARRAYSIZE(sPanCurves)))
             {
                 sound->setPanCurve(panCurve);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -233,6 +239,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::Checkbox("Enable Player Param", &enablePlayerParam))
         {
             sound->setEnablePlayerParam(enablePlayerParam);
+            SetUnsavedChanges(true);
         }
 
         if (!enablePlayerParam)
@@ -243,6 +250,7 @@ void DrawSoundPropertiesUI()
             if (ImGui::InputScalar("Player Priority", ImGuiDataType_U8, &playerPriority, &cStepU8))
             {
                 sound->setPlayerPriority(playerPriority);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -251,6 +259,7 @@ void DrawSoundPropertiesUI()
             if (ImGui::InputScalar("Actor Player Id", ImGuiDataType_U8, &actorPlayerId, &cStepU8))
             {
                 sound->setActorPlayerId(actorPlayerId);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -267,6 +276,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox(sead::FormatFixedSafeString<64>("Enable User Param %u", i).cstr(), &enableUserParam))
                 {
                     sound->setEnableUserParam(i, enableUserParam);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enableUserParam)
@@ -277,6 +287,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("User Param %u", i).cstr(), ImGuiDataType_U32, &userParam, &cStepU32))
                     {
                         sound->setUserParam(i, userParam);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -298,6 +309,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::Checkbox("Enable Front Bypass", &enableIsFrontBypass))
         {
             sound->setEnableIsFrontBypass(enableIsFrontBypass);
+            SetUnsavedChanges(true);
         }
 
         if (isStrm)
@@ -311,6 +323,7 @@ void DrawSoundPropertiesUI()
             if (ImGui::Checkbox("Front Bypass", &isFrontBypass))
             {
                 sound->setIsFrontBypass(isFrontBypass);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -329,6 +342,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::Checkbox("Enable Sound 3D Info", &enableSound3DInfo))
         {
             sound->setEnableSound3DInfo(enableSound3DInfo);
+            SetUnsavedChanges(true);
         }
 
         if (ImGui::CollapsingHeader("Sound 3D Info"))
@@ -350,6 +364,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::CheckboxFlags("Volume", &flags, Sound::Sound3DInfo::Flags::Volume))
                 {
                     sound3DInfo.setFlags(flags);
+                    SetUnsavedChanges(true);
                 }
 
                 ImGui::SameLine();
@@ -357,6 +372,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::CheckboxFlags("Priority", &flags, Sound::Sound3DInfo::Flags::Priority))
                 {
                     sound3DInfo.setFlags(flags);
+                    SetUnsavedChanges(true);
                 }
 
                 ImGui::SameLine();
@@ -364,6 +380,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::CheckboxFlags("Pan", &flags, Sound::Sound3DInfo::Flags::Pan))
                 {
                     sound3DInfo.setFlags(flags);
+                    SetUnsavedChanges(true);
                 }
 
                 ImGui::SameLine();
@@ -371,6 +388,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::CheckboxFlags("Surround Pan", &flags, Sound::Sound3DInfo::Flags::SPan))
                 {
                     sound3DInfo.setFlags(flags);
+                    SetUnsavedChanges(true);
                 }
 
                 ImGui::SameLine();
@@ -378,6 +396,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::CheckboxFlags("Filter", &flags, Sound::Sound3DInfo::Flags::Filter))
                 {
                     sound3DInfo.setFlags(flags);
+                    SetUnsavedChanges(true);
                 }
             }
 
@@ -386,6 +405,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::SliderFloat("Decay Ratio", &decayRatio, 0.0f, 1.0f))
                 {
                     sound3DInfo.setDecayRatio(decayRatio);
+                    SetUnsavedChanges(true);
                 }
             }
 
@@ -396,6 +416,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Combo("Decay Curve", (s32*)&decayCurve, sCurveTypes, IM_ARRAYSIZE(sCurveTypes)))
                 {
                     sound3DInfo.setDecayCurve(decayCurve + 1);
+                    SetUnsavedChanges(true);
                 }
             }
 
@@ -404,6 +425,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::InputScalar("Doppler Factor", ImGuiDataType_U8, &dopplerFactor, &cStepU8))
                 {
                     sound3DInfo.setDopplerFactor(dopplerFactor);
+                    SetUnsavedChanges(true);
                 }
             }
 
@@ -425,6 +447,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::Combo("Sound Type", (s32*)&soundType, sSoundTypes, IM_ARRAYSIZE(sSoundTypes)))
         {
             sound->setSoundType(static_cast<Sound::SoundType>(soundType + 1));
+            SetUnsavedChanges(true);
         }
     }
 
@@ -446,6 +469,7 @@ void DrawSoundPropertiesUI()
                 if (ItemSelector("Sequence File", sBfsar.getSequenceFileList(), &seqFile))
                 {
                     seqSoundInfo.getSequenceFileRef().attach(seqFile);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!seqFile)
@@ -473,6 +497,7 @@ void DrawSoundPropertiesUI()
                     if (ItemSelector(sead::FormatFixedSafeString<16>("Bank %u", i).cstr(), sBfsar.getBankList(), &bank, true))
                     {
                         seqSoundInfo.getBankRef(i).attach(bank);
+                        SetUnsavedChanges(true);
                     }
 
                     Item* bankFile = nullptr;
@@ -540,6 +565,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Start Offset", &enableStartOffset))
                 {
                     seqSoundInfo.setEnableStartOffset(enableStartOffset);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enableStartOffset)
@@ -570,6 +596,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputTextCombo("Start Label", startLabel.getBuffer(), startLabel.getBufferSize(), labels, labelCount))
                     {
                         seqSoundInfo.getStartLabel() = startLabel;
+                        SetUnsavedChanges(true);
                     }
 
                     delete[] labels;
@@ -597,6 +624,7 @@ void DrawSoundPropertiesUI()
                             for (u32 i = 0; i < 4; i++)
                             {
                                 seq->getBankRef_(i)->attach(seqSoundInfo.getBankRef(i).getItem());
+                                SetUnsavedChanges(true);
                             }
 
                             seq->getStartLabel_() = startLabel;
@@ -629,6 +657,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Priority", &enablePriority))
                 {
                     seqSoundInfo.setEnablePriority(enablePriority);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enablePriority)
@@ -639,6 +668,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar("Channel Priority", ImGuiDataType_U8, &channelPriority, &cStepU8))
                     {
                         seqSoundInfo.setChannelPriority(channelPriority);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -647,6 +677,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::Checkbox("Fix Priority At Release", &isReleasePriorityFix))
                     {
                         seqSoundInfo.setIsReleasePriorityFix(isReleasePriorityFix);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -747,6 +778,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::SliderFloat("Pitch", &pitch, 0.0f, 8.0f))
                     {
                         strmSoundInfo.setPitch(pitch);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -755,6 +787,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar("Main Send", ImGuiDataType_U8, &mainSend, &cStepU8))
                     {
                         strmSoundInfo.setMainSend(mainSend);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -764,6 +797,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cStepU8))
                     {
                         strmSoundInfo.setFxSend(i, fxSend);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -771,6 +805,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Stream Sound Extension", &enableStreamSoundExtension))
                 {
                     strmSoundInfo.setEnableStreamSoundExtension(enableStreamSoundExtension);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enableSend)
@@ -791,6 +826,7 @@ void DrawSoundPropertiesUI()
                         if (ImGui::Combo("Stream Type", (s32*)&streamType, streamTypeLabels, IM_ARRAYSIZE(streamTypeLabels)))
                         {
                             strmSoundInfo.setStreamType(static_cast<Sound::StreamSoundInfo::StreamType>(streamType + 1));
+                            SetUnsavedChanges(true);
                         }
                     }
 
@@ -799,6 +835,7 @@ void DrawSoundPropertiesUI()
                         if (ImGui::Checkbox("Is Loop", &isLoop))
                         {
                             strmSoundInfo.setIsLoop(isLoop);
+                            SetUnsavedChanges(true);
                         }
 
                         if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary)
@@ -830,6 +867,7 @@ void DrawSoundPropertiesUI()
                         if (ImGui::InputScalar("Loop Start Sample", ImGuiDataType_U32, &loopStartFrame, &cStepU32))
                         {
                             strmSoundInfo.setLoopStartFrame(loopStartFrame);
+                            SetUnsavedChanges(true);
                         }
                     }
 
@@ -838,6 +876,7 @@ void DrawSoundPropertiesUI()
                         if (ImGui::InputScalar("Loop End Sample", ImGuiDataType_U32, &loopEndFrame, &cStepU32))
                         {
                             strmSoundInfo.setLoopEndFrame(loopEndFrame);
+                            SetUnsavedChanges(true);
                         }
                     }
 
@@ -892,6 +931,7 @@ void DrawSoundPropertiesUI()
                 if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
                 {
                     waveSoundInfo.getWaveFileRef().attach(waveFile);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!waveFile)
@@ -924,6 +964,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Priority", &enablePriority))
                 {
                     waveSoundInfo.setEnablePriority(enablePriority);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enablePriority)
@@ -934,6 +975,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar("Channel Priority", ImGuiDataType_U8, &channelPriority, &cStepU8))
                     {
                         waveSoundInfo.setChannelPriority(channelPriority);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -942,6 +984,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::Checkbox("Fix Priority At Release", &isReleasePriorityFix))
                     {
                         waveSoundInfo.setIsReleasePriorityFix(isReleasePriorityFix);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -954,6 +997,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Pan", &enablePan))
                 {
                     waveSoundInfo.setEnablePan(enablePan);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enablePan)
@@ -964,6 +1008,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cStepU8))
                     {
                         waveSoundInfo.setPan(pan);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -972,6 +1017,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar("Surround Pan", ImGuiDataType_S8, &surroundPan, &cStepS8))
                     {
                         waveSoundInfo.setSurroundPan(surroundPan);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -984,6 +1030,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Pitch", &enablePitch))
                 {
                     waveSoundInfo.setEnablePitch(enablePitch);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enablePitch)
@@ -994,6 +1041,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::SliderFloat("Pitch", &pitch, 0.0f, 8.0f))
                     {
                         waveSoundInfo.setPitch(pitch);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -1006,6 +1054,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Send", &enableSend))
                 {
                     waveSoundInfo.setEnableSend(enableSend);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enableSend)
@@ -1016,6 +1065,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar("Main Send", ImGuiDataType_U8, &mainSend, &cStepU8))
                     {
                         waveSoundInfo.setMainSend(mainSend);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -1025,6 +1075,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cStepU8))
                     {
                         waveSoundInfo.setFxSend(i, fxSend);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -1037,6 +1088,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Envelope", &enableEnvelope))
                 {
                     waveSoundInfo.setEnableEnvelope(enableEnvelope);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enableEnvelope)
@@ -1074,6 +1126,7 @@ void DrawSoundPropertiesUI()
                     if (edited)
                     {
                         waveSoundInfo.setAdshrCurve(adshrCurve);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -1090,6 +1143,7 @@ void DrawSoundPropertiesUI()
                 if (ImGui::Checkbox("Enable Filter", &enableFilter))
                 {
                     waveSoundInfo.setEnableFilter(enableFilter);
+                    SetUnsavedChanges(true);
                 }
 
                 if (!enableFilter)
@@ -1100,6 +1154,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("LPF Frequency (%.3f)###lfreq", (static_cast<f32>(lpfFreq) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &lpfFreq, &cStepU8))
                     {
                         waveSoundInfo.setLpfFreq(lpfFreq);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -1108,6 +1163,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar("Biquad Type", ImGuiDataType_U8, &biquadType, &cStepU8)) // TODO: Combo ?
                     {
                         waveSoundInfo.setBiquadType(biquadType);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -1116,6 +1172,7 @@ void DrawSoundPropertiesUI()
                     if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("Biquad Value (%.3f)###bival", static_cast<f32>(biquadValue) / 127.0f).cstr(), ImGuiDataType_U8, &biquadValue, &cStepU8))
                     {
                         waveSoundInfo.setBiquadValue(biquadValue);
+                        SetUnsavedChanges(true);
                     }
                 }
 
@@ -1145,6 +1202,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
         {
             getWaveFileRef().attach(waveFile);
+            SetUnsavedChanges(true);
         }
 
         if (!waveFile)
@@ -1169,6 +1227,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
         {
             setVolume(volume);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -1177,6 +1236,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cStepU8))
         {
             setPan(pan);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -1185,6 +1245,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (ImGui::InputScalar("Surround Pan", ImGuiDataType_U8, &span, &cStepU8))
         {
             setSPan(span);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -1193,6 +1254,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (ImGui::Checkbox("Front Bypass", &flags))
         {
             setFlags(flags);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -1208,6 +1270,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
             if (ImGui::InputScalar("Main Send", ImGuiDataType_U8, &mainSend, &cStepU8))
             {
                 setMainSend(mainSend);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -1217,6 +1280,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
             if (ImGui::InputScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cStepU8))
             {
                 setFxSend(i, fxSend);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -1238,6 +1302,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
             if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("LPF Frequency (%.3f)###lfreq", (static_cast<f32>(lpfFreq) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &lpfFreq, &cStepU8))
             {
                 setLpfFreq(lpfFreq);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -1246,6 +1311,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
             if (ImGui::InputScalar("Biquad Type", ImGuiDataType_U8, &biquadType, &cStepU8)) // TODO: Combo ?
             {
                 setBiquadType(biquadType);
+                SetUnsavedChanges(true);
             }
         }
 
@@ -1254,6 +1320,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
             if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("Biquad Value (%.3f)###bival", static_cast<f32>(biquadValue) / 127.0f).cstr(), ImGuiDataType_U8, &biquadValue, &cStepU8))
             {
                 setBiquadValue(biquadValue);
+                SetUnsavedChanges(true);
             }
         }
 

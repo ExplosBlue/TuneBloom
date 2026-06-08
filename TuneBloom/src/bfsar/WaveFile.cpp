@@ -221,6 +221,7 @@ bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u
         ret = true;
 
         rIsLoop = isLoop;
+        SetUnsavedChanges(true);
 
         if (pIsLoopDirty && (rLoopStartFrame != 0 || rLoopEndFrame < WaveFile::cStreamMinimumLoopFrames))
         {
@@ -281,11 +282,11 @@ bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u
         if (loopStartFrame != (isLoop ? rLoopStartFrame : 0))
         {
             ret = true;
-        }
-
-        if (isLoop)
-        {
-            rLoopStartFrame = loopStartFrame;
+            if (isLoop)
+            {
+                rLoopStartFrame = loopStartFrame;
+                SetUnsavedChanges(true);
+            }
         }
 
         if (ImGui::IsItemDeactivatedAfterEdit() || buttonEdited)
@@ -327,9 +328,12 @@ bool DrawWaveLoopInfo(bool& rIsLoop, u32& rLoopStartFrame, u32& rLoopEndFrame, u
         if (loopEndFrame != rLoopEndFrame)
         {
             ret = true;
+            if (isLoop)
+            {
+                rLoopEndFrame = loopEndFrame;
+                SetUnsavedChanges(true);
+            }
         }
-
-        rLoopEndFrame = loopEndFrame;
 
         if (ImGui::IsItemDeactivatedAfterEdit() || buttonEdited)
         {
@@ -461,6 +465,7 @@ void WaveFile::drawUI()
 
             Encoding prev = mEncoding;
             mEncoding = sEncoding;
+            SetUnsavedChanges(true);
 
             for (u32 i = 0; i < mChannels.size(); i++)
             {

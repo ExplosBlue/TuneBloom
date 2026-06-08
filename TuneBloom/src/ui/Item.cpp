@@ -105,6 +105,7 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
         if (sEnableName)
         {
             item->getName() = sName;
+            SetUnsavedChanges(true);
         }
 
         if (sItemPropertiesCallback)
@@ -562,6 +563,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 delete sDeleteItem;
                 selectedItem = nullptr;
                 sBfsar.updateList(list);
+                SetUnsavedChanges(true);
 
                 // if (isSubWindow)
                 // {
@@ -611,6 +613,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                     list.pushBack(addedItem);
 
                     sBfsar.updateList(list);
+                    SetUnsavedChanges(true);
 
                     ImGui::CloseCurrentPopup();
                 }
@@ -640,6 +643,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 delete sDeleteItem;
                 selectedItem = nullptr;
                 sBfsar.updateList(list);
+                SetUnsavedChanges(true);
 
                 sDeleteItem = nullptr;
 
@@ -668,6 +672,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 item2->insertFront(item1);
 
             sBfsar.updateList(list);
+            SetUnsavedChanges(true);
         }
 
         if (sDuplicateItem)
@@ -816,6 +821,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             src->insertBack(dup);
             sBfsar.updateList(list);
+            SetUnsavedChanges(true);
 
             selectedItem = dup;
             if (!isSubWindow)
@@ -912,6 +918,7 @@ void DrawItemPropertiesUI()
                 else
                 {
                     item->getName() = name;
+                    SetUnsavedChanges(true);
                 }
             }
         }
@@ -1390,6 +1397,7 @@ void ItemIdTable(const char* name, IdTable& table, const Item::List& itemList)
         {
             delete entry->val();
         }
+        SetUnsavedChanges(true);
     }
 
     ImGui::SameLine(0.0f, spacing);
@@ -1397,6 +1405,7 @@ void ItemIdTable(const char* name, IdTable& table, const Item::List& itemList)
     if (ImGui::Button(sead::FormatFixedSafeString<64>("+##%s", name).cstr(), ImVec2(buttonSize, buttonSize)))
     {
         table.pushBack(new IdEntry(table.getOwner(), nullptr));
+        SetUnsavedChanges(true);
     }
 
     if (ImGui::BeginChild(name, ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
@@ -1410,6 +1419,7 @@ void ItemIdTable(const char* name, IdTable& table, const Item::List& itemList)
             if (ItemSelector(sead::FormatFixedSafeString<32>("%s %u", name, i).cstr(), itemList, &item, true))
             {
                 entry->getIdRef().attach(item);
+                SetUnsavedChanges(true);
             }
 
             if (i + 1 != table.size())

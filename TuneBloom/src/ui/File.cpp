@@ -124,6 +124,7 @@ void InnerFile::drawUI()
         if (ImGui::Combo("Byte Order", (s32*)&endian, sEndianTypes, IM_ARRAYSIZE(sEndianTypes)))
         {
             mEndian = endian;
+            SetUnsavedChanges(true);
         }
     }
 
@@ -134,6 +135,7 @@ void InnerFile::drawUI()
         if (DrawVersionUI(&version, mFormat == ArchiveFormat::BCSAR ? 4 : 3))
         {
             mVersion = version;
+            SetUnsavedChanges(true);
         }
     }
 }
@@ -206,7 +208,9 @@ bool NewFile(ArchiveFormat format)
 
     const char* fmtName = format == ArchiveFormat::BCSAR ? "BCSAR" : "BFSAR";
     LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", fmtName).cstr());
-    util::updateTitle(sead::FormatFixedSafeString<64>("*New.%s", format == ArchiveFormat::BCSAR ? "bcsar" : "bfsar").cstr());
+    util::updateTitle(sead::FormatFixedSafeString<64>("New.%s", format == ArchiveFormat::BCSAR ? "bcsar" : "bfsar").cstr(), true);
+
+    SetUnsavedChanges(true);
 
     SetUITab(UIType::ProjectInfo);
     return true;
@@ -286,7 +290,9 @@ bool OpenFile()
     sead::FixedSafeString<512> fileName;
     sead::Path::getFileName(&fileName, filePath);
 
-    util::updateTitle(fileName.cstr());
+    util::updateTitle(fileName.cstr(), false);
+
+    SetUnsavedChanges(false);
 
     AddToRecentFiles(filePath.cstr());
 
@@ -297,11 +303,11 @@ bool OpenFile()
 bool SaveFile()
 {
     LOG_BOOL("isOpen", sBfsar.isOpen());
-    if (sBfsar.isOpen())
+    if (sBfsar.isOpen() && sBfsar.save())
     {
-        return sBfsar.save();
+        SetUnsavedChanges(false);
+        return true;
     }
-
     return false;
 }
 
@@ -342,10 +348,12 @@ bool SaveFileAs()
         LOG_STR(path.cstr());
         if (sBfsar.saveAs(path))
         {
+            SetUnsavedChanges(false);
+
             sead::FixedSafeString<512> fileName;
             sead::Path::getFileName(&fileName, path);
 
-            util::updateTitle(fileName.cstr());
+            util::updateTitle(fileName.cstr(), false);
 
             return true;
         }
@@ -368,7 +376,9 @@ bool CloseFile()
 
     sBfsar.close();
 
-    util::updateTitle(nullptr);
+    SetUnsavedChanges(false);
+
+    util::updateTitle(nullptr, false);
 
     return true;
 }

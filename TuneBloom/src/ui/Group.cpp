@@ -84,6 +84,7 @@ void DrawGroupPropertiesUI()
         if (ImGui::Combo("Output Type", (s32*)&outputType, sOutputTypes, IM_ARRAYSIZE(sOutputTypes)))
         {
             group->setOutputType(static_cast<Group::OutputType>(outputType));
+            SetUnsavedChanges(true);
         }
     }
 }
@@ -102,6 +103,7 @@ void Group::ItemInfo::drawUI()
     if (ImGui::Checkbox("Disable", &disabled))
     {
         mIsDisabled = disabled;
+        SetUnsavedChanges(true);
     }
 
     ImGui::Separator();
@@ -119,6 +121,7 @@ void Group::ItemInfo::drawUI()
             mItemRef.detach();
 
             mLoadItem = 0; // All
+            SetUnsavedChanges(true);
         }
     }
 
@@ -128,6 +131,7 @@ void Group::ItemInfo::drawUI()
         if (ItemSelector("Item", sBfsar.getItemList(mItemRefType), &item, false))
         {
             mItemRef.attach(item);
+            SetUnsavedChanges(true);
 
             if (oldItem && item)
             {
@@ -182,6 +186,7 @@ void Group::ItemInfo::drawUI()
         if (ImGui::Combo("Load Items", (s32*)&loadItem, items, itemCount))
         {
             mLoadItem = loadItem;
+            SetUnsavedChanges(true);
 
             if (validate(sError))
             {

@@ -211,6 +211,17 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
     return dockspace_id;
 }
 
+bool gUnsavedChanges = false;
+
+void SetUnsavedChanges(bool dirty)
+{
+    if (gUnsavedChanges != dirty)
+    {
+        gUnsavedChanges = dirty;
+        util::refreshTitleDirty(dirty);
+    }
+}
+
 static bool sWantsNew = false;
 static bool sWantsOpen = false;
 static bool sWantsClose = false;
@@ -406,6 +417,15 @@ void DrawMenuBar()
             }
 
             ImGui::EndMenu();
+        }
+
+        if (sBfsar.isOpen())
+        {
+            const char* statusText = gUnsavedChanges ? "  Unsaved " ICON_LC_FILE : "  Saved " ICON_LC_CHECK_CHECK;
+            ImVec4 statusColor = gUnsavedChanges ? ImVec4(0.85f, 0.65f, 0.15f, 1.0f) : ImVec4(0.45f, 0.45f, 0.45f, 1.0f);
+            float textWidth = ImGui::CalcTextSize(statusText).x;
+            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - textWidth - ImGui::GetStyle().FramePadding.x);
+            ImGui::TextColored(statusColor, "%s", statusText);
         }
 
         ImGui::EndMainMenuBar();
@@ -812,27 +832,55 @@ void DrawUI()
     static bool (*sFileAction)() = nullptr;
     if (sWantsNew)
     {
-        ImGui::OpenPopup("###Save");
         sWantsNew = false;
-        sFileAction = &NewFileFormatTrigger;
+        if (!gUnsavedChanges)
+        {
+            NewFileFormatTrigger();
+        }
+        else
+        {
+            ImGui::OpenPopup("###Save");
+            sFileAction = &NewFileFormatTrigger;
+        }
     }
     else if (sWantsOpen)
     {
-        ImGui::OpenPopup("###Save");
         sWantsOpen = false;
-        sFileAction = &OpenFile;
+        if (!gUnsavedChanges)
+        {
+            OpenFile();
+        }
+        else
+        {
+            ImGui::OpenPopup("###Save");
+            sFileAction = &OpenFile;
+        }
     }
     else if (sWantsClose)
     {
-        ImGui::OpenPopup("###Save");
         sWantsClose = false;
-        sFileAction = &CloseFile;
+        if (!gUnsavedChanges)
+        {
+            CloseFile();
+        }
+        else
+        {
+            ImGui::OpenPopup("###Save");
+            sFileAction = &CloseFile;
+        }
     }
     else if (sWantsExit)
     {
-        ImGui::OpenPopup("###Save");
         sWantsExit = false;
-        sFileAction = &Exit;
+        if (!gUnsavedChanges)
+        {
+            Exit();
+        }
+        else
+        {
+            ImGui::OpenPopup("###Save");
+            sFileAction = &Exit;
+        }
     }
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -2579,6 +2627,7 @@ void DrawProjectInfoUI()
         if (ImGui::Combo("Byte Order", (s32*)&endian, sEndianTypes, IM_ARRAYSIZE(sEndianTypes)))
         {
             sBfsar.setEndian(endian);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -2589,6 +2638,7 @@ void DrawProjectInfoUI()
         if (DrawVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3))
         {
             sBfsar.setVersion(version);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -2596,7 +2646,10 @@ void DrawProjectInfoUI()
     {
         bool stringTable = sBfsar.isIncludeStringTable();
         if (ImGui::Checkbox("Include String Table", &stringTable))
+        {
             sBfsar.setIncludeStringTable(stringTable);
+            SetUnsavedChanges(true);
+        }
     }
 
     ImGui::SeparatorText("Sound Archive Player");
@@ -2607,30 +2660,37 @@ void DrawProjectInfoUI()
         if (ImGui::InputScalar("Sequence Sound Max", ImGuiDataType_U16, &playerInfo.sequenceSoundMax, &stepU16))
         {
             playerInfo.sequenceSoundMax = sead::MathCalcCommon<u16>::clamp2(0, playerInfo.sequenceSoundMax, 999);
+            SetUnsavedChanges(true);
         }
         if (ImGui::InputScalar("Sequence Track Max", ImGuiDataType_U16, &playerInfo.sequenceTrackMax, &stepU16))
         {
             playerInfo.sequenceTrackMax = sead::MathCalcCommon<u16>::clamp2(0, playerInfo.sequenceTrackMax, 999);
+            SetUnsavedChanges(true);
         }
         if (ImGui::InputScalar("Stream Sound Max", ImGuiDataType_U16, &playerInfo.streamSoundMax, &stepU16))
         {
             playerInfo.streamSoundMax = sead::MathCalcCommon<u16>::clamp2(0, playerInfo.streamSoundMax, 999);
+            SetUnsavedChanges(true);
         }
         if (ImGui::InputScalar("Stream Track Max", ImGuiDataType_U16, &playerInfo.streamTrackMax, &stepU16))
         {
             playerInfo.streamTrackMax = sead::MathCalcCommon<u16>::clamp2(0, playerInfo.streamTrackMax, 999);
+            SetUnsavedChanges(true);
         }
         if (ImGui::InputScalar("Stream Channel Max", ImGuiDataType_U16, &playerInfo.streamChannelMax, &stepU16))
         {
             playerInfo.streamChannelMax = sead::MathCalcCommon<u16>::clamp2(0, playerInfo.streamChannelMax, 32);
+            SetUnsavedChanges(true);
         }
         if (ImGui::InputScalar("Wave Sound Max", ImGuiDataType_U16, &playerInfo.waveSoundMax, &stepU16))
         {
             playerInfo.waveSoundMax = sead::MathCalcCommon<u16>::clamp2(0, playerInfo.waveSoundMax, 999);
+            SetUnsavedChanges(true);
         }
         if (ImGui::InputScalar("Wave Track Max", ImGuiDataType_U16, &playerInfo.waveTrackMax, &stepU16))
         {
             playerInfo.waveTrackMax = sead::MathCalcCommon<u16>::clamp2(0, playerInfo.waveTrackMax, 999);
+            SetUnsavedChanges(true);
         }
 
         {
@@ -2643,6 +2703,7 @@ void DrawProjectInfoUI()
             {
                 streamBufferTimes = sead::MathCalcCommon<u8>::clamp2(1, streamBufferTimes, 4);
                 playerInfo.streamBufferTimes = streamBufferTimes;
+                SetUnsavedChanges(true);
             }
 
             if (!enable)
@@ -2655,7 +2716,8 @@ void DrawProjectInfoUI()
             }
         }
 
-        ImGui::InputScalar("Options", ImGuiDataType_U32, &playerInfo.options, &stepU32);
+        if (ImGui::InputScalar("Options", ImGuiDataType_U32, &playerInfo.options, &stepU32))
+            SetUnsavedChanges(true);
     }
 }
 

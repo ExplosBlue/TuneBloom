@@ -603,8 +603,10 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
         }
 
         sBfsar.getWaveFileList().pushBack(wave);
+        SetUnsavedChanges(true);
 
         track.getWaveFileRef().attach(wave);
+        SetUnsavedChanges(true);
 
         if (loopError)
         {

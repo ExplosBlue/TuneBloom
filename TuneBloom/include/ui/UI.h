@@ -136,6 +136,9 @@ FileWindow* OpenFileWindow(Item* item);
 void DrawMenuBar();
 void DrawUI();
 
+extern bool gUnsavedChanges;
+void SetUnsavedChanges(bool dirty);
+
 bool NewFile();
 bool NewFile(ArchiveFormat format);
 bool OpenFile();

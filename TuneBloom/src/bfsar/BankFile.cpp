@@ -129,6 +129,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
         {
             getWaveFileRef().attach(waveFile);
+            SetUnsavedChanges(true);
         }
 
         if (!waveFile)
@@ -153,6 +154,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ImGui::InputScalar("Original Key", ImGuiDataType_U8, &originalKey, &cStepU8))
         {
             setOriginalKey(originalKey);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -161,6 +163,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
         {
             setVolume(volume);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -169,6 +172,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cStepU8))
         {
             setPan(pan);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -177,6 +181,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ImGui::SliderFloat("Pitch", &pitch, 0.0f, 8.0f))
         {
             setPitch(pitch);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -185,6 +190,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ImGui::Checkbox("Ignore Note Off (Percussion Mode)", &ignoreNoteOff))
         {
             setIsIgnoreNoteOff(ignoreNoteOff);
+            SetUnsavedChanges(true);
         }
 
         ImGui::SameLine();
@@ -196,6 +202,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ImGui::InputScalar("Key Group", ImGuiDataType_U8, &keyGroup, &cStepU8))
         {
             setKeyGroup(keyGroup);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -211,6 +218,7 @@ void BankFile::VelocityRegion::drawUI()
         if (ImGui::Combo("Interpolation Type", (s32*)&interpolationType, sInterpolationTypes, IM_ARRAYSIZE(sInterpolationTypes)))
         {
             setInterpolationType(interpolationType);
+            SetUnsavedChanges(true);
         }
     }
 
@@ -246,6 +254,7 @@ void BankFile::VelocityRegion::drawUI()
         if (edited)
         {
             setAdshrCurve(adshrCurve);
+            SetUnsavedChanges(true);
         }
     }
 }
@@ -623,6 +632,7 @@ void BankFile::Instrument::drawUI()
         if (ImGui::InputScalar("Program Number", ImGuiDataType_S16, &program, &cStepS16))
         {
             setProgramNo(program);
+            SetUnsavedChanges(true);
         }
     }
 }
@@ -728,6 +738,7 @@ void DeleteVeloctity(BankFile::KeyRegion* keyRegion, BankFile::VelocityRegion* v
     if (keyRegion->getVelocityRegionList().size() == 1) //? Deleted last VelocityRegion, this KeyRegion can die now
     {
         delete keyRegion;
+        SetUnsavedChanges(true);
     }
     else
     {
@@ -736,17 +747,21 @@ void DeleteVeloctity(BankFile::KeyRegion* keyRegion, BankFile::VelocityRegion* v
         if (velocityRegion == keyRegion->getVelocityRegionList().front()) //? VelocityRegion is the bottom one, extend the one above to cover it
         {
             velocityRegion->getNext(*keyRegion)->setVelocityMin(0, *keyRegion);
+            SetUnsavedChanges(true);
         }
         else if (velocityRegion == keyRegion->getVelocityRegionList().back()) //? VelocityRegion is the top one, extend the one below to cover it
         {
             velocityRegion->getPrev(*keyRegion)->setVelocityMax(127, *keyRegion);
+            SetUnsavedChanges(true);
         }
         else //? VelocityRegion is sandwiched, extend the one below to cover it
         {
             velocityRegion->getPrev(*keyRegion)->setVelocityMax(velocityRegion->getVelocityMax(), *keyRegion);
+            SetUnsavedChanges(true);
         }
 
         delete velocityRegion;
+        SetUnsavedChanges(true);
     }
 }
 
@@ -782,6 +797,7 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             u8 newKeyMin = (keyRegion->getKeyMax() + keyRegion->getKeyMin()) / 2 + 1;
 
             keyRegion->setKeyMax(newKeyMin - 1, *instrument);
+            SetUnsavedChanges(true);
 
             BankFile::KeyRegion* newKeyRegion = new BankFile::KeyRegion(newKeyMin, newKeyMax);
             newKeyRegion->setId(0);
@@ -791,6 +807,7 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             keyRegion->insertBack(newKeyRegion);
 
             sBfsar.updateList(instrument->getKeyRegionList());
+            SetUnsavedChanges(true);
 
             BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(0, 127);
             newVelRegion->setId(0);
@@ -814,6 +831,7 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             u8 newVelMin = (velocityRegion->getVelocityMax() + velocityRegion->getVelocityMin()) / 2 + 1;
 
             velocityRegion->setVelocityMax(newVelMin - 1, *keyRegion);
+            SetUnsavedChanges(true);
 
             BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(newVelMin, newVelMax);
             newVelRegion->setId(0);
@@ -824,11 +842,13 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             velocityRegion->insertBack(newVelRegion);
 
             sBfsar.updateList(keyRegion->getVelocityRegionList());
+            SetUnsavedChanges(true);
         }
 
         if (ImGui::MenuItem("Delete"))
         {
             DeleteVeloctity(keyRegion, velocityRegion);
+            SetUnsavedChanges(true);
             ImGui::CloseCurrentPopup();
         }
 
@@ -1343,11 +1363,13 @@ void DrawKeyboardWithRegions(
                 {
                     newRegion = new BankFile::KeyRegion(0, addNode->getKeyMin() - 1);
                     addNode->insertFront(newRegion);
+                    SetUnsavedChanges(true);
                 }
                 else
                 {
                     newRegion = new BankFile::KeyRegion(0, 127);
                     instrument->getKeyRegionList().pushBack(newRegion);
+                    SetUnsavedChanges(true);
                 }
             }
             else if (addMode == AddMode::Back)
@@ -1355,6 +1377,7 @@ void DrawKeyboardWithRegions(
                 SEAD_ASSERT(addNode);
                 newRegion = new BankFile::KeyRegion(addNode->getKeyMax() + 1, 127);
                 addNode->insertBack(newRegion);
+                SetUnsavedChanges(true);
             }
             else if (addMode == AddMode::After)
             {
@@ -1365,6 +1388,7 @@ void DrawKeyboardWithRegions(
 
                 newRegion = new BankFile::KeyRegion(newMin, newMax);
                 addNode->insertBack(newRegion);
+                SetUnsavedChanges(true);
             }
 
             newRegion->setId(0);
@@ -1372,6 +1396,7 @@ void DrawKeyboardWithRegions(
             newRegion->getName() = "KeyRegion";
 
             sBfsar.updateList(instrument->getKeyRegionList());
+            SetUnsavedChanges(true);
 
             BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(0, 127);
             newVelRegion->setId(0);
@@ -1379,6 +1404,7 @@ void DrawKeyboardWithRegions(
             newVelRegion->getName() = "VelocityRegion";
 
             newRegion->getVelocityRegionList().pushBack(newVelRegion);
+            SetUnsavedChanges(true);
 
             SelectVelocity(newRegion, newVelRegion);
         }
@@ -1448,7 +1474,9 @@ void DrawKeyboardWithRegions(
                 snd::internal::driver::SoundThreadLock lock;
                 
                 velRegion->setVelocityMax(mouseVel, *sDrag.region);
+                SetUnsavedChanges(true);
                 vNext->setVelocityMin(mouseVel + 1, *sDrag.region);
+                SetUnsavedChanges(true);
             }
             else
             {
@@ -1514,13 +1542,16 @@ void DrawKeyboardWithRegions(
                     if (sDrag.prev)
                     {
                         sDrag.prev->setKeyMax(newMin - 1, *instrument);
+                        SetUnsavedChanges(true);
                     }
 
                     region->setKeyMin(newMin, *instrument);
+                    SetUnsavedChanges(true);
 
                     if (sDrag.prev)
                     {
                         sDrag.prev->setKeyMax(region->getKeyMin() - 1, *instrument);
+                        SetUnsavedChanges(true);
                     }
                 }
                 else if (sDrag.mode == DragMode::ResizeR)
@@ -1532,13 +1563,16 @@ void DrawKeyboardWithRegions(
                     if (sDrag.next)
                     {
                         sDrag.next->setKeyMin(newMax + 1, *instrument);
+                        SetUnsavedChanges(true);
                     }
 
                     region->setKeyMax(newMax, *instrument);
+                    SetUnsavedChanges(true);
 
                     if (sDrag.next)
                     {
                         sDrag.next->setKeyMin(region->getKeyMax() + 1, *instrument);
+                        SetUnsavedChanges(true);
                     }
                 }
             }

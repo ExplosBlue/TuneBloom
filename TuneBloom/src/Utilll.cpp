@@ -5,6 +5,7 @@
 
 static sead::Framework* sFramework = nullptr;
 static sead::Texture* sIcon = nullptr;
+static sead::FixedSafeString<512> sLastTitlePath;
 
 namespace util {
 
@@ -28,7 +29,7 @@ void setIcon_(sead::Texture* icon)
     sIcon = icon;
 }
 
-bool updateTitle(const char* path)
+bool updateTitle(const char* path, bool dirty)
 {
     sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
     if (!fw)
@@ -36,16 +37,30 @@ bool updateTitle(const char* path)
         return false;
     }
 
+    if (path)
+    {
+        sLastTitlePath = path;
+    }
+    else
+    {
+        sLastTitlePath.clear();
+    }
+
     sead::FixedSafeString<512> title;
     title.format("%s %s", cAppName.cstr(), cAppVersion.cstr());
 
     if (path)
     {
-        title.appendWithFormat(" - %s", path);
+        title.appendWithFormat(" - %s%s", dirty ? "*" : "", path);
     }
 
     fw->setCaption(title);
     return true;
+}
+
+void refreshTitleDirty(bool dirty)
+{
+    updateTitle(sLastTitlePath.isEmpty() ? nullptr : sLastTitlePath.cstr(), dirty);
 }
 
 } // namespace util

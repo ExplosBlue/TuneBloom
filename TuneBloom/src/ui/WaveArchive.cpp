@@ -33,6 +33,7 @@ void DrawWaveArchivePropertiesUI()
         if (ImGui::Checkbox("Load Individually", &isLoadIndividual))
         {
             warc->setIsLoadIndividual(isLoadIndividual);
+            SetUnsavedChanges(true);
         }
     }
 }

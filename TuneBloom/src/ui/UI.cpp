@@ -71,6 +71,9 @@ static Sound::SoundType sPendingExportType;
 static int sPendingExportDurationMin = 2;
 static int sPendingExportDurationSec = 0;
 
+static SequenceFile* sPendingExportSequenceFile = nullptr;
+static WaveFile* sPendingExportWaveFile = nullptr;
+
 static int sStrmMultiChannel = 1;
 static bool sStrmLoop = true;
 static int sStrmLoopCount = 2;
@@ -135,6 +138,7 @@ void DrawSubInfoUI();
 void DrawFileUI(ImGuiID dockspaceId);
 void DrawPropertiesUI();
 void DrawExportDialog();
+static void DrawFileExportDialogs();
 void DrawExportConfirmPopup();
 
 void DrawAllSoundsUI();
@@ -1000,6 +1004,7 @@ void DrawUI()
     }
 
     DrawExportDialog();
+    DrawFileExportDialogs();
     DrawExportConfirmPopup();
 }
 
@@ -1413,6 +1418,95 @@ void DrawExportDialog()
         sPendingExportSound = nullptr;
     }
 
+}
+
+static void DrawFileExportDialogs()
+{
+    if (sPendingExportSequenceFile)
+    {
+        SequenceFile* seq = sPendingExportSequenceFile;
+        sPendingExportSequenceFile = nullptr;
+
+        bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+        const char* ext = isBcsar ? "cseq" : "fseq";
+        const char* name = isBcsar ? "CSEQ" : "FSEQ";
+
+        sead::FixedSafeString<512> path;
+        sead::FixedSafeString<64> filterName;
+        filterName.format("%s file (*.%s)", name, ext);
+        sead::FixedSafeString<32> filterPattern;
+        filterPattern.format("*.%s", ext);
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { filterName.cstr(), filterPattern.cstr() }
+        };
+
+        sead::FixedSafeString<512> defaultPath;
+        {
+            const char* rawName = seq->getNameOrNull().cstr();
+            char cwdBuf[4096];
+            const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
+            defaultPath.format("%s/%s.%s", cwd ? cwd : ".", rawName, ext);
+        }
+
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+        {
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            if (device)
+            {
+                sead::FileHandle handle;
+                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                if (handle.getDevice())
+                {
+                    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+                    seq->write(&handle, &stream, sead::Endian::eBig, true);
+                }
+            }
+        }
+    }
+
+    if (sPendingExportWaveFile)
+    {
+        WaveFile* wave = sPendingExportWaveFile;
+        sPendingExportWaveFile = nullptr;
+
+        bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+        const char* ext = isBcsar ? "cwav" : "fwav";
+        const char* name = isBcsar ? "CWAV" : "FWAV";
+
+        sead::FixedSafeString<512> path;
+        sead::FixedSafeString<64> filterName;
+        filterName.format("%s file (*.%s)", name, ext);
+        sead::FixedSafeString<32> filterPattern;
+        filterPattern.format("*.%s", ext);
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { filterName.cstr(), filterPattern.cstr() }
+        };
+
+        sead::FixedSafeString<512> defaultPath;
+        {
+            const char* rawName = wave->getNameOrNull().cstr();
+            char cwdBuf[4096];
+            const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
+            defaultPath.format("%s/%s.%s", cwd ? cwd : ".", rawName, ext);
+        }
+
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+        {
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            if (device)
+            {
+                sead::FileHandle handle;
+                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                if (handle.getDevice())
+                {
+                    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+                    wave->write(&handle, &stream, sead::Endian::eBig, true);
+                }
+            }
+        }
+    }
 }
 
 void DrawExportConfirmPopup()
@@ -3417,10 +3511,48 @@ void WaveFileContextMenuFunc(Item* item)
         }
     }
 
+    bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+    const char* waveName = isBcsar ? "CWAV" : "FWAV";
+
+    sead::FixedSafeString<64> nativeLabel;
+    nativeLabel.format("Export as %s", waveName);
+
+    if (ImGui::MenuItem(nativeLabel.cstr()))
+    {
+        sPendingExportWaveFile = wave;
+    }
+
     if (disableMenu)
     {
         ImGui::EndDisabled();
     }
+}
+
+void SequenceFileContextMenuFunc(Item* item)
+{
+    SequenceFile* seq = nullptr;
+    if (item)
+    {
+        seq = static_cast<SequenceFile*>(item);
+    }
+
+    ImGui::Separator();
+
+    bool disabled = seq == nullptr || !seq->isValid();
+    if (disabled) ImGui::BeginDisabled();
+
+    bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+    const char* name = isBcsar ? "CSEQ" : "FSEQ";
+
+    sead::FixedSafeString<64> label;
+    label.format("Export as %s", name);
+
+    if (ImGui::MenuItem(label.cstr()))
+    {
+        sPendingExportSequenceFile = seq;
+    }
+
+    if (disabled) ImGui::EndDisabled();
 }
 
 void DrawWaveFilesUI()
@@ -3534,7 +3666,7 @@ const char* SequenceFileNamePrefixFunc(Item* item)
 void DrawSequenceFilesUI()
 {
     DrawAllItemsUI("Sequence File", sBfsar.getSequenceFileList(),
-        &CreateSequenceFileFunc, &SequenceFileNamePrefixFunc, nullptr, GetItemFilterCallback(), true
+        &CreateSequenceFileFunc, &SequenceFileNamePrefixFunc, &SequenceFileContextMenuFunc, GetItemFilterCallback(), true
     );
 }
 

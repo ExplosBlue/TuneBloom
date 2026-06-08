@@ -2851,7 +2851,7 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
 
     struct SetVisual
     {
-        const SoundSet* set;
+        SoundSet* set;
         u32 start;
         u32 end;
         u32 index;
@@ -2860,7 +2860,7 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
     u32 index = 0;
     for (auto it = list.begin(); it != list.end(); ++it)
     {
-        const SoundSet* soundSet = static_cast<const SoundSet*>(*it);
+        SoundSet* soundSet = static_cast<SoundSet*>(*it);
         if (filterByType && soundSet->getSoundSetType() != filterType)
         {
             index++;
@@ -2973,6 +2973,7 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
     ImGui::SetCursorScreenPos(ImVec2(cursorPos.x, cursorPos.y));
     ImGui::InvisibleButton("##rangeVis", ImVec2(width, height + outerPad * 2.0f));
 
+    SetVisual* hoveredSet = nullptr;
     if (ImGui::IsItemHovered())
     {
         ImVec2 mousePos = ImGui::GetMousePos();
@@ -2984,13 +2985,27 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
             {
                 if (hoveredId >= (f32)s.start && hoveredId < (f32)(s.end + 1))
                 {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("%s [%u, %u]", s.set->getNameOrNull().cstr(), s.start, s.end);
-                    ImGui::EndTooltip();
+                    hoveredSet = &s;
                     break;
                 }
             }
         }
+    }
+
+    if (hoveredSet)
+    {
+        f32 hx1 = cursorPos.x + ((f32)(hoveredSet->start - globalMin) / floatRange) * width;
+        f32 hx2 = cursorPos.x + ((f32)(hoveredSet->end - globalMin + 1) / floatRange) * width;
+        if (hx2 - hx1 < 1.0f) hx2 = hx1 + 1.0f;
+        drawList->AddRectFilled(ImVec2(hx1, barMin.y), ImVec2(hx2, barMax.y), IM_COL32(255, 255, 255, 35));
+        drawList->AddRect(ImVec2(hx1, barMin.y), ImVec2(hx2, barMax.y), IM_COL32(255, 255, 255, 160), 0.0f, 0, 1.5f);
+
+        if (ImGui::IsItemActivated())
+            SelectItem(hoveredSet->set);
+
+        ImGui::BeginTooltip();
+        ImGui::Text("%s [%u, %u]", hoveredSet->set->getNameOrNull().cstr(), hoveredSet->start, hoveredSet->end);
+        ImGui::EndTooltip();
     }
 }
 

@@ -335,9 +335,8 @@ bool SaveFileAs()
     sead::FixedSafeString<512> defaultPath;
     if (sBfsar.getFilePath().isEmpty())
     {
-        char cwdBuf[4096];
-        const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
-        defaultPath.format("%s/%s", cwd ? cwd : ".", isBcsar ? "Untitled.bcsar" : "Untitled.bfsar");
+        std::string cwd = std::filesystem::current_path().string();
+        defaultPath.format("%s/%s", cwd.c_str(), isBcsar ? "Untitled.bcsar" : "Untitled.bfsar");
     }
     else
     {

@@ -132,7 +132,7 @@ bool SoundPlayer::playSeqSound(const Sound* sound)
     return true;
 }
 
-void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* sound, u32 maxDurationSecs)
+void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* sound, u32 maxDurationSecs, u32 targetSampleRate)
 {
     mSeqExportPath = path;
     mSeqCapture.prepare();
@@ -234,14 +234,50 @@ void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* soun
 
     mSeqCapture.finish();
     snd::SoundSystem::resumeAudio();
-    writeSeqWavFile(mSeqExportPath, mSeqCapture.mSamplesLeft, mSeqCapture.mSamplesRight);
+
+    if (targetSampleRate == 0)
+        targetSampleRate = snd::internal::driver::HardwareMgr::cSampleRate;
+
+    const std::vector<f32>* left = &mSeqCapture.mSamplesLeft;
+    const std::vector<f32>* right = &mSeqCapture.mSamplesRight;
+    std::vector<f32> resampledLeft;
+    std::vector<f32> resampledRight;
+
+    if (targetSampleRate != snd::internal::driver::HardwareMgr::cSampleRate)
+    {
+        u32 srcLen = (u32)mSeqCapture.mSamplesLeft.size();
+        u32 dstLen = static_cast<u32>((static_cast<u64>(srcLen) * targetSampleRate) / snd::internal::driver::HardwareMgr::cSampleRate);
+        if (dstLen < 1) dstLen = 1;
+
+        auto resample = [&](const std::vector<f32>& src) -> std::vector<f32>
+        {
+            std::vector<f32> dst(dstLen);
+            for (u32 i = 0; i < dstLen; i++)
+            {
+                f32 pos = (static_cast<f32>(i) * srcLen) / dstLen;
+                u32 idx = static_cast<u32>(pos);
+                f32 frac = pos - idx;
+                u32 i0 = sead::Mathu::min(idx, srcLen - 1);
+                u32 i1 = sead::Mathu::min(idx + 1, srcLen - 1);
+                dst[i] = src[i0] + (src[i1] - src[i0]) * frac;
+            }
+            return dst;
+        };
+
+        resampledLeft = resample(mSeqCapture.mSamplesLeft);
+        resampledRight = resample(mSeqCapture.mSamplesRight);
+        left = &resampledLeft;
+        right = &resampledRight;
+    }
+
+    writeSeqWavFile(mSeqExportPath, *left, *right, targetSampleRate);
 
     PopupMgr::instance()->addPopup({
         sead::FormatFixedSafeString<256>("Exported sequence to %s", mSeqExportPath.cstr()), nullptr
     });
 }
 
-bool SoundPlayer::writeSeqWavFile(const sead::SafeString& path, const std::vector<f32>& left, const std::vector<f32>& right)
+bool SoundPlayer::writeSeqWavFile(const sead::SafeString& path, const std::vector<f32>& left, const std::vector<f32>& right, u32 sampleRate)
 {
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     if (!device)
@@ -259,7 +295,8 @@ bool SoundPlayer::writeSeqWavFile(const sead::SafeString& path, const std::vecto
     if (numSamples == 0)
         return false;
 
-    u32 sampleRate = snd::internal::driver::HardwareMgr::cSampleRate;
+    if (sampleRate == 0)
+        sampleRate = snd::internal::driver::HardwareMgr::cSampleRate;
     u32 numChannels = 2;
     u32 bitsPerSample = 16;
     u32 dataSize = numSamples * numChannels * (bitsPerSample / 8);

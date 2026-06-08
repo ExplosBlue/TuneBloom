@@ -6,6 +6,7 @@
 //#include <snd/SoundThread.h>
 
 #include <filedevice/seadPath.h>
+#include <filedevice/seadFileDeviceMgr.h>
 #include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 #include <framework/seadProcessMeter.h>
 #include <gfx/gl/seadTextureGL.h>
@@ -23,6 +24,7 @@
 
 #include <cstdio>
 #include <cctype>
+#include <vector>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -64,6 +66,38 @@ static Sound::SoundType sPendingExportType;
 static int sPendingExportDurationMin = 2;
 static int sPendingExportDurationSec = 0;
 
+static int sStrmMultiChannel = 1;
+static bool sStrmLoop = true;
+static int sStrmLoopCount = 2;
+static float sStrmFadeSec = 12.0f;
+static int sStrmSampleRateIdx = 0;
+static int sSeqSampleRateIdx = 0;
+
+static bool sShowExportConfirm = false;
+
+static const char* sSampleRateItems[] = {
+    "Original",
+    "8000 Hz",
+    "11025 Hz",
+    "16000 Hz",
+    "22050 Hz",
+    "32000 Hz",
+    "44100 Hz",
+    "48000 Hz",
+    "96000 Hz"
+};
+static const u32 sSampleRateValues[] = {
+    0,
+    8000,
+    11025,
+    16000,
+    22050,
+    32000,
+    44100,
+    48000,
+    96000
+};
+
 ItemList sFileWindows;
 
 // Windows
@@ -73,6 +107,7 @@ void DrawSubInfoUI();
 void DrawFileUI(ImGuiID dockspaceId);
 void DrawPropertiesUI();
 void DrawExportDialog();
+void DrawExportConfirmPopup();
 
 void DrawAllSoundsUI();
 void DrawStreamSoundsUI();
@@ -833,6 +868,7 @@ void DrawUI()
     }
 
     DrawExportDialog();
+    DrawExportConfirmPopup();
 }
 
 static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Sound* sound, const char* ext)
@@ -846,6 +882,174 @@ static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Soun
     char cwdBuf[4096];
     const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
     outPath->format("%s/%s.%s", cwd ? cwd : ".", upperName.cstr(), ext);
+}
+
+static void DecodeWaveFileChannels(const WaveFile* wave, std::vector<std::vector<s16>>& outChannels)
+{
+    u32 sampleCount = wave->getSampleCount();
+    const auto& channels = wave->getChannels();
+    u32 numChannels = channels.size();
+    WaveFile::Encoding encoding = wave->getEncoding();
+
+    outChannels.resize(numChannels);
+
+    for (u32 ch = 0; ch < numChannels; ch++)
+    {
+        const WaveFile::Channel* channel = channels.nth(ch);
+        outChannels[ch].resize(sampleCount);
+        s16* dst = outChannels[ch].data();
+
+        switch (encoding)
+        {
+            case WaveFile::Encoding::Pcm8:
+            {
+                const s8* src = static_cast<const s8*>(channel->getData());
+                for (u32 i = 0; i < sampleCount; i++)
+                    dst[i] = static_cast<s16>(src[i]) << 8;
+                break;
+            }
+            case WaveFile::Encoding::Pcm16:
+            {
+                const s16* src = static_cast<const s16*>(channel->getData());
+                for (u32 i = 0; i < sampleCount; i++)
+                    dst[i] = sead::Endian::convertS16(wave->getDataEndian(), sead::Endian::eLittle, src[i]);
+                break;
+            }
+            case WaveFile::Encoding::DspAdpcm:
+            {
+                ADPCMINFO adpcmInfo;
+                sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
+                FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(false), channel->getAdpcmLoopParam(false));
+                decode(const_cast<u8*>(static_cast<const u8*>(channel->getData())), dst, &adpcmInfo, sampleCount);
+                break;
+            }
+        }
+    }
+}
+
+static void ApplyLoopAndFade(std::vector<std::vector<s16>>& channels, u32 sampleRate, bool loop, u32 loopCount, float fadeSec)
+{
+    if (!loop || channels.empty())
+        return;
+
+    u32 numChannels = channels.size();
+    u32 baseLen = channels[0].size();
+
+    for (u32 ch = 1; ch < numChannels; ch++)
+        if (channels[ch].size() > baseLen)
+            baseLen = channels[ch].size();
+
+    if (baseLen == 0)
+        return;
+
+    u32 fadeSamples = static_cast<u32>(fadeSec * sampleRate);
+    u32 totalLen = baseLen * loopCount + sead::Mathu::min(baseLen, fadeSamples);
+
+    for (u32 ch = 0; ch < numChannels; ch++)
+    {
+        std::vector<s16> original = std::move(channels[ch]);
+        channels[ch].resize(totalLen);
+
+        for (u32 loop = 0; loop < loopCount; loop++)
+        {
+            sead::MemUtil::copy(&channels[ch][loop * baseLen], original.data(), baseLen * sizeof(s16));
+        }
+
+        s32 fadeStart = static_cast<s32>(baseLen * loopCount);
+        fadeSamples = sead::Mathu::min(fadeSamples, totalLen - fadeStart);
+
+        for (u32 i = 0; i < fadeSamples; i++)
+        {
+            float t = static_cast<float>(i) / fadeSamples;
+            float gain = 1.0f - t;
+            channels[ch][fadeStart + i] = static_cast<s16>(original[i] * gain);
+        }
+    }
+}
+
+static void ResampleChannels(std::vector<std::vector<s16>>& channels, u32 srcRate, u32 dstRate)
+{
+    if (srcRate == dstRate || channels.empty())
+        return;
+
+    u32 numChannels = channels.size();
+    u32 srcLen = channels[0].size();
+    u32 dstLen = static_cast<u32>((static_cast<u64>(srcLen) * dstRate) / srcRate);
+    if (dstLen < 1) dstLen = 1;
+
+    for (u32 ch = 0; ch < numChannels; ch++)
+    {
+        std::vector<s16> src = std::move(channels[ch]);
+        channels[ch].resize(dstLen);
+
+        for (u32 i = 0; i < dstLen; i++)
+        {
+            f32 pos = (static_cast<f32>(i) * srcLen) / dstLen;
+            u32 idx = static_cast<u32>(pos);
+            f32 frac = pos - idx;
+
+            s16 s0 = src[sead::Mathu::min(idx, srcLen - 1)];
+            s16 s1 = src[sead::Mathu::min(idx + 1, srcLen - 1)];
+            channels[ch][i] = static_cast<s16>(s0 + (s1 - s0) * frac);
+        }
+    }
+}
+
+static bool WriteWavCustom(const sead::SafeString& path, u32 sampleRate, const std::vector<std::vector<s16>>& channels)
+{
+    u32 numChannels = channels.size();
+    if (numChannels == 0)
+        return false;
+
+    u32 sampleCount = channels[0].size();
+    for (u32 ch = 1; ch < numChannels; ch++)
+        if (channels[ch].size() < sampleCount)
+            sampleCount = channels[ch].size();
+
+    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+    if (!device)
+        return false;
+
+    sead::FileHandle handle;
+    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
+    if (!handle.getDevice())
+    {
+        device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+        if (!handle.getDevice())
+            return false;
+    }
+
+    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+    stream.setBinaryEndian(sead::Endian::eLittle);
+
+    u32 bitsPerSample = 16;
+    u32 blockAlign = numChannels * (bitsPerSample / 8);
+    u32 byteRate = sampleRate * blockAlign;
+    u32 dataSize = sampleCount * blockAlign;
+
+    stream.writeString("RIFF", 4);
+    stream.writeU32(36 + dataSize);
+    stream.writeString("WAVE", 4);
+    stream.writeString("fmt ", 4);
+    stream.writeU32(16);
+    stream.writeU16(1);
+    stream.writeU16(numChannels);
+    stream.writeU32(sampleRate);
+    stream.writeU32(byteRate);
+    stream.writeU16(blockAlign);
+    stream.writeU16(bitsPerSample);
+    stream.writeString("data", 4);
+    stream.writeU32(dataSize);
+
+    for (u32 i = 0; i < sampleCount; i++)
+    {
+        for (u32 ch = 0; ch < numChannels; ch++)
+        {
+            stream.writeS16(channels[ch][i]);
+        }
+    }
+
+    return true;
 }
 
 void DrawExportDialog()
@@ -877,6 +1081,9 @@ void DrawExportDialog()
             if (sPendingExportDurationSec > 59) sPendingExportDurationSec = 59;
 
             ImGui::Separator();
+            ImGui::SetNextItemWidth(140);
+            ImGui::Combo("Sample rate", &sSeqSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
+            ImGui::Separator();
 
             if (ImGui::Button("Export", ImVec2(120, 0)))
             {
@@ -890,12 +1097,14 @@ void DrawExportDialog()
                 sead::FixedSafeString<512> defaultPath;
                 BuildDefaultExportPath(&defaultPath, sPendingExportSound, "wav");
 
+                u32 targetRate = sSampleRateValues[sSeqSampleRateIdx];
                 if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
-                    sSoundPlayer.exportSeqToWav(path, sPendingExportSound, totalSecs);
-
-                sPendingExport = false;
-                sPendingExportSound = nullptr;
-                ImGui::CloseCurrentPopup();
+                {
+                    sSoundPlayer.exportSeqToWav(path, sPendingExportSound, totalSecs, targetRate);
+                    sPendingExport = false;
+                    sPendingExportSound = nullptr;
+                    ImGui::CloseCurrentPopup();
+                }
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
@@ -908,7 +1117,148 @@ void DrawExportDialog()
             ImGui::EndPopup();
         }
     }
-    else
+    else if (sPendingExportType == Sound::SoundType::Strm)
+    {
+        ImGui::OpenPopup("Export Stream Options");
+
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Export Stream Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("Stream export options:");
+            ImGui::Separator();
+
+            ImGui::RadioButton("Multi-channel WAV (one file)", &sStrmMultiChannel, 1);
+            ImGui::RadioButton("Split per-track WAV files", &sStrmMultiChannel, 0);
+
+            ImGui::Separator();
+            ImGui::Checkbox("Loop", &sStrmLoop);
+
+            if (sStrmLoop)
+            {
+                ImGui::Indent();
+                ImGui::SetNextItemWidth(80);
+                ImGui::InputInt("Loop count", &sStrmLoopCount, 1, 2);
+                if (sStrmLoopCount < 1) sStrmLoopCount = 1;
+                if (sStrmLoopCount > 99) sStrmLoopCount = 99;
+
+                ImGui::SetNextItemWidth(80);
+                ImGui::InputFloat("Fade (sec)", &sStrmFadeSec, 0.5f, 2.0f, "%.1f");
+                if (sStrmFadeSec < 0.0f) sStrmFadeSec = 0.0f;
+                ImGui::Unindent();
+            }
+
+            ImGui::Separator();
+            ImGui::SetNextItemWidth(140);
+            ImGui::Combo("Sample rate", &sStrmSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
+            ImGui::Separator();
+
+            if (ImGui::Button("Export", ImVec2(120, 0)))
+            {
+                sead::FixedSafeString<512> path;
+                const u32 filterCount = 1;
+                FileFilter filters[filterCount] = { { "Wave (*.wav)", "*.wav" } };
+
+                sead::FixedSafeString<512> defaultPath;
+                BuildDefaultExportPath(&defaultPath, sPendingExportSound, "wav");
+
+                if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+                {
+                    auto& trackList = sPendingExportSound->getStreamSoundInfo().getTrackList();
+                    u32 sampleRate = 0;
+
+                    std::vector<std::vector<std::vector<s16>>> trackChannels;
+                    for (auto it = trackList.robustBegin(); it != trackList.robustEnd(); ++it)
+                    {
+                        Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(it->val());
+                        Item* waveItem = track->getWaveFileRef().getItem();
+                        if (!waveItem)
+                            continue;
+
+                        const WaveFile* wave = static_cast<const WaveFile*>(waveItem);
+                        if (sampleRate == 0)
+                            sampleRate = wave->getSampleRate();
+
+                        trackChannels.emplace_back();
+                        DecodeWaveFileChannels(wave, trackChannels.back());
+                    }
+
+                    if (!trackChannels.empty())
+                    {
+                        u32 targetRate = sSampleRateValues[sStrmSampleRateIdx];
+                        if (targetRate == 0)
+                            targetRate = sampleRate;
+
+                        std::vector<std::vector<s16>> allChannels;
+                        std::vector<u32> trackChannelOffset;
+
+                        for (auto& tc : trackChannels)
+                        {
+                            trackChannelOffset.push_back(allChannels.size());
+                            for (auto& ch : tc)
+                                allChannels.push_back(std::move(ch));
+                        }
+
+                        if (targetRate != sampleRate)
+                            ResampleChannels(allChannels, sampleRate, targetRate);
+                        sampleRate = targetRate;
+
+                        if (sStrmLoop)
+                        {
+                            u32 loopCount = static_cast<u32>(sStrmLoopCount);
+                            ApplyLoopAndFade(allChannels, sampleRate, true, loopCount, sStrmFadeSec);
+                        }
+
+                        if (sStrmMultiChannel != 0)
+                        {
+                            WriteWavCustom(path, sampleRate, allChannels);
+                        }
+                        else
+                        {
+                            u32 trackIdx = 0;
+                            const char* dot = strrchr(path.cstr(), '.');
+                            for (auto& tc : trackChannels)
+                            {
+                                u32 offset = trackChannelOffset[trackIdx];
+                                std::vector<std::vector<s16>> trackChs;
+                                for (u32 i = 0; i < tc.size(); i++)
+                                {
+                                    if (offset + i < allChannels.size())
+                                        trackChs.push_back(allChannels[offset + i]);
+                                }
+
+                                sead::FixedSafeString<512> trackPath;
+                                if (dot)
+                                    trackPath.format("%.*s_track%u%s", (s32)(dot - path.cstr()), path.cstr(), trackIdx, dot);
+                                else
+                                    trackPath.format("%s_track%u.wav", path.cstr(), trackIdx);
+
+                                WriteWavCustom(trackPath, sampleRate, trackChs);
+                                trackIdx++;
+                            }
+                        }
+
+                        sShowExportConfirm = true;
+                    }
+
+                    sPendingExport = false;
+                    sPendingExportSound = nullptr;
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                sPendingExport = false;
+                sPendingExportSound = nullptr;
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+    else if (sPendingExportType == Sound::SoundType::Wave)
     {
         sead::FixedSafeString<512> path;
 
@@ -922,37 +1272,39 @@ void DrawExportDialog()
 
         if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
         {
-            if (sPendingExportType == Sound::SoundType::Wave)
-            {
-                Item* waveItem = sPendingExportSound->getWaveSoundInfo().getWaveFileRef().getItem();
-                if (waveItem)
-                    static_cast<WaveFile*>(waveItem)->writeWavFile(path);
-            }
-            else if (sPendingExportType == Sound::SoundType::Strm)
-            {
-                auto& trackList = sPendingExportSound->getStreamSoundInfo().getTrackList();
-                u32 trackIdx = 0;
-                for (auto it = trackList.robustBegin(); it != trackList.robustEnd(); ++it)
-                {
-                    Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(it->val());
-                    Item* waveItem = track->getWaveFileRef().getItem();
-                    if (waveItem)
-                    {
-                        sead::FixedSafeString<512> trackPath;
-                        const char* dot = strrchr(path.cstr(), '.');
-                        if (dot)
-                            trackPath.format("%.*s_track%u%s", (s32)(dot - path.cstr()), path.cstr(), trackIdx, dot);
-                        else
-                            trackPath.format("%s_track%u.wav", path.cstr(), trackIdx);
-                        static_cast<WaveFile*>(waveItem)->writeWavFile(trackPath);
-                        trackIdx++;
-                    }
-                }
-            }
+            Item* waveItem = sPendingExportSound->getWaveSoundInfo().getWaveFileRef().getItem();
+            if (waveItem)
+                static_cast<WaveFile*>(waveItem)->writeWavFile(path);
         }
 
         sPendingExport = false;
         sPendingExportSound = nullptr;
+    }
+
+}
+
+void DrawExportConfirmPopup()
+{
+    if (!sShowExportConfirm)
+        return;
+
+    ImGui::OpenPopup("Export Complete");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Export Complete", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Stream exported successfully.");
+        ImGui::Separator();
+
+        if (ImGui::Button("OK", ImVec2(120, 0)))
+        {
+            sShowExportConfirm = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 }
 
@@ -2330,6 +2682,7 @@ void SoundContextMenuFunc(Item* item)
 
     if (ImGui::MenuItem("Export to WAV"))
     {
+        sShowExportConfirm = false;
         sPendingExportSound = sound;
         sPendingExportType = sound->getSoundType();
         sPendingExport = true;

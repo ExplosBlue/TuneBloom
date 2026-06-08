@@ -33,7 +33,9 @@ enum class UIType
     SequenceFiles,
     BankFiles,
 
-    Max = BankFiles
+    FileStatistics,
+
+    Max = FileStatistics
 };
 
 void SetUITab(UIType type);

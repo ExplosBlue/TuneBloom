@@ -456,6 +456,18 @@ public:
         return mIsStreamExtended;
     }
 
+    u32 getFileSize() const
+    {
+        if (mUseOriginalData && mOriginalData)
+            return mOriginalDataSize;
+
+        u32 size = 0;
+        for (u32 i = 0; i < mChannels.size(); i++)
+            size += mChannels.nth(i)->getDataSizeMin();
+
+        return size + 0x100;
+    }
+
     void updateLoop();
 
     static void buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel::SeekData* outSeekData, const Channel::SeekData* srcSeekData = nullptr, u32 preserveSamples = 0);

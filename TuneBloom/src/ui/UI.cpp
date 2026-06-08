@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cctype>
 #include <vector>
+#include <algorithm>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -146,6 +147,7 @@ void DrawSequenceSoundSetsUI();
 void DrawWaveFilesUI();
 void DrawSequenceFilesUI();
 void DrawBankFilesUI();
+void DrawFileStatisticsUI();
 
 extern void HeapInfo();
 
@@ -1542,6 +1544,14 @@ void DrawProjectUI()
             selected = true;
         }
 
+        ImGui::Separator();
+
+        if (ImGui::Selectable(ICON_LC_CHART_AREA " File Statistics", sSelectedUIType == UIType::FileStatistics, ImGuiSelectableFlags_SpanAvailWidth))
+        {
+            sSelectedUIType = UIType::FileStatistics;
+            selected = true;
+        }
+
         if (ImGui::IsWindowFocused())
         {
             if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
@@ -1763,6 +1773,10 @@ void DrawInfoUI()
 
             case UIType::BankFiles:
                 DrawBankFilesUI();
+                break;
+
+            case UIType::FileStatistics:
+                DrawFileStatisticsUI();
                 break;
 
             default:
@@ -3557,6 +3571,314 @@ void DrawBankFilesUI()
     DrawAllItemsUI("Bank File", sBfsar.getBankFileList(),
         &CreateBankFileFunc, &BankFileNamePrefixFunc, nullptr, GetItemFilterCallback(), true
     );
+}
+
+static void FormatFileSize(sead::BufferedSafeString& out, u32 bytes)
+{
+    if (bytes >= 1024 * 1024)
+    {
+        f32 mb = (f32)bytes / (1024.0f * 1024.0f);
+        out.format("%.2f MB", mb);
+    }
+    else if (bytes >= 1024)
+    {
+        f32 kb = (f32)bytes / 1024.0f;
+        out.format("%.1f KB", kb);
+    }
+    else
+    {
+        out.format("%u B", bytes);
+    }
+}
+
+static ImU32 HeatMapColor(f32 t)
+{
+    // Green (small) -> Yellow (medium) -> Red (large)
+    t = sead::Mathf::clamp2(0.0f, t, 1.0f);
+    if (t < 0.5f)
+    {
+        f32 u = t / 0.5f;
+        return IM_COL32(
+            (int)(u * 255),
+            255,
+            (int)((1.0f - u) * 128),
+            200
+        );
+    }
+    else
+    {
+        f32 u = (t - 0.5f) / 0.5f;
+        return IM_COL32(
+            255,
+            (int)((1.0f - u) * 255),
+            (int)((1.0f - u) * 64),
+            200
+        );
+    }
+}
+
+struct FileStatBlock
+{
+    WaveFile* wave;
+    u32 size;
+    sead::FixedSafeString<256> name;
+    sead::FixedSafeString<32> sizeStr;
+    ImRect rect;
+};
+
+static void LayoutTreemapRow(std::vector<FileStatBlock>& blocks, size_t start, size_t end, ImRect area)
+{
+    if (start >= end) return;
+
+    if (end - start == 1)
+    {
+        blocks[start].rect = area;
+        return;
+    }
+
+    u32 totalSize = 0;
+    for (size_t i = start; i < end; i++)
+        totalSize += blocks[i].size;
+
+    if (totalSize == 0)
+    {
+        f32 w = area.GetWidth() / (end - start);
+        for (size_t i = start; i < end; i++)
+        {
+            blocks[i].rect = ImRect(
+                area.Min.x + (i - start) * w, area.Min.y,
+                area.Min.x + (i - start + 1) * w, area.Max.y
+            );
+        }
+        return;
+    }
+
+    // Lay out items along the longer dimension of the available area
+    bool horizontal = area.GetWidth() >= area.GetHeight();
+
+    u32 cumSize = 0;
+    size_t bestSplit = start + 1;
+    f32 bestWorst = FLT_MAX;
+
+    for (size_t i = start; i < end; i++)
+    {
+        cumSize += blocks[i].size;
+        size_t count = i - start + 1;
+
+        f32 cumRatio = (f32)cumSize / (f32)totalSize;
+        f32 rowSpan = horizontal ? area.GetHeight() : area.GetWidth();
+        f32 rowThick = rowSpan * cumRatio;
+        f32 itemSpan = horizontal ? area.GetWidth() : area.GetHeight();
+
+        f32 worst = 0.0f;
+        for (size_t j = start; j <= i; j++)
+        {
+            f32 itemRatio = (f32)blocks[j].size / (f32)cumSize;
+            f32 itemW = horizontal ? itemSpan * itemRatio : rowThick;
+            f32 itemH = horizontal ? rowThick : itemSpan * itemRatio;
+            f32 aspect = (itemW > itemH) ? itemW / itemH : itemH / itemW;
+            if (aspect > worst) worst = aspect;
+        }
+
+        if (count == 1 || worst < bestWorst)
+        {
+            bestWorst = worst;
+            bestSplit = i + 1;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    u32 firstSize = 0;
+    for (size_t i = start; i < bestSplit; i++)
+        firstSize += blocks[i].size;
+
+    f32 splitRatio = (f32)firstSize / (f32)totalSize;
+
+    ImRect rowRect, restRect;
+    if (horizontal)
+    {
+        // Row takes a fraction of the HEIGHT at the top; items within stretch full width
+        f32 splitY = area.Min.y + area.GetHeight() * splitRatio;
+        rowRect = ImRect(area.Min, ImVec2(area.Max.x, splitY));
+        restRect = ImRect(ImVec2(area.Min.x, splitY), area.Max);
+    }
+    else
+    {
+        // Row takes a fraction of the WIDTH at the left; items within stretch full height
+        f32 splitX = area.Min.x + area.GetWidth() * splitRatio;
+        rowRect = ImRect(area.Min, ImVec2(splitX, area.Max.y));
+        restRect = ImRect(ImVec2(splitX, area.Min.y), area.Max);
+    }
+
+    if (horizontal)
+    {
+        f32 itemSpan = rowRect.GetWidth();
+        f32 rowPos = rowRect.Min.x;
+        for (size_t i = start; i < bestSplit; i++)
+        {
+            f32 itemRatio = (f32)blocks[i].size / (f32)firstSize;
+            f32 itemW = itemSpan * itemRatio;
+            blocks[i].rect = ImRect(rowPos, rowRect.Min.y, rowPos + itemW, rowRect.Max.y);
+            rowPos += itemW;
+        }
+    }
+    else
+    {
+        f32 itemSpan = rowRect.GetHeight();
+        f32 rowPos = rowRect.Min.y;
+        for (size_t i = start; i < bestSplit; i++)
+        {
+            f32 itemRatio = (f32)blocks[i].size / (f32)firstSize;
+            f32 itemH = itemSpan * itemRatio;
+            blocks[i].rect = ImRect(rowRect.Min.x, rowPos, rowRect.Max.x, rowPos + itemH);
+            rowPos += itemH;
+        }
+    }
+
+    LayoutTreemapRow(blocks, bestSplit, end, restRect);
+}
+
+void DrawFileStatisticsUI()
+{
+    static bool sIncludeStreamWaves = true;
+
+    ImGui::Checkbox("Include Stream Waves", &sIncludeStreamWaves);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::Text("When enabled, includes wave files derived from stream sound data.");
+        ImGui::EndTooltip();
+    }
+
+    ImGui::Separator();
+
+    std::vector<FileStatBlock> blocks;
+    u32 totalSize = 0;
+    u32 maxSize = 0;
+
+    const auto& waveList = sBfsar.getWaveFileList();
+    for (const auto& node : waveList)
+    {
+        WaveFile* wave = static_cast<WaveFile*>(node->val());
+
+        if (!sIncludeStreamWaves && wave->getIsStreamExtended())
+            continue;
+
+        u32 size = wave->getFileSize();
+        if (size == 0) size = 1;
+
+        FileStatBlock block;
+        block.wave = wave;
+        block.size = size;
+        block.name = wave->getName();
+        FormatFileSize(block.sizeStr, size);
+        blocks.push_back(block);
+        totalSize += size;
+        if (size > maxSize) maxSize = size;
+    }
+
+    if (blocks.empty())
+    {
+        ImGui::Text("No wave files to display.");
+        return;
+    }
+
+    std::sort(blocks.begin(), blocks.end(), [](const FileStatBlock& a, const FileStatBlock& b) {
+        return a.size > b.size;
+    });
+
+    {
+        sead::FixedSafeString<32> totalSizeStr;
+        FormatFileSize(totalSizeStr, totalSize);
+        ImGui::Text("Total: %s (%zu files)", totalSizeStr.cstr(), blocks.size());
+    }
+    ImGui::Separator();
+
+    ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+    if (canvasSize.x < 10.0f || canvasSize.y < 10.0f) return;
+
+    f32 minHeight = ImGui::GetFontSize() * 24.0f;
+    if (canvasSize.y < minHeight) canvasSize.y = minHeight;
+
+    ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+    ImRect canvasRect(canvasPos, canvasPos + canvasSize);
+
+    ImGui::InvisibleButton("##treemap", canvasSize, ImGuiButtonFlags_MouseButtonLeft);
+    bool canvasHovered = ImGui::IsItemHovered();
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    LayoutTreemapRow(blocks, 0, blocks.size(), canvasRect);
+
+    FileStatBlock* hoveredBlock = nullptr;
+    FileStatBlock* clickedBlock = nullptr;
+
+    for (auto& block : blocks)
+    {
+        ImRect rect = block.rect;
+
+        f32 t = maxSize > 0 ? (f32)block.size / (f32)maxSize : 0.0f;
+        ImU32 color = HeatMapColor(t);
+        ImU32 borderColor = IM_COL32(0, 0, 0, 100);
+
+        bool darkBg = t < 0.65f;
+        ImU32 textColor = darkBg ? IM_COL32(20, 20, 20, 230) : IM_COL32(255, 255, 255, 230);
+        ImU32 sizeColor = darkBg ? IM_COL32(20, 20, 20, 180) : IM_COL32(255, 255, 255, 180);
+
+        drawList->AddRectFilled(rect.Min, rect.Max, color, 1.0f);
+        drawList->AddRect(rect.Min, rect.Max, borderColor, 1.0f);
+
+        if (rect.GetWidth() > 50.0f && rect.GetHeight() > 30.0f)
+        {
+            ImVec2 nameSize = ImGui::CalcTextSize(block.name.cstr());
+            if (nameSize.x < rect.GetWidth() - 8.0f)
+            {
+                ImVec2 textPos = ImVec2(
+                    rect.Min.x + (rect.GetWidth() - nameSize.x) * 0.5f,
+                    rect.Min.y + 4.0f
+                );
+                drawList->AddText(textPos, textColor, block.name.cstr());
+            }
+
+            ImVec2 sizeTextSize = ImGui::CalcTextSize(block.sizeStr.cstr());
+            if (sizeTextSize.x < rect.GetWidth() - 8.0f)
+            {
+                ImVec2 sizeTextPos = ImVec2(
+                    rect.Min.x + (rect.GetWidth() - sizeTextSize.x) * 0.5f,
+                    rect.Max.y - sizeTextSize.y - 4.0f
+                );
+                drawList->AddText(sizeTextPos, sizeColor, block.sizeStr.cstr());
+            }
+        }
+
+        if (canvasHovered && ImGui::IsMouseHoveringRect(rect.Min, rect.Max))
+        {
+            hoveredBlock = &block;
+            drawList->AddRect(rect.Min, rect.Max, IM_COL32(255, 255, 255, 220), 1.0f, 0, 2.0f);
+        }
+    }
+
+    if (canvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && hoveredBlock)
+    {
+        clickedBlock = hoveredBlock;
+    }
+
+    if (hoveredBlock)
+    {
+        f32 pct = totalSize > 0 ? (f32)hoveredBlock->size / (f32)totalSize * 100.0f : 0.0f;
+        ImGui::BeginTooltip();
+        ImGui::Text("%s", hoveredBlock->name.cstr());
+        ImGui::Text("Size: %s", hoveredBlock->sizeStr.cstr());
+        ImGui::Text("Percentage: %.2f%%", pct);
+        ImGui::EndTooltip();
+    }
+
+    if (clickedBlock)
+        SelectItem(clickedBlock->wave);
 }
 
 bool DrawVersionUI(u32* versionPtr, u32 versionByteNum)

@@ -10,6 +10,7 @@
 // System includes
 #include <stdint.h>     // intptr_t
 
+#include <cctype>
 #include <prim/seadSafeString.h>
 
 //-------------------------------------------------------------------------
@@ -1455,40 +1456,152 @@ bool ImGui::InputTextExCustom(const char* label, const char* hint, char* buf, in
         return value_changed;
 }
 
+static bool stringContainsIgnoreCase(const char* str, const char* substr)
+{
+    if (!str || !substr || !substr[0])
+        return true;
+
+    while (*str)
+    {
+        const char* s = str;
+        const char* sub = substr;
+        while (*s && *sub && tolower((unsigned char)*s) == tolower((unsigned char)*sub))
+        {
+            s++;
+            sub++;
+        }
+        if (!*sub)
+            return true;
+        str++;
+    }
+    return false;
+}
+
 bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const char* const items[], int items_count)
 {
     bool ret = false;
 
-    ImVec2 cursorPos = GetCursorPos();
+    // Read-only combo: display current value as preview, no editable text field
+    sead::FixedSafeString<64> comboLabel;
+    comboLabel.format("##%sCombo", label);
+    const ImGuiStyle& style = GetStyle();
+    float arrowSize = GetFrameHeight();
+    float w = CalcItemWidth();
+    ImVec2 labelSize = CalcTextSize(label, NULL, true);
+    ImRect bb(GetCursorScreenPos(), GetCursorScreenPos() + ImVec2(w, labelSize.y + style.FramePadding.y * 2.0f));
+    ImRect totalBb(bb.Min, bb.Max + ImVec2(labelSize.x > 0.0f ? style.ItemInnerSpacing.x + labelSize.x : 0.0f, 0.0f));
+    ImGuiID id = GetID(comboLabel.cstr());
 
-    ret = InputTextExCustom(sead::FormatFixedSafeString<64>("###%sInputText", label).cstr(), nullptr, buf, buf_size, ImVec2(CalcItemWidth() - GetFrameHeight(), 0));
-
-    //SameLine(0.0f, 0.0f);
-    SetCursorPos(cursorPos);
-
-    if (BeginComboCustom(label, ""))
+    ItemSize(totalBb, style.FramePadding.y);
+    if (ItemAdd(totalBb, id, &bb))
     {
-        for (u32 i = 0; i < items_count; i++)
+        bool hovered, held;
+        bool pressed = ButtonBehavior(bb, id, &hovered, &held);
+        float valueX2 = ImMax(bb.Min.x, bb.Max.x - arrowSize);
+
+        // Draw frame background when hovered
+        ImU32 frameCol = GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+        GetWindowDrawList()->AddRectFilled(bb.Min, ImVec2(valueX2, bb.Max.y), frameCol, style.FrameRounding, ImDrawFlags_RoundCornersLeft);
+        // Draw preview text
+        PushClipRect(bb.Min + style.FramePadding, ImVec2(valueX2, bb.Max.y) - style.FramePadding, true);
+        RenderText(bb.Min + style.FramePadding, buf);
+        PopClipRect();
+        // Draw arrow button
+        ImU32 bgCol = GetColorU32((IsPopupOpen(id, ImGuiPopupFlags_None) || hovered) ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+        ImU32 textCol = GetColorU32(ImGuiCol_Text);
+        GetWindowDrawList()->AddRectFilled(ImVec2(valueX2, bb.Min.y), bb.Max, bgCol, style.FrameRounding, ImDrawFlags_RoundCornersRight);
+        RenderArrow(GetWindowDrawList(), ImVec2(valueX2 + style.FramePadding.y, bb.Min.y + style.FramePadding.y), textCol, ImGuiDir_Down, 1.0f);
+        RenderFrameBorder(bb.Min, bb.Max, style.FrameRounding);
+        // Draw label to the right
+        if (labelSize.x > 0)
+            RenderText(ImVec2(bb.Max.x + style.ItemInnerSpacing.x, bb.Min.y + style.FramePadding.y), label);
+
+        if (pressed)
+            OpenPopupEx(id);
+    }
+
+    int itemCount = items_count;
+    int maxVisibleItems = itemCount < 15 ? itemCount : 15;
+    float itemHeight = GetFrameHeight() + style.ItemSpacing.y;
+    float searchBoxHeight = GetFrameHeight() + style.ItemSpacing.y;
+    float fixedHeight = style.WindowPadding.y * 2.0f + searchBoxHeight + style.ItemSpacing.y;
+    float listHeight = itemHeight * maxVisibleItems;
+    float popupHeight = fixedHeight + listHeight;
+
+    // Clamp to fit within the viewport below the trigger
+    ImGuiViewport* viewport = GetMainViewport();
+    float availableBelow = (viewport->Pos.y + viewport->Size.y) - bb.Max.y;
+    if (popupHeight > availableBelow && availableBelow > fixedHeight + itemHeight)
+    {
+        popupHeight = availableBelow;
+        float rawListHeight = availableBelow - fixedHeight;
+        int rawItems = (int)(rawListHeight / itemHeight);
+        listHeight = itemHeight * rawItems;
+    }
+    else if (popupHeight > availableBelow)
+    {
+        popupHeight = fixedHeight + itemHeight;
+        listHeight = itemHeight;
+    }
+    SetNextWindowSize(ImVec2(bb.GetWidth(), popupHeight));
+    SetNextWindowSizeConstraints(ImVec2(bb.GetWidth(), popupHeight), ImVec2(bb.GetWidth(), popupHeight));
+    SetNextWindowPos(ImVec2(bb.Min.x, bb.Max.y));
+
+    if (BeginPopup(comboLabel.cstr()))
+    {
+        static sead::FixedSafeString<256> sComboFilter;
+
+        if (IsWindowAppearing())
         {
-            sead::SafeString str(items[i]);
-            if (str.isEmpty())
-            {
-                continue;
-            }
-
-            bool selected = str == buf;
-            if (Selectable(str.cstr(), selected))
-            {
-                // strcpy_s(buf, buf_size, str.cstr());
-                strcpy(buf, str.cstr());
-                ret = true;
-            }
-
-            if (selected)
-                SetItemDefaultFocus();
+            sComboFilter.clear();
+            SetKeyboardFocusHere();
         }
 
-        EndCombo();
+        SetNextItemWidth(-FLT_MIN);
+        InputTextWithHint("##comboFilter", " Search...", sComboFilter.getBuffer(), sComboFilter.getBufferSize());
+
+        Separator();
+
+        bool filterActive = !sComboFilter.isEmpty();
+
+        char filterLower[256];
+        if (filterActive)
+        {
+            int fi = 0;
+            while (sComboFilter.cstr()[fi] && fi < 255)
+            {
+                filterLower[fi] = (char)tolower((unsigned char)sComboFilter.cstr()[fi]);
+                fi++;
+            }
+            filterLower[fi] = '\0';
+        }
+
+        if (BeginChild("##comboList", ImVec2(0.0f, listHeight), true, ImGuiWindowFlags_AlwaysVerticalScrollbar))
+        {
+            for (u32 i = 0; i < items_count; i++)
+            {
+                sead::SafeString str(items[i]);
+                if (str.isEmpty())
+                    continue;
+
+                if (filterActive && !stringContainsIgnoreCase(str.cstr(), filterLower))
+                    continue;
+
+                bool selected = str == buf;
+                if (Selectable(str.cstr(), selected))
+                {
+                    strcpy(buf, str.cstr());
+                    ret = true;
+                    CloseCurrentPopup();
+                }
+
+                if (selected)
+                    SetItemDefaultFocus();
+            }
+        }
+        EndChild();
+
+        EndPopup();
     }
 
     return ret;

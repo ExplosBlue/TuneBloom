@@ -2,6 +2,8 @@
 
 #include <bfsar/Sound.h>
 
+#include <cctype>
+
 
 
 static Item* sDeleteItem = nullptr;
@@ -1049,39 +1051,156 @@ bool ItemSelector(const char* name, const Item::List& list, Item** itemPtr, bool
     f32 buttonSize = ImGui::GetFrameHeight();
 
     ImGui::PushItemWidth(w - spacing * 2.0f - buttonSize * 2.0f);
-    if (ImGui::BeginCombo(sead::FormatFixedSafeString<64>("##%sCombo", name).cstr(), itemName.cstr()))
     {
-        if (allowNone)
-        {
-            bool selected = *itemPtr == nullptr;
-            if (ImGui::Selectable("[-] (none)", selected))
-            {
-                *itemPtr = nullptr;
-                ret = true;
-            }
+        sead::FixedSafeString<64> popupIdStr;
+        popupIdStr.format("##%sSelectorPopup", name);
 
-            if (selected)
-                ImGui::SetItemDefaultFocus();
+        // Draw the combo trigger (frame + preview + arrow, same visual as ImGui::BeginCombo)
+        sead::FixedSafeString<64> triggerIdStr;
+        triggerIdStr.format("##%sCombo", name);
+        ImGuiID triggerId = ImGui::GetID(triggerIdStr.cstr());
+        bool popupOpen = ImGui::IsPopupOpen(popupIdStr.cstr(), ImGuiPopupFlags_AnyPopupId);
+        ImVec2 frameMin = ImGui::GetCursorScreenPos();
+        float frameHeight = ImGui::GetFrameHeight();
+        f32 triggerWidth = w - spacing * 2.0f - buttonSize * 2.0f;
+        ImVec2 frameSize = ImVec2(triggerWidth, frameHeight);
+
+        ImGui::ItemSize(frameSize);
+        ImRect frameRect = ImRect(frameMin.x, frameMin.y, frameMin.x + frameSize.x, frameMin.y + frameSize.y);
+        if (ImGui::ItemAdd(frameRect, triggerId))
+        {
+            bool hovered, held;
+            bool pressed = ImGui::ButtonBehavior(frameRect, triggerId, &hovered, &held);
+
+            float arrowSize = frameHeight;
+            float valueX2 = frameMin.x + frameSize.x - arrowSize;
+
+            ImU32 frameCol = ImGui::GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+            ImGui::GetWindowDrawList()->AddRectFilled(frameMin, ImVec2(valueX2, frameMin.y + frameSize.y), frameCol, ImGui::GetStyle().FrameRounding, ImDrawFlags_RoundCornersLeft);
+
+            ImU32 arrowBgCol = ImGui::GetColorU32((popupOpen || hovered) ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+            ImU32 arrowTextCol = ImGui::GetColorU32(ImGuiCol_Text);
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(valueX2, frameMin.y), ImVec2(frameMin.x + frameSize.x, frameMin.y + frameSize.y), arrowBgCol, ImGui::GetStyle().FrameRounding, ImDrawFlags_RoundCornersRight);
+            ImGui::RenderArrow(ImGui::GetWindowDrawList(), ImVec2(valueX2 + ImGui::GetStyle().FramePadding.y, frameMin.y + ImGui::GetStyle().FramePadding.y), arrowTextCol, ImGuiDir_Down, 1.0f);
+            ImGui::RenderFrameBorder(ImVec2(frameMin.x, frameMin.y), ImVec2(frameMin.x + frameSize.x, frameMin.y + frameSize.y), ImGui::GetStyle().FrameRounding);
+
+            ImGui::RenderTextClipped(ImVec2(frameMin.x + ImGui::GetStyle().FramePadding.x, frameMin.y + ImGui::GetStyle().FramePadding.y), ImVec2(valueX2, frameMin.y + frameSize.y - ImGui::GetStyle().FramePadding.y), itemName.cstr(), NULL, NULL);
+
+            if (pressed)
+                ImGui::OpenPopup(popupIdStr.cstr(), ImGuiPopupFlags_None);
         }
 
-        for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+        // Position and size the popup like a standard combo (always set, even if popup not yet open on first frame)
+        ImVec2 triggerMin = ImGui::GetItemRectMin();
+        ImVec2 triggerMax = ImGui::GetItemRectMax();
+        ImGui::SetNextWindowPos(ImVec2(triggerMin.x, triggerMax.y));
+
+        int itemCount = (int)list.size() + (allowNone ? 1 : 0);
+        int maxVisibleItems = itemCount < 15 ? itemCount : 15;
+        float itemHeight = ImGui::GetFrameHeight() + style.ItemSpacing.y;
+        float searchBoxHeight = ImGui::GetFrameHeight() + style.ItemSpacing.y;
+        float fixedHeight = style.WindowPadding.y * 2.0f + searchBoxHeight + style.ItemSpacing.y;
+        float listHeight = itemHeight * maxVisibleItems;
+        float popupHeight = fixedHeight + listHeight;
+
+        // Clamp to fit within the viewport below the trigger
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        float availableBelow = (viewport->Pos.y + viewport->Size.y) - triggerMax.y;
+        if (popupHeight > availableBelow && availableBelow > fixedHeight + itemHeight)
         {
-            Item* item = (*it).val();
+            popupHeight = availableBelow;
+            float rawListHeight = availableBelow - fixedHeight;
+            int rawItems = (int)(rawListHeight / itemHeight);
+            listHeight = itemHeight * rawItems;
+        }
+        else if (popupHeight > availableBelow)
+        {
+            popupHeight = fixedHeight + itemHeight;
+            listHeight = itemHeight;
+        }
+        ImGui::SetNextWindowSize(ImVec2(triggerMax.x - triggerMin.x, popupHeight));
+        ImGui::SetNextWindowSizeConstraints(ImVec2(triggerMax.x - triggerMin.x, popupHeight), ImVec2(triggerMax.x - triggerMin.x, popupHeight));
 
-            itemName = item->getFormattedName();
+        if (ImGui::BeginPopup(popupIdStr.cstr()))
+        {
+            static sead::FixedSafeString<256> sComboFilter;
 
-            bool selected = *itemPtr == item;
-            if (ImGui::Selectable(itemName.cstr(), selected))
+            if (ImGui::IsWindowAppearing())
             {
-                *itemPtr = item;
-                ret = true;
+                sComboFilter.clear();
+                ImGui::SetKeyboardFocusHere();
             }
 
-            if (selected)
-                ImGui::SetItemDefaultFocus();
-        }
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::InputTextWithHint("##comboFilter", ICON_LC_SEARCH " Search...", sComboFilter.getBuffer(), sComboFilter.getBufferSize());
 
-        ImGui::EndCombo();
+            ImGui::Separator();
+
+            bool filterActive = !sComboFilter.isEmpty();
+
+            std::string filterStr;
+            if (filterActive)
+            {
+                filterStr = sComboFilter.cstr();
+                for (char& c : filterStr)
+                    c = (char)std::tolower((u8)c);
+            }
+
+            if (ImGui::BeginChild("##comboList", ImVec2(0.0f, listHeight), ImGuiChildFlags_Border, ImGuiWindowFlags_AlwaysVerticalScrollbar))
+            {
+                bool hasMatch = false;
+
+                if (allowNone && !filterActive)
+                {
+                    bool selected = *itemPtr == nullptr;
+                    if (ImGui::Selectable("[-] (none)", selected))
+                    {
+                        *itemPtr = nullptr;
+                        ret = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+
+                for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+                {
+                    Item* item = (*it).val();
+
+                    itemName = item->getFormattedName();
+
+                    if (filterActive)
+                    {
+                        std::string nameLower = itemName.cstr();
+                        for (char& c : nameLower)
+                            c = (char)std::tolower((u8)c);
+
+                        if (nameLower.find(filterStr) == std::string::npos)
+                            continue;
+                    }
+
+                    hasMatch = true;
+
+                    bool selected = *itemPtr == item;
+                    if (ImGui::Selectable(itemName.cstr(), selected))
+                    {
+                        *itemPtr = item;
+                        ret = true;
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    if (selected)
+                        ImGui::SetItemDefaultFocus();
+                }
+
+                if (filterActive && !hasMatch)
+                    ImGui::TextDisabled("No matches");
+            }
+            ImGui::EndChild();
+
+            ImGui::EndPopup();
+        }
     }
     ImGui::PopItemWidth();
 

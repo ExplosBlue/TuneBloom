@@ -3437,8 +3437,6 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
         canExport = (type == Sound::SoundType::Wave || type == Sound::SoundType::Strm || type == Sound::SoundType::Seq);
     }
 
-    ImGui::Separator();
-
     if (!canExport)
         ImGui::BeginDisabled();
 
@@ -3483,7 +3481,7 @@ const char* SoundNamePrefixFunc2(Item* item)
 
 void DrawStreamSoundsUI()
 {
-    DrawAllItemsUI("Stream Sound", sBfsar.getSoundList(), &CreateStreamSoundFunc, &SoundNamePrefixFunc2, nullptr,
+    DrawAllItemsUI("Stream Sound", sBfsar.getSoundList(), &CreateStreamSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
@@ -3494,7 +3492,7 @@ void DrawStreamSoundsUI()
 
 void DrawWaveSoundsUI()
 {
-    DrawAllItemsUI("Wave Sound", sBfsar.getSoundList(), &CreateWaveSoundFunc, &SoundNamePrefixFunc2, nullptr,
+    DrawAllItemsUI("Wave Sound", sBfsar.getSoundList(), &CreateWaveSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
@@ -3505,7 +3503,7 @@ void DrawWaveSoundsUI()
 
 void DrawSequenceSoundsUI()
 {
-    DrawAllItemsUI("Sequence Sound", sBfsar.getSoundList(), &CreateSequenceSoundFunc, &SoundNamePrefixFunc2, nullptr,
+    DrawAllItemsUI("Sequence Sound", sBfsar.getSoundList(), &CreateSequenceSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);

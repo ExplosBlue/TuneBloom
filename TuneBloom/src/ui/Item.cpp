@@ -211,11 +211,6 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
             }
         }
 
-        if (menuCallback)
-        {
-            menuCallback(item, false);
-        }
-
         ImGui::Separator();
 
         {
@@ -234,6 +229,11 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
             {
                 ImGui::EndDisabled();
             }
+        }
+
+        if (menuCallback)
+        {
+            menuCallback(item, false);
         }
 
         if (menuCallback)

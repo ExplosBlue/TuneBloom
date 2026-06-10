@@ -244,6 +244,14 @@ void SequenceFile::drawFileUI()
         }
     }
 
+    ImGui::SameLine();
+
+    static bool sShowHelp = false;
+    if (ImGui::Button(ICON_LC_BOOK_OPEN_TEXT))
+    {
+        sShowHelp = !sShowHelp;
+    }
+
     static bool sShowTrail = true;
 
     if (mIsValid && sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
@@ -297,7 +305,171 @@ void SequenceFile::drawFileUI()
         ImGui::Checkbox("Trail", &sShowTrail);
     }
 
-    mTextEditor->Render("SeqText");
+    if (sShowHelp)
+    {
+        static float sSplitPos = 0.55f;
+        const float splitterWidth = 6.0f;
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        float leftPaneWidth = availWidth * sSplitPos;
+        float rightPaneWidth = availWidth - leftPaneWidth - splitterWidth;
+
+        ImGui::BeginChild("SeqEditorPane", ImVec2(leftPaneWidth, 0), false);
+        mTextEditor->Render("SeqText");
+        ImGui::EndChild();
+
+        ImGui::SameLine();
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::Button("##HSplitter", ImVec2(splitterWidth, -1));
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemActive())
+        {
+            sSplitPos += ImGui::GetIO().MouseDelta.x / availWidth;
+            if (sSplitPos < 0.15f) sSplitPos = 0.15f;
+            if (sSplitPos > 0.85f) sSplitPos = 0.85f;
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
+        ImGui::SameLine();
+
+        ImGui::BeginChild("SeqHelpPane", ImVec2(rightPaneWidth, 0), false);
+
+        static const ImVec4 cHdr(0.84f, 0.61f, 0.34f, 1.0f);
+        static const ImVec4 cCmd(0.61f, 0.78f, 0.30f, 1.0f);
+        static const ImVec4 cArg(0.44f, 0.63f, 0.88f, 1.0f);
+        static const ImVec4 cDflt(0.50f, 0.50f, 0.50f, 1.0f);
+
+        auto section = [&](const char* title) {
+            ImGui::Spacing();
+            ImGui::TextColored(cHdr, "== %s ==", title);
+        };
+
+        auto cmd1 = [&](const char* cmd, const char* desc) {
+            ImGui::TextColored(cCmd, "  %s", cmd);
+            ImGui::SameLine();
+            ImGui::Text("   %s", desc);
+        };
+
+        auto cmd1a = [&](const char* cmd, const char* arg, const char* desc) {
+            ImGui::TextColored(cCmd, "  %s", cmd);
+            ImGui::SameLine();
+            ImGui::TextColored(cArg, "%s", arg);
+            ImGui::SameLine();
+            ImGui::Text("   %s", desc);
+        };
+
+        auto cmd2 = [&](const char* cmd1, const char* cmd2, const char* desc) {
+            ImGui::TextColored(cCmd, "  %s", cmd1);
+            ImGui::SameLine(0, 0);
+            ImGui::TextColored(cDflt, " / ");
+            ImGui::SameLine(0, 0);
+            ImGui::TextColored(cCmd, "%s", cmd2);
+            ImGui::SameLine();
+            ImGui::Text("   %s", desc);
+        };
+
+        auto cmd1aR = [&](const char* cmd, const char* arg, const char* desc, const char* range) {
+            ImGui::TextColored(cCmd, "  %s", cmd);
+            ImGui::SameLine();
+            ImGui::TextColored(cArg, "%s", arg);
+            ImGui::SameLine();
+            ImGui::Text("   %s ", desc);
+            ImGui::SameLine(0, 0);
+            ImGui::TextColored(cDflt, "%s", range);
+        };
+
+        section("Note Commands");
+        cmd1aR("cn4", " velocity, length", "Play note", "(key: cn4,cs4,dn4,... cnm1-gn9)");
+        cmd1aR("wait", " length",           "Stop sequence", "(48 = quarter note)");
+        cmd1("fin",                         "End sequence processing for this track");
+
+        section("Program & Tempo");
+        cmd1aR("prg", " x",                "Program change", "(0-32767, default 0)");
+        cmd1aR("tempo", " x",              "Set tempo", "(1-1023, default 120)");
+        cmd1aR("timebase", " x",           "Quarter-note resolution", "(1-255, default 48)");
+
+        section("Track Volume / Pan");
+        cmd1aR("volume", " x",             "Track volume", "(0-127, square scale, default 127)");
+        cmd1aR("volume2", " x",            "Additional volume multiplier", "");
+        cmd1aR("main_volume", " x",        "Overall sequence volume", "(0-127, default 127)");
+        cmd1aR("pan", " x",               "Track pan", "(0=left, 64=center, 127=right)");
+        cmd1aR("span", " x",             "Surround pan", "(0=front, 127=rear)");
+        cmd1("init_pan x",                 "Per-note initial pan");
+        cmd1aR("velocity_range", " x",     "Velocity scaling", "(0-127, default 127)");
+
+        section("Envelope (ADSR)");
+        cmd1("attack x",    "Attack rate");
+        cmd1("decay x",     "Decay rate");
+        cmd1("sustain x",   "Sustain level");
+        cmd1("release x",   "Release rate");
+        cmd1("env_adsr a,d,s,r",   "Set all ADSR values");
+        cmd1("env_ahdsr a,h,d,s,r","ADSR with hold phase");
+        cmd1("env_hold x",         "Set hold value");
+        cmd1("env_reset",          "Clear envelope overrides");
+
+        section("Modulation");
+        cmd1aR("mod_depth", " depth", "Modulation depth", "(0-127, default 0)");
+        cmd1aR("mod_range", " range", "Modulation range", "(semitones, default 1)");
+        cmd1aR("mod_speed", " speed", "Modulation speed", "(default 16)");
+        cmd1aR("mod_delay", " delay", "Modulation decay", "(default 0)");
+        cmd1aR("mod_type", " type",   "Modulation type", "(default 0)");
+
+        section("Pitch");
+        cmd1aR("pitchbend", " x",   "Pitch bend", "(-128 to 127, default 0)");
+        cmd1aR("bendrange", " x",   "Bend range", "(semitones, 0-127, default 2)");
+        cmd1aR("transpose", " x",   "Transpose", "(semitones, -64 to +63, default 0)");
+
+        section("Portamento & Sweep");
+        cmd1a("porta", " key",         "Enter portamento with start key");
+        cmd2("porta_on", "porta_off",  "Toggle portamento mode");
+        cmd1aR("porta_time", " time",  "Portamento speed", "(0-255, default 0)");
+        cmd1aR("sweep_pitch", " pitch","Sweep pitch change", "(-32768-32767, 64=1 semitone)");
+
+        section("Filters");
+        cmd1aR("lpf_cutoff", " x",    "LPF cutoff frequency", "(0-127, 64=center, default 64)");
+        cmd1aR("biquad_type", " type","Biquad filter type", "(0=off, 1=LPF, 2=HPF, 3-5=BPF)");
+        cmd1aR("biquad_value", " x",  "Biquad filter amount", "(0-127, default 0)");
+
+        section("Effects");
+        cmd1aR("fxsend_a", " x", "Effect send A level", "(0-127, default 0)");
+        cmd1aR("fxsend_b", " x", "Effect send B level", "(0-127, default 0)");
+        cmd1aR("mainsend", " x", "Dry/main send level", "(0-127, default 127)");
+
+        section("Control Flow");
+        cmd1("jump label",       "Unconditional jump to label");
+        cmd1("call label",       "Call subroutine at label");
+        cmd1("ret",              "Return from subroutine");
+        cmd1a("loop_start", " count", "Begin loop (count iterations)");
+        cmd1("loop_end",         "End loop");
+
+        section("Tracks");
+        cmd1a("alloctrack", " mask", "Allocate tracks (must be first command)");
+        cmd1a("opentrack", " no, label", "Start a sub-track");
+
+        section("Mode Toggles");
+        cmd2("notewait_on", "notewait_off",     "Note wait mode (default: on)");
+        cmd2("tieon", "tieoff",                 "Tie mode (default: off)");
+        cmd2("monophonic_on", "monophonic_off", "Mono, one note per track (default: off)");
+        cmd2("damper_on", "damper_off",         "Damper/sustain pedal");
+
+        section("Other");
+        cmd1aR("prio", " x",            "Voicing priority", "(0-127, default 64)");
+        cmd1a("mute", " mode",           "Track mute / unmute");
+        cmd1a("userproc", " procId",     "Call a user-defined process");
+        cmd2("frontbypass_on", "frontbypass_off", "Front bypass toggle");
+
+        section("Labels");
+        cmd1a(".", "label_name", "Local label (prefixed with .)");
+        cmd1a("label_name", ":", "Global label (suffixed with :)");
+
+        ImGui::EndChild();
+    }
+    else
+    {
+        mTextEditor->Render("SeqText");
+    }
 
     if (mTextEditor->IsTextChanged())
     {

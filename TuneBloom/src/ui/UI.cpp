@@ -4341,6 +4341,7 @@ const char* SequenceFileNamePrefixFunc(Item* item)
     if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_FILE_PEN "###%u", seq->getId()).cstr()))
     {
         OpenFileWindow(seq);
+        SelectItem(seq);
     }
 
     ImGui::SameLine();

@@ -1428,8 +1428,8 @@ static void DrawFileExportDialogs()
         sPendingExportSequenceFile = nullptr;
 
         bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
-        const char* ext = isBcsar ? "cseq" : "fseq";
-        const char* name = isBcsar ? "CSEQ" : "FSEQ";
+        const char* ext = isBcsar ? "bcseq" : "bfseq";
+        const char* name = isBcsar ? "BCSEQ" : "BFSEQ";
 
         sead::FixedSafeString<512> path;
         sead::FixedSafeString<64> filterName;
@@ -1471,8 +1471,8 @@ static void DrawFileExportDialogs()
         sPendingExportWaveFile = nullptr;
 
         bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
-        const char* ext = isBcsar ? "cwav" : "fwav";
-        const char* name = isBcsar ? "CWAV" : "FWAV";
+        const char* ext = isBcsar ? "bcwav" : "bfwav";
+        const char* name = isBcsar ? "BCWAV" : "BFWAV";
 
         sead::FixedSafeString<512> path;
         sead::FixedSafeString<64> filterName;
@@ -2958,8 +2958,11 @@ const char* SoundNamePrefixFunc(Item* item)
     return icon;
 }
 
-void SoundContextMenuFunc(Item* item)
+void SoundContextMenuFunc(Item* item, bool afterDelete)
 {
+    if (afterDelete)
+        return;
+
     Sound* sound = static_cast<Sound*>(item);
     bool canExport = false;
     if (sound)
@@ -3375,6 +3378,8 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
     static sead::FixedSafeString<512> sFileName;
     static bool sAskForPath = true;
     static WaveFile::Encoding sEncoding = WaveFile::Encoding::DspAdpcm;
+    static bool sIsNative;
+    static WaveFile* sPendingNativeWave;
 
     if (clear)
     {
@@ -3382,12 +3387,14 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         sFileName.clear();
         sAskForPath = true;
         sEncoding = WaveFile::Encoding::DspAdpcm;
+        sPendingNativeWave = nullptr;
     }
 
     if (sAskForPath)
     {
-        const u32 filterCount = 1;
+        const u32 filterCount = 2;
         FileFilter filters[filterCount] = {
+            { "All supported audio (*.wav;*.bcwav;*.bfwav)", "*.wav;*.bcwav;*.bfwav" },
             { "Wave (*.wav)", "*.wav" }
         };
 
@@ -3397,6 +3404,42 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         {
             sEncoding = WaveFile::Encoding::DspAdpcm;
             sead::Path::getFileName(&sFileName, sRiffWaveInfo.path);
+
+            const char* pathStr = sRiffWaveInfo.path.cstr();
+            const char* dot = strrchr(pathStr, '.');
+            sIsNative = dot && (strcasecmp(dot, ".bcwav") == 0 || strcasecmp(dot, ".bfwav") == 0);
+
+            if (sIsNative)
+            {
+                sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+                if (device)
+                {
+                    sead::FileDevice::LoadArg arg;
+                    arg.path = sRiffWaveInfo.path;
+                    u8* fileData = device->tryLoad(arg);
+                    if (fileData)
+                    {
+                        WaveFile* newWave = new WaveFile();
+                        newWave->setEnableName(true);
+                        newWave->getName() = sFileName;
+                        if (newWave->read(fileData))
+                        {
+                            newWave->setFormat(sBfsar.getFormat());
+                            sPendingNativeWave = newWave;
+                            device->unload(fileData);
+                            return []() -> Item*
+                            {
+                                Item* item = sPendingNativeWave;
+                                sPendingNativeWave = nullptr;
+                                return item;
+                            };
+                        }
+                        delete newWave;
+                        device->unload(fileData);
+                    }
+                }
+                return nullptr;
+            }
 
             bool success = WaveFile::readRiffWavInfo(&sRiffWaveInfo);
             if (!success)
@@ -3457,97 +3500,85 @@ static WaveFile* sImportWaveFile = nullptr;
 static WaveFile::RiffWaveInfo sRiffWaveInfo;
 static sead::FixedSafeString<512> sWavFileName;
 
-void WaveFileContextMenuFunc(Item* item)
+void WaveFileContextMenuFunc(Item* item, bool afterDelete)
 {
     WaveFile* wave = nullptr;
     if (item)
-    {
         wave = static_cast<WaveFile*>(item);
-    }
-
-    ImGui::Separator();
 
     bool disableMenu = wave == nullptr;
     if (disableMenu)
-    {
         ImGui::BeginDisabled();
-    }
 
-    if (ImGui::MenuItem("Replace"))
+    if (!afterDelete)
     {
-        sImportWaveFile = nullptr;
-        sRiffWaveInfo.clear();
-        sWavFileName.clear();
-
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = {
-            { "Wave (*.wav)", "*.wav" }
-        };
-
-        if (OpenFileDialog(&sRiffWaveInfo.path, nullptr, filterCount, filters))
+        if (ImGui::MenuItem("Replace"))
         {
-            bool success = WaveFile::readRiffWavInfo(&sRiffWaveInfo);
-            if (success)
+            sImportWaveFile = nullptr;
+            sRiffWaveInfo.clear();
+            sWavFileName.clear();
+
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {
+                { "Wave (*.wav)", "*.wav" }
+            };
+
+            if (OpenFileDialog(&sRiffWaveInfo.path, nullptr, filterCount, filters))
             {
-                sEncoding = WaveFile::Encoding::DspAdpcm;
-                sImportWaveFile = wave;
-                sead::Path::getFileName(&sWavFileName, sRiffWaveInfo.path);
+                bool success = WaveFile::readRiffWavInfo(&sRiffWaveInfo);
+                if (success)
+                {
+                    sEncoding = WaveFile::Encoding::DspAdpcm;
+                    sImportWaveFile = wave;
+                    sead::Path::getFileName(&sWavFileName, sRiffWaveInfo.path);
+                }
+            }
+        }
+    }
+    else
+    {
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Export"))
+        {
+            sPendingExportWaveFile = wave;
+        }
+
+        if (ImGui::MenuItem("Export to WAV"))
+        {
+            sead::FixedSafeString<512> path;
+
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {
+                { "Wave (*.wav)", "*.wav" }
+            };
+
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav"))
+            {
+                wave->writeWavFile(path);
             }
         }
     }
 
-    if (ImGui::MenuItem("Export"))
-    {
-        sead::FixedSafeString<512> path;
-
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = {
-            { "Wave (*.wav)", "*.wav" }
-        };
-
-        if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav"))
-        {
-            wave->writeWavFile(path);
-        }
-    }
-
-    bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
-    const char* waveName = isBcsar ? "CWAV" : "FWAV";
-
-    sead::FixedSafeString<64> nativeLabel;
-    nativeLabel.format("Export as %s", waveName);
-
-    if (ImGui::MenuItem(nativeLabel.cstr()))
-    {
-        sPendingExportWaveFile = wave;
-    }
-
     if (disableMenu)
-    {
         ImGui::EndDisabled();
-    }
 }
 
-void SequenceFileContextMenuFunc(Item* item)
+void SequenceFileContextMenuFunc(Item* item, bool afterDelete)
 {
     SequenceFile* seq = nullptr;
     if (item)
-    {
         seq = static_cast<SequenceFile*>(item);
-    }
+
+    if (!afterDelete)
+        return;
 
     ImGui::Separator();
 
     bool disabled = seq == nullptr || !seq->isValid();
     if (disabled) ImGui::BeginDisabled();
 
-    bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
-    const char* name = isBcsar ? "CSEQ" : "FSEQ";
-
-    sead::FixedSafeString<64> label;
-    label.format("Export as %s", name);
-
-    if (ImGui::MenuItem(label.cstr()))
+    if (ImGui::MenuItem("Export"))
     {
         sPendingExportSequenceFile = seq;
     }
@@ -3637,16 +3668,90 @@ FileWindow* OpenFileWindow(Item* item)
 
 InstanciateItemCallback CreateSequenceFileFunc(bool clear)
 {
-    auto doCreate = []() -> Item*
-    {
-        SequenceFile* seq = new SequenceFile();
-        seq->setEnableName(true);
-        seq->getName() = "Sequence";
+    static sead::FixedSafeString<512> sFilePath;
+    static bool sAskForPath = true;
 
-        return seq;
+    if (clear)
+    {
+        sFilePath.clear();
+        sAskForPath = true;
+    }
+
+    if (!sAskForPath)
+        return nullptr;
+
+    const char* ext = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "bcseq" : "bfseq";
+    const char* name = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "BCSEQ" : "BFSEQ";
+
+    sead::FixedSafeString<64> filterName1;
+    filterName1.format("All supported (*.bcseq;*.bfseq)");
+    sead::FixedSafeString<64> filterName2;
+    filterName2.format("%s file (*.%s)", name, ext);
+    sead::FixedSafeString<32> filterPattern2;
+    filterPattern2.format("*.%s", ext);
+
+    const u32 filterCount = 2;
+    FileFilter filters[filterCount] = {
+        { filterName1.cstr(), "*.bcseq;*.bfseq" },
+        { filterName2.cstr(), filterPattern2.cstr() }
     };
 
-    return doCreate;
+    sAskForPath = false;
+
+    if (OpenFileDialog(&sFilePath, nullptr, filterCount, filters))
+    {
+        sead::FixedSafeString<256> fileName;
+        sead::Path::getFileName(&fileName, sFilePath);
+
+        const char* pathStr = sFilePath.cstr();
+        const char* dot = strrchr(pathStr, '.');
+        bool isNative = dot && (strcasecmp(dot, ".bcseq") == 0 || strcasecmp(dot, ".bfseq") == 0);
+
+        if (isNative)
+        {
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            if (device)
+            {
+                sead::FileDevice::LoadArg arg;
+                arg.path = sFilePath;
+                u8* fileData = device->tryLoad(arg);
+                if (fileData)
+                {
+                    static SequenceFile* sPendingNativeSeq = nullptr;
+                    SequenceFile* newSeq = new SequenceFile();
+                    newSeq->setEnableName(true);
+                    newSeq->getName() = fileName;
+                    newSeq->setFormat(sBfsar.getFormat());
+                    if (newSeq->read(fileData))
+                    {
+                        sPendingNativeSeq = newSeq;
+                        device->unload(fileData);
+                        return []() -> Item*
+                        {
+                            Item* item = sPendingNativeSeq;
+                            sPendingNativeSeq = nullptr;
+                            return item;
+                        };
+                    }
+                    delete newSeq;
+                    device->unload(fileData);
+                }
+            }
+            return nullptr;
+        }
+
+        static sead::FixedSafeString<256> sFileName;
+        sFileName = fileName;
+        return []() -> Item*
+        {
+            SequenceFile* seq = new SequenceFile();
+            seq->setEnableName(true);
+            seq->getName() = sFileName;
+            return seq;
+        };
+    }
+
+    return nullptr;
 }
 
 const char* SequenceFileNamePrefixFunc(Item* item)

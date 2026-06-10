@@ -173,7 +173,7 @@ using ItemPropertiesCallback = void (*)(bool clear, Item* item, bool* validate);
 using InstanciateItemCallback = Item* (*)();
 using CreateItemCallback = InstanciateItemCallback (*)(bool clear);
 using ItemNamePrefixCallback = const char* (*)(Item* item);
-using ContextMenuCallback = void (*)(Item* item);
+using ContextMenuCallback = void (*)(Item* item, bool afterDelete);
 using ItemFilterCallback = bool (*)(const Item* item);
 
 void CloseFilter();

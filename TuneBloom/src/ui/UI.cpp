@@ -3379,7 +3379,6 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
     static bool sAskForPath = true;
     static WaveFile::Encoding sEncoding = WaveFile::Encoding::DspAdpcm;
     static bool sIsNative;
-    static WaveFile* sPendingNativeWave;
 
     if (clear)
     {
@@ -3387,14 +3386,14 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         sFileName.clear();
         sAskForPath = true;
         sEncoding = WaveFile::Encoding::DspAdpcm;
-        sPendingNativeWave = nullptr;
+        sIsNative = false;
     }
 
     if (sAskForPath)
     {
         const u32 filterCount = 2;
         FileFilter filters[filterCount] = {
-            { "All supported audio (*.wav;*.bcwav;*.bfwav)", "*.wav;*.bcwav;*.bfwav" },
+            { "All supported audio (*.wav, *.bcwav, *.bfwav)", "*.wav *.bcwav *.bfwav" },
             { "Wave (*.wav)", "*.wav" }
         };
 
@@ -3404,6 +3403,9 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         {
             sEncoding = WaveFile::Encoding::DspAdpcm;
             sead::Path::getFileName(&sFileName, sRiffWaveInfo.path);
+            s32 dotPos = sFileName.rfindIndex(".");
+            if (dotPos != -1)
+                sFileName.trim(dotPos);
 
             const char* pathStr = sRiffWaveInfo.path.cstr();
             const char* dot = strrchr(pathStr, '.');
@@ -3419,32 +3421,83 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
                     u8* fileData = device->tryLoad(arg);
                     if (fileData)
                     {
+                        // Patch file header so reader accepts any version
+                        {
+                            nw::ut::BinaryFileHeader* hdr = reinterpret_cast<nw::ut::BinaryFileHeader*>(fileData);
+                            u16 bom;
+                            sead::MemUtil::copy(&bom, fileData + 4, 2);
+                            bool le = *reinterpret_cast<u8*>(&bom) == 0xFF;
+                            u32 ver = sBfsar.getVersionForBfwav();
+                            if (le)
+                            {
+                                fileData[8] = (ver >> 0) & 0xFF;
+                                fileData[9] = (ver >> 8) & 0xFF;
+                                fileData[10] = (ver >> 16) & 0xFF;
+                                fileData[11] = (ver >> 24) & 0xFF;
+                            }
+                            else
+                            {
+                                fileData[8] = (ver >> 24) & 0xFF;
+                                fileData[9] = (ver >> 16) & 0xFF;
+                                fileData[10] = (ver >> 8) & 0xFF;
+                                fileData[11] = (ver >> 0) & 0xFF;
+                            }
+                            // Fix signature to match archive format
+                            const char* wantSig = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
+                            hdr->signature[0] = wantSig[0];
+                            hdr->signature[1] = wantSig[1];
+                            hdr->signature[2] = wantSig[2];
+                            hdr->signature[3] = wantSig[3];
+                        }
+
                         WaveFile* newWave = new WaveFile();
                         newWave->setEnableName(true);
                         newWave->getName() = sFileName;
                         if (newWave->read(fileData))
                         {
                             newWave->setFormat(sBfsar.getFormat());
-                            sPendingNativeWave = newWave;
+                            newWave->setVersion(sBfsar.getVersionForBfwav());
                             device->unload(fileData);
-                            return []() -> Item*
-                            {
-                                Item* item = sPendingNativeWave;
-                                sPendingNativeWave = nullptr;
-                                return item;
-                            };
+
+                            Item* insertAfter = GetInsertAfterItem();
+                            if (insertAfter)
+                                insertAfter->insertBack(newWave);
+                            else
+                                sBfsar.getWaveFileList().pushBack(newWave);
+                            ClearInsertAfterItem();
+                            sBfsar.updateList(sBfsar.getWaveFileList());
+                            SetUnsavedChanges(true);
+                            SelectItem(newWave);
+
+                            return nullptr;
                         }
-                        delete newWave;
-                        device->unload(fileData);
+                        else
+                        {
+                            delete newWave;
+                            device->unload(fileData);
+                            PopupMgr::instance()->pushCurrentItemError("Failed to read wave file");
+                            return nullptr;
+                        }
+                    }
+                    else
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Failed to load wave file");
+                        return nullptr;
                     }
                 }
-                return nullptr;
+                else
+                {
+                    PopupMgr::instance()->pushCurrentItemError("Native file device not available");
+                    return nullptr;
+                }
             }
-
-            bool success = WaveFile::readRiffWavInfo(&sRiffWaveInfo);
-            if (!success)
+            else
             {
-                return nullptr;
+                bool success = WaveFile::readRiffWavInfo(&sRiffWaveInfo);
+                if (!success)
+                {
+                    return nullptr;
+                }
             }
         }
         else
@@ -3453,11 +3506,13 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         }
     }
 
-    ImGui::Text("Import '%s'", sFileName.cstr());
+    if (!sFileName.isEmpty())
+    {
+        ImGui::Text("Import '%s'", sFileName.cstr());
+        DrawWaveImportInfo(&sEncoding, &sRiffWaveInfo);
+    }
 
-    DrawWaveImportInfo(&sEncoding, &sRiffWaveInfo);
-
-    auto doCreate = []() -> Item*
+    return []() -> Item*
     {
         WaveFile* waveFile = new WaveFile();
         waveFile->setEnableName(true);
@@ -3477,8 +3532,6 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
 
         return waveFile;
     };
-
-    return doCreate;
 }
 
 static const char* WaveFileNamePrefixFunc(Item* item)
@@ -3518,12 +3571,11 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
             sRiffWaveInfo.clear();
             sWavFileName.clear();
 
-            const u32 filterCount = 1;
-            FileFilter filters[filterCount] = {
+            FileFilter filters[] = {
                 { "Wave (*.wav)", "*.wav" }
             };
 
-            if (OpenFileDialog(&sRiffWaveInfo.path, nullptr, filterCount, filters))
+            if (OpenFileDialog(&sRiffWaveInfo.path, nullptr, 1, filters))
             {
                 bool success = WaveFile::readRiffWavInfo(&sRiffWaveInfo);
                 if (success)
@@ -3531,6 +3583,9 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
                     sEncoding = WaveFile::Encoding::DspAdpcm;
                     sImportWaveFile = wave;
                     sead::Path::getFileName(&sWavFileName, sRiffWaveInfo.path);
+                    s32 dotPos = sWavFileName.rfindIndex(".");
+                    if (dotPos != -1)
+                        sWavFileName.trim(dotPos);
                 }
             }
         }
@@ -3546,14 +3601,20 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
 
         if (ImGui::MenuItem("Export to WAV"))
         {
-            sead::FixedSafeString<512> path;
+            sead::FixedSafeString<512> defaultPath;
+            {
+                const char* rawName = wave->getNameOrNull().cstr();
+                char cwdBuf[4096];
+                const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
+                defaultPath.format("%s/%s.wav", cwd ? cwd : ".", rawName);
+            }
 
-            const u32 filterCount = 1;
-            FileFilter filters[filterCount] = {
+            sead::FixedSafeString<512> path;
+            FileFilter filters[] = {
                 { "Wave (*.wav)", "*.wav" }
             };
 
-            if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav"))
+            if (SaveFileDialog(&path, nullptr, 1, filters, "wav", defaultPath.cstr()))
             {
                 wave->writeWavFile(path);
             }
@@ -3683,18 +3744,18 @@ InstanciateItemCallback CreateSequenceFileFunc(bool clear)
     const char* ext = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "bcseq" : "bfseq";
     const char* name = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "BCSEQ" : "BFSEQ";
 
-    sead::FixedSafeString<64> filterName1;
-    filterName1.format("All supported (*.bcseq;*.bfseq)");
-    sead::FixedSafeString<64> filterName2;
-    filterName2.format("%s file (*.%s)", name, ext);
-    sead::FixedSafeString<32> filterPattern2;
-    filterPattern2.format("*.%s", ext);
+        sead::FixedSafeString<64> filterName1;
+        filterName1.format("All supported (*.bcseq, *.bfseq)");
+        sead::FixedSafeString<64> filterName2;
+        filterName2.format("%s file (*.%s)", name, ext);
+        sead::FixedSafeString<32> filterPattern2;
+        filterPattern2.format("*.%s", ext);
 
-    const u32 filterCount = 2;
-    FileFilter filters[filterCount] = {
-        { filterName1.cstr(), "*.bcseq;*.bfseq" },
-        { filterName2.cstr(), filterPattern2.cstr() }
-    };
+        const u32 filterCount = 2;
+        FileFilter filters[filterCount] = {
+            { filterName1.cstr(), "*.bcseq *.bfseq" },
+            { filterName2.cstr(), filterPattern2.cstr() }
+        };
 
     sAskForPath = false;
 
@@ -3702,6 +3763,32 @@ InstanciateItemCallback CreateSequenceFileFunc(bool clear)
     {
         sead::FixedSafeString<256> fileName;
         sead::Path::getFileName(&fileName, sFilePath);
+
+        {
+            s32 dotPos = fileName.rfindIndex(".");
+            if (dotPos != -1)
+                fileName.trim(dotPos);
+
+            auto& seqList = sBfsar.getSequenceFileList();
+            sead::FixedSafeString<256> baseName = fileName;
+            u32 suffix = 1;
+            for (;;)
+            {
+                bool conflict = false;
+                for (auto it = seqList.robustBegin(); it != seqList.robustEnd(); ++it)
+                {
+                    if (it->val()->getName() == baseName)
+                    {
+                        conflict = true;
+                        break;
+                    }
+                }
+                if (!conflict)
+                    break;
+                baseName.format("%s_%u", fileName.cstr(), suffix++);
+            }
+            fileName = baseName;
+        }
 
         const char* pathStr = sFilePath.cstr();
         const char* dot = strrchr(pathStr, '.');
@@ -3722,6 +3809,7 @@ InstanciateItemCallback CreateSequenceFileFunc(bool clear)
                     newSeq->setEnableName(true);
                     newSeq->getName() = fileName;
                     newSeq->setFormat(sBfsar.getFormat());
+                    newSeq->setVersion(sBfsar.getVersionForBfseq());
                     if (newSeq->read(fileData))
                     {
                         sPendingNativeSeq = newSeq;

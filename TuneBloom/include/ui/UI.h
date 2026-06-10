@@ -67,6 +67,9 @@ extern sead::FixedSafeString<512> sRecentFileClick;
 
 void SelectItem(Item* item);
 
+Item* GetInsertAfterItem();
+void ClearInsertAfterItem();
+
 extern UIType sSelectedUIType;
 extern Item* sSelectedItemArr[];
 extern Item* sSubSelectedItemArr[];

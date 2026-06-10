@@ -47,14 +47,14 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
                     return;
                 }
 
-                waveFmt = sead::MemUtil::compare(header->signature, "CWAV", 4) == 0 ? "CWAV" : "FWAV";
+                waveFmt = sead::MemUtil::compare(header->signature, "CWAV", 4) == 0 ? "BCWAV" : "BFWAV";
 
                 if (sead::MemUtil::compare(header->signature, "CWAV", 4) == 0)
                 {
                     u32 major = ((u32)header->version >> 24) & 0xFF;
                     if (major < 1)
                     {
-                        sead::FormatFixedSafeString<64> msg("CWAV version not supported (0x%08X)", (u32)header->version);
+                        sead::FormatFixedSafeString<64> msg("BCWAV version not supported (0x%08X)", (u32)header->version);
                         PopupMgr::instance()->pushCurrentItemError(msg);
                         return;
                     }
@@ -63,7 +63,7 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
                 {
                     if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010200))
                     {
-                        sead::FormatFixedSafeString<64> msg("FWAV version not supported (0x%08X)", (u32)header->version);
+                        sead::FormatFixedSafeString<64> msg("BFWAV version not supported (0x%08X)", (u32)header->version);
                         PopupMgr::instance()->pushCurrentItemError(msg);
                         return;
                     }

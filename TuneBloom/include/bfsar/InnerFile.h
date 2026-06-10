@@ -105,6 +105,11 @@ public:
         mFormat = format;
     }
 
+    void setVersion(u32 version) const
+    {
+        mVersion = version;
+    }
+
     virtual void drawUI();
 
     u32 getWritePos() const

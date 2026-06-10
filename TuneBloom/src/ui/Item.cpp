@@ -144,6 +144,16 @@ void WarningPopup(const char* name, const char* content)
 
 static Item* sInsertAfterItem = nullptr;
 
+Item* GetInsertAfterItem()
+{
+    return sInsertAfterItem;
+}
+
+void ClearInsertAfterItem()
+{
+    sInsertAfterItem = nullptr;
+}
+
 static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, ContextMenuCallback menuCallback, Item*& selectedItem)
 {
     bool add = false;
@@ -615,38 +625,44 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (disableAddWindow || ImGui::Button("Add", buttonSize))
             {
-                SEAD_ASSERT(instanciateItemCallback);
-                Item* addedItem = instanciateItemCallback();
-
-                if (addedItem)
+                if (!instanciateItemCallback)
                 {
-                    sScrollItem = addedItem;
-                    selectedItem = addedItem;
-
-                    if (!isSubWindow)
-                    {
-                        sSelectedItemIsSubWindow = false;
-                        sSubSelectedItem = nullptr;
-                    }
-                    else
-                    {
-                        sSelectedItemIsSubWindow = true;
-                    }
-
-                    if (sInsertAfterItem)
-                    {
-                        sInsertAfterItem->insertBack(addedItem);
-                        sInsertAfterItem = nullptr;
-                    }
-                    else
-                    {
-                        list.pushBack(addedItem);
-                    }
-
-                    sBfsar.updateList(list);
-                    SetUnsavedChanges(true);
-
                     ImGui::CloseCurrentPopup();
+                }
+                else
+                {
+                    Item* addedItem = instanciateItemCallback();
+
+                    if (addedItem)
+                    {
+                        sScrollItem = addedItem;
+                        selectedItem = addedItem;
+
+                        if (!isSubWindow)
+                        {
+                            sSelectedItemIsSubWindow = false;
+                            sSubSelectedItem = nullptr;
+                        }
+                        else
+                        {
+                            sSelectedItemIsSubWindow = true;
+                        }
+
+                        if (sInsertAfterItem)
+                        {
+                            sInsertAfterItem->insertBack(addedItem);
+                            sInsertAfterItem = nullptr;
+                        }
+                        else
+                        {
+                            list.pushBack(addedItem);
+                        }
+
+                        sBfsar.updateList(list);
+                        SetUnsavedChanges(true);
+
+                        ImGui::CloseCurrentPopup();
+                    }
                 }
             }
 

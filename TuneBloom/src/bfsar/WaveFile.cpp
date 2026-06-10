@@ -640,6 +640,10 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     LOG_U32("endian", mEndian);
     LOG_BOOL("useOriginalData", mUseOriginalData);
 
+    mFormat = sBfsar.getFormat();
+    mVersion = sBfsar.getVersionForBfwav();
+    mEndian = sBfsar.getEndian();
+
     FileWriter writer(handle, stream);
     writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWAV" : "FWAV", 2, mVersion);
 

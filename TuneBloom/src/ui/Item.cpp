@@ -583,7 +583,18 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         if (sDeleteItem)
         {
-            if (sDeleteItem->getReferences().size() > 0)
+            bool hasRealRefs = false;
+            for (auto it = sDeleteItem->getReferences().robustBegin();
+                 it != sDeleteItem->getReferences().robustEnd(); ++it)
+            {
+                ItemReference* ref = it->val();
+                if (ref && ref->getOwner() && !ref->getOwner()->isFileWindow())
+                {
+                    hasRealRefs = true;
+                    break;
+                }
+            }
+            if (hasRealRefs)
             {
                 ImGui::OpenPopup("###References");
             }

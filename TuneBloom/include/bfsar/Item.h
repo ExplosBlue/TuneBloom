@@ -167,6 +167,11 @@ public:
     {
     }
 
+    virtual bool isFileWindow() const
+    {
+        return false;
+    }
+
     virtual ~Item()
     {
         for (ItemReference::List::robustIterator it = mReferences.robustBegin(); it != mReferences.robustEnd(); ++it)

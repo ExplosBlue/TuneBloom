@@ -2769,6 +2769,9 @@ static bool DrawReferencesUI(Item* item)
         if (!owner)
             continue;
 
+        if (owner->isFileWindow())
+            continue;
+
         sead::FixedSafeString<512> label;
 
         if (item->getItemType() == Item::ItemType::WaveFile && owner->getItemType() == Item::ItemType::BankFileVelocityRegion)

@@ -105,6 +105,11 @@ public:
         file->onOpenFileWindow();
     }
 
+    bool isFileWindow() const override
+    {
+        return true;
+    }
+
     ~FileWindow() override
     {
         if (mFileRef.isAttached())

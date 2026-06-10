@@ -18,6 +18,7 @@
 #include <basis/win/seadWindows.h>
 #include <shellapi.h>
 #include <direct.h>
+#define strcasecmp _stricmp
 #define getcwd _getcwd
 #elif defined(SEAD_PLATFORM_LINUX) || defined(SEAD_PLATFORM_MACOSX)
 #include <cstdlib>

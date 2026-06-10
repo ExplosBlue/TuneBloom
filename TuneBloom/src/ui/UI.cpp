@@ -29,6 +29,7 @@
 #include <cctype>
 #include <vector>
 #include <algorithm>
+#include <unordered_set>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -73,6 +74,8 @@ static int sPendingExportDurationSec = 0;
 
 static SequenceFile* sPendingExportSequenceFile = nullptr;
 static WaveFile* sPendingExportWaveFile = nullptr;
+static BankFile* sPendingExportBankBundle = nullptr;
+static bool sPendingImportBankBundle = false;
 
 static int sStrmMultiChannel = 1;
 static bool sStrmLoop = true;
@@ -1503,6 +1506,465 @@ static void DrawFileExportDialogs()
                 {
                     sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
                     wave->write(&handle, &stream, sead::Endian::eBig, true);
+                }
+            }
+        }
+    }
+
+    if (sPendingExportBankBundle)
+    {
+        BankFile* bank = sPendingExportBankBundle;
+        sPendingExportBankBundle = nullptr;
+
+        const char* ext = "bbnk";
+
+        sead::FixedSafeString<512> path;
+        sead::FixedSafeString<64> filterName;
+        filterName.format("Bank Bundle (*.%s)", ext);
+        sead::FixedSafeString<32> filterPattern;
+        filterPattern.format("*.%s", ext);
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { filterName.cstr(), filterPattern.cstr() }
+        };
+
+        sead::FixedSafeString<512> defaultPath;
+        {
+            const char* rawName = bank->getNameOrNull().cstr();
+            char cwdBuf[4096];
+            const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
+            defaultPath.format("%s/%s.%s", cwd ? cwd : ".", rawName, ext);
+        }
+
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+        {
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            if (device)
+            {
+                sead::FileHandle handle;
+                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                if (handle.getDevice())
+                {
+                    // Collect unique wave files referenced by the bank
+                    std::vector<const WaveFile*> referencedWaves;
+                    std::unordered_set<const WaveFile*> seenWaves;
+
+                    for (const Item* instrItem : bank->getInstrumentList())
+                    {
+                        const auto* instr = static_cast<const BankFile::Instrument*>(instrItem);
+                        for (const Item* krItem : instr->getKeyRegionList())
+                        {
+                            const auto* kr = static_cast<const BankFile::KeyRegion*>(krItem);
+                            for (const Item* vrItem : kr->getVelocityRegionList())
+                            {
+                                const auto* vr = static_cast<const BankFile::VelocityRegion*>(vrItem);
+                                const Item* waveItem = vr->getWaveFileRef().getItem();
+                                if (waveItem)
+                                {
+                                    const WaveFile* wave = static_cast<const WaveFile*>(waveItem);
+                                    if (!seenWaves.contains(wave))
+                                    {
+                                        seenWaves.insert(wave);
+                                        referencedWaves.push_back(wave);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+                    stream.setBinaryEndian(sead::Endian::eBig);
+
+                    // Magic: "BBND"
+                    stream.writeU32(0x42424E44);
+                    // Version
+                    stream.writeU32(1);
+
+                    // Bank name
+                    const char* bankName = bank->getNameOrNull().cstr();
+                    u32 nameLen = strlen(bankName);
+                    stream.writeU32(nameLen);
+                    stream.writeMemBlock(bankName, nameLen);
+
+                    // Wave count
+                    stream.writeU32(referencedWaves.size());
+
+                    // Write each wave binary via temp file
+                    for (const WaveFile* wave : referencedWaves)
+                    {
+                        const char* waveName = wave->getNameOrNull().cstr();
+                        u32 waveNameLen = strlen(waveName);
+                        stream.writeU32(waveNameLen);
+                        stream.writeMemBlock(waveName, waveNameLen);
+
+                        char tempPath[512];
+                        static u64 sTempCounter = 0;
+                        snprintf(tempPath, sizeof(tempPath), "/tmp/opencode/tb_bbnk_%llu.tmp",
+                                 (unsigned long long)sTempCounter++);
+
+                        // Write wave to temp file
+                        sead::FileHandle tempHandle;
+                        if (device->tryOpen(&tempHandle, tempPath, sead::FileDevice::FileOpenFlag::eCreate, 0))
+                        {
+                            sead::FileDeviceWriteStream tempStream(&tempHandle, sead::Stream::Modes::eBinary);
+                            wave->write(&tempHandle, &tempStream, sead::Endian::eBig, true);
+                            tempHandle.close();
+
+                            // Read temp file back
+                            sead::FileDevice::LoadArg loadArg;
+                            loadArg.path = tempPath;
+                            u8* waveBuf = device->tryLoad(loadArg);
+                            if (waveBuf)
+                            {
+                                u32 waveSize = loadArg.read_size;
+                                stream.writeU32(waveSize);
+                                stream.writeMemBlock(waveBuf, waveSize);
+                                device->unload(waveBuf);
+                            }
+                            else
+                            {
+                                stream.writeU32(0);
+                            }
+
+                            ::remove(tempPath);
+                        }
+                        else
+                        {
+                            stream.writeU32(0);
+                        }
+                    }
+
+                    // Instrument count
+                    stream.writeU32(bank->getInstrumentList().size());
+                    for (const Item* instrItem : bank->getInstrumentList())
+                    {
+                        const auto* instr = static_cast<const BankFile::Instrument*>(instrItem);
+                        stream.writeU16(instr->getProgramNo());
+                        stream.writeU16(instr->getKeyRegionList().size());
+
+                        for (const Item* krItem : instr->getKeyRegionList())
+                        {
+                            const auto* kr = static_cast<const BankFile::KeyRegion*>(krItem);
+                            stream.writeU8(kr->getKeyMin());
+                            stream.writeU8(kr->getKeyMax());
+                            stream.writeU16(kr->getVelocityRegionList().size());
+
+                            for (const Item* vrItem : kr->getVelocityRegionList())
+                            {
+                                const auto* vr = static_cast<const BankFile::VelocityRegion*>(vrItem);
+
+                                const Item* refWaveItem = vr->getWaveFileRef().getItem();
+                                const char* refWaveName = refWaveItem ? refWaveItem->getNameOrNull().cstr() : "";
+                                u32 refNameLen = strlen(refWaveName);
+                                stream.writeU32(refNameLen);
+                                stream.writeMemBlock(refWaveName, refNameLen);
+
+                                stream.writeU8(vr->getVelocityMin());
+                                stream.writeU8(vr->getVelocityMax());
+                                stream.writeU8(vr->getOriginalKey());
+                                stream.writeU8(vr->getVolume());
+                                stream.writeU8(vr->getPan());
+                                stream.writeF32(vr->getPitch());
+                                stream.writeU8(vr->getIsIgnoreNoteOff() ? 1 : 0);
+                                stream.writeU8(vr->getKeyGroup());
+                                stream.writeU8(vr->getInterpolationType());
+                                const auto& adsr = vr->getAdshrCurve();
+                                stream.writeU8(adsr.attack);
+                                stream.writeU8(adsr.decay);
+                                stream.writeU8(adsr.sustain);
+                                stream.writeU8(adsr.hold);
+                                stream.writeU8(adsr.release);
+                            }
+                        }
+                    }
+
+                    handle.close();
+                }
+            }
+        }
+    }
+
+    if (sPendingImportBankBundle)
+    {
+        sPendingImportBankBundle = false;
+
+        const char* ext = "bbnk";
+
+        sead::FixedSafeString<512> path;
+        sead::FixedSafeString<64> filterName;
+        filterName.format("Bank Bundle (*.%s)", ext);
+        sead::FixedSafeString<32> filterPattern;
+        filterPattern.format("*.%s", ext);
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { filterName.cstr(), filterPattern.cstr() }
+        };
+
+        if (OpenFileDialog(&path, nullptr, filterCount, filters))
+        {
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            if (device)
+            {
+                sead::FileDevice::LoadArg loadArg;
+                loadArg.path = path;
+                u8* fileData = device->tryLoad(loadArg);
+                if (fileData)
+                {
+                    u32 offset = 0;
+
+                    auto readU32 = [&]() -> u32
+                    {
+                        u32 val;
+                        sead::MemUtil::copy(&val, fileData + offset, 4);
+                        offset += 4;
+                        return sead::Endian::toHostU32(sead::Endian::eBig, val);
+                    };
+
+                    auto readU16 = [&]() -> u16
+                    {
+                        u16 val;
+                        sead::MemUtil::copy(&val, fileData + offset, 2);
+                        offset += 2;
+                        return sead::Endian::toHostU16(sead::Endian::eBig, val);
+                    };
+
+                    auto readU8 = [&]() -> u8
+                    {
+                        return fileData[offset++];
+                    };
+
+                    auto readF32 = [&]() -> f32
+                    {
+                        u32 val;
+                        sead::MemUtil::copy(&val, fileData + offset, 4);
+                        offset += 4;
+                        val = sead::Endian::toHostU32(sead::Endian::eBig, val);
+                        f32 result;
+                        sead::MemUtil::copy(&result, &val, 4);
+                        return result;
+                    };
+
+                    auto readString = [&]() -> std::string
+                    {
+                        u32 len = readU32();
+                        std::string s;
+                        if (len > 0)
+                            s.assign(reinterpret_cast<const char*>(fileData + offset), len);
+                        offset += len;
+                        return s;
+                    };
+
+                    // Verify magic
+                    u32 magic = readU32();
+                    if (magic != 0x42424E44)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Invalid bank bundle file");
+                        device->unload(fileData);
+                        return;
+                    }
+
+                    // Version
+                    u32 version = readU32();
+                    if (version != 1)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Unsupported bank bundle version");
+                        device->unload(fileData);
+                        return;
+                    }
+
+                    // Bank name
+                    std::string bankName = readString();
+
+                    // Read waves
+                    u32 waveCount = readU32();
+                    std::unordered_map<std::string, WaveFile*> waveMap;
+
+                    for (u32 i = 0; i < waveCount; i++)
+                    {
+                        std::string waveName = readString();
+                        u32 waveSize = readU32();
+
+                        if (waveSize == 0)
+                            continue;
+
+                        // Version-patch the wave binary to match current archive
+                        {
+                            nw::ut::BinaryFileHeader* hdr = reinterpret_cast<nw::ut::BinaryFileHeader*>(fileData + offset);
+                            u16 bom;
+                            sead::MemUtil::copy(&bom, fileData + offset + 4, 2);
+                            bool le = *reinterpret_cast<u8*>(&bom) == 0xFF;
+                            u32 ver = sBfsar.getVersionForBfwav();
+                            if (le)
+                            {
+                                fileData[offset + 8] = (ver >> 0) & 0xFF;
+                                fileData[offset + 9] = (ver >> 8) & 0xFF;
+                                fileData[offset + 10] = (ver >> 16) & 0xFF;
+                                fileData[offset + 11] = (ver >> 24) & 0xFF;
+                            }
+                            else
+                            {
+                                fileData[offset + 8] = (ver >> 24) & 0xFF;
+                                fileData[offset + 9] = (ver >> 16) & 0xFF;
+                                fileData[offset + 10] = (ver >> 8) & 0xFF;
+                                fileData[offset + 11] = (ver >> 0) & 0xFF;
+                            }
+                            // Fix signature
+                            const char* wantSig = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
+                            hdr->signature[0] = wantSig[0];
+                            hdr->signature[1] = wantSig[1];
+                            hdr->signature[2] = wantSig[2];
+                            hdr->signature[3] = wantSig[3];
+                        }
+
+                        // Check if a wave with this name already exists
+                        WaveFile* existingWave = nullptr;
+                        for (const auto& node : sBfsar.getWaveFileList())
+                        {
+                            if (node->getName() == waveName.c_str())
+                            {
+                                existingWave = static_cast<WaveFile*>(node);
+                                break;
+                            }
+                        }
+
+                        if (existingWave)
+                        {
+                            waveMap[waveName.c_str()] = existingWave;
+                            offset += waveSize;
+                            continue;
+                        }
+
+                        WaveFile* newWave = new WaveFile();
+                        newWave->setEnableName(true);
+                        newWave->getName() = waveName.c_str();
+                        if (newWave->read(fileData + offset))
+                        {
+                            newWave->setFormat(sBfsar.getFormat());
+                            newWave->setVersion(sBfsar.getVersionForBfwav());
+                            sBfsar.getWaveFileList().pushBack(newWave);
+                            sBfsar.updateList(sBfsar.getWaveFileList());
+                            SetUnsavedChanges(true);
+                            waveMap[waveName.c_str()] = newWave;
+                        }
+                        else
+                        {
+                            delete newWave;
+                            PopupMgr::instance()->pushCurrentItemError("Failed to read bundled wave file");
+                        }
+
+                        offset += waveSize;
+                    }
+
+                    // Read instruments
+                    if (offset >= loadArg.read_size)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Truncated bank bundle");
+                        device->unload(fileData);
+                        return;
+                    }
+
+                    u32 instrumentCount = readU32();
+                    if (instrumentCount == 0)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Bank bundle has no instruments");
+                        device->unload(fileData);
+                        return;
+                    }
+
+                    BankFile* newBank = new BankFile();
+                    newBank->setEnableName(true);
+                    newBank->getName() = bankName.c_str();
+                    newBank->setup(sBfsar.getEndian(), sBfsar.getFormat());
+
+                    for (u32 i = 0; i < instrumentCount; i++)
+                    {
+                        s16 programNo = readU16();
+                        u16 krCount = readU16();
+
+                        BankFile::Instrument* instr = new BankFile::Instrument();
+                        instr->setProgramNo(programNo);
+
+                        for (u16 k = 0; k < krCount; k++)
+                        {
+                            u8 keyMin = readU8();
+                            u8 keyMax = readU8();
+                            u16 vrCount = readU16();
+
+                            BankFile::KeyRegion* kr = new BankFile::KeyRegion(keyMin, keyMax);
+
+                            for (u16 v = 0; v < vrCount; v++)
+                            {
+                                std::string refWaveName = readString();
+                                u8 velMin = readU8();
+                                u8 velMax = readU8();
+                                u8 originalKey = readU8();
+                                u8 volume = readU8();
+                                u8 pan = readU8();
+                                f32 pitch = readF32();
+                                bool ignoreNoteOff = readU8() != 0;
+                                u8 keyGroup = readU8();
+                                u8 interpolationType = readU8();
+                                u8 attack = readU8();
+                                u8 decay = readU8();
+                                u8 sustain = readU8();
+                                u8 hold = readU8();
+                                u8 release = readU8();
+
+                                BankFile::VelocityRegion* vr = new BankFile::VelocityRegion(velMin, velMax);
+                                vr->setOriginalKey(originalKey);
+                                vr->setVolume(volume);
+                                vr->setPan(pan);
+                                vr->setPitch(pitch);
+                                vr->setIsIgnoreNoteOff(ignoreNoteOff);
+                                vr->setKeyGroup(keyGroup);
+                                vr->setInterpolationType(interpolationType);
+
+                                snd::AdshrCurve adsr;
+                                adsr.attack = attack;
+                                adsr.decay = decay;
+                                adsr.sustain = sustain;
+                                adsr.hold = hold;
+                                adsr.release = release;
+                                vr->setAdshrCurve(adsr);
+
+                                // Attach wave reference
+                                WaveFile* foundWave = nullptr;
+                                auto waveIt = waveMap.find(refWaveName.c_str());
+                                if (waveIt != waveMap.end())
+                                {
+                                    foundWave = waveIt->second;
+                                }
+                                else if (!refWaveName.empty())
+                                {
+                                    for (const auto& node : sBfsar.getWaveFileList())
+                                    {
+                                        if (node->getName() == refWaveName.c_str())
+                                        {
+                                            foundWave = static_cast<WaveFile*>(node);
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (foundWave)
+                                {
+                                    vr->getWaveFileRef().attach(foundWave);
+                                }
+
+                                kr->getVelocityRegionList().pushBack(vr);
+                            }
+
+                            instr->getKeyRegionList().pushBack(kr);
+                        }
+
+                        newBank->getInstrumentList().pushBack(instr);
+                    }
+
+                    sBfsar.getBankFileList().pushBack(newBank);
+                    sBfsar.updateList(sBfsar.getBankFileList());
+                    SetUnsavedChanges(true);
+                    SelectItem(newBank);
+
+                    device->unload(fileData);
                 }
             }
         }
@@ -3647,6 +4109,35 @@ void SequenceFileContextMenuFunc(Item* item, bool afterDelete)
     if (disabled) ImGui::EndDisabled();
 }
 
+void BankFileContextMenuFunc(Item* item, bool afterDelete)
+{
+    BankFile* bank = nullptr;
+    if (item)
+        bank = static_cast<BankFile*>(item);
+
+    if (!afterDelete)
+        return;
+
+    ImGui::Separator();
+
+    {
+        bool disabled = bank == nullptr;
+        if (disabled) ImGui::BeginDisabled();
+
+        if (ImGui::MenuItem("Export Bank Bundle"))
+        {
+            sPendingExportBankBundle = bank;
+        }
+
+        if (disabled) ImGui::EndDisabled();
+    }
+
+    if (ImGui::MenuItem("Import Bank Bundle"))
+    {
+        sPendingImportBankBundle = true;
+    }
+}
+
 void DrawWaveFilesUI()
 {
     DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(),
@@ -3894,7 +4385,7 @@ const char* BankFileNamePrefixFunc(Item* item)
 void DrawBankFilesUI()
 {
     DrawAllItemsUI("Bank File", sBfsar.getBankFileList(),
-        &CreateBankFileFunc, &BankFileNamePrefixFunc, nullptr, GetItemFilterCallback(), true
+        &CreateBankFileFunc, &BankFileNamePrefixFunc, &BankFileContextMenuFunc, GetItemFilterCallback(), true
     );
 }
 

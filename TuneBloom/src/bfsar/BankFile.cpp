@@ -703,6 +703,7 @@ void BankFile::drawUI()
 {
     mVersion = sBfsar.getVersionForBfbnk();
     mEndian = sBfsar.getEndian();
+    mFormat = sBfsar.getFormat();
 
     HelpMarker("Those are derived from the BFSAR");
 

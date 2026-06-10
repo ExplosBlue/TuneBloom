@@ -1035,6 +1035,9 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
                         break;
                     }
 
+                    default:
+                        break;
+
                     case snd::SampleFormat::PcmS16:
                     {
                         s16* channel = (s16*)channels[ch];

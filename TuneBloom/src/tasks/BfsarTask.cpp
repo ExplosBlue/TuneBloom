@@ -1364,7 +1364,7 @@ static void LoadWav(const sead::SafeString& file, snd::WaveBuffer* leftBuffer, s
         }
     }
 
-    delete[] samples;
+    delete[] static_cast<u8*>(samples);
 
     leftBuffer->bufferAddress = leftSamples;
     leftBuffer->sampleLength = numSamples / 2;

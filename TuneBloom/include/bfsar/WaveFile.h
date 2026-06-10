@@ -514,7 +514,7 @@ private:
     bool mIsStreamExtended; //? If data already accounts for Stream Sounds
 
     bool mUseOriginalData;
-    void* mOriginalData;
+    u8* mOriginalData;
     u32 mOriginalDataSize;
 
     friend class Bfsar;

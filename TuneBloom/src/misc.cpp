@@ -23,7 +23,7 @@ static void DoHeapInfo(const sead::Heap* heap)
             ImGui::Text("Type: Heap");
 
         size_t size = heap->getSize();
-        ImGui::Text("Total Size: %.2fMB (0x%X B)", size / 1024.0f / 1024.0f, size);
+        ImGui::Text("Total Size: %.2fMB (0x%zX B)", size / 1024.0f / 1024.0f, size);
 
         if (!sead::DynamicCast<const sead::UnboundHeap>(heap))
         {
@@ -31,9 +31,9 @@ static void DoHeapInfo(const sead::Heap* heap)
             size_t allocatableSize = heap->getMaxAllocatableSize();
             size_t usedSize = size - freeSize;
 
-            ImGui::Text("Used Size: %.2fMB (0x%X B)", usedSize / 1024.0f / 1024.0f, usedSize);
-            ImGui::Text("Free Size: %.2fMB (0x%X B)", freeSize / 1024.0f / 1024.0f, freeSize);
-            ImGui::Text("Max Allocatable: %.2fMB (0x%X B)", allocatableSize / 1024.0f / 1024.0f, allocatableSize);
+            ImGui::Text("Used Size: %.2fMB (0x%zX B)", usedSize / 1024.0f / 1024.0f, usedSize);
+            ImGui::Text("Free Size: %.2fMB (0x%zX B)", freeSize / 1024.0f / 1024.0f, freeSize);
+            ImGui::Text("Max Allocatable: %.2fMB (0x%zX B)", allocatableSize / 1024.0f / 1024.0f, allocatableSize);
         }
         else
         {

@@ -67,6 +67,9 @@ bool SoundPlayer::playSound(const Sound* sound, u32 startOffsetSample)
 
         case Sound::SoundType::Wave:
             return playWaveSound(sound, startOffsetSample);
+
+        default:
+            break;
     }
 
     return false;

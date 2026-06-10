@@ -281,7 +281,7 @@ private:
             SEAD_ASSERT(false);
         }
 
-        return 0 != ((u32)ch >> 7 - bit & 1);
+        return 0 != (((u32)ch >> (7 - bit)) & 1);
     }
 
     bool GetBit(const std::string& str, u16 bit)

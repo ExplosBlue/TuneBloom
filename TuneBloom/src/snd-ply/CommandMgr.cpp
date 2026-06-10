@@ -231,7 +231,7 @@ void CommandMgr::recvCommandReply()
 {
     sead::MessageQueue::Element msg = sead::MessageQueue::cNullElement;
 
-    while (msg = mRecvCommandQueue.pop(sead::MessageQueue::BlockType::eNoBlock))
+    while ((msg = mRecvCommandQueue.pop(sead::MessageQueue::BlockType::eNoBlock)))
     {
         Command* commandList = reinterpret_cast<Command*>(msg);
         this->finalizeCommandList(commandList);

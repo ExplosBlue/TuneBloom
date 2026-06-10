@@ -218,9 +218,12 @@ public:
 
             case ItemType::Group:
                 return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType_Group);
+
+            default:
+                break;
         }
 
-        SEAD_ASSERT(false);
+        // unreachable
         return mId;
     }
 
@@ -271,9 +274,12 @@ public:
 
             case ItemType::StreamTrack:
                 return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(14));
+
+            default:
+                break;
         }
 
-        SEAD_ASSERT(false);
+        // unreachable
         return mId;
     }
 

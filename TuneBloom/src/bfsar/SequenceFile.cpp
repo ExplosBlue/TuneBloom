@@ -1701,6 +1701,8 @@ MmlCommandBase* BuildCommand(const std::string& cmdName, const CommandInfo& info
                     case SeqArgType::ArgVMIDI:
                         seqArg = new SeqArgVMIDI(argInt);
                         break;
+                    default:
+                        break;
                 }
             }
 

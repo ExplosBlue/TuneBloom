@@ -561,6 +561,9 @@ public:
                 mArg2 = arg2;
                 break;
             }
+
+            default:
+                break;
         }
     }
 
@@ -638,6 +641,9 @@ public:
                     SEAD_ASSERT(arg2DefaultType->mHasSign);
                 }
                 break;
+
+            default:
+                break;
         }
 
         ret.push_back(MmlCommand::MML_EX_COMMAND);
@@ -664,6 +670,9 @@ public:
                 ret.insert(ret.end(), arg2Bytes.begin(), arg2Bytes.end());
                 break;
             }
+
+            default:
+                break;
         }
 
         return ret;
@@ -723,6 +732,9 @@ public:
                     SEAD_ASSERT(arg2DefaultType);
                     SEAD_ASSERT(arg2DefaultType->mHasSign);
                 }
+                break;
+
+            default:
                 break;
         }
 

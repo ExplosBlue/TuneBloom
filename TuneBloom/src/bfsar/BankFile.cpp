@@ -898,7 +898,9 @@ static const f32 NoteDarkOffset[12] = {
     -2.0f/3.0f, 0.0f, -0.5f, 0.0f, -1.0f/3.0f, 0.0f
 };
 
+#ifndef IM_ROUND
 #define IM_ROUND(x) ((f32)(s32)((x) + 0.5f))
+#endif
 
 void DrawKeyboardWithRegions(
     f32 width,

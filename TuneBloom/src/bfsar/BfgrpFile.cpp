@@ -37,7 +37,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
     //? Info Block
     {
-        LOG_FMT("Writing INFO block with %u items", mItemFiles->size());
+        LOG_FMT("Writing INFO block with %zu items", mItemFiles->size());
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoBlock, "INFO");
 
         writer.openReferenceTable("ItemInfoTable", mItemFiles->size());

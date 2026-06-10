@@ -57,7 +57,7 @@ void PopupMgr::update()
                 buttonSize = ImVec2(ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x, 0);
             }
 
-            ImGui::Text(info.text.cstr());
+            ImGui::Text("%s", info.text.cstr());
             ImGui::Separator();
 
             if (ImGui::Button("OK", buttonSize))
@@ -225,7 +225,7 @@ void PopupMgr::updateErrors_()
             const std::vector<std::string>& errors = sItSel->second;
             for (size_t i = 0; i < errors.size(); i++)
             {
-                ImGui::TextWrapped(errors[i].c_str());
+                ImGui::TextWrapped("%s", errors[i].c_str());
 
                 if (i != errors.size() - 1)
                 {

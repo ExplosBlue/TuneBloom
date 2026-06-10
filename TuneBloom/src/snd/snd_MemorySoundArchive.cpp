@@ -22,7 +22,7 @@ MemorySoundArchive::~MemorySoundArchive()
     {
         if (mExternalGroups[i])
         {
-            delete mExternalGroups[i];
+            delete static_cast<const InnerFile*>(mExternalGroups[i]);
         }
     }
 }

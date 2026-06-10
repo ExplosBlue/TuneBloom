@@ -130,7 +130,7 @@ void WarningPopup(const char* name, const char* content)
 
     if (ImGui::BeginPopupModal(sead::FormatFixedSafeString<32>(ICON_LC_ALERT_TRIANGLE " Warning%s", name).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text(content);
+        ImGui::Text("%s", content);
         ImGui::Separator();
 
         if (ImGui::Button("OK", ImVec2(ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x, 0)))
@@ -1052,6 +1052,9 @@ void SelectItem(Item* item)
         case Item::ItemType::BankFile:
             tab = UIType::BankFiles;
             break;
+
+        default:
+            break;
     }
 
     size_t tabIdx = (size_t)tab;
@@ -1341,7 +1344,7 @@ bool ItemSelector(const char* name, const Item::List& list, Item** itemPtr, bool
         ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.6f, 0.0f, 0.0f, 1.0f));
     }
 
-    ImGui::Text(name);
+    ImGui::Text("%s", name);
 
     if (redText)
     {
@@ -1570,7 +1573,7 @@ bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** war
     }
 
     ImGui::SameLine(0, style.ItemInnerSpacing.x);
-    ImGui::Text(name);
+    ImGui::Text("%s", name);
 
     return ret;
 }

@@ -71,7 +71,7 @@ void StreamSoundPlayer::deinit(bool freeBuffers)
             void* buffer = mChannels[ch].mBufferAddress;
             if (buffer)
             {
-                delete[] buffer;
+                delete[] static_cast<u8*>(buffer);
                 mChannels[ch].mBufferAddress = nullptr;
             }
         }

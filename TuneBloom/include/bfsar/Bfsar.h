@@ -263,6 +263,9 @@ public:
 
             case Item::ItemType::WaveArchive:
                 return getWaveArchiveList();
+
+            default:
+                break;
         }
 
         static const Item::List cNullList;

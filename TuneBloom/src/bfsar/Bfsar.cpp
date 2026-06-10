@@ -2424,6 +2424,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                                     itemFileMap[j].insert(warcInfo->fileId);
                                     break;
                                 }
+                                default:
+                                    break;
                             }
                         }
                     };
@@ -2544,6 +2546,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                                             itemFileMap[j].insert(warcInfo->fileId);
                                             break;
                                         }
+                                        default:
+                                            break;
                                     }
                                 }
                             }
@@ -2576,6 +2580,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                             itemFileMap[j].insert(warcInfo->fileId);
                             break;
                         }
+                        default:
+                            break;
                     }
                 }
 
@@ -3364,6 +3370,8 @@ void Bfsar::save_(sead::FileHandle& handle)
                 case WaveArchiveType::AutomaticIndividual:
                     generateOriginalWarc = true;
                     break;
+                default:
+                    break;
             }
 
             if (generateOriginalWarc)
@@ -3432,6 +3440,8 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                 case WaveArchiveType::AutomaticIndividual:
                     generateOriginalWarc = true;
+                    break;
+                default:
                     break;
             }
 
@@ -3530,6 +3540,8 @@ void Bfsar::save_(sead::FileHandle& handle)
                 case Sound::SoundType::Strm:
                     addStrmSoundFile(sound);
                     break;
+                default:
+                    break;
             }
         }
 
@@ -3613,6 +3625,8 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                     break;
                 }
+                default:
+                    break;
             }
         }
 

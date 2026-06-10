@@ -156,6 +156,9 @@ void Group::ItemInfo::drawUI()
                             mLoadItem = 0; // All
                         }
                     }
+
+                    default:
+                        break;
                 }
             }
         }
@@ -277,6 +280,9 @@ u32 Group::ItemInfo::getLoadFlag() const
 
         case Item::ItemType::WaveArchive:
             return getLoadFlagForWaveArchive_();
+
+        default:
+            break;
     }
 
     return LoadFlag::LoadAll;
@@ -426,6 +432,9 @@ const char** Group::ItemInfo::GetLoadItems(const Item* item, ItemType itemType, 
         case Item::ItemType::WaveArchive:
             *outCount = IM_ARRAYSIZE(sWaveArchiveLoadItems);
             return sWaveArchiveLoadItems;
+
+        default:
+            break;
     }
 
     *outCount = 0;
@@ -468,6 +477,9 @@ void Group::ItemInfo::setLoadItems(u32 loadFlags)
 
         case Item::ItemType::WaveArchive:
             setLoadItemsForWaveArchive_(loadFlags);
+            break;
+
+        default:
             break;
     }
 }
@@ -643,6 +655,9 @@ const Item* Group::ItemInfo::validate(sead::BufferedSafeString& error) const
 
             break;
         }
+
+        default:
+            break;
     }
 
     return nullptr;

@@ -1000,7 +1000,7 @@ void DrawUI()
             sead::TextureGL* tex = sead::DynamicCast<sead::TextureGL>(util::getIcon());
             if (tex)
             {
-                icon = (ImTextureID)tex->getID();
+                icon = reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(tex->getID()));
             }
         }
 
@@ -2439,6 +2439,9 @@ InstanciateItemCallback CreateGroupItemFunc(bool clear)
                             sLoadItem = 0; // All
                         }
                     }
+
+                    default:
+                        break;
                 }
             }
         }
@@ -2527,6 +2530,9 @@ const char* GroupItemPrefixFunc(Item* item)
                         case Sound::SoundType::Wave:
                             icon = ICON_LC_AUDIO_LINES " ";
                             break;
+
+                        default:
+                            break;
                     }
                 }
 
@@ -2545,6 +2551,9 @@ const char* GroupItemPrefixFunc(Item* item)
                         case SoundSet::SoundSetType::Seq:
                             icon = ICON_LC_MUSIC_2 " ";
                             break;
+
+                        default:
+                            break;
                     }
                 }
 
@@ -2556,6 +2565,9 @@ const char* GroupItemPrefixFunc(Item* item)
 
             case Item::ItemType::WaveArchive:
                 icon = ICON_LC_FILE_MUSIC " ";
+                break;
+
+            default:
                 break;
         }
     }
@@ -2622,16 +2634,19 @@ void DrawSubInfoUI()
         {
             switch (sSelectedItem->getItemType())
             {
-                case Item::ItemType::Sound:
-                {
-                    Sound* sound = static_cast<Sound*>(sSelectedItem);
+                    default:
+                        break;
 
-                    if (sound->getSoundType() == Sound::SoundType::Strm)
+                    case Item::ItemType::Sound:
                     {
-                        DrawAllItemsUI("Track", sound->getStreamSoundInfo().getTrackList(), &CreateStreamTrackFunc);
-                    }
-                    else
-                    {
+                        Sound* sound = static_cast<Sound*>(sSelectedItem);
+
+                        if (sound->getSoundType() == Sound::SoundType::Strm)
+                        {
+                            DrawAllItemsUI("Track", sound->getStreamSoundInfo().getTrackList(), &CreateStreamTrackFunc);
+                        }
+                        else
+                        {
                         CenteredText("Selected Sound Is Not A Stream");
                     }
                     break;
@@ -2665,6 +2680,7 @@ static const char* GetItemIcon(const Item* item)
             case Sound::SoundType::Seq:  return ICON_LC_MUSIC_3 " ";
             case Sound::SoundType::Strm: return ICON_LC_DISC_3 " ";
             case Sound::SoundType::Wave: return ICON_LC_AUDIO_LINES " ";
+            default: break;
         }
     }
 
@@ -2904,7 +2920,13 @@ static bool DrawReferencesUI(Item* item)
                         case Sound::SoundType::Seq:  SetUITab(UIType::SequenceSounds); break;
                         case Sound::SoundType::Strm: SetUITab(UIType::StreamSounds); break;
                         case Sound::SoundType::Wave: SetUITab(UIType::WaveSounds); break;
+                        default: break;
                     }
+
+                    size_t newIdx = (size_t)sSelectedUIType;
+                    sSelectedItemArr[newIdx] = entries[i].navigateItem;
+                    sSubSelectedItemArr[newIdx] = entries[i].selectSubItem;
+                    sSelectedItemIsSubWindowArr[newIdx] = entries[i].selectSubItem != nullptr;
                 }
 
                 clicked = true;
@@ -2987,6 +3009,9 @@ void DrawPropertiesUI()
                     instrument->drawUI();
                     break;
                 }
+
+                default:
+                    break;
             }
 
             ImGui::End();
@@ -3004,6 +3029,9 @@ void DrawPropertiesUI()
                 DrawItemPropertiesUI();
                 ImGui::Separator();
 
+                break;
+
+            default:
                 break;
         }
 
@@ -3060,6 +3088,9 @@ void DrawPropertiesUI()
                 instrument->drawUI();
                 break;
             }
+
+            default:
+                break;
         }
 
         switch (sSelectedItem->getItemType())
@@ -3070,6 +3101,9 @@ void DrawPropertiesUI()
             case Item::ItemType::BankFile:
             case Item::ItemType::Bank:
                 DrawReferencesUI(sSelectedItem);
+                break;
+
+            default:
                 break;
         }
     }
@@ -3156,6 +3190,9 @@ void DrawFileUI(ImGuiID dockspaceId)
                     seq->drawFileUI();
                     break;
                 }
+
+                default:
+                    break;
             }
         }
         ImGui::End();
@@ -3418,6 +3455,9 @@ const char* SoundNamePrefixFunc(Item* item)
 
         case Sound::SoundType::Wave:
             icon = ICON_LC_AUDIO_LINES " ";
+            break;
+
+        default:
             break;
     }
 
@@ -4218,6 +4258,8 @@ FileWindow* OpenFileWindow(Item* item)
 
         return nullptr;
     }
+
+    return nullptr;
 }
 
 InstanciateItemCallback CreateSequenceFileFunc(bool clear)
@@ -4744,7 +4786,7 @@ void CenteredText(const char* text, const ImVec2& sizeArg)
     if (sizeArg.y != -1)
         ImGui::SetCursorPosY((sizeArg.y / 2.0f) - (textSize.y / 2.0f));
 
-    ImGui::Text(text);
+    ImGui::Text("%s", text);
 }
 
 // From ImGui Demo

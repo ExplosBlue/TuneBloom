@@ -335,7 +335,7 @@ void SequenceSoundPlayer::updateTick()
             return;
         }
 
-        mTickCounter++;
+        mTickCounter += 1;
 
         tickPerMsec = calcTickPerMsec();
         if (tickPerMsec == 0.0f)
@@ -386,7 +386,7 @@ void SequenceSoundPlayer::skipTick()
         }
 
         skipCount++;
-        mTickCounter++;
+        mTickCounter += 1;
     }
 
     mSkipTimeCounter = 0.0f;

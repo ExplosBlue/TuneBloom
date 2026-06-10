@@ -336,7 +336,7 @@ void DrawPlayerUI()
 
             if (ImGui::BeginPopup("volume"))
             {
-                ImGui::Text(icon);
+                ImGui::Text("%s", icon);
 
                 sead::FormatFixedSafeString<8> str("%d", static_cast<s32>(volume * 100.0f));
 

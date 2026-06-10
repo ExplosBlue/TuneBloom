@@ -15,6 +15,8 @@ SeqArgBase* nw__snd__internal__driver__MmlParser__ReadArg(const u8** ptr, MmlPar
             return new SeqArg16(*ptr, hasSign);
         case MmlParser::SEQ_ARG_VMIDI:
             return new SeqArgVMIDI(*ptr);
+        default:
+            break;
         case MmlParser::SEQ_ARG_VARIABLE:
             return new SeqArgVariable(*ptr);
         case MmlParser::SEQ_ARG_RANDOM:

@@ -1,6 +1,7 @@
 #include <bfsar/Bfsar.h>
 
 #include <Debug.h>
+#include <unordered_set>
 
 #include <bfsar/writer/FileWriter.h>
 #include <bfsar/writer/FlagParameters.h>
@@ -1030,10 +1031,14 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         }
 
         const u32 fileId = bank->fileId;
+        u32 fileIdx = nw::snd::internal::Util::GetItemIndex(fileId);
         u32 groupId;
         const void* file = soundArchive.detail_GetFileAddress(fileId, nullptr, 0, nullptr, &groupId);
         if (!file)
+        {
+            LOG("Bank %u: detail_GetFileAddress failed (fileId=%08x, fileIdx=%u, fileCount=%u)\n", i, fileId, fileIdx, soundArchive.detail_GetFileCount());
             continue;
+        }
 
         std::vector<std::vector<u32>> globalWaveIdTable;
         std::vector<u32> warcIdxVec;
@@ -1047,14 +1052,17 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 nw::snd::internal::BankFileReader reader(file);
                 if (!reader.IsInitialized())
                 {
+                    LOG("Bank %u Step 1: reader not initialized on file %p (fileId=%08x)\n", i, file, fileId);
                     continue;
                 }
 
                 const nw::snd::internal::Util::WaveIdTable* waveIdTable = reader.GetWaveIdTable();
                 SEAD_ASSERT(waveIdTable);
 
-                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
                 const u32 waveCount = waveIdTable->GetCount();
+                LOG("Bank %u: fileId=%08x fileIdx=%u waveCount=%u\n", i, fileId, nw::snd::internal::Util::GetItemIndex(fileId), waveCount);
+
+                nw::snd::internal::Util::WaveId* waveId = const_cast<nw::snd::internal::Util::WaveId*>(&waveIdTable->table.item[0]);
                 std::vector<u32>& globalWaveIdVec = globalWaveIdTable.emplace_back(waveCount);
 
                 for (u32 j = 0; j < waveCount; j++)
@@ -1070,7 +1078,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 if (waveCount > 0)
                 {
                     warcId = waveId[0].waveArchiveId;
-                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    if (nw::snd::internal::Util::GetItemType(warcId) != nw::snd::internal::ItemType_WaveArchive)
+                        warcId = nw::snd::internal::Util::GetMaskedItemId(warcId, nw::snd::internal::ItemType_WaveArchive);
                     warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
                 }
                 bankFileWarcId[u64(fileId) << 32 | groupId] = warcId;
@@ -1079,7 +1088,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
                 for (u32 j = 0; j < waveCount; j++)
                 {
-                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    u32 globalWaveId = warcIdx < warcFileCache.size() && waveId[j].waveIndex < warcFileCache[warcIdx].size() ? warcFileCache[warcIdx][waveId[j].waveIndex].id : 0;
                     globalWaveIdVec[j] = globalWaveId;
                 }
             }
@@ -1127,7 +1136,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 if (waveCount > 0)
                 {
                     warcId = waveId[0].waveArchiveId;
-                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    if (nw::snd::internal::Util::GetItemType(warcId) != nw::snd::internal::ItemType_WaveArchive)
+                        warcId = nw::snd::internal::Util::GetMaskedItemId(warcId, nw::snd::internal::ItemType_WaveArchive);
                     warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
                 }
                 bankFileWarcId[u64(fileId) << 32 | groupId] = warcId;
@@ -1136,7 +1146,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
                 for (u32 j = 0; j < waveCount; j++)
                 {
-                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    u32 globalWaveId = warcIdx < warcFileCache.size() && waveId[j].waveIndex < warcFileCache[warcIdx].size() ? warcFileCache[warcIdx][waveId[j].waveIndex].id : 0;
                     globalWaveIdVec[j] = globalWaveId;
                 }
 
@@ -1299,7 +1309,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 if (waveCount > 0)
                 {
                     warcId = waveId[0].waveArchiveId;
-                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    if (nw::snd::internal::Util::GetItemType(warcId) != nw::snd::internal::ItemType_WaveArchive)
+                        warcId = nw::snd::internal::Util::GetMaskedItemId(warcId, nw::snd::internal::ItemType_WaveArchive);
                     warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
                 }
                 wsdFileWarcId[u64(fileId) << 32 | groupId] = warcId;
@@ -1308,7 +1319,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
                 for (u32 j = 0; j < waveCount; j++)
                 {
-                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    u32 globalWaveId = warcIdx < warcFileCache.size() && waveId[j].waveIndex < warcFileCache[warcIdx].size() ? warcFileCache[warcIdx][waveId[j].waveIndex].id : 0;
                     globalWaveIdVec[j] = globalWaveId;
                 }
             }
@@ -1354,7 +1365,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 if (waveCount > 0)
                 {
                     warcId = waveId[0].waveArchiveId;
-                    SEAD_ASSERT(nw::snd::internal::Util::GetItemType(warcId) == nw::snd::internal::ItemType_WaveArchive);
+                    if (nw::snd::internal::Util::GetItemType(warcId) != nw::snd::internal::ItemType_WaveArchive)
+                        warcId = nw::snd::internal::Util::GetMaskedItemId(warcId, nw::snd::internal::ItemType_WaveArchive);
                     warcIdx = nw::snd::internal::Util::GetItemIndex(warcId);
                 }
                 wsdFileWarcId[u64(fileId) << 32 | groupId] = warcId;
@@ -1363,7 +1375,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
                 for (u32 j = 0; j < waveCount; j++)
                 {
-                    u32 globalWaveId = warcFileCache[warcIdx][waveId[j].waveIndex].id;
+                    u32 globalWaveId = warcIdx < warcFileCache.size() && waveId[j].waveIndex < warcFileCache[warcIdx].size() ? warcFileCache[warcIdx][waveId[j].waveIndex].id : 0;
                     globalWaveIdVec[j] = globalWaveId;
                 }
 
@@ -1615,16 +1627,30 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
     //     mWaveArchiveList.pushBack(warc);
     // }
 
+    std::unordered_set<u32> referencedFileIndices;
+    for (u32 i = 0; i < soundArchive.GetBankCount(); i++)
+    {
+        const u32 bankId = soundArchive.GetBankIdFromIndex(i);
+        const nw::snd::internal::SoundArchiveFile::BankInfo* bank = soundArchive.GetBankInfo(bankId);
+        if (!bank) continue;
+        referencedFileIndices.insert(nw::snd::internal::Util::GetItemIndex(bank->fileId));
+    }
+    LOG_FMT("ReferencedFileIndices: %zu", referencedFileIndices.size());
+
     std::unordered_map<std::string, TempFile> bankFileCache;
     std::unordered_map<u32, u32> bankFileIdxMap;
 
     for (u32 i = 0; i < soundArchive.detail_GetFileCount(); i++)
     {
+        if (!referencedFileIndices.contains(i))
+            continue;
+
         u32 bankFileSize = 0;
         const void* bankFile = soundArchive.detail_GetFileAddress(i, &bankFileSize);
 
         if (!bankFile || (sead::MemUtil::compare(bankFile, "FBNK", 4) != 0 && sead::MemUtil::compare(bankFile, "CBNK", 4) != 0))
         {
+            referencedFileIndices.erase(i);
             continue;
         }
 
@@ -1681,6 +1707,13 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             return false;
         }
 
+        u32 fileIdx = nw::snd::internal::Util::GetItemIndex(bankInfo->fileId);
+        if (fileIdx >= soundArchive.detail_GetFileCount())
+        {
+            LOG("Bank %u: Skipped (fileIdx=%u >= fileCount=%u)\n", i, fileIdx, soundArchive.detail_GetFileCount());
+            continue;
+        }
+
         Bank* bank = new(heap) Bank();
         bank->mId = i;
         PopupMgr::instance()->setCurrentProcessItem(bank);
@@ -1718,7 +1751,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             PopupMgr::instance()->pushCurrentItemError("Invalid WaveArchiveType");
         }
 
-        BankFile* bankFile = static_cast<BankFile*>(getItem(bankFileIdxMap[bankInfo->fileId], getBankFileList()));
+        BankFile* bankFile = static_cast<BankFile*>(getItem(bankFileIdxMap[fileIdx], getBankFileList()));
 
         bank->mFileRef.attach(bankFile);
         if (bank->mFileRef.isAttached())
@@ -1826,7 +1859,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 }
             }
 
-            u32 globalSeqIdx = seqFileIdxMap[soundInfo->fileId];
+            u32 globalSeqIdx = seqFileIdxMap[nw::snd::internal::Util::GetItemIndex(soundInfo->fileId)];
             SequenceFile* seqFile = static_cast<SequenceFile*>(getItem(globalSeqIdx, getSequenceFileList()));
 
             sound->mSequenceSoundInfo.mSequenceFileRef.attach(seqFile);

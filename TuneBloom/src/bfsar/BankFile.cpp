@@ -106,8 +106,14 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
 {
     LOG_FUNC();
     LOG_U32("instrumentId", instrumentId);
+    LOG_U32("waveIdTableIndex", velocityRegionInfo->waveIdTableIndex);
+    LOG_U32("waveIdTableCount", waveIdTable.GetCount());
     //? waveId->waveIndex is patched with global wave index already
     const nw::snd::internal::Util::WaveId* waveId = waveIdTable.GetWaveId(velocityRegionInfo->waveIdTableIndex);
+    if (waveId)
+    {
+        LOG("waveId=%p waveArchiveId=%u waveIndex=%u\n", waveId, u32(waveId->waveArchiveId), u32(waveId->waveIndex));
+    }
     if (waveId && waveId->waveArchiveId == 0)
     {
         WaveFile* waveFile = static_cast<WaveFile*>(sBfsar.getItem(waveId->waveIndex, sBfsar.getWaveFileList()));
@@ -119,9 +125,14 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
             PopupMgr::instance()->pushCurrentItemError(msg);
         }
     }
+    else if (!waveId)
+    {
+        sead::FormatFixedSafeString<256> msg("Instrument %u: Internal error (waveId is null - table count %u, index %u)", instrumentId, u32(waveIdTable.GetCount()), u32(velocityRegionInfo->waveIdTableIndex));
+        PopupMgr::instance()->pushCurrentItemError(msg);
+    }
     else
     {
-        sead::FormatFixedSafeString<256> msg("Instrument %u: Internal error (failed BFBNK patch)", instrumentId);
+        sead::FormatFixedSafeString<256> msg("Instrument %u: Internal error (failed BFBNK patch - waveArchiveId=%u)", instrumentId, u32(waveId->waveArchiveId));
         PopupMgr::instance()->pushCurrentItemError(msg);
     }
 

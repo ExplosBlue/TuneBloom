@@ -74,6 +74,7 @@ static int sPendingExportDurationMin = 2;
 static int sPendingExportDurationSec = 0;
 
 static SequenceFile* sPendingExportSequenceFile = nullptr;
+static bool sPendingImportSequenceFile = false;
 static WaveFile* sPendingExportWaveFile = nullptr;
 static BankFile* sPendingExportBankBundle = nullptr;
 static bool sPendingImportBankBundle = false;
@@ -1680,6 +1681,69 @@ static void DrawFileExportDialogs()
                     }
 
                     handle.close();
+                }
+            }
+        }
+    }
+
+    if (sPendingImportSequenceFile)
+    {
+        sPendingImportSequenceFile = false;
+
+        bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+        const char* ext = isBcsar ? "bcseq" : "bfseq";
+        const char* name = isBcsar ? "BCSEQ" : "BFSEQ";
+
+        sead::FixedSafeString<512> path;
+        sead::FixedSafeString<64> filterName;
+        filterName.format("%s file (*.%s)", name, ext);
+        sead::FixedSafeString<32> filterPattern;
+        filterPattern.format("*.%s", ext);
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { filterName.cstr(), filterPattern.cstr() }
+        };
+
+        if (OpenFileDialog(&path, nullptr, filterCount, filters))
+        {
+            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+            if (device)
+            {
+                sead::FileDevice::LoadArg arg;
+                arg.path = path;
+                u8* fileData = device->tryLoad(arg);
+                if (fileData)
+                {
+                    sead::FixedSafeString<256> fileName;
+                    sead::Path::getFileName(&fileName, path);
+                    s32 dotPos = fileName.rfindIndex(".");
+                    if (dotPos != -1)
+                        fileName.trim(dotPos);
+
+                    SequenceFile* newSeq = new SequenceFile();
+                    newSeq->setEnableName(true);
+                    newSeq->getName() = fileName;
+                    newSeq->setFormat(sBfsar.getFormat());
+                    newSeq->setVersion(sBfsar.getVersionForBfseq());
+                    if (newSeq->read(fileData))
+                    {
+                        newSeq->setFormat(sBfsar.getFormat());
+                        Item* insertAfter = GetInsertAfterItem();
+                        if (insertAfter)
+                            insertAfter->insertBack(newSeq);
+                        else
+                            sBfsar.getSequenceFileList().pushBack(newSeq);
+                        ClearInsertAfterItem();
+                        sBfsar.updateList(sBfsar.getSequenceFileList());
+                        SetUnsavedChanges(true);
+                        SelectItem(newSeq);
+                    }
+                    else
+                    {
+                        delete newSeq;
+                    }
+
+                    device->unload(fileData);
                 }
             }
         }
@@ -4140,6 +4204,11 @@ void SequenceFileContextMenuFunc(Item* item, bool afterDelete)
 
     ImGui::Separator();
 
+    if (ImGui::MenuItem("Import"))
+    {
+        sPendingImportSequenceFile = true;
+    }
+
     bool disabled = seq == nullptr || !seq->isValid();
     if (disabled) ImGui::BeginDisabled();
 
@@ -4162,6 +4231,11 @@ void BankFileContextMenuFunc(Item* item, bool afterDelete)
 
     ImGui::Separator();
 
+    if (ImGui::MenuItem("Import Bank Bundle"))
+    {
+        sPendingImportBankBundle = true;
+    }
+
     {
         bool disabled = bank == nullptr;
         if (disabled) ImGui::BeginDisabled();
@@ -4172,11 +4246,6 @@ void BankFileContextMenuFunc(Item* item, bool afterDelete)
         }
 
         if (disabled) ImGui::EndDisabled();
-    }
-
-    if (ImGui::MenuItem("Import Bank Bundle"))
-    {
-        sPendingImportBankBundle = true;
     }
 }
 
@@ -4264,117 +4333,15 @@ FileWindow* OpenFileWindow(Item* item)
 
 InstanciateItemCallback CreateSequenceFileFunc(bool clear)
 {
-    static sead::FixedSafeString<512> sFilePath;
-    static bool sAskForPath = true;
-
-    if (clear)
+    auto doCreate = []() -> Item*
     {
-        sFilePath.clear();
-        sAskForPath = true;
-    }
+        SequenceFile* seq = new SequenceFile();
+        seq->setEnableName(true);
+        seq->getName() = "Sequence";
+        return seq;
+    };
 
-    if (!sAskForPath)
-        return nullptr;
-
-    const char* ext = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "bcseq" : "bfseq";
-    const char* name = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "BCSEQ" : "BFSEQ";
-
-        sead::FixedSafeString<64> filterName1;
-        filterName1.format("All supported (*.bcseq, *.bfseq)");
-        sead::FixedSafeString<64> filterName2;
-        filterName2.format("%s file (*.%s)", name, ext);
-        sead::FixedSafeString<32> filterPattern2;
-        filterPattern2.format("*.%s", ext);
-
-        const u32 filterCount = 2;
-        FileFilter filters[filterCount] = {
-            { filterName1.cstr(), "*.bcseq *.bfseq" },
-            { filterName2.cstr(), filterPattern2.cstr() }
-        };
-
-    sAskForPath = false;
-
-    if (OpenFileDialog(&sFilePath, nullptr, filterCount, filters))
-    {
-        sead::FixedSafeString<256> fileName;
-        sead::Path::getFileName(&fileName, sFilePath);
-
-        {
-            s32 dotPos = fileName.rfindIndex(".");
-            if (dotPos != -1)
-                fileName.trim(dotPos);
-
-            auto& seqList = sBfsar.getSequenceFileList();
-            sead::FixedSafeString<256> baseName = fileName;
-            u32 suffix = 1;
-            for (;;)
-            {
-                bool conflict = false;
-                for (auto it = seqList.robustBegin(); it != seqList.robustEnd(); ++it)
-                {
-                    if (it->val()->getName() == baseName)
-                    {
-                        conflict = true;
-                        break;
-                    }
-                }
-                if (!conflict)
-                    break;
-                baseName.format("%s_%u", fileName.cstr(), suffix++);
-            }
-            fileName = baseName;
-        }
-
-        const char* pathStr = sFilePath.cstr();
-        const char* dot = strrchr(pathStr, '.');
-        bool isNative = dot && (strcasecmp(dot, ".bcseq") == 0 || strcasecmp(dot, ".bfseq") == 0);
-
-        if (isNative)
-        {
-            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-            if (device)
-            {
-                sead::FileDevice::LoadArg arg;
-                arg.path = sFilePath;
-                u8* fileData = device->tryLoad(arg);
-                if (fileData)
-                {
-                    static SequenceFile* sPendingNativeSeq = nullptr;
-                    SequenceFile* newSeq = new SequenceFile();
-                    newSeq->setEnableName(true);
-                    newSeq->getName() = fileName;
-                    newSeq->setFormat(sBfsar.getFormat());
-                    newSeq->setVersion(sBfsar.getVersionForBfseq());
-                    if (newSeq->read(fileData))
-                    {
-                        sPendingNativeSeq = newSeq;
-                        device->unload(fileData);
-                        return []() -> Item*
-                        {
-                            Item* item = sPendingNativeSeq;
-                            sPendingNativeSeq = nullptr;
-                            return item;
-                        };
-                    }
-                    delete newSeq;
-                    device->unload(fileData);
-                }
-            }
-            return nullptr;
-        }
-
-        static sead::FixedSafeString<256> sFileName;
-        sFileName = fileName;
-        return []() -> Item*
-        {
-            SequenceFile* seq = new SequenceFile();
-            seq->setEnableName(true);
-            seq->getName() = sFileName;
-            return seq;
-        };
-    }
-
-    return nullptr;
+    return doCreate;
 }
 
 const char* SequenceFileNamePrefixFunc(Item* item)

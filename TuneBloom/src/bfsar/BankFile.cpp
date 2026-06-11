@@ -1777,22 +1777,16 @@ void BankFile::drawFileUI()
             ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnW - helpW - spacing);
             if (ImGui::SmallButton(label))
             {
-#if defined(SEAD_PLATFORM_LINUX)
                 if (sMidiInput.isRunning())
                     sMidiInput.stop();
-                else
-                    sMidiInput.start(&MidiInputCallback, nullptr);
-#else
-                ImGui::OpenPopup("MIDI Unsupported");
-#endif
+                else if (!sMidiInput.start(&MidiInputCallback, nullptr))
+                    ImGui::OpenPopup("MIDI Unsupported");
             }
-#if !defined(SEAD_PLATFORM_LINUX)
             if (ImGui::BeginPopup("MIDI Unsupported"))
             {
                 ImGui::TextUnformatted("MIDI input is not yet supported on this platform.");
                 ImGui::EndPopup();
             }
-#endif
             ImGui::SameLine();
             if (ImGui::SmallButton("?"))
                 ImGui::OpenPopup("Keyboard Help");

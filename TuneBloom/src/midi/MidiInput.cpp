@@ -9,6 +9,41 @@
 #include <mmsystem.h>
 #endif
 
+#if defined(SEAD_PLATFORM_WINDOWS)
+// WinMM callback — runs on a system thread, queues events for poll()
+static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR)
+{
+    if (wMsg != MIM_DATA)
+        return;
+
+    auto* self = reinterpret_cast<MidiInput*>(dwInstance);
+    if (!self)
+        return;
+
+    u8 status = dwParam1 & 0xFF;
+    u8 note = (dwParam1 >> 8) & 0xFF;
+    u8 vel = (dwParam1 >> 16) & 0xFF;
+
+    s32 msg;
+    if ((status & 0xF0) == 0x90 && vel > 0)
+        msg = 1;
+    else if ((status & 0xF0) == 0x80 || ((status & 0xF0) == 0x90 && vel == 0))
+        msg = 2;
+    else
+        return;
+
+    s32 w = self->mQueueWrite;
+    s32 n = (w + 1) % MidiInput::kQueueSize;
+    if (n != self->mQueueRead)
+    {
+        self->mQueue[w].msg = msg;
+        self->mQueue[w].key = note;
+        self->mQueue[w].vel = vel / 127.0f;
+        self->mQueueWrite = n;
+    }
+}
+#endif
+
 bool MidiInput::start(Callback callback, void* userData)
 {
     stop();
@@ -40,12 +75,32 @@ bool MidiInput::start(Callback callback, void* userData)
     mPort = port;
     return true;
 
+#elif defined(SEAD_PLATFORM_WINDOWS)
+    mQueueRead = 0;
+    mQueueWrite = 0;
+
+    HMIDIIN handle = nullptr;
+    MMRESULT res = midiInOpen(&handle, MIDI_MAPPER,
+        reinterpret_cast<DWORD_PTR>(&MidiInProc),
+        reinterpret_cast<DWORD_PTR>(this),
+        CALLBACK_FUNCTION);
+    if (res != MMSYSERR_NOERROR)
+        return false;
+
+    mInHandle = handle;
+
+    res = midiInStart(handle);
+    if (res != MMSYSERR_NOERROR)
+    {
+        midiInClose(handle);
+        mInHandle = nullptr;
+        return false;
+    }
+
+    return true;
+
 #elif defined(SEAD_PLATFORM_MACOSX)
     // macOS CoreMIDI implementation stub
-    return false;
-
-#elif defined(SEAD_PLATFORM_WINDOWS)
-    // Windows MM implementation stub
     return false;
 
 #else
@@ -65,9 +120,13 @@ void MidiInput::stop()
 #elif defined(SEAD_PLATFORM_WINDOWS)
     if (mInHandle)
     {
-        midiInClose((HMIDI)mInHandle);
+        midiInStop(static_cast<HMIDIIN>(mInHandle));
+        midiInReset(static_cast<HMIDIIN>(mInHandle));
+        midiInClose(static_cast<HMIDIIN>(mInHandle));
         mInHandle = nullptr;
     }
+    mQueueRead = 0;
+    mQueueWrite = 0;
 #endif
     mCallback = nullptr;
     mUserData = nullptr;
@@ -75,10 +134,13 @@ void MidiInput::stop()
 
 void MidiInput::poll()
 {
-    if (!mCallback || !mSeq)
+    if (!mCallback)
         return;
 
 #if defined(SEAD_PLATFORM_LINUX)
+    if (!mSeq)
+        return;
+
     snd_seq_t* seq = static_cast<snd_seq_t*>(mSeq);
     snd_seq_event_t* ev = nullptr;
     while (snd_seq_event_input_pending(seq, 1) > 0)
@@ -105,6 +167,16 @@ void MidiInput::poll()
             break;
         }
     }
+
+#elif defined(SEAD_PLATFORM_WINDOWS)
+    s32 r = mQueueRead;
+    s32 w = mQueueWrite;
+    while (r != w)
+    {
+        mCallback(mUserData, mQueue[r].msg, mQueue[r].key, mQueue[r].vel);
+        r = (r + 1) % kQueueSize;
+    }
+    mQueueRead = r;
 #endif
 }
 
@@ -112,6 +184,8 @@ bool MidiInput::isRunning() const
 {
 #if defined(SEAD_PLATFORM_LINUX)
     return mSeq != nullptr;
+#elif defined(SEAD_PLATFORM_WINDOWS)
+    return mInHandle != nullptr;
 #else
     return false;
 #endif

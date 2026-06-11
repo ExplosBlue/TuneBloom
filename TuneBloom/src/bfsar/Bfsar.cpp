@@ -2741,7 +2741,68 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                     }
                     else if (reader.GetGroupItemCount() > 0)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Group has internal files but no Items (Internal Group corruption !)");
+                        std::unordered_map<u32, Item*> fileToItem;
+                        {
+                            auto it = mSoundList.robustBegin();
+                            auto end = mSoundList.robustEnd();
+                            while (it != end)
+                            {
+                                Item* sound = it->val();
+                                u32 maskedId = sound->getIdWithType();
+                                const auto* info = soundArchive.GetSoundInfo(maskedId);
+                                if (info)
+                                    fileToItem[info->fileId] = sound;
+                                ++it;
+                            }
+                        }
+                        {
+                            auto it = mBankList.robustBegin();
+                            auto end = mBankList.robustEnd();
+                            while (it != end)
+                            {
+                                Item* bank = it->val();
+                                u32 maskedId = bank->getIdWithType();
+                                const auto* info = soundArchive.GetBankInfo(maskedId);
+                                if (info)
+                                    fileToItem[info->fileId] = bank;
+                                ++it;
+                            }
+                        }
+                        {
+                            auto it = mWaveArchiveList.robustBegin();
+                            auto end = mWaveArchiveList.robustEnd();
+                            while (it != end)
+                            {
+                                Item* warc = it->val();
+                                u32 maskedId = warc->getIdWithType();
+                                const auto* info = soundArchive.GetWaveArchiveInfo(maskedId);
+                                if (info)
+                                    fileToItem[info->fileId] = warc;
+                                ++it;
+                            }
+                        }
+
+                        for (u32 j = 0; j < reader.GetGroupItemCount(); j++)
+                        {
+                            const auto* groupItemInfo = reader.GetGroupItemInfo(j);
+                            u32 fileId = groupItemInfo->fileId;
+                            auto itemIt = fileToItem.find(fileId);
+                            bool found = itemIt != fileToItem.end();
+
+                            Group::ItemInfo* itemInfo = new(heap) Group::ItemInfo(group);
+                            itemInfo->mId = group->getItemInfoList().size();
+                            itemInfo->mIsDisabled = !found;
+
+                            if (found)
+                            {
+                                Item* item = itemIt->second;
+                                itemInfo->mItemRefType = item->getItemType();
+                                itemInfo->mItemRef.attach(item);
+                                itemInfo->setLoadItems(Group::ItemInfo::LoadFlag::LoadAll);
+                            }
+
+                            group->mItemInfoList.pushBack(itemInfo);
+                        }
                     }
                 }
             }

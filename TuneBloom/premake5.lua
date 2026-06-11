@@ -42,10 +42,14 @@ systemversion "latest"
 
 defines { "SEAD_PLATFORM_WINDOWS" }
 
+links { "winmm" }
+
 filter "system:linux"
 systemversion "latest"
 
 defines { "SEAD_PLATFORM_POSIX", "SEAD_PLATFORM_LINUX" }
+
+links { "asound" }
 
 filter "system:macosx"
 systemversion "14.0"
@@ -63,7 +67,8 @@ links {
     "CoreVideo.framework",
     "OpenGL.framework",
     "QuartzCore.framework",
-    "UniformTypeIdentifiers.framework"
+    "UniformTypeIdentifiers.framework",
+    "CoreMIDI.framework"
 }
 
 filter "platforms:GLFW_*"

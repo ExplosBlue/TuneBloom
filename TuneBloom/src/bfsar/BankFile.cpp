@@ -7,6 +7,8 @@
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
+#include <midi/MidiInput.h>
+
 #include <VectorSet.h>
 
 #include <algorithm>
@@ -71,6 +73,33 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
     }
 
     return false;
+}
+
+static MidiInput sMidiInput;
+
+static void MidiInputCallback(void* userData, s32 msg, s32 key, f32 vel)
+{
+    if (key < 0 || key >= 128)
+        return;
+
+    Item* selected = sSelectedItem;
+    if (selected && selected->getItemType() == Item::ItemType::BankFileInstrument)
+    {
+        if (msg == 1)
+            KeyboardFunc(selected, NoteOn, key, vel);
+        else if (msg == 2)
+            KeyboardFunc(selected, NoteOff, key, 0.0f);
+    }
+    else
+    {
+        if (msg == 2)
+            KeyPresed[key] = false;
+    }
+}
+
+void PollMidiInput()
+{
+    sMidiInput.poll();
 }
 
 void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
@@ -1740,6 +1769,51 @@ void BankFile::drawFileUI()
     f32 startY = ImGui::GetCursorScreenPos().y;
     if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
     {
+        {
+            const char* label = sMidiInput.isRunning() ? "Disconnect MIDI" : "Connect MIDI";
+            f32 btnW = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
+            f32 helpW = ImGui::CalcTextSize("?").x + ImGui::GetStyle().FramePadding.x * 2;
+            f32 spacing = ImGui::GetStyle().ItemSpacing.x;
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnW - helpW - spacing);
+            if (ImGui::SmallButton(label))
+            {
+#if defined(SEAD_PLATFORM_LINUX)
+                if (sMidiInput.isRunning())
+                    sMidiInput.stop();
+                else
+                    sMidiInput.start(&MidiInputCallback, nullptr);
+#else
+                ImGui::OpenPopup("MIDI Unsupported");
+#endif
+            }
+#if !defined(SEAD_PLATFORM_LINUX)
+            if (ImGui::BeginPopup("MIDI Unsupported"))
+            {
+                ImGui::TextUnformatted("MIDI input is not yet supported on this platform.");
+                ImGui::EndPopup();
+            }
+#endif
+            ImGui::SameLine();
+            if (ImGui::SmallButton("?"))
+                ImGui::OpenPopup("Keyboard Help");
+            if (ImGui::BeginPopup("Keyboard Help"))
+            {
+                ImGui::TextUnformatted("PC Keyboard Mapping");
+                ImGui::Separator();
+                ImGui::TextUnformatted("Lower octave (Z-M):");
+                ImGui::TextUnformatted("  White: Z  X  C  V  B  N  M");
+                ImGui::TextUnformatted("  Black: S     D     G  H  J");
+                ImGui::TextUnformatted("Upper octave (Q-U):");
+                ImGui::TextUnformatted("  White: Q  W  E  R  T  Y  U");
+                ImGui::TextUnformatted("  Black: 2  3     5  6  7");
+                ImGui::Separator();
+                ImGui::TextUnformatted("Controls:");
+                ImGui::TextUnformatted("  Left/Right arrows or +/- buttons: shift octave");
+                ImGui::TextUnformatted("  Backspace: reset to C3");
+                ImGui::EndPopup();
+            }
+        }
+
         f32 width = ImGui::GetContentRegionAvail().x;
 
         DrawKeyboardWithRegions(

@@ -328,6 +328,8 @@ void BfsarTask::calc()
     DrawMenuBar();
     DrawUI();
 
+    PollMidiInput();
+
     //? Code for printing all banks instruments info
 
 /*

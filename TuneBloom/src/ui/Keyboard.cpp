@@ -15,6 +15,7 @@ bool TestPianoBoardFunct(void* UserData, int Msg, int Key, float Vel) {
 */
 
 #include <ui/UI.h>
+#include <math/seadMathCalcCommon.h>
 
 void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style, s32 OriginalKey)
 {
@@ -73,6 +74,77 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
     if (NoteHeight < 5.0 || NoteWidth < 3.0)
     {
         return;
+    }
+
+    // PC keyboard input — 2-octave DAW-style layout
+    static s32 sOctaveBase = 48; // C3
+    static bool sPrevKeyState[128] = { false };
+
+    const struct { ImGuiKey key; s32 offset; } sKeyMappings[] = {
+        // Lower octave (white: Z X C V B N M, black: S D G H J)
+        { ImGuiKey_Z, 0 },  { ImGuiKey_S, 1 },  { ImGuiKey_X, 2 },  { ImGuiKey_D, 3 },
+        { ImGuiKey_C, 4 },  { ImGuiKey_V, 5 },  { ImGuiKey_G, 6 },  { ImGuiKey_B, 7 },
+        { ImGuiKey_H, 8 },  { ImGuiKey_N, 9 },  { ImGuiKey_J, 10 }, { ImGuiKey_M, 11 },
+        // Upper octave (white: Q W E R T Y U, black: 2 3 5 6 7)
+        { ImGuiKey_Q, 12 }, { ImGuiKey_2, 13 }, { ImGuiKey_W, 14 }, { ImGuiKey_3, 15 },
+        { ImGuiKey_E, 16 }, { ImGuiKey_R, 17 }, { ImGuiKey_5, 18 }, { ImGuiKey_T, 19 },
+        { ImGuiKey_6, 20 }, { ImGuiKey_Y, 21 }, { ImGuiKey_7, 22 }, { ImGuiKey_U, 23 },
+    };
+
+    // Note detection (uses current sOctaveBase, don't modify it here)
+    if (!ImGui::GetIO().WantTextInput)
+    {
+        for (s32 i = 0; i < IM_ARRAYSIZE(sKeyMappings); i++)
+        {
+            bool isDown = ImGui::IsKeyDown(sKeyMappings[i].key);
+            s32 note = sOctaveBase + sKeyMappings[i].offset;
+            if (note < 0 || note >= 128)
+                continue;
+            if (isDown != sPrevKeyState[note])
+            {
+                sPrevKeyState[note] = isDown;
+                Callback(UserData, isDown ? NoteOn : NoteOff, note, isDown ? 0.8f : 0.0f);
+            }
+        }
+    }
+
+    // Octave shift — arrows & buttons, with proper cleanup
+    {
+        s32 newBase = sOctaveBase;
+
+        if (!ImGui::GetIO().WantTextInput)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+                newBase -= 12;
+            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+                newBase += 12;
+            if (ImGui::IsKeyPressed(ImGuiKey_Backspace))
+                newBase = 48;
+        }
+
+        ImGui::PushID("PianoKeyboardControls");
+        if (ImGui::SmallButton("-"))
+            newBase -= 12;
+        ImGui::SameLine();
+        ImGui::Text("Octave %d (%s%d)", sOctaveBase / 12 - 1, "C", sOctaveBase / 12 - 1);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+"))
+            newBase += 12;
+        ImGui::PopID();
+
+        s32 clamped = sead::MathCalcCommon<s32>::clamp2(0, newBase, 108);
+        if (clamped != sOctaveBase)
+        {
+            sOctaveBase = clamped;
+            for (s32 i = 0; i < 128; i++)
+            {
+                if (sPrevKeyState[i])
+                {
+                    sPrevKeyState[i] = false;
+                    Callback(UserData, NoteOff, i, 0.0f);
+                }
+            }
+        }
     }
 
     // minimal size using mouse

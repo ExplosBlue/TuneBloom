@@ -583,3 +583,5 @@ inline BankFile::VelocityRegion* BankFile::VelocityRegion::getNext(const KeyRegi
 
     return nullptr;
 }
+
+void PollMidiInput();

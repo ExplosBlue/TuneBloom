@@ -9,6 +9,46 @@
 #include <mmsystem.h>
 #endif
 
+#if defined(SEAD_PLATFORM_MACOSX)
+// CoreMIDI callback — runs on a system thread, queues events for poll()
+static void MidiReadProc(const MIDIPacketList* pktList, void* refCon, void*)
+{
+    auto* self = static_cast<MidiInput*>(refCon);
+    if (!self)
+        return;
+
+    const MIDIPacket* pkt = &pktList->packet[0];
+    for (UInt32 i = 0; i < pktList->numPackets; i++)
+    {
+        if (pkt->length >= 3)
+        {
+            u8 status = pkt->data[0];
+            u8 note = pkt->data[1];
+            u8 vel = pkt->data[2];
+
+            s32 msg;
+            if ((status & 0xF0) == 0x90 && vel > 0)
+                msg = 1;
+            else if ((status & 0xF0) == 0x80 || ((status & 0xF0) == 0x90 && vel == 0))
+                msg = 2;
+            else
+                continue;
+
+            s32 w = self->mQueueWrite;
+            s32 n = (w + 1) % MidiInput::kQueueSize;
+            if (n != self->mQueueRead)
+            {
+                self->mQueue[w].msg = msg;
+                self->mQueue[w].key = note;
+                self->mQueue[w].vel = vel / 127.0f;
+                self->mQueueWrite = n;
+            }
+        }
+        pkt = MIDIPacketNext(pkt);
+    }
+}
+#endif
+
 #if defined(SEAD_PLATFORM_WINDOWS)
 // WinMM callback — runs on a system thread, queues events for poll()
 static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR)
@@ -75,6 +115,36 @@ bool MidiInput::start(Callback callback, void* userData)
     mPort = port;
     return true;
 
+#elif defined(SEAD_PLATFORM_MACOSX)
+    mQueueRead = 0;
+    mQueueWrite = 0;
+
+    MIDIClientRef client = nullptr;
+    OSStatus err = MIDIClientCreate(CFSTR("TuneBloom"), nullptr, nullptr, &client);
+    if (err != noErr)
+        return false;
+    mClient = client;
+
+    MIDIPortRef port = nullptr;
+    err = MIDIInputPortCreate(client, CFSTR("MIDI Input"), MidiReadProc, this, &port);
+    if (err != noErr)
+    {
+        MIDIClientDispose(client);
+        mClient = nullptr;
+        return false;
+    }
+    mPort = port;
+
+    ItemCount count = MIDIGetNumberOfSources();
+    for (ItemCount i = 0; i < count; i++)
+    {
+        MIDIEndpointRef src = MIDIGetSource(i);
+        if (src)
+            MIDIPortConnectSource(port, src, nullptr);
+    }
+
+    return true;
+
 #elif defined(SEAD_PLATFORM_WINDOWS)
     mQueueRead = 0;
     mQueueWrite = 0;
@@ -99,10 +169,6 @@ bool MidiInput::start(Callback callback, void* userData)
 
     return true;
 
-#elif defined(SEAD_PLATFORM_MACOSX)
-    // macOS CoreMIDI implementation stub
-    return false;
-
 #else
     return false;
 #endif
@@ -117,6 +183,19 @@ void MidiInput::stop()
         mSeq = nullptr;
     }
     mPort = -1;
+#elif defined(SEAD_PLATFORM_MACOSX)
+    if (mPort)
+    {
+        MIDIPortDispose(static_cast<MIDIPortRef>(mPort));
+        mPort = nullptr;
+    }
+    if (mClient)
+    {
+        MIDIClientDispose(static_cast<MIDIClientRef>(mClient));
+        mClient = nullptr;
+    }
+    mQueueRead = 0;
+    mQueueWrite = 0;
 #elif defined(SEAD_PLATFORM_WINDOWS)
     if (mInHandle)
     {
@@ -168,7 +247,7 @@ void MidiInput::poll()
         }
     }
 
-#elif defined(SEAD_PLATFORM_WINDOWS)
+#elif defined(SEAD_PLATFORM_MACOSX) || defined(SEAD_PLATFORM_WINDOWS)
     s32 r = mQueueRead;
     s32 w = mQueueWrite;
     while (r != w)
@@ -184,6 +263,8 @@ bool MidiInput::isRunning() const
 {
 #if defined(SEAD_PLATFORM_LINUX)
     return mSeq != nullptr;
+#elif defined(SEAD_PLATFORM_MACOSX)
+    return mClient != nullptr;
 #elif defined(SEAD_PLATFORM_WINDOWS)
     return mInHandle != nullptr;
 #else

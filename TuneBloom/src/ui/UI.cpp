@@ -26,6 +26,8 @@
 #include <unistd.h>
 #endif
 
+#include <midi/SeqMidiExporter.h>
+
 #include <cstdio>
 #include <cctype>
 #include <vector>
@@ -153,6 +155,7 @@ void DrawSequenceSoundsUI();
 void DrawAllSoundSetsUI();
 void DrawWaveSoundSetsUI();
 void DrawSequenceSoundSetsUI();
+void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete);
 void DrawWaveFilesUI();
 void DrawSequenceFilesUI();
 void DrawBankFilesUI();
@@ -3535,10 +3538,12 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
 
     Sound* sound = static_cast<Sound*>(item);
     bool canExport = false;
+    bool isSeq = false;
     if (sound)
     {
         Sound::SoundType type = sound->getSoundType();
         canExport = (type == Sound::SoundType::Wave || type == Sound::SoundType::Strm || type == Sound::SoundType::Seq);
+        isSeq = (type == Sound::SoundType::Seq);
     }
 
     if (!canExport)
@@ -3553,6 +3558,29 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
     }
 
     if (!canExport)
+        ImGui::EndDisabled();
+
+    ImGui::Separator();
+
+    if (!isSeq)
+        ImGui::BeginDisabled();
+
+    if (ImGui::MenuItem("Export to MIDI"))
+    {
+        sead::FixedSafeString<512> path;
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = { { "MIDI (*.midi)", "*.midi" } };
+
+        sead::FixedSafeString<512> defaultPath;
+        BuildDefaultExportPath(&defaultPath, sound, "midi");
+
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, "midi", defaultPath.cstr()))
+        {
+            exportSeqToMidi(path, *sound);
+        }
+    }
+
+    if (!isSeq)
         ImGui::EndDisabled();
 }
 
@@ -3912,7 +3940,7 @@ void DrawSequenceSoundSetsUI()
     f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
-    DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), &CreateSequenceSoundSetFunc, nullptr, nullptr,
+    DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), &CreateSequenceSoundSetFunc, nullptr, &SequenceSoundSetContextMenuFunc,
         [](const Item* item)
         {
             const SoundSet* soundSet = static_cast<const SoundSet*>(item);
@@ -3927,6 +3955,57 @@ void DrawSequenceSoundSetsUI()
         ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
 
     DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), true, SoundSet::SoundSetType::Seq);
+}
+
+void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
+{
+    if (afterDelete)
+        return;
+
+    SoundSet* soundSet = static_cast<SoundSet*>(item);
+    if (!soundSet || soundSet->getIsEmpty() || soundSet->getSoundSetType() != SoundSet::SoundSetType::Seq)
+        return;
+
+    u32 startId = soundSet->getStartId();
+    u32 endId = soundSet->getEndId();
+
+    bool hasSeq = false;
+    for (auto it = sBfsar.getSoundList().begin(); it != sBfsar.getSoundList().end(); ++it)
+    {
+        Sound* s = static_cast<Sound*>(*it);
+        if (s->getId() >= startId && s->getId() <= endId && s->getSoundType() == Sound::SoundType::Seq)
+        {
+            hasSeq = true;
+            break;
+        }
+    }
+
+    if (!hasSeq)
+        ImGui::BeginDisabled();
+
+    if (ImGui::MenuItem("Export to MIDI"))
+    {
+        sead::FixedSafeString<512> dirPath;
+        if (SaveFileDialog(&dirPath, "Select directory for MIDI export"))
+        {
+            const char* p = dirPath.cstr();
+            const char* lastSlash = nullptr;
+            for (const char* c = p; *c; c++)
+                if (*c == '/' || *c == '\\')
+                    lastSlash = c;
+
+            sead::FixedSafeString<512> exportDir;
+            if (lastSlash)
+                exportDir.format("%.*s", (s32)(lastSlash - p), p);
+            else
+                exportDir = ".";
+
+            exportSeqSoundSetToMidiDir(exportDir, *soundSet);
+        }
+    }
+
+    if (!hasSeq)
+        ImGui::EndDisabled();
 }
 
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)

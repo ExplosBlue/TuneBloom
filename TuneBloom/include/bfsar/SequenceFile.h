@@ -86,6 +86,11 @@ public:
         return mSeqBytes;
     }
 
+    u32 getSeqBytesSize() const
+    {
+        return mSeqBytesSize;
+    }
+
     u32 getLabelOffset(const sead::SafeString& label, bool parsed = true) const;
     u32 getLabelAllocTracks(const sead::SafeString& label) const;
 

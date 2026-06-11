@@ -40,7 +40,7 @@ end
 filter "system:windows"
 systemversion "latest"
 
-defines { "SEAD_PLATFORM_WINDOWS" }
+defines { "SEAD_PLATFORM_WINDOWS", "_CRT_SECURE_NO_WARNINGS" }
 
 links { "winmm" }
 

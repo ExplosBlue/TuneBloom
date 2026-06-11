@@ -424,8 +424,6 @@ void WaveFile::drawUI()
     {
         for (u32 i = 0; i < mChannels.size(); i++)
         {
-            const Channel* channel = mChannels.nth(i);
-
             if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", i).cstr()))
             {
                 sSoundPlayer.playWaveFile(*this, i);
@@ -554,12 +552,10 @@ bool WaveFile::doRead(const void* fileAddr)
     mLoopStartFrame = waveInfo.originalLoopStartFrame;
     mLoopEndFrame = waveInfo.loopEndFrame - (waveInfo.loopStartFrame - waveInfo.originalLoopStartFrame);
 
-    bool loopError = false;
     if (mLoopStartFrame >= mLoopEndFrame)
     {
         sead::FormatFixedSafeString<1024> msg("Invalid loop (%u >= %u)", mLoopStartFrame, mLoopEndFrame);
         PopupMgr::instance()->pushCurrentItemError(msg);
-        loopError = true;
     }
 
     mSampleCount = mLoopEndFrame;

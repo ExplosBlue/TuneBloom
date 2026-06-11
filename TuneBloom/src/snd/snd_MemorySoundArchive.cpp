@@ -13,6 +13,7 @@ MemorySoundArchive::MemorySoundArchive()
     , mInfoBlockBody(nullptr)
     , mFileBlockBody(nullptr)
     , mData(nullptr)
+    , mDataSize(0)
 {
 }
 
@@ -155,7 +156,11 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
                         *outGroupId = INVALID_ID;
                     }
 
-                    return sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+                    u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
+                    if (mDataSize && rawFileOffset >= mDataSize)
+                        return nullptr;
+
+                    return sead::PtrUtil::addOffset(mData, rawFileOffset);
                 }
 
                 counter++;
@@ -197,7 +202,9 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
                     u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
                     SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
 
-                    groupFile = sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+                    u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
+                    if (!mDataSize || rawFileOffset < mDataSize)
+                        groupFile = sead::PtrUtil::addOffset(mData, rawFileOffset);
                 }
             }
 
@@ -293,22 +300,27 @@ const void* MemorySoundArchive::detail_GetFileAddressGroup(FileId fileId, u32 gr
                 u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
                 SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
 
-                groupFile = sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+                u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
+                if (!mDataSize || rawFileOffset < mDataSize)
+                    groupFile = sead::PtrUtil::addOffset(mData, rawFileOffset);
             }
         }
 
         if (groupFile)
         {
             internal::GroupFileReader reader(groupFile);
-            u32 groupItemCount = reader.GetGroupItemCount();
-            for (u32 j = 0; j < groupItemCount; j++)
+            if (reader.IsInitialized())
             {
-                internal::GroupItemLocationInfo locationInfo;
-                if (reader.ReadGroupItemLocationInfo(&locationInfo, j))
+                u32 groupItemCount = reader.GetGroupItemCount();
+                for (u32 j = 0; j < groupItemCount; j++)
                 {
-                    if (locationInfo.fileId == fileId)
+                    internal::GroupItemLocationInfo locationInfo;
+                    if (reader.ReadGroupItemLocationInfo(&locationInfo, j))
                     {
-                        return locationInfo.address;
+                        if (locationInfo.fileId == fileId)
+                        {
+                            return locationInfo.address;
+                        }
                     }
                 }
             }
@@ -330,7 +342,9 @@ const void* MemorySoundArchive::detail_GetFileAddressSimple(FileId fileId) const
             u32 offsetFromFileBlockHead = internalFileInfo->GetOffsetFromFileBlockHead();
             if (offsetFromFileBlockHead != 0xFFFFFFFF)
             {
-                return sead::PtrUtil::addOffset(mData, offsetFromFileBlockHead + mHeader.GetFileBlockOffset());
+                u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
+                if (!mDataSize || rawFileOffset < mDataSize)
+                    return sead::PtrUtil::addOffset(mData, rawFileOffset);
             }
         }
     }

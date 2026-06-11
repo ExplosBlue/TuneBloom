@@ -51,7 +51,7 @@ public:
     }
 
     void create(ArchiveFormat format = ArchiveFormat::BFSAR);
-    bool open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* heap);
+    bool open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath, sead::Heap* heap);
     bool save();
     bool saveAs(const sead::SafeString& filePath);
     void close();
@@ -439,7 +439,7 @@ public:
     }
 
 private:
-    bool open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap);
+    bool open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize, sead::Heap* heap);
     void save_(sead::FileHandle& handle);
     void close_();
 
@@ -474,4 +474,6 @@ private:
     BankFile::List mBankFileList;
 
     Item::List mGenWaveArchiveList; // ..........so we can display warnings on open
+
+    std::vector<u8*> mExternalGroupBuffers; // Owned buffers loaded from extData/ or dialog
 };

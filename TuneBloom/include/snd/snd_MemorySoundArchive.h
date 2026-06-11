@@ -191,6 +191,7 @@ public:
     const internal::SoundArchiveFile::FileBlockBody* mFileBlockBody;
 
     const void* mData;
+    u32 mDataSize;
 
     //? For external groups
     mutable std::vector<const void*> mExternalGroups;

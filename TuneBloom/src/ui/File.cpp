@@ -276,7 +276,7 @@ bool OpenFile()
 
     CloseFile();
 
-    if (!sBfsar.open(bfsarFile, filePath, nullptr)) //? bfsarFile is freed here
+    if (!sBfsar.open(bfsarFile, static_cast<u32>(arg.read_size), filePath, nullptr)) //? bfsarFile is freed here
     {
         sead::FormatFixedSafeString<1024> msg(
             "Your BFSAR file is corrupted beyond repair :(\n%s", PopupMgr::instance()->getCorruptInfo().cstr()

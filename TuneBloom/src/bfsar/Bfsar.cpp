@@ -98,7 +98,7 @@ void Bfsar::create(ArchiveFormat format)
     mOpen = true;
 }
 
-bool Bfsar::open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* heap)
+bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath, sead::Heap* heap)
 {
     LOG_FUNC();
     LOG_HEX("magic", bfsarFile, 4);
@@ -123,7 +123,18 @@ bool Bfsar::open(u8* bfsarFile, const sead::SafeString& filePath, sead::Heap* he
             return false;
         }
 
-        success = open_(soundArchive, heap);
+        soundArchive.mDataSize = bfsarSize;
+        success = open_(soundArchive, bfsarSize, heap);
+
+        // Prevent ~MemorySoundArchive from crashing: it tries to delete mExternalGroups
+        // entries as InnerFile*, but we push raw u8* buffers. Clear before scope exit.
+        soundArchive.mExternalGroups.clear();
+
+        // External group buffers are only needed during open_() for file address resolution.
+        // Now that all files have been parsed into model objects, free them.
+        for (u8* buf : mExternalGroupBuffers)
+            delete buf;
+        mExternalGroupBuffers.clear();
     }
 
     delete bfsarFile;
@@ -317,7 +328,7 @@ void Bfsar::updateList(Item::List& list)
     }
 }
 
-bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* heap)
+bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize, sead::Heap* heap)
 {
     LOG_FUNC();
     LOG_U32("fileSize", soundArchive.mHeader.fileSize);
@@ -419,13 +430,98 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
                 groupInfo->fileId = soundArchive.detail_GetFileCount() + static_cast<u32>(soundArchive.mExternalGroups.size());
 
                 soundArchive.mExternalGroups.push_back(bfgrpFile);
+                mExternalGroupBuffers.push_back(static_cast<u8*>(const_cast<void*>(bfgrpFile)));
             }
         }
 
-        nw::snd::internal::GroupFileReader reader(soundArchive.detail_GetFileAddress(groupInfo->fileId));
-        if (!reader.IsInitialized())
+        // Check if the group's file data is a valid CGRP
+        bool isCgrp = false;
+        bool extDataLoaded = false;
         {
-            groupInfo->fileId = nw::snd::SoundArchive::INVALID_ID; //? Mark as invalid so it won't be used later
+                const u8* archiveEnd = static_cast<const u8*>(soundArchive.mData) + bfsarSize;
+            const void* addr = soundArchive.detail_GetFileAddressSimple(groupInfo->fileId);
+            if (addr && addr >= soundArchive.mData && static_cast<const u8*>(addr) + 4 <= archiveEnd)
+            {
+                const u8* p = static_cast<const u8*>(addr);
+                isCgrp = (p[0] == 'C' && p[1] == 'G' && p[2] == 'R' && p[3] == 'P') ||
+                         (p[0] == 'F' && p[1] == 'G' && p[2] == 'R' && p[3] == 'P');
+            }
+
+            // Try extData/ autoload if the group's file data isn't a valid CGRP
+            if (!isCgrp && groupInfo->fileId != nw::snd::SoundArchive::INVALID_ID)
+            {
+                sead::FixedSafeString<512> extPath;
+                {
+                    sead::FixedSafeString<512> dir;
+                    if (sead::Path::getDirectoryName(&dir, getFilePath()))
+                    {
+                        extPath.format("%s/extData/%s.bcgrp", dir.cstr(), group->mName.cstr());
+                    }
+                }
+
+                if (!extPath.isEmpty())
+                {
+                    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+                    SEAD_ASSERT(device);
+
+                    sead::FileDevice::LoadArg arg;
+                    arg.path = extPath;
+                    const void* bcgrpFile = device->tryLoad(arg);
+
+                    if (bcgrpFile)
+                    {
+                        nw::snd::internal::GroupFileReader extReader(bcgrpFile);
+                        if (extReader.IsInitialized())
+                        {
+                            // Invalidate FILE entries for all items in this external group
+                            // so that detail_GetFileAddress falls through to group search
+                            u32 itemCount = extReader.GetGroupItemCount();
+                            for (u32 gi = 0; gi < itemCount; gi++)
+                            {
+                                const auto* itemInfo = extReader.GetGroupItemInfo(gi);
+                                if (!itemInfo)
+                                    continue;
+                                const auto* fileInfo = soundArchive.detail_GetFileInfo(itemInfo->fileId);
+                                if (!fileInfo || fileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_INTERNAL)
+                                    continue;
+                                auto* intInfo = const_cast<nw::snd::internal::SoundArchiveFile::InternalFileInfo*>(fileInfo->GetInternalFileInfo());
+                                if (intInfo)
+                                    intInfo->toFileImageFromFileBlockBody.offset = static_cast<s32>(nw::snd::internal::SoundArchiveFile::InternalFileInfo::INVALID_OFFSET);
+                            }
+
+                            groupInfo->fileId = soundArchive.detail_GetFileCount() + static_cast<u32>(soundArchive.mExternalGroups.size());
+                            soundArchive.mExternalGroups.push_back(bcgrpFile);
+                            mExternalGroupBuffers.push_back(static_cast<u8*>(const_cast<void*>(bcgrpFile)));
+                            group->mOutputType = Group::OutputType::External;
+                            extDataLoaded = true;
+                        }
+                        else
+                        {
+                            u8* buf = static_cast<u8*>(const_cast<void*>(bcgrpFile));
+                            delete buf;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (extDataLoaded)
+        {
+            // Already patched, no need to validate again
+        }
+        else if (!isCgrp)
+        {
+            // Data isn't valid CGRP and wasn't replaced by extData — mark invalid
+            groupInfo->fileId = nw::snd::SoundArchive::INVALID_ID;
+        }
+        else
+        {
+            // Valid CGRP data — validate with GroupFileReader (safe address)
+            nw::snd::internal::GroupFileReader reader(soundArchive.detail_GetFileAddress(groupInfo->fileId));
+            if (!reader.IsInitialized())
+            {
+                groupInfo->fileId = nw::snd::SoundArchive::INVALID_ID;
+            }
         }
 
         mGroupList.pushBack(group);
@@ -2737,7 +2833,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, sead::Heap* h
 
                     if (reader.GetGroupItemExCount() > 0)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Failed to find real Items order");
+                        LOG_FMT("Group '%s' (id=%u) has items but the file order could not be determined", group->mName.cstr(), group->getId());
                     }
                     else if (reader.GetGroupItemCount() > 0)
                     {
@@ -5370,6 +5466,10 @@ void Bfsar::close_()
     mSequenceFileList.clear();
     mBankFileList.clear();
     clearGenWaveArchiveList();
+
+    for (u8* buf : mExternalGroupBuffers)
+        delete buf;
+    mExternalGroupBuffers.clear();
 }
 
 bool Bfsar::validate_()

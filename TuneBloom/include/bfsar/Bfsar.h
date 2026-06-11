@@ -284,7 +284,12 @@ public:
     u32 getVersionForBfwsd() const
     {
         if (mFormat == ArchiveFormat::BCSAR)
-            return makeVersion(1, 0, 1);
+        {
+            if (isVersionOrLater(2, 3, 0))
+                return makeVersion(1, 0, 1);
+
+            return makeVersion(1, 0, 0);
+        }
 
         if (isVersionOrLater(2, 1, 0))
             return makeVersion(1, 0, 0);
@@ -331,6 +336,9 @@ public:
     {
         if (mFormat == ArchiveFormat::BCSAR)
         {
+            if (isVersionOrLater(2, 3, 0))
+                return makeVersion(1, 1, 0);
+
             return makeVersion(1, 0, 0);
         }
         else

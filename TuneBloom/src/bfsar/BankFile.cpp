@@ -1781,21 +1781,60 @@ void BankFile::drawFileUI()
     if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
     {
         {
-            const char* label = sMidiInput.isRunning() ? "Disconnect MIDI" : "Connect MIDI";
-            f32 btnW = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2;
+            static s32 sMidiDeviceIndex = 0;
+            u32 devCount = MidiInput::getDeviceCount();
+
+            bool connected = sMidiInput.isRunning();
+            f32 comboW = ImGui::CalcTextSize("MMMMMMMMMMMMMMM").x + ImGui::GetStyle().FramePadding.x * 4;
+            f32 btnW = ImGui::CalcTextSize("Disconnect MIDI").x + ImGui::GetStyle().FramePadding.x * 2;
             f32 helpW = ImGui::CalcTextSize("?").x + ImGui::GetStyle().FramePadding.x * 2;
             f32 spacing = ImGui::GetStyle().ItemSpacing.x;
-            ImGui::SameLine(ImGui::GetContentRegionAvail().x - btnW - helpW - spacing);
+
+            float rightX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+
+            if (connected) ImGui::BeginDisabled();
+            ImGui::SetCursorPosX(rightX - comboW - btnW - helpW - spacing * 2);
+            if (devCount > 0)
+            {
+                const char* preview = MidiInput::getDeviceName(static_cast<u32>(sMidiDeviceIndex));
+                if (!preview || !*preview) preview = "No device";
+                ImGui::SetNextItemWidth(comboW);
+                if (ImGui::BeginCombo("##midiDev", preview))
+                {
+                    for (u32 i = 0; i < devCount; i++)
+                    {
+                        bool isSelected = (static_cast<u32>(sMidiDeviceIndex) == i);
+                        if (ImGui::Selectable(MidiInput::getDeviceName(i), isSelected))
+                            sMidiDeviceIndex = static_cast<s32>(i);
+                        if (isSelected)
+                            ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+            }
+            else
+            {
+                ImGui::SetNextItemWidth(comboW);
+                ImGui::TextUnformatted("No MIDI devices");
+            }
+            if (connected) ImGui::EndDisabled();
+
+            ImGui::SameLine(rightX - btnW - helpW - spacing, 0);
+            const char* label = connected ? "Disconnect MIDI" : "Connect MIDI";
             if (ImGui::SmallButton(label))
             {
-                if (sMidiInput.isRunning())
+                if (connected)
                     sMidiInput.stop();
-                else if (!sMidiInput.start(&MidiInputCallback, nullptr))
-                    ImGui::OpenPopup("MIDI Unsupported");
+                else
+                {
+                    sMidiInput.start(&MidiInputCallback, nullptr, static_cast<u32>(sMidiDeviceIndex));
+                    if (!sMidiInput.isRunning())
+                        ImGui::OpenPopup("MIDI Unsupported");
+                }
             }
             if (ImGui::BeginPopup("MIDI Unsupported"))
             {
-                ImGui::TextUnformatted("Could not connect to a MIDI input device.\nMake sure a MIDI device is connected and working.");
+                ImGui::TextUnformatted("Could not connect to the selected MIDI input device.\nMake sure it is connected and working.");
                 ImGui::EndPopup();
             }
             ImGui::SameLine();

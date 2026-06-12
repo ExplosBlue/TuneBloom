@@ -1,5 +1,8 @@
 #include <midi/MidiInput.h>
 
+#include <string>
+#include <vector>
+
 #if defined(SEAD_PLATFORM_LINUX)
 #include <alsa/asoundlib.h>
 #elif defined(SEAD_PLATFORM_MACOSX)
@@ -8,6 +11,96 @@
 #include <windows.h>
 #include <mmsystem.h>
 #endif
+
+struct DeviceEntry
+{
+    std::string name;
+#if defined(SEAD_PLATFORM_LINUX)
+    int client;
+    int port;
+#endif
+};
+
+static std::vector<DeviceEntry> sDeviceList;
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+static std::string WideToUtf8(const wchar_t* str)
+{
+    if (!str || !*str) return {};
+    int len = WideCharToMultiByte(CP_UTF8, 0, str, -1, nullptr, 0, nullptr, nullptr);
+    std::string ret(static_cast<size_t>(len) - 1, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, str, -1, &ret[0], len, nullptr, nullptr);
+    return ret;
+}
+#endif
+
+static void PopulateDeviceList()
+{
+    if (!sDeviceList.empty())
+        return;
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    UINT numDevs = midiInGetNumDevs();
+    sDeviceList.reserve(numDevs);
+    for (UINT i = 0; i < numDevs; i++)
+    {
+        MIDIINCAPSW caps;
+        if (midiInGetDevCapsW(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
+            sDeviceList.push_back({ WideToUtf8(caps.szPname) });
+    }
+
+#elif defined(SEAD_PLATFORM_MACOSX)
+    ItemCount count = MIDIGetNumberOfSources();
+    sDeviceList.reserve(count);
+    for (ItemCount i = 0; i < count; i++)
+    {
+        MIDIEndpointRef src = MIDIGetSource(i);
+        if (!src)
+            continue;
+
+        CFStringRef str = nullptr;
+        if (MIDIObjectGetStringProperty(src, kMIDIPropertyName, &str) == noErr && str)
+        {
+            char buf[256];
+            if (CFStringGetCString(str, buf, sizeof(buf), kCFStringEncodingUTF8))
+                sDeviceList.push_back({ buf });
+            CFRelease(str);
+        }
+    }
+
+#elif defined(SEAD_PLATFORM_LINUX)
+    snd_seq_t* seq = nullptr;
+    if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0) < 0)
+        return;
+
+    snd_seq_client_info_t* cinfo;
+    snd_seq_port_info_t* pinfo;
+    snd_seq_client_info_alloca(&cinfo);
+    snd_seq_port_info_alloca(&pinfo);
+
+    snd_seq_client_info_set_client(cinfo, -1);
+    while (snd_seq_query_next_client(seq, cinfo) >= 0)
+    {
+        int client = snd_seq_client_info_get_client(cinfo);
+        const char* cname = snd_seq_client_info_get_name(cinfo);
+
+        snd_seq_port_info_set_client(pinfo, client);
+        snd_seq_port_info_set_port(pinfo, -1);
+        while (snd_seq_query_next_port(seq, pinfo) >= 0)
+        {
+            unsigned int caps = snd_seq_port_info_get_capability(pinfo);
+            if (caps & SND_SEQ_PORT_CAP_READ)
+            {
+                int port = snd_seq_port_info_get_port(pinfo);
+                const char* pname = snd_seq_port_info_get_name(pinfo);
+                sDeviceList.push_back({ std::string(cname) + ":" + std::string(pname), client, port });
+            }
+        }
+    }
+
+    snd_seq_close(seq);
+#endif
+}
 
 #if defined(SEAD_PLATFORM_MACOSX)
 // CoreMIDI callback — runs on a system thread, queues events for poll()
@@ -84,7 +177,7 @@ static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_
 }
 #endif
 
-bool MidiInput::start(Callback callback, void* userData)
+bool MidiInput::start(Callback callback, void* userData, u32 deviceIndex)
 {
     stop();
 
@@ -93,6 +186,9 @@ bool MidiInput::start(Callback callback, void* userData)
 
     mCallback = callback;
     mUserData = userData;
+    mDeviceIndex = static_cast<s32>(deviceIndex);
+
+    PopulateDeviceList();
 
 #if defined(SEAD_PLATFORM_LINUX)
     snd_seq_t* seq = nullptr;
@@ -109,6 +205,12 @@ bool MidiInput::start(Callback callback, void* userData)
     {
         snd_seq_close(seq);
         return false;
+    }
+
+    if (deviceIndex < sDeviceList.size())
+    {
+        const auto& entry = sDeviceList[deviceIndex];
+        snd_seq_connect_from(seq, port, entry.client, entry.port);
     }
 
     mSeq = seq;
@@ -135,10 +237,9 @@ bool MidiInput::start(Callback callback, void* userData)
     }
     mPort = port;
 
-    ItemCount count = MIDIGetNumberOfSources();
-    for (ItemCount i = 0; i < count; i++)
+    if (deviceIndex < MIDIGetNumberOfSources())
     {
-        MIDIEndpointRef src = MIDIGetSource(i);
+        MIDIEndpointRef src = MIDIGetSource(deviceIndex);
         if (src)
             MIDIPortConnectSource(port, src, nullptr);
     }
@@ -150,28 +251,13 @@ bool MidiInput::start(Callback callback, void* userData)
     mQueueWrite = 0;
 
     HMIDIIN handle = nullptr;
-    MMRESULT res = midiInOpen(&handle, MIDI_MAPPER,
+    MMRESULT res = midiInOpen(&handle, deviceIndex,
         reinterpret_cast<DWORD_PTR>(&MidiInProc),
         reinterpret_cast<DWORD_PTR>(this),
         CALLBACK_FUNCTION);
 
-    // MIDI_MAPPER for input is unreliable on Windows. If it fails,
-    // enumerate available devices and try the first one.
     if (res != MMSYSERR_NOERROR)
-    {
-        UINT numDevs = midiInGetNumDevs();
-        for (UINT i = 0; i < numDevs; i++)
-        {
-            res = midiInOpen(&handle, i,
-                reinterpret_cast<DWORD_PTR>(&MidiInProc),
-                reinterpret_cast<DWORD_PTR>(this),
-                CALLBACK_FUNCTION);
-            if (res == MMSYSERR_NOERROR)
-                break;
-        }
-        if (res != MMSYSERR_NOERROR)
-            return false;
-    }
+        return false;
 
     mInHandle = handle;
 
@@ -225,6 +311,7 @@ void MidiInput::stop()
 #endif
     mCallback = nullptr;
     mUserData = nullptr;
+    mDeviceIndex = -1;
 }
 
 void MidiInput::poll()
@@ -273,6 +360,20 @@ void MidiInput::poll()
     }
     mQueueRead = r;
 #endif
+}
+
+u32 MidiInput::getDeviceCount()
+{
+    PopulateDeviceList();
+    return static_cast<u32>(sDeviceList.size());
+}
+
+const char* MidiInput::getDeviceName(u32 index)
+{
+    PopulateDeviceList();
+    if (index >= sDeviceList.size())
+        return "";
+    return sDeviceList[index].name.c_str();
 }
 
 bool MidiInput::isRunning() const

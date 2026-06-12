@@ -284,6 +284,9 @@ public:
 
 	void EnsureCursorVisible();
 
+	void FindNext();
+	void FindPrevious();
+
 private:
 	typedef std::vector<std::pair<std::regex, PaletteIndex>> RegexList;
 
@@ -364,12 +367,26 @@ private:
 	void HandleKeyboardInputs();
 	void HandleMouseInputs();
 	void Render();
+	void DrawSearchBar();
+	void FindAll();
+	void GoToMatch(int index);
+
+	struct SearchState
+	{
+		std::string query;
+		bool active = false;
+		bool caseSensitive = false;
+		int currentMatch = -1;
+		bool focusRequested = false;
+		std::vector<std::pair<Coordinates, Coordinates>> matches;
+	};
 
 	float mLineSpacing;
 	Lines mLines;
 	EditorState mState;
 	UndoBuffer mUndoBuffer;
 	int mUndoIndex;
+	SearchState mSearch;
 
 	int mTabSize;
 	bool mOverwrite;

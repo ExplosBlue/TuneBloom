@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <string>
 #include <regex>
 #include <cmath>
@@ -695,6 +696,164 @@ ImU32 TextEditor::GetGlyphColor(const Glyph & aGlyph) const
 	return color;
 }
 
+void TextEditor::FindAll()
+{
+	mSearch.matches.clear();
+	mSearch.currentMatch = -1;
+
+	if (mSearch.query.empty())
+		return;
+
+	for (int line = 0; line < (int)mLines.size(); line++)
+	{
+		const auto& textLine = mLines[line];
+		std::string str;
+		str.reserve(textLine.size());
+		for (const auto& glyph : textLine)
+			str += (char)glyph.mChar;
+
+		size_t pos = 0;
+		if (!mSearch.caseSensitive)
+		{
+			std::string lowerStr = str;
+			for (auto& c : lowerStr) c = (char)std::tolower((unsigned char)c);
+			std::string lowerQuery = mSearch.query;
+			for (auto& c : lowerQuery) c = (char)std::tolower((unsigned char)c);
+
+			while ((pos = lowerStr.find(lowerQuery, pos)) != std::string::npos)
+			{
+				mSearch.matches.push_back({
+					Coordinates(line, (int)pos),
+					Coordinates(line, (int)(pos + lowerQuery.length()))
+				});
+				pos += 1;
+			}
+		}
+		else
+		{
+			while ((pos = str.find(mSearch.query, pos)) != std::string::npos)
+			{
+				mSearch.matches.push_back({
+					Coordinates(line, (int)pos),
+					Coordinates(line, (int)(pos + mSearch.query.length()))
+				});
+				pos += 1;
+			}
+		}
+	}
+
+	if (!mSearch.matches.empty())
+	{
+		auto cursor = mState.mCursorPosition;
+		int best = 0;
+		for (int i = 0; i < (int)mSearch.matches.size(); i++)
+		{
+			if (mSearch.matches[i].first >= cursor)
+			{
+				best = i;
+				break;
+			}
+		}
+		GoToMatch(best);
+	}
+}
+
+void TextEditor::GoToMatch(int index)
+{
+	if (index < 0 || index >= (int)mSearch.matches.size())
+		return;
+
+	mSearch.currentMatch = index;
+	mState.mCursorPosition = mSearch.matches[index].first;
+	mState.mSelectionStart = mSearch.matches[index].first;
+	mState.mSelectionEnd = mSearch.matches[index].second;
+	EnsureCursorVisible();
+}
+
+void TextEditor::FindNext()
+{
+	if (mSearch.matches.empty())
+	{
+		FindAll();
+		return;
+	}
+
+	int next = (mSearch.currentMatch + 1) % (int)mSearch.matches.size();
+	GoToMatch(next);
+}
+
+void TextEditor::FindPrevious()
+{
+	if (mSearch.matches.empty())
+	{
+		FindAll();
+		return;
+	}
+
+	int prev = mSearch.currentMatch - 1;
+	if (prev < 0) prev = (int)mSearch.matches.size() - 1;
+	GoToMatch(prev);
+}
+
+void TextEditor::DrawSearchBar()
+{
+	char buf[256];
+	size_t len = mSearch.query.copy(buf, sizeof(buf) - 1);
+	buf[len] = '\0';
+
+	if (mSearch.query.empty() && !mSearch.matches.empty())
+		mSearch.matches.clear();
+
+	if (mSearch.focusRequested)
+	{
+		ImGui::SetKeyboardFocusHere();
+		mSearch.focusRequested = false;
+	}
+
+	ImGui::SetNextItemWidth(220.0f);
+	if (ImGui::InputTextWithHint("##TxtEdSearch", "Search...", buf, sizeof(buf),
+		ImGuiInputTextFlags_EnterReturnsTrue))
+	{
+		mSearch.query = buf;
+		FindAll();
+		FindNext();
+	}
+
+	if (mSearch.query != buf)
+	{
+		mSearch.query = buf;
+		FindAll();
+	}
+
+	ImGui::SameLine();
+	if (ImGui::SmallButton(mSearch.caseSensitive ? "Aa" : "aa"))
+	{
+		mSearch.caseSensitive = !mSearch.caseSensitive;
+		FindAll();
+	}
+
+	ImGui::SameLine();
+	if (!mSearch.matches.empty())
+		ImGui::Text("%d/%d", mSearch.currentMatch + 1, (int)mSearch.matches.size());
+	else if (!mSearch.query.empty())
+		ImGui::Text("No results");
+
+	ImGui::SameLine();
+	if (ImGui::SmallButton("<"))
+		FindPrevious();
+	ImGui::SameLine();
+	if (ImGui::SmallButton(">"))
+		FindNext();
+	ImGui::SameLine();
+	if (ImGui::SmallButton("x"))
+	{
+		mSearch.active = false;
+		mSearch.query.clear();
+		mSearch.matches.clear();
+		mSearch.currentMatch = -1;
+	}
+}
+
 void TextEditor::HandleKeyboardInputs()
 {
 	ImGuiIO& io = ImGui::GetIO();
@@ -925,6 +1084,29 @@ void TextEditor::Render()
 				drawList->AddRectFilled(vstart, vend, mPalette[(int)PaletteIndex::Selection]);
 			}
 
+			// Draw search match highlights
+			if (!mSearch.matches.empty())
+			{
+				for (int mi = 0; mi < (int)mSearch.matches.size(); mi++)
+				{
+					const auto& match = mSearch.matches[mi];
+					if (match.first.mLine != lineNo)
+						continue;
+
+					float matchStart = TextDistanceToLineStart(match.first);
+					float matchEnd = TextDistanceToLineStart(match.second);
+
+					ImVec2 vstart(lineStartScreenPos.x + mTextStart + matchStart, lineStartScreenPos.y);
+					ImVec2 vend(lineStartScreenPos.x + mTextStart + matchEnd, lineStartScreenPos.y + mCharAdvance.y);
+
+					ImU32 color = (mi == mSearch.currentMatch)
+						? IM_COL32(255, 200, 50, 160)
+						: IM_COL32(255, 255, 0, 60);
+
+					drawList->AddRectFilled(vstart, vend, color);
+				}
+			}
+
 			// Draw breakpoints
 			auto start = ImVec2(lineStartScreenPos.x + scrollX, lineStartScreenPos.y);
 
@@ -1139,6 +1321,46 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 	mTextChanged = false;
 	mCursorPositionChanged = false;
 
+	if (mSearch.active)
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 2));
+		DrawSearchBar();
+		ImGui::PopStyleVar();
+	}
+
+	ImGuiIO& io = ImGui::GetIO();
+	auto shift = io.KeyShift;
+	auto ctrl = io.ConfigMacOSXBehaviors ? io.KeySuper : io.KeyCtrl;
+	auto alt = io.ConfigMacOSXBehaviors ? io.KeyCtrl : io.KeyAlt;
+
+	if (mSearch.active)
+	{
+		if (!ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGuiKey_F3))
+			FindNext();
+		else if (!ctrl && shift && !alt && ImGui::IsKeyPressed(ImGuiKey_F3))
+			FindPrevious();
+		else if (!ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			mSearch.active = false;
+			mSearch.query.clear();
+			mSearch.matches.clear();
+			mSearch.currentMatch = -1;
+		}
+	}
+
+	if (!mSearch.active && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGuiKey_F))
+	{
+		mSearch.active = true;
+		mSearch.focusRequested = true;
+		if (mSearch.query.empty())
+		{
+			auto word = GetWordUnderCursor();
+			if (!word.empty())
+				mSearch.query = word;
+		}
+		FindAll();
+	}
+
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Background]));
 	ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 	if (!mIgnoreImGuiChild)
@@ -1149,6 +1371,9 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 		HandleKeyboardInputs();
 		ImGui::PushAllowKeyboardFocus(true);
 	}
+
+	if (mSearch.active && mTextChanged)
+		FindAll();
 
 	if (mHandleMouseInputs)
 		HandleMouseInputs();

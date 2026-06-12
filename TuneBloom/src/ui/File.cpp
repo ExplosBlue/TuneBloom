@@ -17,9 +17,44 @@
 #include <filesystem>
 #include <algorithm>
 
-#include <portable-file-dialogs.h>
-
 #include <bfsar/InnerFile.h>
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+#include <basis/win/seadWindows.h>
+#include <commdlg.h>
+#include <GLFW/glfw3native.h>
+#else
+#include <portable-file-dialogs.h>
+#endif
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+static std::wstring Utf8ToWide(const char* str)
+{
+    if (!str || !*str) return {};
+    int len = MultiByteToWideChar(CP_UTF8, 0, str, -1, nullptr, 0);
+    std::wstring ret(static_cast<size_t>(len) - 1, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, str, -1, &ret[0], len);
+    return ret;
+}
+
+static std::string WideToUtf8(const wchar_t* str)
+{
+    if (!str || !*str) return {};
+    int len = WideCharToMultiByte(CP_UTF8, 0, str, -1, nullptr, 0, nullptr, nullptr);
+    std::string ret(static_cast<size_t>(len) - 1, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, str, -1, &ret[0], len, nullptr, nullptr);
+    return ret;
+}
+
+static HWND GetWindowHandle()
+{
+    sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
+    if (!fw) return nullptr;
+    GLFWwindow* glfwWindow = fw->getWindowHandle();
+    if (!glfwWindow) return nullptr;
+    return glfwGetWin32Window(glfwWindow);
+}
+#endif
 
 static void AddToRecentFiles(const char* path)
 {
@@ -42,6 +77,47 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     LOG_FMT("title=\"%s\" filterCount=%u", title ? title : "nullptr", filterCount);
     SEAD_ASSERT(outPath);
 
+#if defined(SEAD_PLATFORM_WINDOWS)
+    std::wstring filterStr;
+    for (u32 i = 0; i < filterCount; i++)
+    {
+        auto nameW = Utf8ToWide(filters[i].name);
+        filterStr.append(nameW.begin(), nameW.end());
+        filterStr.push_back(L'\0');
+
+        std::string pattern = filters[i].filter;
+        for (char& c : pattern)
+            if (c == ' ') c = ';';
+        auto patternW = Utf8ToWide(pattern.c_str());
+        filterStr.append(patternW.begin(), patternW.end());
+        filterStr.push_back(L'\0');
+    }
+    filterStr += L"All Files (*.*)";
+    filterStr.push_back(L'\0');
+    filterStr += L"*.*";
+    filterStr.push_back(L'\0');
+    filterStr.push_back(L'\0');
+
+    wchar_t path[4096] = {};
+    auto titleW = title ? Utf8ToWide(title) : std::wstring();
+
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = GetWindowHandle();
+    ofn.lpstrFilter = filterStr.c_str();
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = 4096;
+    ofn.lpstrTitle = titleW.empty() ? nullptr : titleW.c_str();
+    ofn.Flags = OFN_NOCHANGEDIR | OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+    if (!GetOpenFileNameW(&ofn))
+        return false;
+
+    LOG_STR(WideToUtf8(path).c_str());
+    outPath->copy(WideToUtf8(path).c_str());
+    return true;
+
+#else
     std::vector<std::string> filtersVec;
 
     if (filterCount > 0)
@@ -67,6 +143,7 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     LOG_STR(result[0].c_str());
     outPath->copy(result[0].c_str());
     return true;
+#endif
 }
 
 bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters, const char* defaultExt, const char* defaultName)
@@ -74,6 +151,56 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     LOG_FMT("title=\"%s\" filterCount=%u defaultExt=\"%s\" defaultName=\"%s\"", title ? title : "nullptr", filterCount, defaultExt ? defaultExt : "nullptr", defaultName ? defaultName : "nullptr");
     SEAD_ASSERT(outPath);
 
+#if defined(SEAD_PLATFORM_WINDOWS)
+    std::wstring filterStr;
+    if (filterCount > 0)
+    {
+        SEAD_ASSERT(filters);
+
+        for (u32 i = 0; i < filterCount; i++)
+        {
+            auto nameW = Utf8ToWide(filters[i].name);
+            filterStr.append(nameW.begin(), nameW.end());
+            filterStr.push_back(L'\0');
+
+            std::string pattern = filters[i].filter;
+            for (char& c : pattern)
+                if (c == ' ') c = ';';
+            auto patternW = Utf8ToWide(pattern.c_str());
+            filterStr.append(patternW.begin(), patternW.end());
+            filterStr.push_back(L'\0');
+        }
+    }
+    filterStr.push_back(L'\0');
+
+    wchar_t path[4096] = {};
+    if (defaultName && *defaultName)
+    {
+        auto defaultNameW = Utf8ToWide(defaultName);
+        wcscpy_s(path, defaultNameW.c_str());
+    }
+
+    auto titleW = title ? Utf8ToWide(title) : std::wstring();
+    auto defaultExtW = defaultExt ? Utf8ToWide(defaultExt) : std::wstring();
+
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = GetWindowHandle();
+    ofn.lpstrFilter = filterStr.c_str();
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = 4096;
+    ofn.lpstrTitle = titleW.empty() ? nullptr : titleW.c_str();
+    ofn.lpstrDefExt = defaultExtW.empty() ? nullptr : defaultExtW.c_str();
+    ofn.Flags = OFN_NOCHANGEDIR | OFN_EXPLORER | OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+
+    if (!GetSaveFileNameW(&ofn))
+        return false;
+
+    LOG_STR(WideToUtf8(path).c_str());
+    outPath->copy(WideToUtf8(path).c_str());
+    return true;
+
+#else
     std::vector<std::string> filtersVec;
 
     if (filterCount > 0)
@@ -96,6 +223,7 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     LOG_STR(result.c_str());
     outPath->copy(result.c_str());
     return true;
+#endif
 }
 
 bool CreateDirectoryRecursively(const std::string& directory)

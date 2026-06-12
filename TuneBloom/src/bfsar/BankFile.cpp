@@ -1795,7 +1795,7 @@ void BankFile::drawFileUI()
             }
             if (ImGui::BeginPopup("MIDI Unsupported"))
             {
-                ImGui::TextUnformatted("MIDI input is not yet supported on this platform.");
+                ImGui::TextUnformatted("Could not connect to a MIDI input device.\nMake sure a MIDI device is connected and working.");
                 ImGui::EndPopup();
             }
             ImGui::SameLine();

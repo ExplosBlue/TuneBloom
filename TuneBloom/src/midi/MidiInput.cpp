@@ -154,8 +154,24 @@ bool MidiInput::start(Callback callback, void* userData)
         reinterpret_cast<DWORD_PTR>(&MidiInProc),
         reinterpret_cast<DWORD_PTR>(this),
         CALLBACK_FUNCTION);
+
+    // MIDI_MAPPER for input is unreliable on Windows. If it fails,
+    // enumerate available devices and try the first one.
     if (res != MMSYSERR_NOERROR)
-        return false;
+    {
+        UINT numDevs = midiInGetNumDevs();
+        for (UINT i = 0; i < numDevs; i++)
+        {
+            res = midiInOpen(&handle, i,
+                reinterpret_cast<DWORD_PTR>(&MidiInProc),
+                reinterpret_cast<DWORD_PTR>(this),
+                CALLBACK_FUNCTION);
+            if (res == MMSYSERR_NOERROR)
+                break;
+        }
+        if (res != MMSYSERR_NOERROR)
+            return false;
+    }
 
     mInHandle = handle;
 

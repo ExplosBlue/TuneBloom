@@ -1,5 +1,7 @@
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <sys/stat.h>
 
 #include <devenv/seadAssertConfig.h>
 #include <filedevice/seadFileDevice.h>
@@ -48,6 +50,27 @@ void AssertException(const char* msg)
 static bool isBfsarBcsar(const void* file)
 {
     return memcmp(file, "FSAR", 4) == 0 || memcmp(file, "CSAR", 4) == 0;
+}
+
+static void ensureDir(const char* path)
+{
+    std::string dir(path);
+    size_t pos = dir.find_last_of('/');
+    if (pos == std::string::npos)
+        return;
+    dir.resize(pos);
+    if (dir.empty() || dir == ".")
+        return;
+    for (size_t i = 1; i < dir.size(); i++)
+    {
+        if (dir[i] == '/')
+        {
+            dir[i] = '\0';
+            mkdir(dir.c_str(), 0755);
+            dir[i] = '/';
+        }
+    }
+    mkdir(dir.c_str(), 0755);
 }
 
 int main(int argc, char* argv[])
@@ -112,6 +135,7 @@ int main(int argc, char* argv[])
         }
 
         sead::FormatFixedSafeString<1024> outPathStr(outPath);
+        ensureDir(outPath);
         if (!sBfsar.saveAs(outPathStr))
         {
             fprintf(stderr, "Failed to save to '%s'\n", outPath);

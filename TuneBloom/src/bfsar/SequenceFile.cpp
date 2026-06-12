@@ -433,8 +433,9 @@ void SequenceFile::drawFileUI()
         cmd1aR("biquad_value", " x",  "Biquad filter amount", "(0-127, default 0)");
 
         section("Effects");
-        cmd1aR("fxsend_a", " x", "Effect send A level", "(0-127, default 0)");
-        cmd1aR("fxsend_b", " x", "Effect send B level", "(0-127, default 0)");
+        cmd1aR("fxsend_a", " x", "Effect send A (Aux bus A) level", "(0-127, default 0)");
+        cmd1aR("fxsend_b", " x", "Effect send B (Aux bus B) level", "(0-127, default 0)");
+        cmd1aR("fxsend_c", " x", "Effect send C (Aux bus C, Wii U) level", "(0-127, default 0)");
         cmd1aR("mainsend", " x", "Dry/main send level", "(0-127, default 127)");
 
         section("Control Flow");
@@ -458,7 +459,33 @@ void SequenceFile::drawFileUI()
         cmd1aR("prio", " x",            "Voicing priority", "(0-127, default 64)");
         cmd1a("mute", " mode",           "Track mute / unmute");
         cmd1a("userproc", " procId",     "Call a user-defined process");
+        cmd1aR("bank_select", " idx",    "Select bank for multi-bank sounds", "(0-3)");
         cmd2("frontbypass_on", "frontbypass_off", "Front bypass toggle");
+        cmd1a("printvar", " varNo",      "Print variable value to debug output");
+
+        section("Variables");
+        cmd1a("setvar", " varNo, x",   "Set variable to x");
+        cmd1a("addvar", " varNo, x",   "Add x to variable");
+        cmd1a("subvar", " varNo, x",   "Subtract x from variable");
+        cmd1a("mulvar", " varNo, x",   "Multiply variable by x");
+        cmd1a("divvar", " varNo, x",   "Divide variable by x");
+        cmd1a("shiftvar", " varNo, x", "Left shift by x bits (right if x < 0)");
+        cmd1a("randvar", " varNo, x",  "Random value 0 to x into variable");
+        cmd1a("modvar", " varNo, x",   "Remainder of variable / x");
+
+        section("Comparisons");
+        cmd1a("cmp_eq", " varNo, x",   "Jump if variable == x");
+        cmd1a("cmp_ne", " varNo, x",   "Jump if variable != x");
+        cmd1a("cmp_lt", " varNo, x",   "Jump if variable < x");
+        cmd1a("cmp_gt", " varNo, x",   "Jump if variable > x");
+        cmd1a("cmp_le", " varNo, x",   "Jump if variable <= x");
+        cmd1a("cmp_ge", " varNo, x",   "Jump if variable >= x");
+
+        section("Suffixes");
+        cmd1("_r",             "Random: randomises arg as 0..n-1, e.g. pan_r 128");
+        cmd1a("_v", " varNo",  "Reads arg from variable, e.g. volume_v 0");
+        cmd1a("_if", " varNo", "Conditional: skip if last cmp result is false");
+        cmd1("time:",          "Prefix to override note length, e.g. 48:cn4 100,100");
 
         section("Labels");
         cmd1a(".", "label_name", "Local label (prefixed with .)");

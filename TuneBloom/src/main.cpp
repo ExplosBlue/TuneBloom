@@ -1,13 +1,30 @@
+#include <cstdio>
+#include <cstring>
+
 #include <devenv/seadAssertConfig.h>
+#include <filedevice/seadFileDevice.h>
+#include <filedevice/seadFileDeviceMgr.h>
 #include <heap/seadExpHeap.h>
 #include <heap/seadHeapMgr.h>
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+#include <filedevice/win/seadWinNativeFileDeviceWin.h>
+#elif defined(SEAD_PLATFORM_POSIX)
+#include <filedevice/posix/seadPosixNativeFileDevicePosix.h>
+#endif
 
 #include "AppFramework.h"
 #include "tasks/RootTask.h"
 
+#include <snd/ut/ut_BinaryFileFormat.h>
+
+#include "ui/PopupMgr.h"
 #include "Utilll.h"
+#include "bfsar/Bfsar.h"
 
 #include <portable-file-dialogs.h>
+
+extern Bfsar sBfsar;
 
 void AssertException(const char* msg)
 {
@@ -28,18 +45,95 @@ void AssertException(const char* msg)
     }
 }
 
-int main()
+static bool isBfsarBcsar(const void* file)
+{
+    return memcmp(file, "FSAR", 4) == 0 || memcmp(file, "CSAR", 4) == 0;
+}
+
+int main(int argc, char* argv[])
 {
     sead::Delegate1 deleg = sead::FunctionDelegateCreator<const char*>(&AssertException);
     sead::AssertConfig::registerFinalCallback(&deleg);
 
-    sead::Framework::InitializeArg initArg;
-    initArg.heap_size = 150 * 1024 * 1024; // 150 MiB
-    AppFramework::initialize(initArg);
+    // CLI mode: convert input to output without UI
+    if (argc >= 3)
+    {
+        sead::Framework::InitializeArg initArg;
+        initArg.heap_size = 150 * 1024 * 1024;
+        AppFramework::initialize(initArg);
 
-    sead::HeapMgr::createUnboundHeap();
-    sead::HeapMgr::instance()->setAllocFromNotSeadThreadHeap(sead::HeapMgr::getUnboundHeap());
-    sead::HeapMgr::getUnboundHeap()->setEnableLock(true);
+        sead::HeapMgr::createUnboundHeap();
+        sead::HeapMgr::instance()->setAllocFromNotSeadThreadHeap(sead::HeapMgr::getUnboundHeap());
+        sead::HeapMgr::getUnboundHeap()->setEnableLock(true);
+
+        sead::CurrentHeapSetter heapSetter(sead::HeapMgr::getUnboundHeap());
+
+        PopupMgr::createInstance(nullptr);
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+        sead::FileDeviceMgr::instance()->mount(new sead::WinNativeFileDevice());
+#elif defined(SEAD_PLATFORM_POSIX)
+        sead::FileDeviceMgr::instance()->mount(new sead::PosixNativeFileDevice());
+#endif
+
+        const char* inPath = argv[1];
+        const char* outPath = argv[2];
+
+        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+        if (!device)
+        {
+            fprintf(stderr, "Failed to find native file device\n");
+            return 1;
+        }
+
+        sead::FileDevice::LoadArg loadArg;
+        sead::FormatFixedSafeString<1024> inPathStr(inPath);
+        loadArg.path = inPathStr;
+        u8* bfsarFile = device->tryLoad(loadArg);
+        if (!bfsarFile)
+        {
+            fprintf(stderr, "Failed to load '%s'\n", inPath);
+            return 1;
+        }
+
+        if (!isBfsarBcsar(bfsarFile))
+        {
+            fprintf(stderr, "'%s' is not a valid BFSAR/BCSAR file\n", inPath);
+            delete bfsarFile;
+            return 1;
+        }
+
+        sFileEndian = nw::ut::GetFileEndian(*reinterpret_cast<const nw::ut::BinaryFileHeader*>(bfsarFile));
+
+        if (!sBfsar.open(bfsarFile, static_cast<u32>(loadArg.read_size), inPathStr, nullptr))
+        {
+            fprintf(stderr, "Failed to parse '%s'\n", inPath);
+            return 1;
+        }
+
+        sead::FormatFixedSafeString<1024> outPathStr(outPath);
+        if (!sBfsar.saveAs(outPathStr))
+        {
+            fprintf(stderr, "Failed to save to '%s'\n", outPath);
+            return 1;
+        }
+
+        fprintf(stdout, "Done: '%s' -> '%s'\n", inPath, outPath);
+        fflush(stdout);
+        _Exit(0);
+        return 0;
+    }
+
+    // Normal GUI mode
+    {
+        sead::Framework::InitializeArg initArg;
+        initArg.heap_size = 150 * 1024 * 1024;
+        AppFramework::initialize(initArg);
+
+        sead::HeapMgr::createUnboundHeap();
+        sead::HeapMgr::instance()->setAllocFromNotSeadThreadHeap(sead::HeapMgr::getUnboundHeap());
+        sead::HeapMgr::getUnboundHeap()->setEnableLock(true);
+    }
 
     AppFramework::CreateArg createArg;
     createArg.wait_vblank = 0;
@@ -70,9 +164,3 @@ int main()
 
     delete framework;
 }
-
-// extern "C"
-// {
-// 	__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
-// 	__declspec(dllexport) DWORD NvOptimusEnablement = 0x00000001;
-// }

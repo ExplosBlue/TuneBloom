@@ -119,7 +119,7 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
     bool success;
     {
         nw::snd::MemorySoundArchive soundArchive;
-        if (!soundArchive.Initialize(bfsarFile))
+            if (!soundArchive.Initialize(bfsarFile))
         {
             return false;
         }

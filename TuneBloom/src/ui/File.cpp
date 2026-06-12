@@ -22,6 +22,7 @@
 #if defined(SEAD_PLATFORM_WINDOWS)
 #include <basis/win/seadWindows.h>
 #include <commdlg.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #else
 #include <portable-file-dialogs.h>

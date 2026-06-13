@@ -59,6 +59,13 @@ static bool isBfsarBcsar(const void* file)
     return memcmp(file, "FSAR", 4) == 0 || memcmp(file, "CSAR", 4) == 0;
 }
 
+#ifdef _WIN32
+#include <direct.h>
+static int mkdir_p(const char* path) { return _mkdir(path); }
+#else
+static int mkdir_p(const char* path) { return mkdir(path, 0755); }
+#endif
+
 static void ensureDir(const char* path)
 {
     std::string dir(path);
@@ -73,11 +80,11 @@ static void ensureDir(const char* path)
         if (dir[i] == '/')
         {
             dir[i] = '\0';
-            mkdir(dir.c_str(), 0755);
+            mkdir_p(dir.c_str());
             dir[i] = '/';
         }
     }
-    mkdir(dir.c_str(), 0755);
+    mkdir_p(dir.c_str());
 }
 
 int main(int argc, char* argv[])

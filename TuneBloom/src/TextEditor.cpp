@@ -768,7 +768,7 @@ void TextEditor::GoToMatch(int index)
 	mState.mCursorPosition = mSearch.matches[index].first;
 	mState.mSelectionStart = mSearch.matches[index].first;
 	mState.mSelectionEnd = mSearch.matches[index].second;
-	EnsureCursorVisible();
+	mScrollToCursor = true;
 }
 
 void TextEditor::FindNext()
@@ -805,15 +805,19 @@ void TextEditor::DrawSearchBar()
 	if (mSearch.query.empty() && !mSearch.matches.empty())
 		mSearch.matches.clear();
 
+	ImGuiInputTextFlags inputFlags = ImGuiInputTextFlags_EnterReturnsTrue;
 	if (mSearch.focusRequested)
 	{
 		ImGui::SetKeyboardFocusHere();
 		mSearch.focusRequested = false;
+		mSearch.selectAll = true;
 	}
+	if (mSearch.selectAll)
+		inputFlags |= ImGuiInputTextFlags_AutoSelectAll;
 
 	ImGui::SetNextItemWidth(220.0f);
 	if (ImGui::InputTextWithHint("##TxtEdSearch", "Search...", buf, sizeof(buf),
-		ImGuiInputTextFlags_EnterReturnsTrue))
+		inputFlags))
 	{
 		mSearch.query = buf;
 		FindAll();
@@ -825,6 +829,9 @@ void TextEditor::DrawSearchBar()
 		mSearch.query = buf;
 		FindAll();
 	}
+
+	if (mSearch.selectAll && ImGui::IsItemActive())
+		mSearch.selectAll = false;
 
 	ImGui::SameLine();
 	if (ImGui::SmallButton(mSearch.caseSensitive ? "Aa" : "aa"))
@@ -1359,6 +1366,10 @@ void TextEditor::Render(const char* aTitle, const ImVec2& aSize, bool aBorder)
 				mSearch.query = word;
 		}
 		FindAll();
+	}
+	else if (mSearch.active && ctrl && !shift && !alt && ImGui::IsKeyPressed(ImGuiKey_F))
+	{
+		mSearch.focusRequested = true;
 	}
 
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Background]));

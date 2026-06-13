@@ -378,6 +378,7 @@ private:
 		bool caseSensitive = false;
 		int currentMatch = -1;
 		bool focusRequested = false;
+		bool selectAll = false;
 		std::vector<std::pair<Coordinates, Coordinates>> matches;
 	};
 

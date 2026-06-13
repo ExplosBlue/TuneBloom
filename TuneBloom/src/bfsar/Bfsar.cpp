@@ -32,6 +32,8 @@
 #include <VectorMap.h>
 #include <VectorSet.h>
 
+#include <cstdio>
+#include <filesystem>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
@@ -390,38 +392,90 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             {
                 sead::FixedSafeString<512> filePath;
 
-                const u32 filterCount = 1;
-                FileFilter filters[filterCount] = {
-                    { "Group File (*.bfgrp)", "*.bfgrp" }
-                };
-
-                if (OpenFileDialog(&filePath, sead::FormatFixedSafeString<512>("Open group file for '%s'", group->getFormattedName().cstr()).cstr(), filterCount, filters))
+                if (mCliMode)
                 {
-                    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-                    SEAD_ASSERT(device);
-
-                    sead::FileDevice::LoadArg arg;
-                    arg.path = filePath;
-
-                    bfgrpFile = device->tryLoad(arg);
-                    if (!bfgrpFile)
+                    sead::FixedSafeString<512> dir;
+                    if (sead::Path::getDirectoryName(&dir, getFilePath()))
                     {
-                        sead::FixedSafeString<512> file;
-                        if (sead::Path::getFileName(&file, filePath))
+                        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+                        SEAD_ASSERT(device);
+
+                        sead::FileDevice::LoadArg arg;
+
+                        filePath.format("%s/extData/%s.bcgrp", dir.cstr(), group->mName.cstr());
+                        arg.path = filePath;
+                        bfgrpFile = device->tryLoad(arg);
+
+                        if (!bfgrpFile)
                         {
-                            sead::FormatFixedSafeString<1024> msg("Couldn't load the file '%s'", file.cstr());
-                            PopupMgr::instance()->pushCurrentItemError(msg);
+                            filePath.format("%s/extData/%s.bfgrp", dir.cstr(), group->mName.cstr());
+                            arg.path = filePath;
+                            bfgrpFile = device->tryLoad(arg);
                         }
-                        else
+
+                        if (!bfgrpFile)
                         {
-                            sead::FormatFixedSafeString<256> msg("Couldn't load file for group '%s'", group->getFormattedName().cstr());
-                            PopupMgr::instance()->pushCurrentItemError(msg);
+                            namespace fs = std::filesystem;
+                            std::string targetName(group->mName.cstr());
+
+                            for (auto& entry : fs::recursive_directory_iterator(dir.cstr(), fs::directory_options::skip_permission_denied))
+                            {
+                                if (!entry.is_regular_file())
+                                    continue;
+                                auto p = entry.path();
+                                if (p.stem() == targetName && (p.extension() == ".bcgrp" || p.extension() == ".bfgrp"))
+                                {
+                                    filePath.copy(p.c_str());
+                                    arg.path = filePath;
+                                    bfgrpFile = device->tryLoad(arg);
+                                    if (bfgrpFile)
+                                    {
+                                        fprintf(stdout, "Found external group: %s\n", p.c_str());
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
+
+                    if (!bfgrpFile)
+                        fprintf(stderr, "Failed to find external group file for '%s'\n", group->mName.cstr());
                 }
                 else
                 {
-                    PopupMgr::instance()->pushCurrentItemError("External group file wasn't loaded");
+                    const u32 filterCount = 1;
+                    FileFilter filters[filterCount] = {
+                        { "Group File (*.bfgrp)", "*.bfgrp" }
+                    };
+
+                    if (OpenFileDialog(&filePath, sead::FormatFixedSafeString<512>("Open group file for '%s'", group->getFormattedName().cstr()).cstr(), filterCount, filters))
+                    {
+                        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+                        SEAD_ASSERT(device);
+
+                        sead::FileDevice::LoadArg arg;
+                        arg.path = filePath;
+
+                        bfgrpFile = device->tryLoad(arg);
+                        if (!bfgrpFile)
+                        {
+                            sead::FixedSafeString<512> file;
+                            if (sead::Path::getFileName(&file, filePath))
+                            {
+                                sead::FormatFixedSafeString<1024> msg("Couldn't load the file '%s'", file.cstr());
+                                PopupMgr::instance()->pushCurrentItemError(msg);
+                            }
+                            else
+                            {
+                                sead::FormatFixedSafeString<256> msg("Couldn't load file for group '%s'", group->getFormattedName().cstr());
+                                PopupMgr::instance()->pushCurrentItemError(msg);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("External group file wasn't loaded");
+                    }
                 }
             }
 

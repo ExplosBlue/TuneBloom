@@ -50,6 +50,8 @@ public:
         mFormat = format;
     }
 
+    void setCliMode(bool cliMode) { mCliMode = cliMode; }
+
     void create(ArchiveFormat format = ArchiveFormat::BFSAR);
     bool open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath, sead::Heap* heap);
     bool save();
@@ -476,4 +478,5 @@ private:
     Item::List mGenWaveArchiveList; // ..........so we can display warnings on open
 
     std::vector<u8*> mExternalGroupBuffers; // Owned buffers loaded from extData/ or dialog
+    bool mCliMode = false;
 };

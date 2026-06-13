@@ -27,9 +27,16 @@
 #include <portable-file-dialogs.h>
 
 extern Bfsar sBfsar;
+static bool sCliMode = false;
 
 void AssertException(const char* msg)
 {
+    if (sCliMode)
+    {
+        fprintf(stderr, "ASSERTION ERROR: %s\n", msg);
+        return;
+    }
+
     auto msgBox = [msg]()
     {
         sead::FormatFixedSafeString<2048> info("%s\nAn unexpected error has ocurred, please report this issue on 'https://github.com/stupidestmodder/TuneBloom/issues' or ask here 'https://go.nsmbu.net/discord'", msg);
@@ -81,6 +88,9 @@ int main(int argc, char* argv[])
     // CLI mode: convert input to output without UI
     if (argc >= 3)
     {
+        sCliMode = true;
+        sBfsar.setCliMode(true);
+
         sead::Framework::InitializeArg initArg;
         initArg.heap_size = 150 * 1024 * 1024;
         AppFramework::initialize(initArg);

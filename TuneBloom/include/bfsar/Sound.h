@@ -190,7 +190,7 @@ public:
                 return 0;
 
             const SequenceFile* seqFile = static_cast<const SequenceFile*>(item);
-            return seqFile->getLabelOffset(mStartLabel, false);
+            return seqFile->getLabelOffset(mStartLabel, true);
         }
 
         // void setStartOffset(u32 startOffset)
@@ -699,6 +699,7 @@ public:
             , mPitch(1.0f)
             , mEnableSend(true)
             , mMainSend(127)
+            , mFxSendCount(0)
             , mEnableEnvelope(true)
             , mAdshrCurve(127, 127, 127, 127, 127)
             , mEnableFilter(true)
@@ -873,6 +874,16 @@ public:
             mFxSend[idx] = fxSend;
         }
 
+        u8 getFxSendCount() const
+        {
+            return mFxSendCount;
+        }
+
+        void setFxSendCount(u8 count)
+        {
+            mFxSendCount = count;
+        }
+
         bool isEnableEnvelope() const
         {
             return mEnableEnvelope;
@@ -971,6 +982,7 @@ public:
         bool mEnableSend;
         u8 mMainSend;
         u8 mFxSend[3];
+        u8 mFxSendCount;
         bool mEnableEnvelope;
         snd::AdshrCurve mAdshrCurve;
         bool mEnableFilter;

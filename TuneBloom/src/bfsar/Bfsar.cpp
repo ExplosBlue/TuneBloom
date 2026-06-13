@@ -2264,6 +2264,14 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                     if (sound->mWaveSoundInfo.mEnableSend)
                     {
                         innerWaveSoundInfo.GetSendValue(&sound->mWaveSoundInfo.mMainSend, sound->mWaveSoundInfo.mFxSend, nw::snd::AUX_BUS_NUM);
+
+                        u32 sendOffset;
+                        if (innerWaveSoundInfo.optionParameter.GetValue(&sendOffset, nw::snd::internal::WAVE_SOUND_INFO_SEND))
+                        {
+                            const nw::snd::internal::SendValueWsd& sendValue = *reinterpret_cast<const nw::snd::internal::SendValueWsd*>(
+                                sead::PtrUtil::addOffset(&innerWaveSoundInfo, sendOffset));
+                            sound->mWaveSoundInfo.mFxSendCount = sendValue.fxSend.count;
+                        }
                     }
 
                     sound->mWaveSoundInfo.mEnableEnvelope = innerWaveSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::WAVE_SOUND_INFO_ENVELOPE) != 0;
@@ -2512,12 +2520,22 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                             break;
                     }
 
+                    itemInfo->mOriginalItemId = itemInfoEx.itemId;
+
                     itemInfo->mItemRef.attach(getItem(itemInfoEx.itemId, getItemList(itemInfo->mItemRefType)));
                     if (!itemInfo->mItemRef.isAttached())
                     {
                         sead::FormatFixedSafeString<1024> msg("Item %u is invalid", itemIdx);
                         PopupMgr::instance()->pushCurrentItemError(msg);
+                        //fprintf(stderr, "[DEBUG]   -> attach FAILED for item %u\n", itemIdx);
                     }
+                    //else
+                    //{
+                    //    fprintf(stderr, "[DEBUG]   -> attached to item %p (id=%d, itemType=%d)\n",
+                    //        (void*)itemInfo->mItemRef.getItem(),
+                    //        itemInfo->mItemRef.getItem() ? itemInfo->mItemRef.getItem()->getId() : -1,
+                    //        itemInfo->mItemRef.getItem() ? (int)itemInfo->mItemRef.getItem()->getItemType() : -1);
+                    //}
 
                     itemInfo->setLoadItems(itemInfoEx.loadFlag);
                 }
@@ -2981,6 +2999,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                                 Item* item = itemIt->second;
                                 itemInfo->mItemRefType = item->getItemType();
                                 itemInfo->mItemRef.attach(item);
+                                itemInfo->mOriginalItemId = item->getIdWithType();
                                 itemInfo->setLoadItems(Group::ItemInfo::LoadFlag::LoadAll);
                             }
 

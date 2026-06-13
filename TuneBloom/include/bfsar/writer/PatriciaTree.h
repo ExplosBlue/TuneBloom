@@ -253,13 +253,8 @@ private:
         return CompareBit(str1, str2, start, -1);
     }
 
-    u16 CompareBit(const std::string& str1, const std::string& str2, u16 start, u16 end)
+    u16 CompareBit(const std::string& str1, const std::string& str2, u16 start, s16 end)
     {
-        if (start < 0)
-        {
-            SEAD_ASSERT(false);
-        }
-
         u16 num = end;
 
         if (end < 0)

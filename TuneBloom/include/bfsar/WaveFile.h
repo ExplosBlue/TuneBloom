@@ -341,9 +341,12 @@ public:
     bool readWavFile(const RiffWaveInfo& info, Encoding encoding);
     bool writeWavFile(const sead::SafeString& path, s32 channelIdx = -1);
 
-    static bool isOriginalLoopAvailable(u32 version)
+    static bool isOriginalLoopAvailable(ArchiveFormat format, u32 version)
     {
-        return version >= 0x00010200;
+        if (format == ArchiveFormat::BCSAR)
+            return version >= makeVersion(2, 1, 1);
+        else
+            return version >= makeVersion(0, 1, 2);
     }
 
     sead::Endian::Types getDataEndian() const

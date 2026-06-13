@@ -231,6 +231,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     //? InfoEx Block
     {
         u32 itemInfoCount = mGroup->getItemInfoList().size();
+        //fprintf(stderr, "[DEBUG] INFX block writing %u items\n", itemInfoCount);
         LOG_FMT("Writing INFX block with %u itemInfo entries", itemInfoCount);
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_InfoExBlock, "INFX");
         // if (sBfsar.getVersion() > cIncludeDisabledItemsVersion)
@@ -286,54 +287,24 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                 itemId = nw::snd::internal::Util::GetMaskedItemId(itemInfo.getItemRef().getItemId(), itemType);
             }
 
+            //fprintf(stderr, "[DEBUG] INFX item: disabled=%d attached=%d refType=%d itemType=%d itemId=0x%08x loadFlag=0x%08x\n",
+            //    itemInfo.getIsDisabled(), itemInfo.getItemRef().isAttached(),
+            //    (int)itemInfo.getItemRefType(),
+            //    itemInfo.getItemRef().isAttached() ? (int)itemInfo.getItemRef().getItem()->getItemType() : -1,
+            //    itemId, itemInfo.getLoadFlag());
+
             stream->writeU32(itemId);
             stream->writeU32(itemInfo.getLoadFlag());
         };
 
-        if (sBfsar.getVersion() < cSortItemsAlgo2Version)
+        // The items are read from INFX in project-assigned ItemID) order, so the list order already matches
+        // the original sort. Preserve it by not re-sorting here for 1:1 output.
+        for (const Item* item : mGroup->getItemInfoList())
         {
-            // TODO: Figure out Algo1 sorting
-            for (const Item* item : mGroup->getItemInfoList())
-            {
-                SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
-                const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
+            SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
+            const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
 
-                writeGroupItem(*itemInfo);
-            }
-        }
-        else
-        {
-            std::vector<const Group::ItemInfo*> itemInfos;
-
-            for (const Item* item : mGroup->getItemInfoList())
-            {
-                SEAD_ASSERT(item->getItemType() == Item::ItemType::GroupItemInfo);
-                const Group::ItemInfo* itemInfo = static_cast<const Group::ItemInfo*>(item);
-
-                // if (itemInfo->getIsDisabled())
-                // {
-                //     continue;
-                // }
-
-                itemInfos.push_back(itemInfo);
-            }
-
-            std::sort(itemInfos.begin(), itemInfos.end(), [](const Group::ItemInfo* a, const Group::ItemInfo* b) -> bool
-                {
-                    SEAD_ASSERT(a->getItemRef().isAttached());
-                    SEAD_ASSERT(b->getItemRef().isAttached());
-
-                    const Item* aItem = a->getItemRef().getItem();
-                    const Item* bItem = b->getItemRef().getItem();
-
-                    return aItem->getIdWithType() < bItem->getIdWithType();
-                }
-            );
-
-            for (const Group::ItemInfo* itemInfo : itemInfos)
-            {
-                writeGroupItem(*itemInfo);
-            }
+            writeGroupItem(*itemInfo);
         }
 
         writer.closeReferenceTable("ItemInfoExTable");

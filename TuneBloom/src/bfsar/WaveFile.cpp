@@ -653,7 +653,10 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         stream->writeU32(mSampleRate);
         stream->writeU32(getLoopStartFrame(false));
         stream->writeU32(getLoopEndFrame(false));
-        stream->writeU32(isOriginalLoopAvailable(mVersion) ? getOriginalLoopStartFrame() : 0);
+        u32 ols = 0;
+        if (isOriginalLoopAvailable(mFormat, mVersion))
+            ols = getOriginalLoopStartFrame();
+        stream->writeU32(ols);
 
         writer.pushOffsetBase();
         {

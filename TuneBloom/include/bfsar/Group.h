@@ -75,6 +75,7 @@ public:
             , mItemRef(owner)
             //, mLoadFlag(LoadFlag::LoadAll)
             , mLoadItem(0) // All
+            , mOriginalItemId(0)
         {
             mItemType = ItemType::GroupItemInfo;
         }
@@ -138,6 +139,8 @@ public:
         }
 
         u32 getLoadFlag() const;
+
+        u32 getOriginalItemId() const { return mOriginalItemId; }
         const char** getLoadItems(u32* outCount) const;
 
         static const char** GetLoadItems(const Item* item, ItemType itemType, u32* outCount);
@@ -167,6 +170,7 @@ public:
         ItemReference mItemRef;
         //u32 mLoadFlag;
         u32 mLoadItem;
+        u32 mOriginalItemId;
 
         friend class Bfsar;
     };

@@ -219,7 +219,9 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
                             stream->writeU8(waveSoundInfo.getMainSend());
 
-                            u8 fxSendCount = nw::snd::AUX_BUS_NUM;
+                            u8 fxSendCount = getAuxBusCount(mFormat);
+                            if (u8 stored = waveSoundInfo.getFxSendCount())
+                                fxSendCount = stored;
                             stream->writeU8(fxSendCount);
 
                             for (u32 i = 0; i < fxSendCount; i++)
@@ -227,7 +229,9 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                                 stream->writeU8(waveSoundInfo.getFxSend(i));
                             }
 
-                            writer.align(4);
+                            u8 padBytes = 4 - (2 + fxSendCount) % 4;
+                            for (u32 i = 0; i < padBytes; i++)
+                                stream->writeU8(0);
                         }
 
                         if (waveSoundInfo.isEnableEnvelope())

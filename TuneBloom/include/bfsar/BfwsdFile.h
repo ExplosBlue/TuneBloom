@@ -49,6 +49,11 @@ public:
         return version >= makeVersion(1, 0, 1);
     }
 
+    static u32 getAuxBusCount(ArchiveFormat format)
+    {
+        return format == ArchiveFormat::BCSAR ? 2 : 3;
+    }
+
 private:
     bool doRead(const void* fileAddr) override
     {

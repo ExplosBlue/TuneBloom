@@ -43,22 +43,18 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     SEAD_ASSERT(outPath);
 
     std::vector<std::string> filtersVec;
-
     for (u32 i = 0; i < filterCount; i++)
     {
         SEAD_ASSERT(filters);
         filtersVec.push_back(filters[i].name);
         filtersVec.push_back(filters[i].filter);
     }
-
     filtersVec.push_back("All Files (*.*)");
     filtersVec.push_back("*.*");
 
     std::vector<std::string> result = pfd::open_file(title ? title : "", "", filtersVec, pfd::opt::none).result();
     if (result.empty())
-    {
         return false;
-    }
 
     LOG_STR(result[0].c_str());
     outPath->copy(result[0].c_str());
@@ -71,22 +67,24 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     SEAD_ASSERT(outPath);
 
     std::vector<std::string> filtersVec;
-
     for (u32 i = 0; i < filterCount; i++)
     {
         SEAD_ASSERT(filters);
         filtersVec.push_back(filters[i].name);
         filtersVec.push_back(filters[i].filter);
     }
-
     filtersVec.push_back("All Files (*.*)");
     filtersVec.push_back("*.*");
 
-    std::string result = pfd::save_file(title ? title : "", defaultName ? defaultName : "", filtersVec, pfd::opt::none).result();
+    // Normalize path separators to platform-native (critical on Windows where
+    // GetSaveFileNameW rejects forward slashes with FNERR_INVALIDFILENAME)
+    std::string defaultPath;
+    if (defaultName && *defaultName)
+        defaultPath = std::filesystem::path(defaultName).make_preferred().string();
+
+    std::string result = pfd::save_file(title ? title : "", defaultPath, filtersVec, pfd::opt::force_overwrite).result();
     if (result.empty())
-    {
         return false;
-    }
 
     // If the user typed a filename without an extension, append the default extension
     if (defaultExt && *defaultExt)

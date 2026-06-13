@@ -425,12 +425,12 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                                 auto p = entry.path();
                                 if (p.stem() == targetName && (p.extension() == ".bcgrp" || p.extension() == ".bfgrp"))
                                 {
-                                    filePath.copy(p.c_str());
+                                    filePath.copy(p.string().c_str());
                                     arg.path = filePath;
                                     bfgrpFile = device->tryLoad(arg);
                                     if (bfgrpFile)
                                     {
-                                        fprintf(stdout, "Found external group: %s\n", p.c_str());
+                                        fprintf(stdout, "Found external group: %s\n", p.string().c_str());
                                         break;
                                     }
                                 }

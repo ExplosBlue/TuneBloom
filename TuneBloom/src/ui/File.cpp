@@ -79,6 +79,9 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
         filtersVec.push_back(filters[i].filter);
     }
 
+    filtersVec.push_back("All Files (*.*)");
+    filtersVec.push_back("*.*");
+
     std::string result = pfd::save_file(title ? title : "", defaultName ? defaultName : "", filtersVec, pfd::opt::none).result();
     if (result.empty())
     {

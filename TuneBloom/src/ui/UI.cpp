@@ -33,6 +33,7 @@
 #include <vector>
 #include <algorithm>
 #include <unordered_set>
+#include <filesystem>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -1024,9 +1025,8 @@ static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Soun
     for (s32 i = 0; i < upperName.calcLength(); i++)
         upperName.getBuffer()[i] = ::toupper((unsigned char)upperName.getBuffer()[i]);
 
-    char cwdBuf[4096];
-    const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
-    outPath->format("%s/%s.%s", cwd ? cwd : ".", upperName.cstr(), ext);
+    std::string cwd = std::filesystem::current_path().string();
+    outPath->format("%s/%s.%s", cwd.c_str(), upperName.cstr(), ext);
 }
 
 static void DecodeWaveFileChannels(const WaveFile* wave, std::vector<std::vector<s16>>& outChannels)
@@ -1452,9 +1452,8 @@ static void DrawFileExportDialogs()
         sead::FixedSafeString<512> defaultPath;
         {
             const char* rawName = seq->getNameOrNull().cstr();
-            char cwdBuf[4096];
-            const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
-            defaultPath.format("%s/%s.%s", cwd ? cwd : ".", rawName, ext);
+            std::string cwd = std::filesystem::current_path().string();
+            defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
         }
 
         if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
@@ -1495,9 +1494,8 @@ static void DrawFileExportDialogs()
         sead::FixedSafeString<512> defaultPath;
         {
             const char* rawName = wave->getNameOrNull().cstr();
-            char cwdBuf[4096];
-            const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
-            defaultPath.format("%s/%s.%s", cwd ? cwd : ".", rawName, ext);
+            std::string cwd = std::filesystem::current_path().string();
+            defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
         }
 
         if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
@@ -1536,9 +1534,8 @@ static void DrawFileExportDialogs()
         sead::FixedSafeString<512> defaultPath;
         {
             const char* rawName = bank->getNameOrNull().cstr();
-            char cwdBuf[4096];
-            const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
-            defaultPath.format("%s/%s.%s", cwd ? cwd : ".", rawName, ext);
+            std::string cwd = std::filesystem::current_path().string();
+            defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
         }
 
         if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
@@ -4251,9 +4248,8 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
             sead::FixedSafeString<512> defaultPath;
             {
                 const char* rawName = wave->getNameOrNull().cstr();
-                char cwdBuf[4096];
-                const char* cwd = getcwd(cwdBuf, sizeof(cwdBuf));
-                defaultPath.format("%s/%s.wav", cwd ? cwd : ".", rawName);
+                std::string cwd = std::filesystem::current_path().string();
+                defaultPath.format("%s/%s.wav", cwd.c_str(), rawName);
             }
 
             sead::FixedSafeString<512> path;

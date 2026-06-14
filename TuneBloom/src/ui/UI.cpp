@@ -92,6 +92,13 @@ static bool sExportCancelled = false;
 static bool sExportProcessingStarted = false;
 static sead::FixedSafeString<512> sExportDirPath;
 
+static void NormalizePathSlashes(sead::BufferedSafeString* path)
+{
+    for (s32 i = 0; i < path->calcLength(); i++)
+        if (path->getBuffer()[i] == '\\')
+            path->getBuffer()[i] = '/';
+}
+
 static int sStrmMultiChannel = 1;
 static bool sStrmLoop = true;
 static int sStrmLoopCount = 2;
@@ -1375,6 +1382,7 @@ void DrawExportDialog()
                     if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
                     {
                         sExportDirPath = dirPath;
+                        NormalizePathSlashes(&sExportDirPath);
                         sExportProgressCurrent = 0;
                         sExportProgressTotal = count;
                         sExportCancelled = false;
@@ -1466,6 +1474,7 @@ void DrawExportDialog()
                     if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
                     {
                         sExportDirPath = dirPath;
+                        NormalizePathSlashes(&sExportDirPath);
                         sExportProgressCurrent = 0;
                         sExportProgressTotal = count;
                         sExportCancelled = false;
@@ -1513,6 +1522,7 @@ void DrawExportDialog()
             if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
             {
                 sExportDirPath = dirPath;
+                NormalizePathSlashes(&sExportDirPath);
                 sExportProgressCurrent = 0;
                 sExportProgressTotal = count;
                 sExportCancelled = false;
@@ -1612,6 +1622,7 @@ void DrawExportDialog()
                 if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
                 {
                     sExportDirPath = dirPath;
+                    NormalizePathSlashes(&sExportDirPath);
                     sExportProgressCurrent = 0;
                     sExportProgressTotal = count;
                     sExportCancelled = false;

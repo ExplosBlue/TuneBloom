@@ -678,33 +678,56 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 add = true;
             }
 
-            if (isSingleSelected)
+            if (selected)
             {
                 if (ImGui::BeginDragDropSource())
                 {
                     ImGui::SetDragDropPayload("ITEM", &item, sizeof(item));
 
-                    ImGui::Text("Moving '%s'", name.cstr());
+                    if (isMultiSelected)
+                    {
+                        sead::FormatFixedSafeString<64> dragLabel("Moving %zu items", sMultiSelectedItems.size());
+                        ImGui::Text("%s", dragLabel.cstr());
+                    }
+                    else
+                    {
+                        ImGui::Text("Moving '%s'", name.cstr());
+                    }
 
                     ImGui::EndDragDropSource();
                 }
             }
 
-            if (ImGui::BeginDragDropTarget())
             {
-                const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ITEM");
-                if (payload)
-                {
-                    Item* data = *((Item**)payload->Data);
-                    SEAD_ASSERT(data);
-                    SEAD_ASSERT(data != item);
+                ImGui::PushStyleColor(ImGuiCol_DragDropTarget, IM_COL32(0, 0, 0, 0));
 
-                    reorder = true;
-                    item1 = data;
-                    item2 = item;
+                if (ImGui::BeginDragDropTarget())
+                {
+                    ImVec2 itemTL = ImGui::GetItemRectMin();
+                    ImVec2 itemBR = ImGui::GetItemRectMax();
+                    float offset = ImGui::GetStyle().ItemSpacing.y * 0.5f;
+
+                    ImGui::GetWindowDrawList()->AddRectFilled(
+                        ImVec2(itemTL.x, itemBR.y + offset),
+                        ImVec2(itemBR.x, itemBR.y + offset + 3.0f),
+                        IM_COL32(255, 200, 0, 220));
+
+                    const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ITEM");
+                    if (payload)
+                    {
+                        Item* data = *((Item**)payload->Data);
+                        SEAD_ASSERT(data);
+                        SEAD_ASSERT(data != item);
+
+                        reorder = true;
+                        item1 = data;
+                        item2 = item;
+                    }
+
+                    ImGui::EndDragDropTarget();
                 }
 
-                ImGui::EndDragDropTarget();
+                ImGui::PopStyleColor();
             }
         }
     }
@@ -917,15 +940,35 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         if (reorder)
         {
-            item1->erase();
+            bool isMultiReorder = std::find(
+                sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item1
+            ) != sMultiSelectedItems.end();
 
-            if (item1->getId() < item2->getId())
+            if (isMultiReorder &&
+                std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item2)
+                    == sMultiSelectedItems.end())
+            {
+                std::vector<Item*> itemsToMove(sMultiSelectedItems.begin(), sMultiSelectedItems.end());
+                std::sort(itemsToMove.begin(), itemsToMove.end(),
+                    [](Item* a, Item* b) { return a->getId() < b->getId(); });
+
+                for (Item* mi : itemsToMove)
+                    mi->erase();
+
+                for (auto it = itemsToMove.rbegin(); it != itemsToMove.rend(); ++it)
+                    item2->insertBack(*it);
+
+                sBfsar.updateList(list);
+                SetUnsavedChanges(true);
+            }
+            else if (!isMultiReorder)
+            {
+                item1->erase();
                 item2->insertBack(item1);
-            else
-                item2->insertFront(item1);
 
-            sBfsar.updateList(list);
-            SetUnsavedChanges(true);
+                sBfsar.updateList(list);
+                SetUnsavedChanges(true);
+            }
         }
 
         if (sDuplicateItem)

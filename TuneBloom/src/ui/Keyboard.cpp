@@ -122,15 +122,7 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
                 newBase = 48;
         }
 
-        ImGui::PushID("PianoKeyboardControls");
-        if (ImGui::SmallButton("-"))
-            newBase -= 12;
-        ImGui::SameLine();
         ImGui::Text("Octave %d (%s%d)", sOctaveBase / 12 - 1, "C", sOctaveBase / 12 - 1);
-        ImGui::SameLine();
-        if (ImGui::SmallButton("+"))
-            newBase += 12;
-        ImGui::PopID();
 
         s32 clamped = sead::MathCalcCommon<s32>::clamp2(0, newBase, 108);
         if (clamped != sOctaveBase)

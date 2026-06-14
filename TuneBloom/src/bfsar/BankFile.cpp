@@ -952,6 +952,7 @@ void DrawKeyboardWithRegions(
 )
 {
     ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+    ImVec2 visibleCanvasPos = canvasPos;
     ImVec2 canvasSize(width, regionHeight + keyboardHeight);
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -975,8 +976,60 @@ void DrawKeyboardWithRegions(
         if (NoteIsDark[i % 12] == 0)
             countWhite++;
     }
-    
-    f32 noteWidth = width / (f32)countWhite;
+
+    // Zoom/scroll state
+    static f32 sZoom = 1.0f;
+    static f32 sScrollX = 0.0f;
+
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        if (ImGui::IsWindowHovered())
+        {
+            if (io.KeyCtrl && io.MouseWheel != 0.0f)
+            {
+                f32 oldZoom = sZoom;
+                sZoom *= 1.0f + io.MouseWheel * 0.1f;
+                sZoom = sead::MathCalcCommon<f32>::clamp2(0.5f, sZoom, 3.0f);
+                f32 mouseX = sead::MathCalcCommon<f32>::clamp2(0.0f, io.MousePos.x - visibleCanvasPos.x, width);
+                sScrollX = (sScrollX + mouseX) * (sZoom / oldZoom) - mouseX;
+            }
+
+            if (io.KeyShift && io.MouseWheel != 0.0f)
+                sScrollX += io.MouseWheel * 30.0f;
+
+            if (io.MouseWheelH != 0.0f)
+                sScrollX -= io.MouseWheelH * 30.0f;
+
+            if (io.KeyCtrl)
+            {
+                if (ImGui::IsKeyPressed(ImGuiKey_Equal))
+                {
+                    f32 oldZoom = sZoom;
+                    sZoom *= 1.25f;
+                    sZoom = sead::MathCalcCommon<f32>::clamp2(0.5f, sZoom, 3.0f);
+                    f32 viewCenter = sScrollX + width * 0.5f;
+                    sScrollX = viewCenter * (sZoom / oldZoom) - width * 0.5f;
+                }
+                if (ImGui::IsKeyPressed(ImGuiKey_Minus))
+                {
+                    f32 oldZoom = sZoom;
+                    sZoom /= 1.25f;
+                    sZoom = sead::MathCalcCommon<f32>::clamp2(0.5f, sZoom, 3.0f);
+                    f32 viewCenter = sScrollX + width * 0.5f;
+                    sScrollX = viewCenter * (sZoom / oldZoom) - width * 0.5f;
+                }
+            }
+        }
+    }
+
+    f32 zoomedWidth = std::max(1.0f, sZoom * width);
+    f32 maxScroll = std::max(0.0f, zoomedWidth - width);
+    sScrollX = sead::MathCalcCommon<f32>::clamp2(0.0f, sScrollX, maxScroll);
+
+    canvasPos.x -= sScrollX;
+    canvasSize.x = zoomedWidth;
+
+    f32 noteWidth = zoomedWidth / (f32)countWhite;
     f32 noteWidth2 = noteWidth * 0.6f;
 
     auto GetWhiteIndex = [&](s32 key) -> s32
@@ -1028,6 +1081,8 @@ void DrawKeyboardWithRegions(
     ImVec2 mouse = ImGui::GetIO().MousePos;
     bool mouseDown = ImGui::IsMouseDown(ImGuiMouseButton_Left);
     bool mouseClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+
+    draw->PushClipRect(visibleCanvasPos, ImVec2(visibleCanvasPos.x + width, visibleCanvasPos.y + regionHeight + keyboardHeight), true);
 
     // BG
     draw->AddRectFilled(
@@ -1310,6 +1365,7 @@ void DrawKeyboardWithRegions(
                         sDrag.prev = prev;
                         sDrag.next = next;
                         sDrag.initialCanvasPos = canvasPos;
+                        sDrag.initialCanvasPos.x += sScrollX;
                     }
                 }
                 else if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -1456,24 +1512,6 @@ void DrawKeyboardWithRegions(
         {
             BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
             BankFile::KeyRegion* keyRegion = sContextKeyRegion;
-            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
-            {
-                BankFile::KeyRegion* prev = keyRegion->getPrev(*instrument);
-                if (prev && !prev->getVelocityRegionList().isEmpty())
-                {
-                    SelectVelocity(prev, static_cast<BankFile::VelocityRegion*>(prev->getVelocityRegionList().back()->val()));
-                }
-            }
-
-            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
-            {
-                BankFile::KeyRegion* next = keyRegion->getNext(*instrument);
-                if (next && !next->getVelocityRegionList().isEmpty())
-                {
-                    SelectVelocity(next, static_cast<BankFile::VelocityRegion*>(next->getVelocityRegionList().back()->val()));
-                }
-            }
-
             if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
             {
                 BankFile::VelocityRegion* prev = velRegion->getPrev(*keyRegion);
@@ -1679,7 +1717,7 @@ void DrawKeyboardWithRegions(
 
     ImGui_PianoKeyboard(
         "Keyboard",
-        ImVec2(width, keyboardHeight),
+        ImVec2(zoomedWidth, keyboardHeight),
         &sPrevNote,
         beginNote,
         endNote,
@@ -1688,6 +1726,13 @@ void DrawKeyboardWithRegions(
         nullptr,
         originalKey
     );
+
+    draw->PopClipRect();
+
+    {
+        ImVec2 afterKB = ImGui::GetCursorScreenPos();
+        ImGui::SetCursorScreenPos(ImVec2(visibleCanvasPos.x, afterKB.y));
+    }
 
     s32 key[2] = { -1, -1 };
     s32 vel[2] = { -1, -1 };
@@ -1778,7 +1823,7 @@ void BankFile::drawFileUI()
     ImGui::EndChild();
 
     f32 startY = ImGui::GetCursorScreenPos().y;
-    if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
+    if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_NoScrollWithMouse))
     {
         {
             static s32 sMidiDeviceIndex = 0;
@@ -1852,8 +1897,12 @@ void BankFile::drawFileUI()
                 ImGui::TextUnformatted("  Black: 2  3     5  6  7");
                 ImGui::Separator();
                 ImGui::TextUnformatted("Controls:");
-                ImGui::TextUnformatted("  Left/Right arrows or +/- buttons: shift octave");
+                ImGui::TextUnformatted("  Left/Right arrows: shift octave");
                 ImGui::TextUnformatted("  Backspace: reset to C3");
+                ImGui::Separator();
+                ImGui::TextUnformatted("Zoom/Scroll:");
+                ImGui::TextUnformatted("  Ctrl+Scroll or Ctrl++/-: zoom in/out");
+                ImGui::TextUnformatted("  Shift+Scroll or horizontal scroll: pan");
                 ImGui::EndPopup();
             }
         }

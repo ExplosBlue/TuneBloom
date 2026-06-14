@@ -3,11 +3,14 @@
 #include <bfsar/Sound.h>
 
 #include <cctype>
+#include <algorithm>
 
 
 
 static Item* sDeleteItem = nullptr;
+static std::vector<Item*> sDeleteItems;
 static Item* sDuplicateItem = nullptr;
+static std::vector<Item*> sDuplicateItems;
 
 bool Item::validateName(sead::BufferedSafeString& error) const
 {
@@ -175,6 +178,9 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
             }
         }
 
+        bool multiActive = !sMultiSelectedItems.empty() && item &&
+            std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item) != sMultiSelectedItems.end();
+
         {
             bool disableAdd = createCallback == nullptr;
             if (disableAdd)
@@ -185,6 +191,7 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
             if (ImGui::MenuItem("Add"))
             {
                 sInsertAfterItem = nullptr;
+                sMultiSelectedItems.clear();
                 add = true;
             }
 
@@ -199,15 +206,25 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
             if (ImGui::MenuItem("Insert After"))
             {
                 sInsertAfterItem = item;
+                sMultiSelectedItems.clear();
                 add = true;
             }
         }
 
         if (item && item->getItemType() == Item::ItemType::Sound)
         {
-            if (ImGui::MenuItem("Duplicate"))
+            sead::FixedSafeString<64> dupLabel;
+            if (multiActive)
+                dupLabel.format("Duplicate %zu items", sMultiSelectedItems.size());
+            else
+                dupLabel.copy("Duplicate");
+
+            if (ImGui::MenuItem(dupLabel.cstr()))
             {
-                sDuplicateItem = item;
+                if (multiActive)
+                    sDuplicateItems = sMultiSelectedItems;
+                else
+                    sDuplicateItem = item;
             }
         }
 
@@ -220,9 +237,18 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
                 ImGui::BeginDisabled();
             }
 
-            if (ImGui::MenuItem("Delete"))
+            sead::FixedSafeString<64> delLabel;
+            if (multiActive)
+                delLabel.format("Delete %zu items", sMultiSelectedItems.size());
+            else
+                delLabel.copy("Delete");
+
+            if (ImGui::MenuItem(delLabel.cstr()))
             {
-                sDeleteItem = item;
+                if (multiActive)
+                    sDeleteItems = sMultiSelectedItems;
+                else
+                    sDeleteItem = item;
             }
 
             if (disableDelete)
@@ -290,6 +316,8 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         {
             if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
             {
+                sMultiSelectedItems.clear();
+                sMultiSelectAnchor = selectedItem;
                 Item::ListNode* prev = list.prev(selectedItem);
                 if (prev)
                 {
@@ -306,6 +334,8 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
             {
+                sMultiSelectedItems.clear();
+                sMultiSelectAnchor = selectedItem;
                 Item::ListNode* next = list.next(selectedItem);
                 if (next)
                 {
@@ -322,6 +352,8 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (ImGui::IsKeyPressed(ImGuiKey_PageUp))
             {
+                sMultiSelectedItems.clear();
+                sMultiSelectAnchor = selectedItem;
                 Item* target = selectedItem;
                 for (int i = 0; i < 20; i++)
                 {
@@ -345,6 +377,8 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (ImGui::IsKeyPressed(ImGuiKey_PageDown))
             {
+                sMultiSelectedItems.clear();
+                sMultiSelectAnchor = selectedItem;
                 Item* target = selectedItem;
                 for (int i = 0; i < 20; i++)
                 {
@@ -368,6 +402,8 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (ImGui::IsKeyPressed(ImGuiKey_Home))
             {
+                sMultiSelectedItems.clear();
+                sMultiSelectAnchor = selectedItem;
                 Item::ListNode* first = list.front();
                 if (first)
                 {
@@ -383,6 +419,8 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
             if (ImGui::IsKeyPressed(ImGuiKey_End))
             {
+                sMultiSelectedItems.clear();
+                sMultiSelectAnchor = selectedItem;
                 Item::ListNode* last = list.back();
                 if (last && last->val() != selectedItem)
                 {
@@ -401,9 +439,29 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 sScrollItem = selectedItem;
             }
 
+            if (ImGui::IsKeyPressed(ImGuiKey_A) && ImGui::GetIO().KeyCtrl)
+            {
+                sMultiSelectedItems.clear();
+                for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+                {
+                    Item* cur = static_cast<Item*>((*it).val());
+                    if (cur && (!filterCallback || filterCallback(cur)))
+                        sMultiSelectedItems.push_back(cur);
+                }
+                if (!sMultiSelectedItems.empty())
+                {
+                    selectedItem = sMultiSelectedItems.back();
+                    sMultiSelectAnchor = sMultiSelectedItems.front();
+                }
+                sScrollItem = selectedItem;
+            }
+
             if (canEdit && ImGui::IsKeyPressed(ImGuiKey_Delete) && sSubSelectedItem == nullptr && sSelectedItemIsSubWindow == false)
             {
-                sDeleteItem = selectedItem;
+                if (!sMultiSelectedItems.empty())
+                    sDeleteItems = sMultiSelectedItems;
+                else
+                    sDeleteItem = selectedItem;
             }
         }
     }
@@ -483,11 +541,94 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         ImVec2 cursor = ImGui::GetCursorScreenPos();
 
-        bool selected = selectedItem == item;
+        bool isSingleSelected = selectedItem == item;
+        bool isMultiSelected = std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item) != sMultiSelectedItems.end();
+        bool selected = isSingleSelected || isMultiSelected;
         sead::FormatFixedSafeString<512> selName("%s%s%s###%p", namePrefix, name.cstr(), postFix, item);
         if (ImGui::Selectable(selName.cstr(), selected))
         {
-            selectedItem = item;
+            bool ctrl = ImGui::GetIO().KeyCtrl;
+            bool shift = ImGui::GetIO().KeyShift;
+
+            if (ctrl && shift && !sMultiSelectedItems.empty())
+            {
+                // Ctrl+Shift: add range from last multi-selected item to clicked item
+                Item* ctrlAnchor = sMultiSelectedItems.back();
+                bool between = false;
+                for (auto it2 = list.robustBegin(); it2 != list.robustEnd(); ++it2)
+                {
+                    Item* cur = static_cast<Item*>((*it2).val());
+                    if (cur == ctrlAnchor || cur == item)
+                    {
+                        if (std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), cur) == sMultiSelectedItems.end())
+                            sMultiSelectedItems.push_back(cur);
+                        if (between)
+                            break;
+                        between = true;
+                    }
+                    else if (between)
+                    {
+                        if (std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), cur) == sMultiSelectedItems.end())
+                            sMultiSelectedItems.push_back(cur);
+                    }
+                }
+                selectedItem = item;
+            }
+            else if (ctrl)
+            {
+                auto& ref = sMultiSelectedItemsArr[(size_t)sSelectedUIType];
+                (void)ref;
+                auto it = std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item);
+                if (it != sMultiSelectedItems.end())
+                {
+                    sMultiSelectedItems.erase(it);
+                    if (sMultiSelectedItems.empty())
+                    {
+                        selectedItem = nullptr;
+                        sMultiSelectAnchor = nullptr;
+                    }
+                    else
+                    {
+                        sMultiSelectAnchor = sMultiSelectedItems.back();
+                    }
+                }
+                else
+                {
+                    if (sMultiSelectedItems.empty() && selectedItem && selectedItem != item)
+                        sMultiSelectedItems.push_back(selectedItem);
+                    sMultiSelectedItems.push_back(item);
+                    selectedItem = item;
+                    sMultiSelectAnchor = item;
+                }
+            }
+            else if (shift && sMultiSelectAnchor != nullptr)
+            {
+                sMultiSelectedItems.clear();
+                bool between = false;
+                for (auto it2 = list.robustBegin(); it2 != list.robustEnd(); ++it2)
+                {
+                    Item* cur = static_cast<Item*>((*it2).val());
+                    if (cur == sMultiSelectAnchor || cur == item)
+                    {
+                        sMultiSelectedItems.push_back(cur);
+                        if (between)
+                            break;
+                        between = true;
+                    }
+                    else if (between)
+                    {
+                        sMultiSelectedItems.push_back(cur);
+                    }
+                }
+                selectedItem = item;
+            }
+            else
+            {
+                sMultiSelectedItems.clear();
+                selectedItem = item;
+                sMultiSelectAnchor = item;
+            }
+
             FocusPropertiesWindow();
 
             if (isSubWindow)
@@ -537,7 +678,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 add = true;
             }
 
-            if (selected)
+            if (isSingleSelected)
             {
                 if (ImGui::BeginDragDropSource())
                 {
@@ -581,6 +722,23 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
             ImGui::OpenPopup("###Add");
         }
 
+        auto doSingleDelete = [&](Item* itemToDelete)
+        {
+            for (size_t i = 0; i <= (size_t)UIType::Max; i++)
+            {
+                if (sSelectedItemArr[i] == itemToDelete)
+                    sSelectedItemArr[i] = nullptr;
+                if (sSubSelectedItemArr[i] == itemToDelete)
+                    sSubSelectedItemArr[i] = nullptr;
+                auto& multi = sMultiSelectedItemsArr[i];
+                auto it = std::find(multi.begin(), multi.end(), itemToDelete);
+                if (it != multi.end())
+                    multi.erase(it);
+            }
+            delete itemToDelete;
+            selectedItem = nullptr;
+        };
+
         if (sDeleteItem)
         {
             bool hasRealRefs = false;
@@ -600,20 +758,42 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
             }
             else
             {
-                for (size_t i = 0; i <= (size_t)UIType::Max; i++)
-                {
-                    if (sSelectedItemArr[i] == sDeleteItem)
-                        sSelectedItemArr[i] = nullptr;
-                    if (sSubSelectedItemArr[i] == sDeleteItem)
-                        sSubSelectedItemArr[i] = nullptr;
-                }
-
-                delete sDeleteItem;
-                selectedItem = nullptr;
+                doSingleDelete(sDeleteItem);
                 sBfsar.updateList(list);
                 SetUnsavedChanges(true);
-
                 sDeleteItem = nullptr;
+            }
+        }
+
+        if (!sDeleteItems.empty())
+        {
+            bool hasRealRefs = false;
+            for (Item* delItem : sDeleteItems)
+            {
+                for (auto it = delItem->getReferences().robustBegin();
+                     it != delItem->getReferences().robustEnd(); ++it)
+                {
+                    ItemReference* ref = it->val();
+                    if (ref && ref->getOwner() && !ref->getOwner()->isFileWindow())
+                    {
+                        hasRealRefs = true;
+                        break;
+                    }
+                }
+                if (hasRealRefs)
+                    break;
+            }
+            if (hasRealRefs)
+            {
+                ImGui::OpenPopup("###References");
+            }
+            else
+            {
+                for (Item* delItem : sDeleteItems)
+                    doSingleDelete(delItem);
+                sBfsar.updateList(list);
+                SetUnsavedChanges(true);
+                sDeleteItems.clear();
             }
         }
 
@@ -648,6 +828,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                     {
                         sScrollItem = addedItem;
                         selectedItem = addedItem;
+                        sMultiSelectedItems.clear();
 
                         if (!isSubWindow)
                         {
@@ -659,9 +840,10 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                             sSelectedItemIsSubWindow = true;
                         }
 
-                        if (sInsertAfterItem)
+                        Item* insertAfter = sInsertAfterItem;
+                        if (insertAfter)
                         {
-                            sInsertAfterItem->insertBack(addedItem);
+                            insertAfter->insertBack(addedItem);
                             sInsertAfterItem = nullptr;
                         }
                         else
@@ -692,27 +874,31 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         if (ImGui::BeginPopupModal(ICON_LC_ALERT_TRIANGLE " Warning###References", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::Text("The Item '%s' is referenced by other Items\nDelete anyway ?", sDeleteItem->getFormattedName().cstr());
+            if (sDeleteItem)
+                ImGui::Text("The Item '%s' is referenced by other Items\nDelete anyway ?", sDeleteItem->getFormattedName().cstr());
+            else
+                ImGui::Text("One or more items are referenced by other items.\nDelete anyway ?");
             ImGui::Separator();
 
             ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
 
             if (ImGui::Button("Delete", buttonSize))
             {
-                for (size_t i = 0; i <= (size_t)UIType::Max; i++)
+                if (sDeleteItem)
                 {
-                    if (sSelectedItemArr[i] == sDeleteItem)
-                        sSelectedItemArr[i] = nullptr;
-                    if (sSubSelectedItemArr[i] == sDeleteItem)
-                        sSubSelectedItemArr[i] = nullptr;
+                    doSingleDelete(sDeleteItem);
+                    sBfsar.updateList(list);
+                    SetUnsavedChanges(true);
+                    sDeleteItem = nullptr;
                 }
-
-                delete sDeleteItem;
-                selectedItem = nullptr;
-                sBfsar.updateList(list);
-                SetUnsavedChanges(true);
-
-                sDeleteItem = nullptr;
+                else if (!sDeleteItems.empty())
+                {
+                    for (Item* delItem : sDeleteItems)
+                        doSingleDelete(delItem);
+                    sBfsar.updateList(list);
+                    SetUnsavedChanges(true);
+                    sDeleteItems.clear();
+                }
 
                 ImGui::CloseCurrentPopup();
             }
@@ -722,7 +908,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
             if (ImGui::Button("Cancel", buttonSize))
             {
                 sDeleteItem = nullptr;
-
+                sDeleteItems.clear();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -902,6 +1088,204 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
             }
 
             sDuplicateItem = nullptr;
+        }
+
+        if (!sDuplicateItems.empty())
+        {
+            // Build list of items in list order, then group into contiguous blocks.
+            // For each contiguous block, insert duplicates after the block's last item.
+            std::vector<Sound*> orderedSrcs;
+            for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+            {
+                Item* cur = static_cast<Item*>((*it).val());
+                if (std::find(sDuplicateItems.begin(), sDuplicateItems.end(), cur) != sDuplicateItems.end())
+                    orderedSrcs.push_back(static_cast<Sound*>(cur));
+            }
+
+            auto makeDup = [](Sound* src) -> Sound*
+            {
+                Sound* dup = new Sound();
+                dup->setEnableName(src->isEnableName());
+                {
+                    u32 copyNum = 1;
+                    sead::FixedSafeString<256> newName;
+                    do {
+                        newName = src->getName();
+                        newName.appendWithFormat("_%u", copyNum);
+                        copyNum++;
+                    } while (!sBfsar.validateName(newName));
+                    dup->getName() = newName;
+                }
+
+                if (src->getPlayerRef().isAttached())
+                    dup->getPlayerRef().attach(src->getPlayerRef().getItem());
+
+                dup->setVolume(src->getVolume());
+                dup->setRemoteFilter(src->getRemoteFilter());
+                dup->setSoundType(src->getSoundType());
+
+                dup->setEnablePanParam(src->isEnablePanParam());
+                dup->setPanMode(src->getPanMode());
+                dup->setPanCurve(src->getPanCurve());
+
+                dup->setEnablePlayerParam(src->isEnablePlayerParam());
+                dup->setPlayerPriority(src->getPlayerPriority());
+                dup->setActorPlayerId(src->getActorPlayerId());
+
+                for (u32 i = 0; i < 4; i++)
+                {
+                    dup->setEnableUserParam(i, src->isEnableUserParam(i));
+                    dup->setUserParam(i, src->getUserParam(i));
+                }
+
+                dup->setEnableIsFrontBypass(src->isEnableIsFrontBypass());
+                dup->setIsFrontBypass(src->getIsFrontBypass());
+
+                dup->setEnableSound3DInfo(src->isEnableSound3DInfo());
+                {
+                    Sound::Sound3DInfo& dst3D = dup->getSound3DInfo();
+                    const Sound::Sound3DInfo& src3D = src->getSound3DInfo();
+                    dst3D.setFlags(src3D.getFlags());
+                    dst3D.setDecayRatio(src3D.getDecayRatio());
+                    dst3D.setDecayCurve(src3D.getDecayCurve());
+                    dst3D.setDopplerFactor(src3D.getDopplerFactor());
+                }
+
+                {
+                    Sound::SequenceSoundInfo& dstSeq = dup->getSequenceSoundInfo();
+                    Sound::SequenceSoundInfo& srcSeq = src->getSequenceSoundInfo();
+
+                    if (srcSeq.getSequenceFileRef().isAttached())
+                        dstSeq.getSequenceFileRef().attach(srcSeq.getSequenceFileRef().getItem());
+
+                    for (u32 i = 0; i < 4; i++)
+                    {
+                        if (srcSeq.getBankRef(i).isAttached())
+                            dstSeq.getBankRef(i).attach(srcSeq.getBankRef(i).getItem());
+                    }
+
+                    dstSeq.setEnableStartOffset(srcSeq.isEnableStartOffset());
+                    dstSeq.getStartLabel() = srcSeq.getStartLabel();
+                    dstSeq.setEnablePriority(srcSeq.isEnablePriority());
+                    dstSeq.setIsReleasePriorityFix(srcSeq.getIsReleasePriorityFix());
+                }
+
+                {
+                    Sound::StreamSoundInfo& dstStrm = dup->getStreamSoundInfo();
+                    Sound::StreamSoundInfo& srcStrm = src->getStreamSoundInfo();
+
+                    dstStrm.getPath() = srcStrm.getPath();
+                    dstStrm.setPitch(srcStrm.getPitch());
+                    dstStrm.setMainSend(srcStrm.getMainSend());
+                    for (u32 i = 0; i < 3; i++)
+                        dstStrm.setFxSend(i, srcStrm.getFxSend(i));
+                    dstStrm.setEnableStreamSoundExtension(srcStrm.isEnableStreamSoundExtension());
+                    dstStrm.setStreamType(srcStrm.getStreamType());
+                    dstStrm.setIsLoop(srcStrm.getIsLoop());
+                    dstStrm.setLoopStartFrame(srcStrm.getLoopStartFrame());
+                    dstStrm.setLoopEndFrame(srcStrm.getLoopEndFrame());
+
+                    if (srcStrm.getPrefetchFileRef().isAttached())
+                        dstStrm.getPrefetchFileRef().attach(srcStrm.getPrefetchFileRef().getItem());
+
+                    u32 trackIdx = 0;
+                    for (auto it = srcStrm.getTrackList().begin(); it != srcStrm.getTrackList().end(); ++it, ++trackIdx)
+                    {
+                        Sound::StreamSoundInfo::Track* srcTrack = static_cast<Sound::StreamSoundInfo::Track*>(*it);
+                        Sound::StreamSoundInfo::Track* dstTrack = new Sound::StreamSoundInfo::Track();
+
+                        if (srcTrack->getWaveFileRef().isAttached())
+                            dstTrack->getWaveFileRef().attach(srcTrack->getWaveFileRef().getItem());
+
+                        dstTrack->setId(trackIdx);
+                        dstTrack->setEnableName(srcTrack->isEnableName());
+                        dstTrack->getName() = srcTrack->getName();
+
+                        dstTrack->setVolume(srcTrack->getVolume());
+                        dstTrack->setPan(srcTrack->getPan());
+                        dstTrack->setSPan(srcTrack->getSPan());
+                        dstTrack->setFlags(srcTrack->getFlags());
+                        dstTrack->setMainSend(srcTrack->getMainSend());
+                        dstTrack->setLpfFreq(srcTrack->getLpfFreq());
+                        dstTrack->setBiquadType(srcTrack->getBiquadType());
+                        dstTrack->setBiquadValue(srcTrack->getBiquadValue());
+                        for (u32 i = 0; i < 3; i++)
+                            dstTrack->setFxSend(i, srcTrack->getFxSend(i));
+
+                        dstStrm.getTrackList().pushBack(dstTrack);
+                    }
+                }
+
+                {
+                    Sound::WaveSoundInfo& dstWave = dup->getWaveSoundInfo();
+                    Sound::WaveSoundInfo& srcWave = src->getWaveSoundInfo();
+
+                    if (srcWave.getWaveFileRef().isAttached())
+                        dstWave.getWaveFileRef().attach(srcWave.getWaveFileRef().getItem());
+
+                    dstWave.setAllocateTrackCount(srcWave.getAllocateTrackCount());
+                    dstWave.setEnablePriority(srcWave.isEnablePriority());
+                    dstWave.setChannelPriority(srcWave.getChannelPriority());
+                    dstWave.setIsReleasePriorityFix(srcWave.getIsReleasePriorityFix());
+                    dstWave.setEnablePan(srcWave.isEnablePan());
+                    dstWave.setPan(srcWave.getPan());
+                    dstWave.setSurroundPan(srcWave.getSurroundPan());
+                    dstWave.setEnablePitch(srcWave.isEnablePitch());
+                    dstWave.setPitch(srcWave.getPitch());
+                    dstWave.setEnableSend(srcWave.isEnableSend());
+                    dstWave.setMainSend(srcWave.getMainSend());
+                    for (u32 i = 0; i < 3; i++)
+                        dstWave.setFxSend(i, srcWave.getFxSend(i));
+                    dstWave.setEnableEnvelope(srcWave.isEnableEnvelope());
+                    dstWave.setAdshrCurve(srcWave.getAdshrCurve());
+                    dstWave.setEnableFilter(srcWave.isEnableFilter());
+                    dstWave.setLpfFreq(srcWave.getLpfFreq());
+                    dstWave.setBiquadType(srcWave.getBiquadType());
+                    dstWave.setBiquadValue(srcWave.getBiquadValue());
+                }
+                return dup;
+            };
+
+            // Walk through ordered sources, grouping into contiguous blocks
+            std::vector<Item*> newDups;
+            size_t i = 0;
+            while (i < orderedSrcs.size())
+            {
+                // Find the end of this contiguous block in the actual list
+                size_t blockEnd = i;
+                while (blockEnd + 1 < orderedSrcs.size())
+                {
+                    Item* after = static_cast<Item*>(list.next(orderedSrcs[blockEnd]));
+                    if (after == orderedSrcs[blockEnd + 1])
+                        ++blockEnd;
+                    else
+                        break;
+                }
+
+                // Block from i to blockEnd inclusive is contiguous
+                Item* insertPoint = orderedSrcs[blockEnd];
+                for (size_t j = i; j <= blockEnd; ++j)
+                {
+                    Sound* dup = makeDup(orderedSrcs[j]);
+                    insertPoint->insertBack(dup);
+                    insertPoint = dup;
+                    newDups.push_back(dup);
+                }
+
+                i = blockEnd + 1;
+            }
+
+            if (!orderedSrcs.empty())
+            {
+                sBfsar.updateList(list);
+                SetUnsavedChanges(true);
+                if (!newDups.empty())
+                {
+                    selectedItem = newDups.back();
+                    sMultiSelectedItems = newDups;
+                }
+                sDuplicateItems.clear();
+            }
         }
     }
 

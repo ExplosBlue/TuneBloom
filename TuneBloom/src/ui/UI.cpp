@@ -71,18 +71,26 @@ sead::FixedSafeString<512> sDroppedFilePath;
 sead::FixedSafeString<512> sRecentFileClick;
 
 static bool sPendingExport = false;
-static Sound* sPendingExportSound = nullptr;
+static std::vector<Sound*> sPendingExportSounds;
 static Sound::SoundType sPendingExportType;
 static int sPendingExportDurationMin = 2;
 static int sPendingExportDurationSec = 0;
 
-static SequenceFile* sPendingExportSequenceFile = nullptr;
+static std::vector<SequenceFile*> sPendingExportSequenceFiles;
 static bool sPendingImportSequenceFile = false;
-static WaveFile* sPendingExportWaveFile = nullptr;
-static WaveFile* sPendingExportWaveToWav = nullptr;
-static Sound* sPendingExportMidiSound = nullptr;
-static BankFile* sPendingExportBankBundle = nullptr;
+static std::vector<WaveFile*> sPendingExportWaveFiles;
+static std::vector<WaveFile*> sPendingExportWaveToWavs;
+static std::vector<Sound*> sPendingExportMidiSounds;
+static std::vector<BankFile*> sPendingExportBankBundles;
 static bool sPendingImportBankBundle = false;
+
+// Export progress state (frame-by-frame batch export)
+static bool sExportInProgress = false;
+static int sExportProgressCurrent = 0;
+static int sExportProgressTotal = 0;
+static bool sExportCancelled = false;
+static bool sExportProcessingStarted = false;
+static sead::FixedSafeString<512> sExportDirPath;
 
 static int sStrmMultiChannel = 1;
 static bool sStrmLoop = true;
@@ -115,6 +123,7 @@ static const u32 sOutSampleRateValues[] = {
 };
 
 static bool sShowExportConfirm = false;
+static sead::FixedSafeString<128> sExportConfirmMessage;
 
 static const char* sSampleRateItems[] = {
     "Original",
@@ -150,6 +159,7 @@ void DrawPropertiesUI();
 void DrawExportDialog();
 static void DrawFileExportDialogs();
 void DrawExportConfirmPopup();
+void DrawExportProgressPopup();
 
 void DrawAllSoundsUI();
 void DrawStreamSoundsUI();
@@ -1017,6 +1027,7 @@ void DrawUI()
     DrawExportDialog();
     DrawFileExportDialogs();
     DrawExportConfirmPopup();
+    DrawExportProgressPopup();
 }
 
 static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Sound* sound, const char* ext)
@@ -1199,12 +1210,128 @@ static bool WriteWavCustom(const sead::SafeString& path, u32 sampleRate, const s
     return true;
 }
 
+static void BuildExportPathFromDir(sead::BufferedSafeString* outPath, const char* dir, const Sound* sound, const char* ext)
+{
+    const char* rawName = sound->getName().cstr();
+    sead::FixedSafeString<256> upperName;
+    upperName.format("%s", rawName);
+    for (s32 i = 0; i < upperName.calcLength(); i++)
+        upperName.getBuffer()[i] = ::toupper((unsigned char)upperName.getBuffer()[i]);
+    outPath->format("%s/%s.%s", dir, upperName.cstr(), ext);
+}
+
+static bool ExportStreamSoundToWav(Sound* sound, const char* path, bool multiChannel, bool loop, int loopCount, float fadeSec, u32 targetRate)
+{
+    auto& trackList = sound->getStreamSoundInfo().getTrackList();
+    u32 sampleRate = 0;
+
+    std::vector<std::vector<std::vector<s16>>> trackChannels;
+    for (auto it = trackList.robustBegin(); it != trackList.robustEnd(); ++it)
+    {
+        Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(it->val());
+        Item* waveItem = track->getWaveFileRef().getItem();
+        if (!waveItem)
+            continue;
+
+        const WaveFile* wave = static_cast<const WaveFile*>(waveItem);
+        if (sampleRate == 0)
+            sampleRate = wave->getSampleRate();
+
+        trackChannels.emplace_back();
+        DecodeWaveFileChannels(wave, trackChannels.back());
+    }
+
+    if (trackChannels.empty())
+        return false;
+
+    if (targetRate == 0)
+        targetRate = sampleRate;
+
+    std::vector<std::vector<s16>> allChannels;
+    std::vector<u32> trackChannelOffset;
+
+    for (auto& tc : trackChannels)
+    {
+        trackChannelOffset.push_back(allChannels.size());
+        for (auto& ch : tc)
+            allChannels.push_back(std::move(ch));
+    }
+
+    if (targetRate != sampleRate)
+        ResampleChannels(allChannels, sampleRate, targetRate);
+    sampleRate = targetRate;
+
+    if (loop)
+    {
+        u32 loopCountU = static_cast<u32>(loopCount);
+        ApplyLoopAndFade(allChannels, sampleRate, true, loopCountU, fadeSec);
+    }
+
+    if (multiChannel)
+    {
+        if (!WriteWavCustom(path, sampleRate, allChannels))
+        {
+            PopupMgr::instance()->addPopup({ "Failed to write multi-channel WAV file", nullptr });
+            return false;
+        }
+    }
+    else
+    {
+        bool anyFailed = false;
+        u32 trackIdx = 0;
+        const char* dot = strrchr(path, '.');
+        for (auto& tc : trackChannels)
+        {
+            u32 offset = trackChannelOffset[trackIdx];
+            std::vector<std::vector<s16>> trackChs;
+            for (u32 i = 0; i < tc.size(); i++)
+            {
+                if (offset + i < allChannels.size())
+                    trackChs.push_back(allChannels[offset + i]);
+            }
+
+            sead::FixedSafeString<512> trackPath;
+            if (dot)
+                trackPath.format("%.*s_track%u%s", (s32)(dot - path), path, trackIdx, dot);
+            else
+                trackPath.format("%s_track%u.wav", path, trackIdx);
+
+            if (!WriteWavCustom(trackPath, sampleRate, trackChs))
+                anyFailed = true;
+            trackIdx++;
+        }
+        if (anyFailed)
+        {
+            PopupMgr::instance()->addPopup({ "Failed to write some per-track WAV files", nullptr });
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void DrawExportDialog()
 {
-    if (!sPendingExport)
+    if (sPendingExportSounds.empty() || sExportInProgress)
+    {
+        sPendingExport = false;
         return;
+    }
 
-    if (sPendingExportType == Sound::SoundType::Seq)
+    s32 count = (s32)sPendingExportSounds.size();
+    s32 seqCount = 0, strmCount = 0, waveCount = 0;
+    for (Sound* s : sPendingExportSounds)
+    {
+        Sound::SoundType t = s->getSoundType();
+        if (t == Sound::SoundType::Seq) seqCount++;
+        else if (t == Sound::SoundType::Strm) strmCount++;
+        else if (t == Sound::SoundType::Wave) waveCount++;
+    }
+    bool mixed = (seqCount > 0 && strmCount > 0) ||
+                 (seqCount > 0 && count != seqCount) ||
+                 (strmCount > 0 && count != strmCount);
+
+    if (!mixed && sPendingExportType == Sound::SoundType::Seq)
     {
         ImGui::OpenPopup("Export Sequence Duration");
 
@@ -1213,7 +1340,10 @@ void DrawExportDialog()
 
         if (ImGui::BeginPopupModal("Export Sequence Duration", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::Text("Set maximum duration for sequence export:");
+            if (count > 1)
+                ImGui::Text("Exporting %d sequence sounds", seqCount > 0 ? seqCount : count);
+            else
+                ImGui::Text("Set maximum duration for sequence export:");
             ImGui::Text("The export will stop after 2 loops or this duration, whichever comes first.");
             ImGui::Separator();
 
@@ -1237,34 +1367,56 @@ void DrawExportDialog()
                 u32 totalSecs = (u32)(sPendingExportDurationMin * 60 + sPendingExportDurationSec);
                 if (totalSecs == 0) totalSecs = 1;
 
-                sead::FixedSafeString<512> path;
-                const u32 filterCount = 1;
-                FileFilter filters[filterCount] = { { "Wave (*.wav)", "*.wav" } };
-
-                sead::FixedSafeString<512> defaultPath;
-                BuildDefaultExportPath(&defaultPath, sPendingExportSound, "wav");
-
                 u32 targetRate = sSampleRateValues[sSeqSampleRateIdx];
-                if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+
+                if (count > 1)
                 {
-                    sSoundPlayer.exportSeqToWav(path, sPendingExportSound, totalSecs, targetRate);
-                    sPendingExport = false;
-                    sPendingExportSound = nullptr;
-                    ImGui::CloseCurrentPopup();
+                    sead::FixedSafeString<512> dirPath;
+                    if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
+                    {
+                        sExportDirPath = dirPath;
+                        sExportProgressCurrent = 0;
+                        sExportProgressTotal = count;
+                        sExportCancelled = false;
+                        sExportProcessingStarted = false;
+                        sSoundPlayer.stopAllPlayers(false);
+                        sSoundPlayer.stopAllVoices();
+                        sExportInProgress = true;
+                        sPendingExport = false;
+                        ImGui::CloseCurrentPopup();
+                    }
+                }
+                else
+                {
+                    const u32 filterCount = 1;
+                    FileFilter filters[filterCount] = { { "Wave (*.wav)", "*.wav" } };
+
+                    sead::FixedSafeString<512> defaultPath;
+                    BuildDefaultExportPath(&defaultPath, sPendingExportSounds[0], "wav");
+                    sead::FixedSafeString<512> path;
+                    if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+                    {
+                        sSoundPlayer.exportSeqToWav(path, sPendingExportSounds[0], totalSecs, targetRate);
+                        sExportConfirmMessage.copy("Sequence exported successfully.");
+                        sShowExportConfirm = true;
+                        sPendingExport = false;
+                        sPendingExportSounds.clear();
+                        ImGui::CloseCurrentPopup();
+                    }
                 }
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
                 sPendingExport = false;
-                sPendingExportSound = nullptr;
+                sPendingExportSounds.clear();
                 ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndPopup();
         }
     }
-    else if (sPendingExportType == Sound::SoundType::Strm)
+    else if (!mixed && sPendingExportType == Sound::SoundType::Strm)
     {
         ImGui::OpenPopup("Export Stream Options");
 
@@ -1273,7 +1425,10 @@ void DrawExportDialog()
 
         if (ImGui::BeginPopupModal("Export Stream Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::Text("Stream export options:");
+            if (count > 1)
+                ImGui::Text("Exporting %d stream sounds", strmCount > 0 ? strmCount : count);
+            else
+                ImGui::Text("Stream export options:");
             ImGui::Separator();
 
             ImGui::RadioButton("Multi-channel WAV (one file)", &sStrmMultiChannel, 1);
@@ -1303,103 +1458,168 @@ void DrawExportDialog()
 
             if (ImGui::Button("Export", ImVec2(120, 0)))
             {
-                sead::FixedSafeString<512> path;
-                const u32 filterCount = 1;
-                FileFilter filters[filterCount] = { { "Wave (*.wav)", "*.wav" } };
+                u32 targetRate = sSampleRateValues[sStrmSampleRateIdx];
 
-                sead::FixedSafeString<512> defaultPath;
-                BuildDefaultExportPath(&defaultPath, sPendingExportSound, "wav");
-
-                if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+                if (count > 1)
                 {
-                    auto& trackList = sPendingExportSound->getStreamSoundInfo().getTrackList();
-                    u32 sampleRate = 0;
-
-                    std::vector<std::vector<std::vector<s16>>> trackChannels;
-                    for (auto it = trackList.robustBegin(); it != trackList.robustEnd(); ++it)
+                    sead::FixedSafeString<512> dirPath;
+                    if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
                     {
-                        Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(it->val());
-                        Item* waveItem = track->getWaveFileRef().getItem();
-                        if (!waveItem)
-                            continue;
-
-                        const WaveFile* wave = static_cast<const WaveFile*>(waveItem);
-                        if (sampleRate == 0)
-                            sampleRate = wave->getSampleRate();
-
-                        trackChannels.emplace_back();
-                        DecodeWaveFileChannels(wave, trackChannels.back());
+                        sExportDirPath = dirPath;
+                        sExportProgressCurrent = 0;
+                        sExportProgressTotal = count;
+                        sExportCancelled = false;
+                        sExportProcessingStarted = false;
+                        sExportInProgress = true;
+                        sPendingExport = false;
+                        ImGui::CloseCurrentPopup();
                     }
+                }
+                else
+                {
+                    const u32 filterCount = 1;
+                    FileFilter filters[filterCount] = { { "Wave (*.wav)", "*.wav" } };
 
-                    if (!trackChannels.empty())
+                    sead::FixedSafeString<512> defaultPath;
+                    BuildDefaultExportPath(&defaultPath, sPendingExportSounds[0], "wav");
+                    sead::FixedSafeString<512> path;
+                    if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
                     {
-                        u32 targetRate = sSampleRateValues[sStrmSampleRateIdx];
-                        if (targetRate == 0)
-                            targetRate = sampleRate;
-
-                        std::vector<std::vector<s16>> allChannels;
-                        std::vector<u32> trackChannelOffset;
-
-                        for (auto& tc : trackChannels)
-                        {
-                            trackChannelOffset.push_back(allChannels.size());
-                            for (auto& ch : tc)
-                                allChannels.push_back(std::move(ch));
-                        }
-
-                        if (targetRate != sampleRate)
-                            ResampleChannels(allChannels, sampleRate, targetRate);
-                        sampleRate = targetRate;
-
-                        if (sStrmLoop)
-                        {
-                            u32 loopCount = static_cast<u32>(sStrmLoopCount);
-                            ApplyLoopAndFade(allChannels, sampleRate, true, loopCount, sStrmFadeSec);
-                        }
-
-                        if (sStrmMultiChannel != 0)
-                        {
-                            if (!WriteWavCustom(path, sampleRate, allChannels))
-                            {
-                                PopupMgr::instance()->addPopup({ "Failed to write multi-channel WAV file", nullptr });
-                            }
-                        }
-                        else
-                        {
-                            bool anyFailed = false;
-                            u32 trackIdx = 0;
-                            const char* dot = strrchr(path.cstr(), '.');
-                            for (auto& tc : trackChannels)
-                            {
-                                u32 offset = trackChannelOffset[trackIdx];
-                                std::vector<std::vector<s16>> trackChs;
-                                for (u32 i = 0; i < tc.size(); i++)
-                                {
-                                    if (offset + i < allChannels.size())
-                                        trackChs.push_back(allChannels[offset + i]);
-                                }
-
-                                sead::FixedSafeString<512> trackPath;
-                                if (dot)
-                                    trackPath.format("%.*s_track%u%s", (s32)(dot - path.cstr()), path.cstr(), trackIdx, dot);
-                                else
-                                    trackPath.format("%s_track%u.wav", path.cstr(), trackIdx);
-
-                                if (!WriteWavCustom(trackPath, sampleRate, trackChs))
-                                    anyFailed = true;
-                                trackIdx++;
-                            }
-                            if (anyFailed)
-                            {
-                                PopupMgr::instance()->addPopup({ "Failed to write some per-track WAV files", nullptr });
-                            }
-                        }
-
+                        ExportStreamSoundToWav(sPendingExportSounds[0], path.cstr(), sStrmMultiChannel != 0, sStrmLoop, sStrmLoopCount, sStrmFadeSec, targetRate);
+                        sExportConfirmMessage.copy("Stream exported successfully.");
                         sShowExportConfirm = true;
+                        sPendingExport = false;
+                        sPendingExportSounds.clear();
+                        ImGui::CloseCurrentPopup();
                     }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            {
+                sPendingExport = false;
+                sPendingExportSounds.clear();
+                ImGui::CloseCurrentPopup();
+            }
 
+            ImGui::EndPopup();
+        }
+    }
+    else if (!mixed && sPendingExportType == Sound::SoundType::Wave)
+    {
+        if (count > 1)
+        {
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
+            {
+                sExportDirPath = dirPath;
+                sExportProgressCurrent = 0;
+                sExportProgressTotal = count;
+                sExportCancelled = false;
+                sExportProcessingStarted = false;
+                sExportInProgress = true;
+                sPendingExport = false;
+            }
+        }
+        else
+        {
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {
+                { "Wave (*.wav)", "*.wav" }
+            };
+
+            sead::FixedSafeString<512> defaultPath;
+            BuildDefaultExportPath(&defaultPath, sPendingExportSounds[0], "wav");
+            sead::FixedSafeString<512> path;
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+            {
+                Item* waveItem = sPendingExportSounds[0]->getWaveSoundInfo().getWaveFileRef().getItem();
+                if (waveItem)
+                    static_cast<WaveFile*>(waveItem)->writeWavFile(path);
+                sExportConfirmMessage.copy("Wave sound exported successfully.");
+                sShowExportConfirm = true;
+                sPendingExport = false;
+                sPendingExportSounds.clear();
+            }
+        }
+
+        sPendingExport = false;
+        sPendingExportSounds.clear();
+    }
+    else if (mixed)
+    {
+        // Mixed types: show combined dialog with options for Seq (if any) and Strm (if any)
+        ImGui::OpenPopup("Export Options");
+
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Export Options", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            sead::FixedSafeString<256> header;
+            if (waveCount > 0)
+                header.format("Exporting %d sounds (%d seq, %d strm, %d wave)", count, seqCount, strmCount, waveCount);
+            else
+                header.format("Exporting %d sounds (%d seq, %d strm)", count, seqCount, strmCount);
+            ImGui::Text("%s", header.cstr());
+
+            ImGui::Separator();
+
+            if (seqCount > 0)
+            {
+                ImGui::Text("Sequence duration:");
+                ImGui::Text("The export will stop after 2 loops or this duration, whichever comes first.");
+                ImGui::SetNextItemWidth(100);
+                ImGui::InputInt("##seqmin", &sPendingExportDurationMin, 1, 5);
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(100);
+                ImGui::InputInt("##seqsec", &sPendingExportDurationSec, 1, 15);
+                if (sPendingExportDurationMin < 0) sPendingExportDurationMin = 0;
+                if (sPendingExportDurationMin > 60) sPendingExportDurationMin = 60;
+                if (sPendingExportDurationSec < 0) sPendingExportDurationSec = 0;
+                if (sPendingExportDurationSec > 59) sPendingExportDurationSec = 59;
+                ImGui::Separator();
+            }
+
+            if (strmCount > 0)
+            {
+                ImGui::Text("Stream audio:");
+                ImGui::RadioButton("Multi-channel WAV (one file)", &sStrmMultiChannel, 1);
+                ImGui::RadioButton("Split per-track WAV files", &sStrmMultiChannel, 0);
+                ImGui::Checkbox("Loop", &sStrmLoop);
+                if (sStrmLoop)
+                {
+                    ImGui::Indent();
+                    ImGui::SetNextItemWidth(80);
+                    ImGui::InputInt("Loop count", &sStrmLoopCount, 1, 2);
+                    if (sStrmLoopCount < 1) sStrmLoopCount = 1;
+                    if (sStrmLoopCount > 99) sStrmLoopCount = 99;
+                    ImGui::SetNextItemWidth(80);
+                    ImGui::InputFloat("Fade (sec)", &sStrmFadeSec, 0.5f, 2.0f, "%.1f");
+                    if (sStrmFadeSec < 0.0f) sStrmFadeSec = 0.0f;
+                    ImGui::Unindent();
+                }
+                ImGui::Separator();
+            }
+
+            ImGui::SetNextItemWidth(140);
+            ImGui::Combo("Sample rate", &sStrmSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
+            ImGui::Separator();
+
+            if (ImGui::Button("Export", ImVec2(120, 0)))
+            {
+                sead::FixedSafeString<512> dirPath;
+                if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
+                {
+                    sExportDirPath = dirPath;
+                    sExportProgressCurrent = 0;
+                    sExportProgressTotal = count;
+                    sExportCancelled = false;
+                    sExportProcessingStarted = false;
+                    sSoundPlayer.stopAllPlayers(false);
+                    sSoundPlayer.stopAllVoices();
+                    sExportInProgress = true;
                     sPendingExport = false;
-                    sPendingExportSound = nullptr;
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -1407,295 +1627,350 @@ void DrawExportDialog()
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
                 sPendingExport = false;
-                sPendingExportSound = nullptr;
+                sPendingExportSounds.clear();
                 ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndPopup();
         }
     }
-    else if (sPendingExportType == Sound::SoundType::Wave)
+
+}
+
+static void WriteSequenceFile(const SequenceFile* seq, sead::FileDevice* device, const char* path)
+{
+    sead::FileHandle handle;
+    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+    if (handle.getDevice())
     {
-        sead::FixedSafeString<512> path;
+        sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+        seq->write(&handle, &stream, sead::Endian::eBig, true);
+    }
+}
 
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = {
-            { "Wave (*.wav)", "*.wav" }
-        };
+static void WriteWaveFile(const WaveFile* wave, sead::FileDevice* device, const char* path)
+{
+    sead::FileHandle handle;
+    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+    if (handle.getDevice())
+    {
+        sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+        wave->write(&handle, &stream, sead::Endian::eBig, true);
+    }
+}
 
-        sead::FixedSafeString<512> defaultPath;
-        BuildDefaultExportPath(&defaultPath, sPendingExportSound, "wav");
+static void ExportBankBundle(const BankFile* bank, sead::FileDevice* device, sead::FileHandle* handle)
+{
+    // Collect unique wave files referenced by the bank
+    std::vector<const WaveFile*> referencedWaves;
+    std::unordered_set<const WaveFile*> seenWaves;
 
-        if (SaveFileDialog(&path, nullptr, filterCount, filters, "wav", defaultPath.cstr()))
+    for (const Item* instrItem : bank->getInstrumentList())
+    {
+        const auto* instr = static_cast<const BankFile::Instrument*>(instrItem);
+        for (const Item* krItem : instr->getKeyRegionList())
         {
-            Item* waveItem = sPendingExportSound->getWaveSoundInfo().getWaveFileRef().getItem();
-            if (waveItem)
-                static_cast<WaveFile*>(waveItem)->writeWavFile(path);
+            const auto* kr = static_cast<const BankFile::KeyRegion*>(krItem);
+            for (const Item* vrItem : kr->getVelocityRegionList())
+            {
+                const auto* vr = static_cast<const BankFile::VelocityRegion*>(vrItem);
+                const Item* waveItem = vr->getWaveFileRef().getItem();
+                if (waveItem)
+                {
+                    const WaveFile* wave = static_cast<const WaveFile*>(waveItem);
+                    if (!seenWaves.contains(wave))
+                    {
+                        seenWaves.insert(wave);
+                        referencedWaves.push_back(wave);
+                    }
+                }
+            }
         }
-
-        sPendingExport = false;
-        sPendingExportSound = nullptr;
     }
 
+    sead::FileDeviceWriteStream stream(handle, sead::Stream::Modes::eBinary);
+    stream.setBinaryEndian(sead::Endian::eBig);
+
+    // Magic: "BBND"
+    stream.writeU32(0x42424E44);
+    // Version
+    stream.writeU32(1);
+
+    // Bank name
+    const char* bankName = bank->getNameOrNull().cstr();
+    u32 nameLen = strlen(bankName);
+    stream.writeU32(nameLen);
+    stream.writeMemBlock(bankName, nameLen);
+
+    // Wave count
+    stream.writeU32(referencedWaves.size());
+
+    // Write each wave binary via temp file
+    for (const WaveFile* wave : referencedWaves)
+    {
+        const char* waveName = wave->getNameOrNull().cstr();
+        u32 waveNameLen = strlen(waveName);
+        stream.writeU32(waveNameLen);
+        stream.writeMemBlock(waveName, waveNameLen);
+
+        static u64 sTempCounter = 0;
+        std::string tmpDir = std::filesystem::temp_directory_path().string();
+        sead::FixedSafeString<512> tempPath;
+        tempPath.format("%s/tb_bbnk_%llu.tmp",
+                        tmpDir.c_str(), (unsigned long long)sTempCounter++);
+
+        // Write wave to temp file
+        sead::FileHandle tempHandle;
+        if (device->tryOpen(&tempHandle, tempPath, sead::FileDevice::FileOpenFlag::eCreate, 0))
+        {
+            sead::FileDeviceWriteStream tempStream(&tempHandle, sead::Stream::Modes::eBinary);
+            wave->write(&tempHandle, &tempStream, sead::Endian::eBig, true);
+            tempHandle.close();
+
+            // Read temp file back
+            sead::FileDevice::LoadArg loadArg;
+            loadArg.path = tempPath;
+            u8* waveBuf = device->tryLoad(loadArg);
+            if (waveBuf)
+            {
+                u32 waveSize = loadArg.read_size;
+                stream.writeU32(waveSize);
+                stream.writeMemBlock(waveBuf, waveSize);
+                device->unload(waveBuf);
+            }
+            else
+            {
+                stream.writeU32(0);
+            }
+
+            ::remove(tempPath.cstr());
+        }
+        else
+        {
+            stream.writeU32(0);
+        }
+    }
+
+    // Instrument count
+    stream.writeU32(bank->getInstrumentList().size());
+    for (const Item* instrItem : bank->getInstrumentList())
+    {
+        const auto* instr = static_cast<const BankFile::Instrument*>(instrItem);
+        stream.writeU16(instr->getProgramNo());
+        stream.writeU16(instr->getKeyRegionList().size());
+
+        for (const Item* krItem : instr->getKeyRegionList())
+        {
+            const auto* kr = static_cast<const BankFile::KeyRegion*>(krItem);
+            stream.writeU8(kr->getKeyMin());
+            stream.writeU8(kr->getKeyMax());
+            stream.writeU16(kr->getVelocityRegionList().size());
+
+            for (const Item* vrItem : kr->getVelocityRegionList())
+            {
+                const auto* vr = static_cast<const BankFile::VelocityRegion*>(vrItem);
+
+                const Item* refWaveItem = vr->getWaveFileRef().getItem();
+                const char* refWaveName = refWaveItem ? refWaveItem->getNameOrNull().cstr() : "";
+                u32 refNameLen = strlen(refWaveName);
+                stream.writeU32(refNameLen);
+                stream.writeMemBlock(refWaveName, refNameLen);
+
+                stream.writeU8(vr->getVelocityMin());
+                stream.writeU8(vr->getVelocityMax());
+                stream.writeU8(vr->getOriginalKey());
+                stream.writeU8(vr->getVolume());
+                stream.writeU8(vr->getPan());
+                stream.writeF32(vr->getPitch());
+                stream.writeU8(vr->getIsIgnoreNoteOff() ? 1 : 0);
+                stream.writeU8(vr->getKeyGroup());
+                stream.writeU8(vr->getInterpolationType());
+                const auto& adsr = vr->getAdshrCurve();
+                stream.writeU8(adsr.attack);
+                stream.writeU8(adsr.decay);
+                stream.writeU8(adsr.sustain);
+                stream.writeU8(adsr.hold);
+                stream.writeU8(adsr.release);
+            }
+        }
+    }
 }
 
 static void DrawFileExportDialogs()
 {
-    if (sPendingExportSequenceFile)
+    if (!sPendingExportSequenceFiles.empty())
     {
-        SequenceFile* seq = sPendingExportSequenceFile;
-        sPendingExportSequenceFile = nullptr;
-
         bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
         const char* ext = isBcsar ? "bcseq" : "bfseq";
         const char* name = isBcsar ? "BCSEQ" : "BFSEQ";
 
-        sead::FixedSafeString<512> path;
-        sead::FixedSafeString<64> filterName;
-        filterName.format("%s file (*.%s)", name, ext);
-        sead::FixedSafeString<32> filterPattern;
-        filterPattern.format("*.%s", ext);
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = {
-            { filterName.cstr(), filterPattern.cstr() }
-        };
+        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
 
-        sead::FixedSafeString<512> defaultPath;
+        if (sPendingExportSequenceFiles.size() > 1)
         {
-            const char* rawName = seq->getNameOrNull().cstr();
-            std::string cwd = std::filesystem::current_path().string();
-            defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
-        }
-
-        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
-        {
-            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-            if (device)
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select export directory"))
             {
-                sead::FileHandle handle;
-                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
-                if (handle.getDevice())
+                for (SequenceFile* seq : sPendingExportSequenceFiles)
                 {
-                    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
-                    seq->write(&handle, &stream, sead::Endian::eBig, true);
+                    sead::FixedSafeString<512> filePath;
+                    filePath.format("%s/%s.%s", dirPath.cstr(), seq->getNameOrNull().cstr(), ext);
+                    if (device)
+                        WriteSequenceFile(seq, device, filePath.cstr());
                 }
             }
         }
+        else
+        {
+            SequenceFile* seq = sPendingExportSequenceFiles[0];
+            sead::FixedSafeString<512> defaultPath;
+            {
+                const char* rawName = seq->getNameOrNull().cstr();
+                std::string cwd = std::filesystem::current_path().string();
+                defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
+            }
+
+            sead::FixedSafeString<64> filterName;
+            filterName.format("%s file (*.%s)", name, ext);
+            sead::FixedSafeString<32> filterPattern;
+            filterPattern.format("*.%s", ext);
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {
+                { filterName.cstr(), filterPattern.cstr() }
+            };
+
+            sead::FixedSafeString<512> path;
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+            {
+                if (device)
+                    WriteSequenceFile(seq, device, path.cstr());
+            }
+        }
+        sPendingExportSequenceFiles.clear();
     }
 
-    if (sPendingExportWaveFile)
+    if (!sPendingExportWaveFiles.empty())
     {
-        WaveFile* wave = sPendingExportWaveFile;
-        sPendingExportWaveFile = nullptr;
-
         bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
         const char* ext = isBcsar ? "bcwav" : "bfwav";
         const char* name = isBcsar ? "BCWAV" : "BFWAV";
 
-        sead::FixedSafeString<512> path;
-        sead::FixedSafeString<64> filterName;
-        filterName.format("%s file (*.%s)", name, ext);
-        sead::FixedSafeString<32> filterPattern;
-        filterPattern.format("*.%s", ext);
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = {
-            { filterName.cstr(), filterPattern.cstr() }
-        };
+        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
 
-        sead::FixedSafeString<512> defaultPath;
+        if (sPendingExportWaveFiles.size() > 1)
         {
-            const char* rawName = wave->getNameOrNull().cstr();
-            std::string cwd = std::filesystem::current_path().string();
-            defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
-        }
-
-        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
-        {
-            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-            if (device)
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select export directory"))
             {
-                sead::FileHandle handle;
-                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
-                if (handle.getDevice())
+                for (WaveFile* wave : sPendingExportWaveFiles)
                 {
-                    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
-                    wave->write(&handle, &stream, sead::Endian::eBig, true);
+                    sead::FixedSafeString<512> filePath;
+                    filePath.format("%s/%s.%s", dirPath.cstr(), wave->getNameOrNull().cstr(), ext);
+                    if (device)
+                        WriteWaveFile(wave, device, filePath.cstr());
                 }
             }
         }
+        else
+        {
+            WaveFile* wave = sPendingExportWaveFiles[0];
+            sead::FixedSafeString<512> defaultPath;
+            {
+                const char* rawName = wave->getNameOrNull().cstr();
+                std::string cwd = std::filesystem::current_path().string();
+                defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
+            }
+
+            sead::FixedSafeString<64> filterName;
+            filterName.format("%s file (*.%s)", name, ext);
+            sead::FixedSafeString<32> filterPattern;
+            filterPattern.format("*.%s", ext);
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {
+                { filterName.cstr(), filterPattern.cstr() }
+            };
+
+            sead::FixedSafeString<512> path;
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+            {
+                if (device)
+                    WriteWaveFile(wave, device, path.cstr());
+            }
+        }
+        sPendingExportWaveFiles.clear();
     }
 
-    if (sPendingExportBankBundle)
+    if (!sPendingExportBankBundles.empty())
     {
-        BankFile* bank = sPendingExportBankBundle;
-        sPendingExportBankBundle = nullptr;
-
         const char* ext = "bbnk";
 
-        sead::FixedSafeString<512> path;
-        sead::FixedSafeString<64> filterName;
-        filterName.format("Bank Bundle (*.%s)", ext);
-        sead::FixedSafeString<32> filterPattern;
-        filterPattern.format("*.%s", ext);
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = {
-            { filterName.cstr(), filterPattern.cstr() }
-        };
+        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
 
-        sead::FixedSafeString<512> defaultPath;
-        {
-            const char* rawName = bank->getNameOrNull().cstr();
-            std::string cwd = std::filesystem::current_path().string();
-            defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
-        }
+        s32 bankCount = (s32)sPendingExportBankBundles.size();
 
-        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+        if (bankCount > 1)
         {
-            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-            if (device)
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select export directory"))
             {
-                sead::FileHandle handle;
-                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
-                if (handle.getDevice())
+                for (BankFile* bank : sPendingExportBankBundles)
                 {
-                    // Collect unique wave files referenced by the bank
-                    std::vector<const WaveFile*> referencedWaves;
-                    std::unordered_set<const WaveFile*> seenWaves;
-
-                    for (const Item* instrItem : bank->getInstrumentList())
+                    sead::FixedSafeString<512> filePath;
+                    filePath.format("%s/%s.%s", dirPath.cstr(), bank->getNameOrNull().cstr(), ext);
+                    // Use the single-bank export flow for each
+                    if (device)
                     {
-                        const auto* instr = static_cast<const BankFile::Instrument*>(instrItem);
-                        for (const Item* krItem : instr->getKeyRegionList())
+                        sead::FileHandle handle;
+                        device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                        if (handle.getDevice())
                         {
-                            const auto* kr = static_cast<const BankFile::KeyRegion*>(krItem);
-                            for (const Item* vrItem : kr->getVelocityRegionList())
-                            {
-                                const auto* vr = static_cast<const BankFile::VelocityRegion*>(vrItem);
-                                const Item* waveItem = vr->getWaveFileRef().getItem();
-                                if (waveItem)
-                                {
-                                    const WaveFile* wave = static_cast<const WaveFile*>(waveItem);
-                                    if (!seenWaves.contains(wave))
-                                    {
-                                        seenWaves.insert(wave);
-                                        referencedWaves.push_back(wave);
-                                    }
-                                }
-                            }
+                            ExportBankBundle(bank, device, &handle);
+                            handle.close();
                         }
                     }
-
-                    sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
-                    stream.setBinaryEndian(sead::Endian::eBig);
-
-                    // Magic: "BBND"
-                    stream.writeU32(0x42424E44);
-                    // Version
-                    stream.writeU32(1);
-
-                    // Bank name
-                    const char* bankName = bank->getNameOrNull().cstr();
-                    u32 nameLen = strlen(bankName);
-                    stream.writeU32(nameLen);
-                    stream.writeMemBlock(bankName, nameLen);
-
-                    // Wave count
-                    stream.writeU32(referencedWaves.size());
-
-                    // Write each wave binary via temp file
-                    for (const WaveFile* wave : referencedWaves)
-                    {
-                        const char* waveName = wave->getNameOrNull().cstr();
-                        u32 waveNameLen = strlen(waveName);
-                        stream.writeU32(waveNameLen);
-                        stream.writeMemBlock(waveName, waveNameLen);
-
-                        static u64 sTempCounter = 0;
-                        std::string tmpDir = std::filesystem::temp_directory_path().string();
-                        sead::FixedSafeString<512> tempPath;
-                        tempPath.format("%s/tb_bbnk_%llu.tmp",
-                                        tmpDir.c_str(), (unsigned long long)sTempCounter++);
-
-                        // Write wave to temp file
-                        sead::FileHandle tempHandle;
-                        if (device->tryOpen(&tempHandle, tempPath, sead::FileDevice::FileOpenFlag::eCreate, 0))
-                        {
-                            sead::FileDeviceWriteStream tempStream(&tempHandle, sead::Stream::Modes::eBinary);
-                            wave->write(&tempHandle, &tempStream, sead::Endian::eBig, true);
-                            tempHandle.close();
-
-                            // Read temp file back
-                            sead::FileDevice::LoadArg loadArg;
-                            loadArg.path = tempPath;
-                            u8* waveBuf = device->tryLoad(loadArg);
-                            if (waveBuf)
-                            {
-                                u32 waveSize = loadArg.read_size;
-                                stream.writeU32(waveSize);
-                                stream.writeMemBlock(waveBuf, waveSize);
-                                device->unload(waveBuf);
-                            }
-                            else
-                            {
-                                stream.writeU32(0);
-                            }
-
-                            ::remove(tempPath.cstr());
-                        }
-                        else
-                        {
-                            stream.writeU32(0);
-                        }
-                    }
-
-                    // Instrument count
-                    stream.writeU32(bank->getInstrumentList().size());
-                    for (const Item* instrItem : bank->getInstrumentList())
-                    {
-                        const auto* instr = static_cast<const BankFile::Instrument*>(instrItem);
-                        stream.writeU16(instr->getProgramNo());
-                        stream.writeU16(instr->getKeyRegionList().size());
-
-                        for (const Item* krItem : instr->getKeyRegionList())
-                        {
-                            const auto* kr = static_cast<const BankFile::KeyRegion*>(krItem);
-                            stream.writeU8(kr->getKeyMin());
-                            stream.writeU8(kr->getKeyMax());
-                            stream.writeU16(kr->getVelocityRegionList().size());
-
-                            for (const Item* vrItem : kr->getVelocityRegionList())
-                            {
-                                const auto* vr = static_cast<const BankFile::VelocityRegion*>(vrItem);
-
-                                const Item* refWaveItem = vr->getWaveFileRef().getItem();
-                                const char* refWaveName = refWaveItem ? refWaveItem->getNameOrNull().cstr() : "";
-                                u32 refNameLen = strlen(refWaveName);
-                                stream.writeU32(refNameLen);
-                                stream.writeMemBlock(refWaveName, refNameLen);
-
-                                stream.writeU8(vr->getVelocityMin());
-                                stream.writeU8(vr->getVelocityMax());
-                                stream.writeU8(vr->getOriginalKey());
-                                stream.writeU8(vr->getVolume());
-                                stream.writeU8(vr->getPan());
-                                stream.writeF32(vr->getPitch());
-                                stream.writeU8(vr->getIsIgnoreNoteOff() ? 1 : 0);
-                                stream.writeU8(vr->getKeyGroup());
-                                stream.writeU8(vr->getInterpolationType());
-                                const auto& adsr = vr->getAdshrCurve();
-                                stream.writeU8(adsr.attack);
-                                stream.writeU8(adsr.decay);
-                                stream.writeU8(adsr.sustain);
-                                stream.writeU8(adsr.hold);
-                                stream.writeU8(adsr.release);
-                            }
-                        }
-                    }
-
-                    handle.close();
                 }
+                sExportConfirmMessage.format("Exported %d bank bundles successfully.", bankCount);
+                sShowExportConfirm = true;
             }
         }
+        else
+        {
+            BankFile* bank = sPendingExportBankBundles[0];
+
+            sead::FixedSafeString<512> path;
+            sead::FixedSafeString<64> filterName;
+            filterName.format("Bank Bundle (*.%s)", ext);
+            sead::FixedSafeString<32> filterPattern;
+            filterPattern.format("*.%s", ext);
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {
+                { filterName.cstr(), filterPattern.cstr() }
+            };
+
+            sead::FixedSafeString<512> defaultPath;
+            {
+                const char* rawName = bank->getNameOrNull().cstr();
+                std::string cwd = std::filesystem::current_path().string();
+                defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
+            }
+
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+            {
+                if (device)
+                {
+                    sead::FileHandle handle;
+                    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                    if (handle.getDevice())
+                    {
+                        ExportBankBundle(bank, device, &handle);
+                        handle.close();
+                    }
+                }
+                sExportConfirmMessage.copy("Bank bundle exported successfully.");
+                sShowExportConfirm = true;
+            }
+        }
+        sPendingExportBankBundles.clear();
     }
 
     if (sPendingImportSequenceFile)
@@ -2047,51 +2322,93 @@ static void DrawFileExportDialogs()
         }
     }
 
-    if (sPendingExportWaveToWav)
+    if (!sPendingExportWaveToWavs.empty())
     {
-        WaveFile* wave = sPendingExportWaveToWav;
-        sPendingExportWaveToWav = nullptr;
+        s32 wavCount = (s32)sPendingExportWaveToWavs.size();
 
-        sead::FixedSafeString<512> defaultPath;
+        if (wavCount > 1)
         {
-            const char* rawName = wave->getNameOrNull().cstr();
-            std::string cwd = std::filesystem::current_path().string();
-            defaultPath.format("%s/%s.wav", cwd.c_str(), rawName);
-        }
-
-        sead::FixedSafeString<512> path;
-        FileFilter filters[] = {
-            { "Wave (*.wav)", "*.wav" }
-        };
-
-        if (SaveFileDialog(&path, nullptr, 1, filters, "wav", defaultPath.cstr()))
-        {
-            if (!wave->writeWavFile(path))
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
             {
-                PopupMgr::instance()->addPopup({ "Failed to write WAV file", nullptr });
+                for (WaveFile* wave : sPendingExportWaveToWavs)
+                {
+                    sead::FixedSafeString<512> filePath;
+                    filePath.format("%s/%s.wav", dirPath.cstr(), wave->getNameOrNull().cstr());
+                    if (!wave->writeWavFile(filePath))
+                    {
+                        PopupMgr::instance()->addPopup({ "Failed to write WAV file", nullptr });
+                    }
+                }
             }
         }
+        else
+        {
+            WaveFile* wave = sPendingExportWaveToWavs[0];
+
+            sead::FixedSafeString<512> defaultPath;
+            {
+                const char* rawName = wave->getNameOrNull().cstr();
+                std::string cwd = std::filesystem::current_path().string();
+                defaultPath.format("%s/%s.wav", cwd.c_str(), rawName);
+            }
+
+            sead::FixedSafeString<512> path;
+            FileFilter filters[] = {
+                { "Wave (*.wav)", "*.wav" }
+            };
+
+            if (SaveFileDialog(&path, nullptr, 1, filters, "wav", defaultPath.cstr()))
+            {
+                if (!wave->writeWavFile(path))
+                {
+                    PopupMgr::instance()->addPopup({ "Failed to write WAV file", nullptr });
+                }
+            }
+        }
+        sPendingExportWaveToWavs.clear();
     }
 
-    if (sPendingExportMidiSound)
+    if (!sPendingExportMidiSounds.empty())
     {
-        Sound* sound = sPendingExportMidiSound;
-        sPendingExportMidiSound = nullptr;
+        s32 midiCount = (s32)sPendingExportMidiSounds.size();
 
-        sead::FixedSafeString<512> path;
-        const u32 filterCount = 1;
-        FileFilter filters[filterCount] = { { "MIDI (*.midi)", "*.midi" } };
-
-        sead::FixedSafeString<512> defaultPath;
-        BuildDefaultExportPath(&defaultPath, sound, "midi");
-
-        if (SaveFileDialog(&path, nullptr, filterCount, filters, "midi", defaultPath.cstr()))
+        if (midiCount > 1)
         {
-            if (!exportSeqToMidi(path, *sound))
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select directory for MIDI export"))
             {
-                PopupMgr::instance()->addPopup({ "Failed to export MIDI file", nullptr });
+                for (Sound* sound : sPendingExportMidiSounds)
+                {
+                    sead::FixedSafeString<512> filePath;
+                    BuildExportPathFromDir(&filePath, dirPath.cstr(), sound, "midi");
+                    if (!exportSeqToMidi(filePath, *sound))
+                    {
+                        PopupMgr::instance()->addPopup({ "Failed to export MIDI file", nullptr });
+                    }
+                }
             }
         }
+        else
+        {
+            Sound* sound = sPendingExportMidiSounds[0];
+
+            sead::FixedSafeString<512> path;
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = { { "MIDI (*.midi)", "*.midi" } };
+
+            sead::FixedSafeString<512> defaultPath;
+            BuildDefaultExportPath(&defaultPath, sound, "midi");
+
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, "midi", defaultPath.cstr()))
+            {
+                if (!exportSeqToMidi(path, *sound))
+                {
+                    PopupMgr::instance()->addPopup({ "Failed to export MIDI file", nullptr });
+                }
+            }
+        }
+        sPendingExportMidiSounds.clear();
     }
 }
 
@@ -2107,7 +2424,7 @@ void DrawExportConfirmPopup()
 
     if (ImGui::BeginPopupModal("Export Complete", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("Stream exported successfully.");
+        ImGui::Text("%s", sExportConfirmMessage.cstr());
         ImGui::Separator();
 
         if (ImGui::Button("OK", ImVec2(120, 0)))
@@ -2117,6 +2434,166 @@ void DrawExportConfirmPopup()
         }
 
         ImGui::EndPopup();
+    }
+}
+
+static void ProcessExportNextItem()
+{
+    if (sExportCancelled || sExportProgressCurrent >= sExportProgressTotal)
+    {
+        if (!sExportCancelled && sExportProgressTotal > 0)
+        {
+            sExportConfirmMessage.format("Exported %d sounds successfully.", sExportProgressTotal);
+            sShowExportConfirm = true;
+        }
+        sExportInProgress = false;
+        sPendingExportSounds.clear();
+        return;
+    }
+
+    Sound* sound = sPendingExportSounds[sExportProgressCurrent];
+
+    sead::FixedSafeString<512> filePath;
+    BuildExportPathFromDir(&filePath, sExportDirPath.cstr(), sound, "wav");
+
+    Sound::SoundType t = sound->getSoundType();
+    if (t == Sound::SoundType::Seq)
+    {
+        u32 totalSecs = (u32)(sPendingExportDurationMin * 60 + sPendingExportDurationSec);
+        if (totalSecs == 0) totalSecs = 1;
+        u32 targetRate = sSampleRateValues[sSeqSampleRateIdx];
+        sSoundPlayer.exportSeqToWav(filePath, sound, totalSecs, targetRate);
+    }
+    else if (t == Sound::SoundType::Strm)
+    {
+        u32 targetRate = sSampleRateValues[sStrmSampleRateIdx];
+        ExportStreamSoundToWav(sound, filePath.cstr(), sStrmMultiChannel != 0, sStrmLoop, sStrmLoopCount, sStrmFadeSec, targetRate);
+    }
+    else if (t == Sound::SoundType::Wave)
+    {
+        Item* waveItem = sound->getWaveSoundInfo().getWaveFileRef().getItem();
+        if (waveItem)
+            static_cast<WaveFile*>(waveItem)->writeWavFile(filePath);
+    }
+
+    sExportProgressCurrent++;
+}
+
+void DrawExportProgressPopup()
+{
+    sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
+
+    static bool wasTitleSet = false;
+    static sead::FixedSafeString<256> origTitle;
+
+    auto restoreTitle = [&]()
+    {
+        if (wasTitleSet && fw)
+        {
+            glfwSetWindowTitle(fw->getWindowHandle(), origTitle.cstr());
+            wasTitleSet = false;
+        }
+    };
+
+    // Phase 1: If export is done, close any lingering popup and restore title
+    if (!sExportInProgress)
+    {
+        if (ImGui::IsPopupOpen("Export Progress"))
+        {
+            ImGui::OpenPopup("Export Progress");
+            if (ImGui::BeginPopupModal("Export Progress", nullptr, ImGuiWindowFlags_NoResize))
+            {
+                ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+        }
+        restoreTitle();
+        return;
+    }
+
+    // Update main window title while exporting
+    if (fw && !wasTitleSet)
+    {
+        const char* current = glfwGetWindowTitle(fw->getWindowHandle());
+        origTitle = current ? current : "TuneBloom";
+        sead::FixedSafeString<512> exportTitle;
+        exportTitle.format("%s - Exporting...", origTitle.cstr());
+        glfwSetWindowTitle(fw->getWindowHandle(), exportTitle.cstr());
+        wasTitleSet = true;
+    }
+
+    // Phase 2: Render the popup FIRST so it appears before any processing
+    ImGui::OpenPopup("Export Progress");
+    ImGui::SetNextWindowSize(ImVec2(650.0f, 0.0f));
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Export Progress", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        s32 shownCount = sExportProgressCurrent < sExportProgressTotal
+            ? sExportProgressCurrent + 1
+            : sExportProgressTotal;
+        float progress = sExportProgressTotal > 0
+            ? (float)sExportProgressCurrent / (float)sExportProgressTotal
+            : 0.0f;
+
+        ImGui::ProgressBar(progress, ImVec2(-1.0f, 24.0f), "");
+        ImVec2 barMin = ImGui::GetItemRectMin();
+        ImVec2 barMax = ImGui::GetItemRectMax();
+        sead::FormatFixedSafeString<32> label("%d / %d", shownCount, sExportProgressTotal);
+        ImGui::GetWindowDrawList()->AddText(
+            ImVec2((barMin.x + barMax.x - ImGui::CalcTextSize(label.cstr()).x) * 0.5f,
+                   (barMin.y + barMax.y - ImGui::CalcTextSize(label.cstr()).y) * 0.5f),
+            IM_COL32_WHITE, label.cstr());
+
+        if (sExportProgressCurrent < sExportProgressTotal && !sPendingExportSounds.empty())
+        {
+            Sound* cur = sPendingExportSounds[sExportProgressCurrent];
+            sead::FixedSafeString<256> name;
+            name.format("Current: %s", cur->getName().cstr());
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            if (ImGui::CalcTextSize(name.cstr()).x > availWidth)
+            {
+                sead::FixedSafeString<256> truncated;
+                for (s32 i = name.calcLength() - 1; i > 0; i--)
+                {
+                    sead::FixedSafeString<256> test;
+                    test.format("%.*s...", i, name.cstr());
+                    if (ImGui::CalcTextSize(test.cstr()).x <= availWidth)
+                    {
+                        truncated = test;
+                        break;
+                    }
+                }
+                ImGui::Text("%s", truncated.cstr());
+            }
+            else
+            {
+                ImGui::Text("%s", name.cstr());
+            }
+        }
+        ImGui::Separator();
+
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        {
+            sExportCancelled = true;
+            sExportInProgress = false;
+            sPendingExportSounds.clear();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    // Phase 3: Process next item AFTER the popup is already visible.
+    // Skip the very first frame so the modal appears before any work begins.
+    if (sExportProcessingStarted)
+    {
+        if (!sExportCancelled)
+            ProcessExportNextItem();
+    }
+    else
+    {
+        sExportProcessingStarted = true;
     }
 }
 
@@ -3587,6 +4064,22 @@ const char* SoundNamePrefixFunc(Item* item)
     return icon;
 }
 
+static std::vector<Sound*> CollectSoundsForAction(Item* item)
+{
+    Sound* sound = static_cast<Sound*>(item);
+    if (sound && !sMultiSelectedItems.empty() &&
+        std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), sound) != sMultiSelectedItems.end())
+    {
+        std::vector<Sound*> result;
+        for (Item* sel : sMultiSelectedItems)
+            result.push_back(static_cast<Sound*>(sel));
+        return result;
+    }
+    if (sound)
+        return { sound };
+    return {};
+}
+
 void SoundContextMenuFunc(Item* item, bool afterDelete)
 {
     if (afterDelete)
@@ -3602,28 +4095,55 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
         isSeq = (type == Sound::SoundType::Seq);
     }
 
+    // When multi-selection is active, check ALL items for enabling
+    bool multiActive = sound && !sMultiSelectedItems.empty() &&
+        std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), sound) != sMultiSelectedItems.end();
+
+    if (multiActive)
+    {
+        bool allCanExport = true;
+        bool allIsSeq = true;
+        for (Item* sel : sMultiSelectedItems)
+        {
+            Sound* s = static_cast<Sound*>(sel);
+            Sound::SoundType t = s->getSoundType();
+            if (!(t == Sound::SoundType::Wave || t == Sound::SoundType::Strm || t == Sound::SoundType::Seq))
+                allCanExport = false;
+            if (t != Sound::SoundType::Seq)
+                allIsSeq = false;
+        }
+        canExport = allCanExport;
+        isSeq = allIsSeq;
+    }
+
+    ImGui::Separator();
+
     if (!canExport)
         ImGui::BeginDisabled();
 
     if (ImGui::MenuItem("Export to WAV"))
     {
-        sShowExportConfirm = false;
-        sPendingExportSound = sound;
-        sPendingExportType = sound->getSoundType();
-        sPendingExport = true;
+        auto sounds = CollectSoundsForAction(item);
+        if (!sounds.empty())
+        {
+            sShowExportConfirm = false;
+            sPendingExportSounds = std::move(sounds);
+            sPendingExportType = sound->getSoundType();
+            sPendingExport = true;
+        }
     }
 
     if (!canExport)
         ImGui::EndDisabled();
-
-    ImGui::Separator();
 
     if (!isSeq)
         ImGui::BeginDisabled();
 
     if (ImGui::MenuItem("Export to MIDI"))
     {
-        sPendingExportMidiSound = sound;
+        auto sounds = CollectSoundsForAction(item);
+        if (!sounds.empty())
+            sPendingExportMidiSounds = std::move(sounds);
     }
 
     if (!isSeq)
@@ -4245,6 +4765,22 @@ static WaveFile* sImportWaveFile = nullptr;
 static WaveFile::RiffWaveInfo sRiffWaveInfo;
 static sead::FixedSafeString<512> sWavFileName;
 
+static std::vector<WaveFile*> CollectWaveFilesForAction(Item* item)
+{
+    WaveFile* wave = item ? static_cast<WaveFile*>(item) : nullptr;
+    if (wave && !sMultiSelectedItems.empty() &&
+        std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), wave) != sMultiSelectedItems.end())
+    {
+        std::vector<WaveFile*> result;
+        for (Item* sel : sMultiSelectedItems)
+            result.push_back(static_cast<WaveFile*>(sel));
+        return result;
+    }
+    if (wave)
+        return { wave };
+    return {};
+}
+
 void WaveFileContextMenuFunc(Item* item, bool afterDelete)
 {
     WaveFile* wave = nullptr;
@@ -4255,8 +4791,15 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
     if (disableMenu)
         ImGui::BeginDisabled();
 
+    // Disable "Replace" when multi-selecting (only single-item replace makes sense)
+    bool multiActive = wave && !sMultiSelectedItems.empty() &&
+        std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), wave) != sMultiSelectedItems.end();
+
     if (!afterDelete)
     {
+        bool disableReplace = multiActive;
+        if (disableReplace) ImGui::BeginDisabled();
+
         if (ImGui::MenuItem("Replace"))
         {
             sImportWaveFile = nullptr;
@@ -4281,6 +4824,8 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
                 }
             }
         }
+
+        if (disableReplace) ImGui::EndDisabled();
     }
     else
     {
@@ -4288,17 +4833,37 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
 
         if (ImGui::MenuItem("Export"))
         {
-            sPendingExportWaveFile = wave;
+            auto waves = CollectWaveFilesForAction(item);
+            if (!waves.empty())
+                sPendingExportWaveFiles = std::move(waves);
         }
 
         if (ImGui::MenuItem("Export to WAV"))
         {
-            sPendingExportWaveToWav = wave;
+            auto waves = CollectWaveFilesForAction(item);
+            if (!waves.empty())
+                sPendingExportWaveToWavs = std::move(waves);
         }
     }
 
     if (disableMenu)
         ImGui::EndDisabled();
+}
+
+static std::vector<SequenceFile*> CollectSequenceFilesForAction(Item* item)
+{
+    SequenceFile* seq = item ? static_cast<SequenceFile*>(item) : nullptr;
+    if (seq && !sMultiSelectedItems.empty() &&
+        std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), seq) != sMultiSelectedItems.end())
+    {
+        std::vector<SequenceFile*> result;
+        for (Item* sel : sMultiSelectedItems)
+            result.push_back(static_cast<SequenceFile*>(sel));
+        return result;
+    }
+    if (seq)
+        return { seq };
+    return {};
 }
 
 void SequenceFileContextMenuFunc(Item* item, bool afterDelete)
@@ -4322,10 +4887,28 @@ void SequenceFileContextMenuFunc(Item* item, bool afterDelete)
 
     if (ImGui::MenuItem("Export"))
     {
-        sPendingExportSequenceFile = seq;
+        auto seqs = CollectSequenceFilesForAction(item);
+        if (!seqs.empty())
+            sPendingExportSequenceFiles = std::move(seqs);
     }
 
     if (disabled) ImGui::EndDisabled();
+}
+
+static std::vector<BankFile*> CollectBankFilesForAction(Item* item)
+{
+    BankFile* bank = item ? static_cast<BankFile*>(item) : nullptr;
+    if (bank && !sMultiSelectedItems.empty() &&
+        std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), bank) != sMultiSelectedItems.end())
+    {
+        std::vector<BankFile*> result;
+        for (Item* sel : sMultiSelectedItems)
+            result.push_back(static_cast<BankFile*>(sel));
+        return result;
+    }
+    if (bank)
+        return { bank };
+    return {};
 }
 
 void BankFileContextMenuFunc(Item* item, bool afterDelete)
@@ -4350,7 +4933,9 @@ void BankFileContextMenuFunc(Item* item, bool afterDelete)
 
         if (ImGui::MenuItem("Export Bank Bundle"))
         {
-            sPendingExportBankBundle = bank;
+            auto banks = CollectBankFilesForAction(item);
+            if (!banks.empty())
+                sPendingExportBankBundles = std::move(banks);
         }
 
         if (disabled) ImGui::EndDisabled();

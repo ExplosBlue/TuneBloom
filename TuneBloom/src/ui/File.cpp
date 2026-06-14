@@ -61,6 +61,20 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     return true;
 }
 
+bool SelectFolderDialog(sead::BufferedSafeString* outPath, const char* title)
+{
+    LOG_FMT("title=\"%s\"", title ? title : "nullptr");
+    SEAD_ASSERT(outPath);
+
+    std::string result = pfd::select_folder(title ? title : "", "").result();
+    if (result.empty())
+        return false;
+
+    LOG_STR(result.c_str());
+    outPath->copy(result.c_str());
+    return true;
+}
+
 bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters, const char* defaultExt, const char* defaultName)
 {
     LOG_FMT("title=\"%s\" filterCount=%u defaultExt=\"%s\" defaultName=\"%s\"", title ? title : "nullptr", filterCount, defaultExt ? defaultExt : "nullptr", defaultName ? defaultName : "nullptr");
@@ -152,6 +166,9 @@ Bfsar sBfsar;
 Item* sSelectedItemArr[(size_t)UIType::Max + 1] = {};
 Item* sSubSelectedItemArr[(size_t)UIType::Max + 1] = {};
 bool sSelectedItemIsSubWindowArr[(size_t)UIType::Max + 1] = {};
+
+std::vector<Item*> sMultiSelectedItemsArr[(size_t)UIType::Max + 1];
+Item* sMultiSelectAnchorArr[(size_t)UIType::Max + 1] = {};
 
 bool ValidBFSARHeader(const void* file)
 {
@@ -376,6 +393,8 @@ bool CloseFile()
         sSelectedItemArr[i] = nullptr;
         sSubSelectedItemArr[i] = nullptr;
         sSelectedItemIsSubWindowArr[i] = false;
+        sMultiSelectedItemsArr[i].clear();
+        sMultiSelectAnchorArr[i] = nullptr;
     }
     sFileWindows.clear();
     CloseFilter();

@@ -56,6 +56,7 @@ struct FileFilter
 
 bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title = nullptr, u32 filterCount = 0, FileFilter* filters = nullptr);
 bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title = nullptr, u32 filterCount = 0, FileFilter* filters = nullptr, const char* defaultExt = nullptr, const char* defaultName = "");
+bool SelectFolderDialog(sead::BufferedSafeString* outPath, const char* title = nullptr);
 
 extern Bfsar sBfsar;
 extern SoundPlayer sSoundPlayer;
@@ -75,9 +76,14 @@ extern Item* sSelectedItemArr[];
 extern Item* sSubSelectedItemArr[];
 extern bool sSelectedItemIsSubWindowArr[];
 
+extern std::vector<Item*> sMultiSelectedItemsArr[];
+extern Item* sMultiSelectAnchorArr[];
+
 #define sSelectedItem sSelectedItemArr[(size_t)sSelectedUIType]
 #define sSubSelectedItem sSubSelectedItemArr[(size_t)sSelectedUIType]
 #define sSelectedItemIsSubWindow sSelectedItemIsSubWindowArr[(size_t)sSelectedUIType]
+#define sMultiSelectedItems sMultiSelectedItemsArr[(size_t)sSelectedUIType]
+#define sMultiSelectAnchor sMultiSelectAnchorArr[(size_t)sSelectedUIType]
 
 extern ImVec4 gAccentColor;
 extern f32 gThemeBrightness;

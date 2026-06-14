@@ -546,6 +546,7 @@ bool WaveFile::doRead(const void* fileAddr)
     mIsLoop = waveInfo.loopFlag;
     mSampleRate = waveInfo.sampleRate;
 
+    mOriginalFileLoopStartFrame = waveInfo.originalLoopStartFrame;
     if (waveInfo.originalLoopStartFrame == 0 && waveInfo.loopStartFrame != 0)
         waveInfo.originalLoopStartFrame = waveInfo.loopStartFrame;
 
@@ -653,10 +654,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         stream->writeU32(mSampleRate);
         stream->writeU32(getLoopStartFrame(false));
         stream->writeU32(getLoopEndFrame(false));
-        u32 ols = 0;
-        if (isOriginalLoopAvailable(mFormat, mVersion))
-            ols = getOriginalLoopStartFrame();
-        stream->writeU32(ols);
+        stream->writeU32(isOriginalLoopAvailable(mFormat, mVersion) ? (mUseOriginalData ? mOriginalFileLoopStartFrame : getOriginalLoopStartFrame()) : 0);
 
         writer.pushOffsetBase();
         {

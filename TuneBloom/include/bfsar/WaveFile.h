@@ -304,6 +304,7 @@ public:
         , mSampleRate(0)
         , mLoopStartFrame(0)
         , mLoopEndFrame(0)
+        , mOriginalFileLoopStartFrame(0)
 
         , mSampleCount(0)
 
@@ -509,6 +510,7 @@ private:
     u32 mSampleRate;
     u32 mLoopStartFrame;
     u32 mLoopEndFrame;
+    u32 mOriginalFileLoopStartFrame;
 
     u32 mSampleCount;
 

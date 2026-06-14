@@ -129,7 +129,7 @@ public:
     bool isStreamSendAvailable() const
     {
         if (mFormat == ArchiveFormat::BCSAR)
-            return isVersionOrLater(2, 3, 1);
+            return isVersionOrLater(2, 0, 0);
 
         return isVersionOrLater(2, 1, 0);
     }
@@ -321,12 +321,7 @@ public:
     u32 getVersionForBfgrp() const
     {
         if (mFormat == ArchiveFormat::BCSAR)
-        {
-            if (isVersionOrLater(2, 1, 0))
-                return makeVersion(1, 1, 0);
-
-            return makeVersion(1, 0, 0);
-        }
+            return makeVersion(1, 1, 0);
 
         if (isVersionOrLater(2, 1, 0))
             return makeVersion(1, 1, 0);

@@ -700,6 +700,7 @@ public:
             , mEnableSend(true)
             , mMainSend(127)
             , mFxSendCount(0)
+            , mOriginalFxSendCount(0)
             , mEnableEnvelope(true)
             , mAdshrCurve(127, 127, 127, 127, 127)
             , mEnableFilter(true)
@@ -856,6 +857,11 @@ public:
             mMainSend = mainSend;
         }
 
+        u8 getOriginalFxSendCount() const
+        {
+            return mOriginalFxSendCount;
+        }
+
         u8 getFxSend(u32 idx) const
         {
             SEAD_ASSERT(idx < 3);
@@ -983,6 +989,7 @@ public:
         u8 mMainSend;
         u8 mFxSend[3];
         u8 mFxSendCount;
+        u8 mOriginalFxSendCount;
         bool mEnableEnvelope;
         snd::AdshrCurve mAdshrCurve;
         bool mEnableFilter;

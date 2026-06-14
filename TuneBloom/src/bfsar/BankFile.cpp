@@ -515,7 +515,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
 
                 if (keyRegionRef->offset == nw::snd::internal::Util::Reference::INVALID_OFFSET)
                 {
-                    if (keyRegionRef->typeId != nw::snd::internal::ElementType_BankFile_NullInfo)
+                    if (keyRegionRef->typeId != 0 && keyRegionRef->typeId != nw::snd::internal::ElementType_BankFile_NullInfo)
                     {
                         sead::FormatFixedSafeString<256> msg("Instrument %u: KeyRegion error (Range)", mId);
                         PopupMgr::instance()->pushCurrentItemError(msg);
@@ -606,7 +606,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
 
                 if (keyRegionRef->offset == nw::snd::internal::Util::Reference::INVALID_OFFSET)
                 {
-                    if (keyRegionRef->typeId != nw::snd::internal::ElementType_BankFile_NullInfo)
+                    if (keyRegionRef->typeId != 0 && keyRegionRef->typeId != nw::snd::internal::ElementType_BankFile_NullInfo)
                     {
                         sead::FormatFixedSafeString<256> msg("Instrument %u: KeyRegion error (Index)", mId);
                         PopupMgr::instance()->pushCurrentItemError(msg);

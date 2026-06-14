@@ -2266,12 +2266,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                         innerWaveSoundInfo.GetSendValue(&sound->mWaveSoundInfo.mMainSend, sound->mWaveSoundInfo.mFxSend, nw::snd::AUX_BUS_NUM);
 
                         u32 sendOffset;
-                        if (innerWaveSoundInfo.optionParameter.GetValue(&sendOffset, nw::snd::internal::WAVE_SOUND_INFO_SEND))
-                        {
-                            const nw::snd::internal::SendValueWsd& sendValue = *reinterpret_cast<const nw::snd::internal::SendValueWsd*>(
-                                sead::PtrUtil::addOffset(&innerWaveSoundInfo, sendOffset));
-                            sound->mWaveSoundInfo.mFxSendCount = sendValue.fxSend.count;
-                        }
+                        innerWaveSoundInfo.optionParameter.GetValue(&sendOffset, nw::snd::internal::WAVE_SOUND_INFO_SEND);
+                        const nw::snd::internal::SendValueWsd& sendValue = *reinterpret_cast<const nw::snd::internal::SendValueWsd*>(
+                            sead::PtrUtil::addOffset(&innerWaveSoundInfo, sendOffset));
+                        sound->mWaveSoundInfo.mOriginalFxSendCount = sendValue.fxSend.count;
                     }
 
                     sound->mWaveSoundInfo.mEnableEnvelope = innerWaveSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::WAVE_SOUND_INFO_ENVELOPE) != 0;
@@ -4549,7 +4547,10 @@ void Bfsar::save_(sead::FileHandle& handle)
 
                     stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(sound->getPlayerId(), nw::snd::internal::ItemType_Player));
                     stream.writeU8(sound->getVolume());
-                    stream.writeU8(sound->getRemoteFilter());
+                    if (mFormat == ArchiveFormat::BCSAR)
+                        stream.writeU8(0);
+                    else
+                        stream.writeU8(sound->getRemoteFilter());
                     stream.writeU16(0); // Padding1
 
                     writer.openReference("DetailSoundInfo");
@@ -4586,7 +4587,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                             flags[nw::snd::internal::SOUND_INFO_OFFSET_TO_3D_PARAM] = 0;
                         }
 
-                        if (sound->isEnableIsFrontBypass() && sound->getSoundType() != Sound::SoundType::Strm)
+                        if (sound->isEnableIsFrontBypass() && ((mFormat == ArchiveFormat::BCSAR && !isVersionOrLater(2, 1, 0)) || sound->getSoundType() != Sound::SoundType::Strm))
                         {
                             flags[nw::snd::internal::SOUND_INFO_OFFSET_TO_CTR_PARAM] = sound->getIsFrontBypass();
                         }
@@ -4632,7 +4633,7 @@ void Bfsar::save_(sead::FileHandle& handle)
                         }
                     }
 
-                    if (sound->getSoundType() == Sound::SoundType::Wave || sound->getSoundType() == Sound::SoundType::Seq)
+                    if ((mFormat == ArchiveFormat::BCSAR && !isVersionOrLater(2, 1, 0)) || sound->getSoundType() == Sound::SoundType::Wave || sound->getSoundType() == Sound::SoundType::Seq)
                     {
                         stream.writeU32(sound->getIsFrontBypass()); // BRUH
                     }
@@ -4866,8 +4867,25 @@ void Bfsar::save_(sead::FileHandle& handle)
                                     flags[nw::snd::internal::WAVE_SOUND_INFO_PRIORITY] = flag;
                                 }
 
+                                u32 sendDataOffset = 0;
+                                if (waveInfo.isEnableSend() && mFormat == ArchiveFormat::BCSAR && !isVersionOrLater(2, 1, 0))
+                                {
+                                    sendDataOffset = 4 + 4 + 4;
+                                    if (waveInfo.isEnablePriority())
+                                        sendDataOffset += 4;
+                                    sendDataOffset += 4;
+
+                                    flags[nw::snd::internal::WAVE_SOUND_INFO_SEND] = sendDataOffset;
+                                }
+
                                 FlagParameters params(flags);
                                 params.write(writer);
+
+                                if (waveInfo.isEnableSend() && mFormat == ArchiveFormat::BCSAR && !isVersionOrLater(2, 1, 0))
+                                {
+                                    stream.writeU32(0x027F);
+                                    stream.writeU32(0);
+                                }
                                 break;
                             }
 
@@ -5204,8 +5222,13 @@ void Bfsar::save_(sead::FileHandle& handle)
             stream.writeU16(mSoundArchivePlayerInfo.streamChannelMax);
             stream.writeU16(mSoundArchivePlayerInfo.waveSoundMax);
             stream.writeU16(mSoundArchivePlayerInfo.waveTrackMax);
-            stream.writeU8(isStreamPrefetchAvailable() ? mSoundArchivePlayerInfo.streamBufferTimes : 0);
-            stream.writeU8(0); // Padding
+            if (mFormat == ArchiveFormat::BCSAR)
+                stream.writeU16(0); // Padding
+            else
+            {
+                stream.writeU8(isStreamPrefetchAvailable() ? mSoundArchivePlayerInfo.streamBufferTimes : 0);
+                stream.writeU8(0); // Padding
+            }
             stream.writeU32(mSoundArchivePlayerInfo.options);
         }
         writer.popOffsetBase();

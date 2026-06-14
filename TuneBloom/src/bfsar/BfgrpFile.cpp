@@ -257,7 +257,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
         {
             writer.addReferenceTableReference("ItemInfoExTable", nw::snd::internal::ElementType_GroupFile_GroupItemInfoEx);
 
-            u32 itemId = 0; //? Idk why not nw::snd::SoundArchive::INVALID_ID... 
+            u32 itemId = 0;
             if (!itemInfo.getIsDisabled() && itemInfo.getItemRef().isAttached())
             {
                 nw::snd::internal::ItemType itemType;

@@ -219,9 +219,9 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
                             stream->writeU8(waveSoundInfo.getMainSend());
 
-                            u8 fxSendCount = getAuxBusCount(mFormat);
-                            if (u8 stored = waveSoundInfo.getFxSendCount())
-                                fxSendCount = stored;
+                            u8 fxSendCount = waveSoundInfo.getOriginalFxSendCount();
+                            if (fxSendCount == 0)
+                                fxSendCount = nw::snd::AUX_BUS_NUM;
                             stream->writeU8(fxSendCount);
 
                             for (u32 i = 0; i < fxSendCount; i++)

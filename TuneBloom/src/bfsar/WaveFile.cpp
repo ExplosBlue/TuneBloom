@@ -906,17 +906,44 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
         char block[4];
         stream.readMemBlock(block, 4);
         u32 blockSize = stream.readU32();
+        u32 chunkStart = handle.getCurrentSeekPos();
 
         if (sead::MemUtil::compare(block, "data", 4) == 0)
         {
             out->sampleBytes = blockSize;
-            out->dataStart = handle.getCurrentSeekPos();
-            break;
-        }
-        else
-        {
+            out->dataStart = chunkStart;
             stream.skip(blockSize);
         }
+        else if (sead::MemUtil::compare(block, "smpl", 4) == 0)
+        {
+            if (blockSize >= 36)
+            {
+                stream.skip(28);
+                u32 numLoops = stream.readU32();
+                stream.skip(4);
+
+                if (numLoops > 0)
+                {
+                    stream.skip(8);
+                    u32 loopStart = stream.readU32();
+                    u32 loopEnd = stream.readU32();
+                    stream.skip(8);
+
+                    out->isLoop = true;
+                    out->loopStartFrame = loopStart;
+                    out->loopEndFrame = loopEnd;
+
+                    LOG_U32("smpl loopStart", loopStart);
+                    LOG_U32("smpl loopEnd",   loopEnd);
+                }
+                else
+                    stream.skip(blockSize - 36);
+            }
+            else
+                stream.skip(blockSize);
+        }
+        else
+            stream.skip(blockSize);
     }
 
     if (out->sampleBytes == 0)
@@ -934,10 +961,11 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
     LOG_U32("sampleCount", out->sampleCount);
     LOG_STR("RIFF WAV parse complete");
 
-    // TODO: Loop info ?
-    out->isLoop = false;
-    out->loopStartFrame = 0;
-    out->loopEndFrame = out->sampleCount;
+    if (!out->isLoop)
+    {
+        out->loopStartFrame = 0;
+        out->loopEndFrame = out->sampleCount;
+    }
 
     out->isValid = true;
 

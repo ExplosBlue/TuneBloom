@@ -44,6 +44,8 @@ defines { "SEAD_PLATFORM_WINDOWS", "_CRT_SECURE_NO_WARNINGS" }
 
 links { "winmm" }
 
+files { "src/win/resource.rc" }
+
 filter "system:linux"
 systemversion "latest"
 

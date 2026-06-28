@@ -2245,8 +2245,36 @@ InstanciateItemCallback CreateInstrumentFunc(bool clear)
     return doCreate;
 }
 
+static BankFile* sCurrentEditBank = nullptr;
+
+static void InstrumentContextMenuFunc(Item* item, bool afterDelete)
+{
+    if (afterDelete)
+        return;
+
+    ImGui::Separator();
+
+    {
+        bool disabled = (sCurrentEditBank == nullptr);
+        if (disabled) ImGui::BeginDisabled();
+        if (ImGui::MenuItem("Import Instrument"))
+            RequestImportInstrument(sCurrentEditBank);
+        if (disabled) ImGui::EndDisabled();
+    }
+
+    {
+        bool disabled = (item == nullptr);
+        if (disabled) ImGui::BeginDisabled();
+        if (ImGui::MenuItem("Export Instrument"))
+            RequestExportInstrument(item);
+        if (disabled) ImGui::EndDisabled();
+    }
+}
+
 void BankFile::drawFileUI()
 {
+    sCurrentEditBank = this;
+
     static f32 sKeyboardHeight = 200.0f; // initial guess
     static f32 sRegionHeight = 128.0f;
     f32 totalHeight = ImGui::GetContentRegionAvail().y;
@@ -2264,7 +2292,7 @@ void BankFile::drawFileUI()
 
     if (ImGui::BeginChild("Instruments", ImVec2(0.0f, topHeight), ImGuiChildFlags_Border))
     {
-        DrawAllItemsUI("Instrument", mInstrumentList, &CreateInstrumentFunc, nullptr, nullptr, nullptr, true);
+        DrawAllItemsUI("Instrument", mInstrumentList, &CreateInstrumentFunc, nullptr, &InstrumentContextMenuFunc, nullptr, true);
     }
     ImGui::EndChild();
 

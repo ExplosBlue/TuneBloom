@@ -115,6 +115,9 @@ void ApplyAudioConfig();
 
 void OpenPreferencesWindow();
 
+void RequestExportInstrument(Item* instrument);
+void RequestImportInstrument(Item* targetBank);
+
 class FileWindow : public Item
 {
 public:

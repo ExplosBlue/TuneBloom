@@ -1708,6 +1708,38 @@ static void ExportBankBundle(const BankFile* bank, sead::FileDevice* device, sea
         }
     }
 
+    std::unordered_map<const WaveFile*, std::string> waveExportNames;
+    {
+        std::unordered_map<std::string, u32> nameCounts;
+        for (const WaveFile* wave : referencedWaves)
+        {
+            std::string name = wave->getName().cstr();
+            nameCounts[name]++;
+        }
+
+        std::unordered_set<std::string> usedNames;
+        u32 uniqueId = 0;
+        for (const WaveFile* wave : referencedWaves)
+        {
+            std::string name = wave->getName().cstr();
+
+            if (name.empty() || nameCounts[name] > 1)
+            {
+                sead::FixedSafeString<256> uniqueName;
+                do {
+                    uniqueName.format("_W%u", uniqueId++);
+                } while (nameCounts.find(uniqueName.cstr()) != nameCounts.end() || usedNames.count(uniqueName.cstr()));
+                usedNames.insert(uniqueName.cstr());
+                waveExportNames[wave] = uniqueName.cstr();
+            }
+            else
+            {
+                waveExportNames[wave] = name;
+                usedNames.insert(name);
+            }
+        }
+    }
+
     sead::FileDeviceWriteStream stream(handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(sead::Endian::eBig);
 
@@ -1728,7 +1760,7 @@ static void ExportBankBundle(const BankFile* bank, sead::FileDevice* device, sea
     // Write each wave binary via temp file
     for (const WaveFile* wave : referencedWaves)
     {
-        const char* waveName = wave->getNameOrNull().cstr();
+        const char* waveName = waveExportNames[wave].c_str();
         u32 waveNameLen = strlen(waveName);
         stream.writeU32(waveNameLen);
         stream.writeMemBlock(waveName, waveNameLen);
@@ -1791,7 +1823,13 @@ static void ExportBankBundle(const BankFile* bank, sead::FileDevice* device, sea
                 const auto* vr = static_cast<const BankFile::VelocityRegion*>(vrItem);
 
                 const Item* refWaveItem = vr->getWaveFileRef().getItem();
-                const char* refWaveName = refWaveItem ? refWaveItem->getNameOrNull().cstr() : "";
+                const char* refWaveName = "";
+                if (refWaveItem)
+                {
+                    auto nameIt = waveExportNames.find(static_cast<const WaveFile*>(refWaveItem));
+                    if (nameIt != waveExportNames.end())
+                        refWaveName = nameIt->second.c_str();
+                }
                 u32 refNameLen = strlen(refWaveName);
                 stream.writeU32(refNameLen);
                 stream.writeMemBlock(refWaveName, refNameLen);

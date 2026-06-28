@@ -823,7 +823,15 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal(sead::FormatFixedSafeString<64>(ICON_LC_PLUS " Add %s###Add", listName).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        const bool resizableAdd = (strcmp(listName, "Wave File") == 0);
+        ImGuiWindowFlags addFlags = resizableAdd ? ImGuiWindowFlags_None : ImGuiWindowFlags_AlwaysAutoResize;
+        if (resizableAdd)
+        {
+            ImGui::SetNextWindowSize(ImVec2(660.0f, 660.0f), ImGuiCond_Appearing);
+            ImGui::SetNextWindowSizeConstraints(ImVec2(440.0f, 360.0f), ImVec2(4096.0f, 4096.0f));
+        }
+
+        if (ImGui::BeginPopupModal(sead::FormatFixedSafeString<64>(ICON_LC_PLUS " Add %s###Add", listName).cstr(), nullptr, addFlags))
         {
             SEAD_ASSERT(createCallback);
             InstanciateItemCallback instanciateItemCallback = createCallback(ImGui::IsWindowAppearing());

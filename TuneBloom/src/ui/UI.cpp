@@ -28,6 +28,15 @@
 
 #include <midi/SeqMidiExporter.h>
 
+#include <bfsar/LoopAnalysis.h>
+#include <bfsar/LoopWaveformEditor.h>
+#include <bfsar/DecodedPcm.h>
+#include <bfsar/AudioProcessing.h>
+#include <bfsar/TempWavWriter.h>
+#include <bfsar/WaveFileEditDecode.h>
+#include <cstring>
+#include <cmath>
+
 #include <cstdio>
 #include <cctype>
 #include <vector>
@@ -4584,15 +4593,588 @@ void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
         ImGui::EndDisabled();
 }
 
+static bool IsNativeWaveFile_(const sead::SafeString& path)
+{
+    const char* pathStr = path.cstr();
+    const char* dot = strrchr(pathStr, '.');
+    return dot && (strcasecmp(dot, ".bcwav") == 0 || strcasecmp(dot, ".bfwav") == 0);
+}
+
+namespace {
+
+struct ImportPreviewCache
+{
+    sead::FixedSafeString<512> cachedPath;
+    DecodedPcm pcm;
+    ImGui::LoopWaveformState waveformState;
+    WaveFile previewWave;
+    bool hasDecoded = false;
+    bool previewBuilt = false;
+    bool previewStale = false;
+    enum class PreviewMode { None, Full, Loop } previewMode = PreviewMode::None;
+
+    enum class LoopMode : s32 { DetectFromWav = 0, Disabled = 1, Manual = 2 };
+    LoopMode loopMode = LoopMode::DetectFromWav;
+    bool sourceHadLoop = false;
+
+    u32 workingLoopStart = 0, workingLoopEnd = 0;
+    bool workingLoopInit = false;
+    double origLoopFracStart = 0.0, origLoopFracEnd = 1.0;
+
+    u32 targetSampleRate = 0;
+    float speedMultiplier = 1.0f;
+    bool normalizeEnabled = false;
+    float normalizeTargetDb = 0.0f;
+    AudioProcessing::ChannelMode channelMode = AudioProcessing::ChannelMode::Stereo;
+    s32 channelIndexFor3Plus = 0;
+
+    bool derivedDirty = true;
+    std::vector<std::vector<float>> workingChannels;
+    std::vector<float> mono;
+    u32 workingSampleRate = 0;
+    u32 period = 0;
+
+    void ensureDecoded(const WaveFile::RiffWaveInfo& info)
+    {
+        if (hasDecoded && std::strcmp(cachedPath.cstr(), info.path.cstr()) == 0)
+            return;
+
+        pcm = decodePcmForPreview(info);
+        cachedPath.copy(info.path.cstr());
+        hasDecoded = true;
+        previewBuilt = false;
+        previewStale = false;
+        previewMode = PreviewMode::None;
+        loopMode = LoopMode::DetectFromWav;
+        sourceHadLoop = info.isLoop;
+        waveformState = ImGui::LoopWaveformState{};
+        targetSampleRate = pcm.isValid() ? pcm.sampleRate : 0;
+        speedMultiplier = 1.0f;
+        normalizeEnabled = false;
+        normalizeTargetDb = 0.0f;
+        channelMode = AudioProcessing::ChannelMode::Stereo;
+        channelIndexFor3Plus = 0;
+        workingLoopInit = false;
+        derivedDirty = true;
+
+        const double sc = pcm.isValid() ? static_cast<double>(pcm.sampleCount) : 0.0;
+        origLoopFracStart = sc > 0.0 ? static_cast<double>(info.loopStartFrame) / sc : 0.0;
+        origLoopFracEnd   = sc > 0.0 ? static_cast<double>(info.loopEndFrame) / sc : 1.0;
+    }
+
+    bool isUnmodified() const
+    {
+        return targetSampleRate == pcm.sampleRate
+            && speedMultiplier == 1.0f
+            && !normalizeEnabled
+            && channelMode == AudioProcessing::ChannelMode::Stereo
+            && channelIndexFor3Plus == 0;
+    }
+
+    u32 crossfadeSamples(u32 ls, u32 le) const
+    {
+        s32 xf = static_cast<s32>(waveformState.crossfadeMs / 1000.0f * workingSampleRate);
+        const s32 lenM1 = (le > ls) ? static_cast<s32>(le - ls - 1) : -1;
+        xf = std::min({ xf, static_cast<s32>(ls), lenM1 });
+        return xf > 0 ? static_cast<u32>(xf) : 0u;
+    }
+
+    std::vector<std::vector<float>> bakedChannels(bool isLoop, u32 ls, u32 le, bool equalPower) const
+    {
+        std::vector<std::vector<float>> out = workingChannels;
+        const u32 xf = crossfadeSamples(ls, le);
+        if (!isLoop || xf == 0)
+            return out;
+
+        constexpr double kPi = 3.14159265358979323846;
+        for (auto& d : out)
+        {
+            if (le > d.size())
+                continue;
+            for (u32 k = 0; k < xf; k++)
+            {
+                const u32 tail = le - xf + k;
+                const u32 lead = ls - xf + k;
+                const double t = static_cast<double>(k + 1) / static_cast<double>(xf + 1);
+                const double gOut = equalPower ? std::cos(t * kPi / 2.0) : (1.0 - t);
+                const double gIn  = equalPower ? std::sin(t * kPi / 2.0) : t;
+                d[tail] = static_cast<float>(d[tail] * gOut + d[lead] * gIn);
+            }
+        }
+        return out;
+    }
+
+    void rebuildDerived(bool isNative)
+    {
+        const u32 oldLen = static_cast<u32>(mono.size());
+        workingSampleRate = pcm.sampleRate;
+        if (isNative || isUnmodified())
+        {
+            workingChannels = pcm.channels;
+        }
+        else
+        {
+            if (static_cast<u32>(pcm.channels.size()) > 2 && channelIndexFor3Plus > 0)
+                workingChannels = AudioProcessing::selectChannelByIndex(pcm.channels, static_cast<u32>(channelIndexFor3Plus));
+            else
+                workingChannels = AudioProcessing::selectChannels(pcm.channels, channelMode);
+
+            if (speedMultiplier != 1.0f)
+                workingChannels = AudioProcessing::applySpeed(workingChannels, speedMultiplier).channels;
+
+            if (targetSampleRate != 0 && targetSampleRate != pcm.sampleRate)
+            {
+                for (auto& ch : workingChannels)
+                    ch = AudioProcessing::resample(ch, pcm.sampleRate, targetSampleRate);
+                workingSampleRate = targetSampleRate;
+            }
+
+            if (normalizeEnabled)
+                workingChannels = AudioProcessing::normalizeChannels(workingChannels, true, normalizeTargetDb).channels;
+        }
+
+        if (workingChannels.empty())
+            mono.clear();
+        else if (workingChannels.size() == 1)
+            mono = workingChannels[0];
+        else
+        {
+            mono.assign(workingChannels[0].size(), 0.0f);
+            const float invN = 1.0f / static_cast<float>(workingChannels.size());
+            for (size_t i = 0; i < mono.size(); i++)
+            {
+                float s = 0.0f;
+                for (const auto& ch : workingChannels) s += ch[i];
+                mono[i] = s * invN;
+            }
+        }
+
+        period = mono.empty() ? 0u : LoopAnalysis::estimatePeriod(mono, workingSampleRate);
+
+        const u32 newLen = static_cast<u32>(mono.size());
+        if (!workingLoopInit)
+        {
+            workingLoopStart = static_cast<u32>(origLoopFracStart * newLen);
+            workingLoopEnd = static_cast<u32>(origLoopFracEnd * newLen);
+        }
+        else if (oldLen > 0 && oldLen != newLen)
+        {
+            const double r = static_cast<double>(newLen) / static_cast<double>(oldLen);
+            workingLoopStart = static_cast<u32>(std::lround(workingLoopStart * r));
+            workingLoopEnd = static_cast<u32>(std::lround(workingLoopEnd * r));
+        }
+        if (workingLoopEnd > newLen) workingLoopEnd = newLen;
+        if (newLen > 0 && workingLoopStart >= workingLoopEnd)
+            workingLoopStart = workingLoopEnd > 0 ? workingLoopEnd - 1 : 0;
+        
+        workingLoopInit = true;
+
+        if (oldLen > 0 && newLen > 0 && oldLen != newLen && waveformState.viewInitialized)
+        {
+            const double r = static_cast<double>(newLen) / static_cast<double>(oldLen);
+            u32 vs = static_cast<u32>(waveformState.viewStart * r);
+            u32 ve = static_cast<u32>(waveformState.viewEnd * r);
+            if (ve > newLen) ve = newLen;
+            if (vs >= ve) { vs = 0; ve = newLen; }
+            waveformState.viewStart = vs;
+            waveformState.viewEnd = ve;
+        }
+
+        derivedDirty = false;
+    }
+};
+}
+
+static ImportPreviewCache sImportCache;
+
+static void FinalizeImportInfoForCommit_(WaveFile::RiffWaveInfo* info)
+{
+    if (!info || !sImportCache.hasDecoded)
+        return;
+    
+    if (IsNativeWaveFile_(info->path))
+        return;
+
+    if (std::strcmp(sImportCache.cachedPath.cstr(), info->path.cstr()) != 0)
+        return;
+    if (sImportCache.workingChannels.empty())
+        return;
+
+    const bool isLoop = info->isLoop;
+    const u32 ls = sImportCache.workingLoopStart;
+    u32 le = sImportCache.workingLoopEnd;
+    const u32 workingLen = static_cast<u32>(sImportCache.workingChannels[0].size());
+
+    const bool manualLoop = (sImportCache.loopMode == ImportPreviewCache::LoopMode::Manual);
+    const bool bakeNeeded = isLoop && manualLoop && sImportCache.crossfadeSamples(ls, le) > 0;
+    const bool truncateNeeded = isLoop && le < workingLen;
+    if (sImportCache.isUnmodified() && !bakeNeeded && !truncateNeeded)
+        return;
+
+    char tempPathBuf[600];
+    snprintf(tempPathBuf, sizeof(tempPathBuf), "%s.loopbloom_processed.wav", sImportCache.cachedPath.cstr());
+
+    std::vector<std::vector<float>> baked =
+        sImportCache.bakedChannels(manualLoop, ls, le, sImportCache.waveformState.equalPowerCurve);
+
+    if (truncateNeeded)
+    {
+        for (auto& ch : baked)
+            if (ch.size() > le) ch.resize(le);
+    }
+
+    std::string written = TempWavWriter::write(baked, sImportCache.workingSampleRate,
+                                                isLoop, ls, le, tempPathBuf);
+    if (written.empty())
+        return;
+
+    info->path.copy(written.c_str());
+    WaveFile::readRiffWavInfo(info);
+
+    info->isLoop = isLoop;
+    info->loopStartFrame = ls;
+    info->loopEndFrame = le;
+}
+
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)
 {
-    if (ImGui::Combo("Encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes)))
+    ImportPreviewCache& sCache = sImportCache;
+
+    const bool isNative = IsNativeWaveFile_(info->path);
+    sCache.ensureDecoded(*info);
+
+    if (!sCache.pcm.isValid())
     {
+        ImGui::Combo("Encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
+        ImGui::Separator();
+        DrawWaveLoopInfo(info->isLoop, info->loopStartFrame, info->loopEndFrame,
+                          info->sampleCount, info->sampleRate, true, nullptr, true);
+        return;
+    }
+
+    {
+        const char* p = info->path.cstr();
+        const char* fslash = strrchr(p, '/');
+        const char* bslash = strrchr(p, '\\');
+        const char* base = (fslash > bslash ? fslash : bslash);
+        base = base ? base + 1 : p;
+        const u32 nch = static_cast<u32>(sCache.pcm.channels.size());
+        const double durSec = sCache.pcm.sampleRate ? static_cast<double>(sCache.pcm.sampleCount) / sCache.pcm.sampleRate : 0.0;
+        ImGui::TextDisabled("%s  -  %u Hz  -  %s  -  %.2fs", base, sCache.pcm.sampleRate, nch == 1 ? "mono" : nch == 2 ? "stereo" : "multi-ch", durSec);
+    }
+    ImGui::Separator();
+
+    bool rebuiltThisFrame = false;
+    if (sCache.derivedDirty) { sCache.rebuildDerived(isNative); rebuiltThisFrame = true; }
+
+    const std::vector<float>& mono = sCache.mono;
+    const u32 workingSampleRate = sCache.workingSampleRate;
+    const u32 totalSamples = static_cast<u32>(mono.size());
+    const u32 period = sCache.period;
+
+    using LoopMode = ImportPreviewCache::LoopMode;
+    const bool manualLoop = (sCache.loopMode == LoopMode::Manual);
+    const bool loopActive = manualLoop || (sCache.loopMode == LoopMode::DetectFromWav && sCache.sourceHadLoop);
+    const bool showLoop = loopActive;
+    const bool editable = manualLoop;
+
+    u32 loopStart = sCache.workingLoopStart;
+    u32 loopEnd = sCache.workingLoopEnd;
+
+    char readout[96];
+    readout[0] = '\0';
+    if (showLoop)
+    {
+        const u32 len = (loopEnd > loopStart) ? (loopEnd - loopStart) : 0;
+        const double loopMs = workingSampleRate ? static_cast<double>(len) / workingSampleRate * 1000.0 : 0.0;
+        if (period) snprintf(readout, sizeof(readout), "loop %.1f ms  -  %u smp  -  %.2f periods",
+                             loopMs, len, static_cast<double>(len) / period);
+        else        snprintf(readout, sizeof(readout), "loop %.1f ms  -  %u smp", loopMs, len);
+    }
+
+    float playheadSample = -1.0f;
+    if (sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == &sCache.previewWave)
+        playheadSample = static_cast<float>(sSoundPlayer.getPlaySamplePosition(true));
+
+    bool changed = ImGui::LoopWaveformEditor("import", sCache.waveformState, mono, workingSampleRate,
+                                              loopStart, loopEnd, playheadSample,
+                                              showLoop, editable,
+                                              showLoop ? readout : nullptr, ImVec2(0.0f, 150.0f));
+
+
+    auto rebuildPreview = [&]() {
+
+        const bool manualNow = (sCache.loopMode == LoopMode::Manual);
+        const bool loopActiveNow = manualNow
+            || (sCache.loopMode == LoopMode::DetectFromWav && sCache.sourceHadLoop);
+
+        DecodedPcm previewPcm;
+        previewPcm.channels = sCache.bakedChannels(manualNow, loopStart, loopEnd, sCache.waveformState.equalPowerCurve);
+        previewPcm.sampleRate = workingSampleRate;
+
+        if (loopActiveNow && !previewPcm.channels.empty())
+        {
+            const u32 len = static_cast<u32>(previewPcm.channels[0].size());
+            if (loopEnd >= len && loopEnd > loopStart)
+            {
+                const u32 guard = std::min<u32>(loopEnd - loopStart, 256u);
+                for (auto& ch : previewPcm.channels)
+                {
+                    ch.reserve(len + guard);
+                    for (u32 i = 0; i < guard; i++)
+                        ch.push_back(ch[loopStart + i]);
+                }
+            }
+        }
+        previewPcm.sampleCount = previewPcm.channels.empty() ? 0u : static_cast<u32>(previewPcm.channels[0].size());
+        sCache.previewWave.setupPreviewPcm16(previewPcm, loopActiveNow, loopStart, loopEnd);
+        sCache.previewBuilt = true;
+        sCache.previewStale = false;
+    };
+    auto ensurePreviewFresh = [&]() {
+        if (!sCache.previewBuilt || sCache.previewStale)
+        {
+            sSoundPlayer.stopAllPlayers(true);
+            rebuildPreview();
+        }
+    };
+
+    auto restartPreview = [&]() {
+        sSoundPlayer.stopAllPlayers(true);
+        rebuildPreview();
+        const u32 off = (sCache.previewMode == ImportPreviewCache::PreviewMode::Loop) ? loopStart : 0u;
+        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, off);
+    };
+
+    if (ImGui::Button(ICON_LC_PLAY " Preview"))
+    {
+        ensurePreviewFresh();
+        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, 0);
+        sCache.previewMode = ImportPreviewCache::PreviewMode::Full;
+    }
+    ImGui::SameLine();
+    if (!loopActive) ImGui::BeginDisabled();
+    if (ImGui::Button(ICON_LC_REPEAT " Loop"))
+    {
+        ensurePreviewFresh();
+        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, loopStart);
+        sCache.previewMode = ImportPreviewCache::PreviewMode::Loop;
+    }
+    if (!loopActive) ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button(ICON_LC_CIRCLE_STOP " Stop"))
+    {
+        sSoundPlayer.stopAllPlayers(true);
+        sCache.previewMode = ImportPreviewCache::PreviewMode::None;
+    }
+
+    ImGui::SeparatorText("Output format");
+    {
+        const float kLabelW = 120.0f;
+        const float kCtrlW  = 210.0f;
+        auto field = [&](const char* label, const char* tip = nullptr) {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(label);
+            if (tip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+            ImGui::SameLine(kLabelW);
+            ImGui::SetNextItemWidth(kCtrlW);
+        };
+
+        field("Encoding", "How the sample is stored in the bank/archive.");
+        ImGui::Combo("##encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
+
+        // Sample rate
+        static const u32 kRatePresets[] = { 8000, 11025, 16000, 22050, 32000, 44100, 48000 };
+        char rateLabel[40];
+        if (sCache.targetSampleRate == sCache.pcm.sampleRate)
+            snprintf(rateLabel, sizeof(rateLabel), "%u Hz (source)", sCache.targetSampleRate);
+        else
+            snprintf(rateLabel, sizeof(rateLabel), "%u Hz", sCache.targetSampleRate);
+        field("Sample rate", "Audio is resampled to this rate on import.");
+        if (ImGui::BeginCombo("##rate", rateLabel))
+        {
+            char srcL[48]; snprintf(srcL, sizeof(srcL), "%u Hz (source)", sCache.pcm.sampleRate);
+            if (ImGui::Selectable(srcL, sCache.targetSampleRate == sCache.pcm.sampleRate))
+            { sCache.targetSampleRate = sCache.pcm.sampleRate; sCache.derivedDirty = true; }
+            for (size_t i = 0; i < IM_ARRAYSIZE(kRatePresets); i++)
+            {
+                if (kRatePresets[i] == sCache.pcm.sampleRate) continue;
+                char label[32]; snprintf(label, sizeof(label), "%u Hz", kRatePresets[i]);
+                if (ImGui::Selectable(label, kRatePresets[i] == sCache.targetSampleRate))
+                { sCache.targetSampleRate = kRatePresets[i]; sCache.derivedDirty = true; }
+            }
+            ImGui::EndCombo();
+        }
+
+        // Channels
+        const u32 srcChannels = static_cast<u32>(sCache.pcm.channels.size());
+        const char* channelModeNames[] = { "Keep all channels", "Left only (mono)", "Right only (mono)", "Mix to mono" };
+        s32 channelModeIdx = static_cast<s32>(sCache.channelMode);
+        field("Channels", "Which channel(s) of the source to import.");
+        if (ImGui::Combo("##channels", &channelModeIdx, channelModeNames, IM_ARRAYSIZE(channelModeNames)))
+        { sCache.channelMode = static_cast<AudioProcessing::ChannelMode>(channelModeIdx); sCache.derivedDirty = true; }
+        if (srcChannels > 2)
+        {
+            field("Or pick track", "Source has more than 2 channels; import one specific track as mono.");
+            const ImU32 cStepS32 = 1;
+            if (ImGui::InputScalar("##picktrack", ImGuiDataType_S32, &sCache.channelIndexFor3Plus, &cStepS32))
+            {
+                sCache.channelIndexFor3Plus = std::max<s32>(0, std::min<s32>(sCache.channelIndexFor3Plus, srcChannels - 1));
+                sCache.derivedDirty = true;
+            }
+            ImGui::SameLine(); ImGui::TextDisabled("of %u", srcChannels);
+        }
+
+        // Speed
+        field("Speed", "Varispeed: changes pitch and length together. 1.00x = unchanged.");
+        if (ImGui::SliderFloat("##speed", &sCache.speedMultiplier, 0.25f, 4.0f, "%.2fx"))
+            sCache.derivedDirty = true;
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Reset##speed")) { sCache.speedMultiplier = 1.0f; sCache.derivedDirty = true; }
+
+        // Normalize
+        field("Normalize", "Scale the peak level to a target. Off = leave levels untouched.");
+        if (ImGui::Checkbox("##norm", &sCache.normalizeEnabled))
+            sCache.derivedDirty = true;
+        ImGui::SameLine();
+        if (sCache.normalizeEnabled)
+        {
+            ImGui::SetNextItemWidth(kCtrlW - 30.0f);
+            if (ImGui::SliderFloat("##normdb", &sCache.normalizeTargetDb, -24.0f, 0.0f, "%.1f dBFS"))
+                sCache.derivedDirty = true;
+        }
+        else
+            ImGui::TextDisabled("off");
+    }
+
+    ImGui::SeparatorText("Loop");
+    {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("Loop mode");
+        ImGui::SameLine(120.0f);
+        ImGui::SetNextItemWidth(210.0f);
+        const char* loopModeNames[] = { "Detect from WAV", "Disabled", "Manual" };
+        s32 modeIdx = static_cast<s32>(sCache.loopMode);
+        if (ImGui::Combo("##loopmode", &modeIdx, loopModeNames, IM_ARRAYSIZE(loopModeNames)))
+        {
+            sCache.loopMode = static_cast<LoopMode>(modeIdx);
+            changed = true;
+
+            ImGui::SetWindowSize(ImVec2(ImGui::GetWindowWidth(), 0.0f));
+
+            if (sCache.loopMode == LoopMode::DetectFromWav)
+            {
+                loopStart = static_cast<u32>(sCache.origLoopFracStart * totalSamples);
+                loopEnd   = static_cast<u32>(sCache.origLoopFracEnd * totalSamples);
+                if (loopEnd > totalSamples) loopEnd = totalSamples;
+                if (totalSamples > 0 && loopStart >= loopEnd) loopStart = loopEnd > 0 ? loopEnd - 1 : 0;
+            }
+        }
+
+        if (sCache.loopMode == LoopMode::Manual)
+        {
+            const float kLabelW = 120.0f;
+            const float kCtrlW  = 160.0f;
+            auto field = [&](const char* label) {
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(label);
+                ImGui::SameLine(kLabelW);
+                ImGui::SetNextItemWidth(kCtrlW);
+            };
+
+            const ImU32 cStepU32 = 1;
+            s32 lsField = static_cast<s32>(loopStart), leField = static_cast<s32>(loopEnd);
+            bool fieldsChanged = false;
+
+            field("Loop start");
+            if (ImGui::InputScalar("##loopstart", ImGuiDataType_S32, &lsField, &cStepU32)) fieldsChanged = true;
+            ImGui::SameLine(); ImGui::TextDisabled("smp");
+
+            field("Loop end");
+            if (ImGui::InputScalar("##loopend", ImGuiDataType_S32, &leField, &cStepU32)) fieldsChanged = true;
+            ImGui::SameLine(); ImGui::TextDisabled("smp");
+
+            if (fieldsChanged)
+            {
+                lsField = std::max<s32>(0, std::min<s32>(lsField, static_cast<s32>(totalSamples) - 1));
+                leField = std::max<s32>(lsField + 1, std::min<s32>(leField, static_cast<s32>(totalSamples)));
+                loopStart = static_cast<u32>(lsField); loopEnd = static_cast<u32>(leField); changed = true;
+            }
+
+            field("Crossfade");
+            
+            if (ImGui::SliderFloat("##xfade", &sCache.waveformState.crossfadeMs, 0.0f, 80.0f, "%.0f ms"))
+                changed = true;
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Equal-power", &sCache.waveformState.equalPowerCurve))
+                changed = true;
+
+            if (ImGui::Button("Suggest loop"))
+            {
+                LoopAnalysis::SuggestResult sug = LoopAnalysis::suggestLoop(mono, workingSampleRate);
+                if (sug.ok)
+                {
+                    loopStart = sug.loopStart; loopEnd = sug.loopEnd;
+                    ImGui::LoopWaveformZoomToLoop(sCache.waveformState, sug.loopStart, sug.loopEnd, totalSamples);
+                    changed = true;
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Snap to frame + period"))
+            {
+                LoopAnalysis::FrameSnapResult snap = LoopAnalysis::snapFramePeriod(loopStart, loopEnd, period, totalSamples);
+                loopStart = snap.loopStart; loopEnd = snap.loopEnd; changed = true;
+            }
+            ImGui::SameLine();
+            HelpMarker(
+                "Drag on the waveform: left-click sets the loop start, right-click sets the end.\n"
+                "Scroll to zoom; shift-scroll or middle-drag to pan.\n\n"
+                "Suggest loop: auto-detect a clean loop region.\n"
+                "Snap to frame + period: align the loop to the 14-sample DSP-ADPCM frame grid and a\n"
+                "whole number of waveform periods, for the cleanest seam.");
+        }
+        else if (sCache.loopMode == LoopMode::DetectFromWav)
+        {
+            if (sCache.sourceHadLoop)
+                ImGui::TextDisabled("Using the loop embedded in the WAV (start %u, end %u smp).", loopStart, loopEnd);
+            else
+                ImGui::TextDisabled("This WAV has no embedded loop.");
+        }
+        else
+            ImGui::TextDisabled("The sample will import without a loop.");
+    }
+
+    sCache.workingLoopStart = loopStart;
+    sCache.workingLoopEnd = loopEnd;
+    info->isLoop = loopActive;
+    info->loopStartFrame = loopStart;
+    info->loopEndFrame = loopEnd;
+
+    {
+        const bool previewPlaying = sSoundPlayer.isActive()
+            && sSoundPlayer.getPlayingWaveFile() == &sCache.previewWave;
+        const bool dragging = ImGui::IsMouseDown(ImGuiMouseButton_Left)
+            || ImGui::IsMouseDown(ImGuiMouseButton_Right);
+        if (!sCache.previewBuilt)
+            rebuildPreview();
+        else if (changed || rebuiltThisFrame)
+        {
+            if (!previewPlaying)      rebuildPreview();
+            else if (dragging)        sCache.previewStale = true;
+            else                      restartPreview();
+        }
+        else if (sCache.previewStale)
+        {
+            if (!previewPlaying)      rebuildPreview();
+            else if (!dragging)       restartPreview();
+        }
     }
 
     ImGui::Separator();
-
-    DrawWaveLoopInfo(info->isLoop, info->loopStartFrame, info->loopEndFrame, info->sampleCount, info->sampleRate, true, nullptr, true);
+    HelpMarker(
+        "To avoid multiple re-encodes which degrade audio quality,\nit is recommended to set your looping parameters upfront here.\n"
+        "Alternatively, import as Pcm16 which lets you edit parameters without re-encodes,\nthen convert to DspAdpcm once at the end."
+    );
 }
 
 InstanciateItemCallback CreateWaveFileFunc(bool clear)
@@ -4741,6 +5323,10 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         waveFile->setEnableName(true);
         waveFile->getName() = sFileName;
 
+        // produce the processed temp WAV now (if any processing was applied)
+        // and repoint sRiffWaveInfo at it -- deferred from edit time to here
+        FinalizeImportInfoForCommit_(&sRiffWaveInfo);
+
         if (!sRiffWaveInfo.isLoop)
         {
             sRiffWaveInfo.loopStartFrame = 0;
@@ -4833,6 +5419,47 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
                     if (dotPos != -1)
                         sWavFileName.trim(dotPos);
                 }
+            }
+        }
+
+        if (ImGui::MenuItem("Reimport"))
+        {
+            sImportWaveFile = nullptr;
+            sRiffWaveInfo.clear();
+            sWavFileName.clear();
+
+            DecodedPcm pcm = decodeWaveFileForEditing(*wave);
+            if (pcm.isValid())
+            {
+                const char* tmpDir = std::getenv("TEMP");
+                if (!tmpDir) tmpDir = std::getenv("TMP");
+                if (!tmpDir) tmpDir = ".";
+
+                char tempPath[700];
+                snprintf(tempPath, sizeof(tempPath), "%s/tunebloom_reimport_%u.wav", tmpDir, wave->getId());
+
+                std::string written = TempWavWriter::write(
+                    pcm.channels, pcm.sampleRate, wave->getIsLoop(),
+                    wave->getOriginalLoopStartFrame(), wave->getOriginalLoopEndFrame(), tempPath);
+
+                if (!written.empty())
+                {
+                    sRiffWaveInfo.path.copy(written.c_str());
+                    if (WaveFile::readRiffWavInfo(&sRiffWaveInfo))
+                    {
+                        sEncoding = wave->getEncoding();
+                        sImportWaveFile = wave;
+                        sWavFileName.copy(wave->getName().cstr()); // keep the existing name
+                    }
+                }
+                else
+                {
+                    PopupMgr::instance()->pushCurrentItemError("Reimport failed: couldn't write temp WAV");
+                }
+            }
+            else
+            {
+                PopupMgr::instance()->pushCurrentItemError("Reimport failed: couldn't decode this wave");
             }
         }
 
@@ -4966,8 +5593,10 @@ void DrawWaveFilesUI()
 
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 660.0f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(440.0f, 360.0f), ImVec2(4096.0f, 4096.0f));
 
-    if (ImGui::BeginPopupModal("WavImport", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+    if (ImGui::BeginPopupModal("WavImport", nullptr, ImGuiWindowFlags_NoTitleBar))
     {
         ImGui::Text("Replace with '%s'", sWavFileName.cstr());
 
@@ -4979,6 +5608,8 @@ void DrawWaveFilesUI()
 
         if (ImGui::Button("Replace", buttonSize))
         {
+            FinalizeImportInfoForCommit_(&sRiffWaveInfo);
+
             if (!sRiffWaveInfo.isLoop)
             {
                 sRiffWaveInfo.loopStartFrame = 0;

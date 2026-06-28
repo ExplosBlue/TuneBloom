@@ -11,6 +11,7 @@
 #include <dsp/dsp.h>
 
 class Sound;
+struct DecodedPcm;
 
 void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam);
 void FillAdpcmParam(snd::DspAdpcmParam* param, snd::internal::DspAdpcmLoopParam* loopParam, const ADPCMINFO& adpcmInfo);
@@ -454,6 +455,8 @@ public:
     {
         return mSampleCount;
     }
+    
+    bool setupPreviewPcm16(const DecodedPcm& pcm, bool isLoop, u32 loopStartFrame, u32 loopEndFrame);
 
     bool getIsStreamExtended() const
     {

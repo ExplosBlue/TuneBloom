@@ -170,7 +170,7 @@ void BankFile::KeyRegion::GetVelocityRegionCount(s32* min, s32* max) const
     GetRegionCount(this, toVelocityRegionChunk.typeId, toVelocityRegionChunk.offset, min, max);
 }
 
-u8 BankFile::VelocityRegion::GetOriginalKey() const
+u8 BankFile::VelocityRegion::GetRootKey() const
 {
     u32 value;
     bool result = optionParameter.GetValue(&value, VELOCITY_REGION_KEY);

@@ -52,7 +52,7 @@ struct WaveSoundNoteInfo
     u32 waveArchiveId;
     s32 waveIndex;
     AdshrCurve adshr;
-    u8 originalKey;
+    u8 rootKey;
     u8 pan;
     u8 surroundPan;
     u8 volume;

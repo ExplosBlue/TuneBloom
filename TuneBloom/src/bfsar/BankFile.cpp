@@ -159,7 +159,7 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
         PopupMgr::instance()->pushCurrentItemError(msg);
     }
 
-    mOriginalKey = velocityRegionInfo->GetOriginalKey();
+    mRootKey = velocityRegionInfo->GetRootKey();
     mVolume = velocityRegionInfo->GetVolume();
     mPan = velocityRegionInfo->GetPan();
     mPitch = velocityRegionInfo->GetPitch();
@@ -213,15 +213,15 @@ void BankFile::VelocityRegion::drawUI()
     }
 
     {
-        u8 originalKey = getOriginalKey();
-        if (ImGui::InputScalar("Root Key", ImGuiDataType_U8, &originalKey, &cStepU8))
+        u8 rootKey = getRootKey();
+        if (ImGui::InputScalar("Root Key", ImGuiDataType_U8, &rootKey, &cStepU8))
         {
-            setOriginalKey(originalKey);
+            setRootKey(rootKey);
             SetUnsavedChanges(true);
         }
-        
+
         ImGui::SameLine();
-        ImGui::TextDisabled("%s", FormatKeyName(originalKey).cstr());
+        ImGui::TextDisabled("%s", FormatKeyName(rootKey).cstr());
     }
 
     {
@@ -837,7 +837,7 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
     auto copyVel = [](BankFile::VelocityRegion* dst, BankFile::VelocityRegion* src)
     {
         dst->getWaveFileRef().attach(src->getWaveFileRef().getItem());
-        dst->setOriginalKey(src->getOriginalKey());
+        dst->setRootKey(src->getRootKey());
         dst->setVolume(src->getVolume());
         dst->setPan(src->getPan());
         dst->setPitch(src->getPitch());
@@ -1713,11 +1713,11 @@ void DrawKeyboardWithRegions(
 
     static s32 sPrevNote = -1;
 
-    s32 originalKey = -1;
+    s32 rootKey = -1;
     if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
     {
         BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
-        originalKey = velRegion->getOriginalKey();
+        rootKey = velRegion->getRootKey();
     }
 
     ImGui_PianoKeyboard(
@@ -1729,7 +1729,7 @@ void DrawKeyboardWithRegions(
         &KeyboardFunc,
         instrument,
         nullptr,
-        originalKey
+        rootKey
     );
 
     draw->PopClipRect();
@@ -1813,10 +1813,10 @@ void DrawKeyboardWithRegions(
     ImGui::SameLine();
     ImGui::SetNextItemWidth(200.0f);
 
-    sead::FixedSafeString<24> formattedRoot = FormatKeyName(originalKey);
+    sead::FixedSafeString<24> formattedRoot = FormatKeyName(rootKey);
 
     ImGui::BeginDisabled();
-    ImGui::InputText("###Orig", formattedRoot.getBuffer(), formattedRoot.getBufferSize());
+    ImGui::InputText("###Root", formattedRoot.getBuffer(), formattedRoot.getBufferSize());
     ImGui::EndDisabled();
 }
 
@@ -2323,7 +2323,7 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         stream->writeU32(waveIdIndexes[waveFile]);
 
         stream->writeU32(nw::snd::internal::VelocityRegionBitFlag::VELOCITY_REGION_BASIC_PARAM_FLAG);
-        stream->writeU32(velocityRegion.getOriginalKey());
+        stream->writeU32(velocityRegion.getRootKey());
         stream->writeU32(velocityRegion.getVolume());
         stream->writeU32(velocityRegion.getPan());
         stream->writeF32(velocityRegion.getPitch());

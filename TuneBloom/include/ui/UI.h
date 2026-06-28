@@ -271,4 +271,4 @@ struct ImGuiPianoStyles
     f32 NoteDarkWidth  = 2.0f / 2.0f; // black key scale w
 };
 
-void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style = nullptr, s32 OriginalKey = -1);
+void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style = nullptr, s32 RootKey = -1);

@@ -1798,7 +1798,7 @@ static void ExportBankBundle(const BankFile* bank, sead::FileDevice* device, sea
 
                 stream.writeU8(vr->getVelocityMin());
                 stream.writeU8(vr->getVelocityMax());
-                stream.writeU8(vr->getOriginalKey());
+                stream.writeU8(vr->getRootKey());
                 stream.writeU8(vr->getVolume());
                 stream.writeU8(vr->getPan());
                 stream.writeF32(vr->getPitch());
@@ -2269,7 +2269,7 @@ static void DrawFileExportDialogs()
                                 std::string refWaveName = readString();
                                 u8 velMin = readU8();
                                 u8 velMax = readU8();
-                                u8 originalKey = readU8();
+                                u8 rootKey = readU8();
                                 u8 volume = readU8();
                                 u8 pan = readU8();
                                 f32 pitch = readF32();
@@ -2283,7 +2283,7 @@ static void DrawFileExportDialogs()
                                 u8 release = readU8();
 
                                 BankFile::VelocityRegion* vr = new BankFile::VelocityRegion(velMin, velMax);
-                                vr->setOriginalKey(originalKey);
+                                vr->setRootKey(rootKey);
                                 vr->setVolume(volume);
                                 vr->setPan(pan);
                                 vr->setPitch(pitch);

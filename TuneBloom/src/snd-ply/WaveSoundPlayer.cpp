@@ -133,7 +133,7 @@ void WaveSoundPlayer::setBankNoteInfo(u8 key, u8 velocity, const BankFile::Veloc
     SEAD_ASSERT(key < 128);
     SEAD_ASSERT(velocity < 128);
 
-    mChannel->setKey(key, velocityRegion.getOriginalKey());
+    mChannel->setKey(key, velocityRegion.getRootKey());
     mChannel->setVelocity(BankR::calcChannelVelocityVolume(velocity));
     mChannel->setInstrumentVolume(velocityRegion.getVolume() * BankR::INSTRUMENT_VOLUME_CRITERION_R);
     mChannel->setTune(velocityRegion.getPitch());

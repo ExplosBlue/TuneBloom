@@ -135,7 +135,7 @@ bool WaveSoundFileReader::ReadNoteInfo(WaveSoundNoteInfo* dst, u32 index, u32 no
     dst->waveIndex = pWaveId->waveIndex;
     dst->pitch = src.GetPitch();
     dst->adshr = src.GetAdshrCurve();
-    dst->originalKey = src.GetOriginalKey();
+    dst->rootKey = src.GetRootKey();
     dst->pan = src.GetPan();
     dst->surroundPan = src.GetSurroundPan();
     dst->volume = src.GetVolume();

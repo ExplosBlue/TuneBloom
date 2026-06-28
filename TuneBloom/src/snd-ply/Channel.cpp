@@ -72,7 +72,7 @@ void Channel::update(bool doPeriodicProc)
     }
 
     // pitch
-    f32 cent = mKey - mOriginalKey + mUserPitch + this->getSweepValue();
+    f32 cent = mKey - mRootKey + mUserPitch + this->getSweepValue();
 
     for (u32 i = 0; i < cModCount; i++)
     {
@@ -315,7 +315,7 @@ void Channel::initParam(ChannelCallback callback, void* callbackData)
 
     mLength = 0;
     mKey = cKeyInit;
-    mOriginalKey = cOriginalKeyInit;
+    mRootKey = cRootKeyInit;
     mInitPan = 0.0f;
     //mInitSurroundPan = 0.0f;
     mTune = 1.0f;

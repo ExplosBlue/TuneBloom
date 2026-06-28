@@ -451,7 +451,7 @@ void BfsarTask::calc()
                     // SEAD_PRINT("            VelocityRegion %d:\n", velocity);
                     // SEAD_PRINT("                WaveArchiveId: 0x%08X\n", regionInfo.waveArchiveId);
                     // SEAD_PRINT("                WaveIndex: 0x%08X\n", regionInfo.waveIndex);
-                    // SEAD_PRINT("                RegionParameter.originalKey: %d\n", regionInfo.originalKey);
+                    // SEAD_PRINT("                RegionParameter.rootKey: %d\n", regionInfo.rootKey);
                     // SEAD_PRINT("                RegionParameter.volume: %d\n", regionInfo.volume);
                     // SEAD_PRINT("                RegionParameter.pan: %d\n", regionInfo.pan);
                     // SEAD_PRINT("                RegionParameter.pitch: %f\n", regionInfo.pitch);
@@ -706,7 +706,7 @@ void BfsarTask::draw()
 
                                                         ImGui::Text("waveArchiveId: 0x%08X", noteInfo.waveArchiveId);
                                                         ImGui::Text("waveIndex: %d", noteInfo.waveIndex);
-                                                        ImGui::Text("originalKey: %d", noteInfo.originalKey);
+                                                        ImGui::Text("rootKey: %d", noteInfo.rootKey);
                                                         ImGui::Text("pan: %d", noteInfo.pan);
                                                         ImGui::Text("surroundPan: %d", noteInfo.surroundPan);
                                                         ImGui::Text("volume: %d", noteInfo.volume);
@@ -924,7 +924,7 @@ void BfsarTask::draw()
 
                                                         ImGui::Text("WaveArchiveId: 0x%08X", regionInfo.waveArchiveId);
                                                         ImGui::Text("WaveIndex: 0x%08X", regionInfo.waveIndex);
-                                                        ImGui::Text("originalKey: %d", regionInfo.originalKey);
+                                                        ImGui::Text("rootKey: %d", regionInfo.rootKey);
                                                         ImGui::Text("volume: %d", regionInfo.volume);
                                                         ImGui::Text("pan: %d", regionInfo.pan);
                                                         ImGui::Text("pitch: %f", regionInfo.pitch);

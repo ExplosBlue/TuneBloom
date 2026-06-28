@@ -44,7 +44,7 @@ public:
 
 private:
     static const s32 cKeyInit = 60;
-    static const s32 cOriginalKeyInit = 60;
+    static const s32 cRootKeyInit = 60;
     static const u8 cSilenceVolumeMax = 255;
     static const u8 cSilenceVolumeMin = 0;
 
@@ -94,10 +94,10 @@ public:
         mKey = key;
     }
 
-    void setKey(u8 key, u8 originalKey)
+    void setKey(u8 key, u8 rootKey)
     {
         mKey = key;
-        mOriginalKey = originalKey;
+        mRootKey = rootKey;
     }
 
     void setInitPan(f32 pan)
@@ -384,7 +384,7 @@ private:
     PanCurve mPanCurve;
 
     u8 mKey;
-    u8 mOriginalKey;
+    u8 mRootKey;
     u8 mKeyGroupId;
     u8 mInterpolationType;
 

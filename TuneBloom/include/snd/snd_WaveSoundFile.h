@@ -307,7 +307,7 @@ struct WaveSoundFile
         ut::ResU32 waveIdTableIndex;
         Util::BitFlag optionParameter;
 
-        u8 GetOriginalKey() const
+        u8 GetRootKey() const
         {
             u32 value;
             bool result = optionParameter.GetValue(&value, NOTE_INFO_KEY);

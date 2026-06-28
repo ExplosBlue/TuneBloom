@@ -65,7 +65,7 @@ public:
             return nullptr;
 
         // Initial parameter settings
-        pChannel->setKey(static_cast<u8>(noteOnInfo.key), regionInfo.originalKey);
+        pChannel->setKey(static_cast<u8>(noteOnInfo.key), regionInfo.rootKey);
         pChannel->setVelocity(calcChannelVelocityVolume(static_cast<u8>(noteOnInfo.velocity)));
         pChannel->setInstrumentVolume(regionInfo.volume * INSTRUMENT_VOLUME_CRITERION_R);
         pChannel->setTune(regionInfo.pitch);
@@ -137,7 +137,7 @@ public:
             return nullptr;
 
         // Initial parameter settings
-        pChannel->setKey(static_cast<u8>(noteOnInfo.key), velocityRegion->getOriginalKey());
+        pChannel->setKey(static_cast<u8>(noteOnInfo.key), velocityRegion->getRootKey());
         pChannel->setVelocity(calcChannelVelocityVolume(static_cast<u8>(noteOnInfo.velocity)));
         pChannel->setInstrumentVolume(velocityRegion->getVolume() * INSTRUMENT_VOLUME_CRITERION_R);
         pChannel->setTune(velocityRegion->getPitch());

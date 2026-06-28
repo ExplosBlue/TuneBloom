@@ -17,7 +17,7 @@ bool TestPianoBoardFunct(void* UserData, int Msg, int Key, float Vel) {
 #include <ui/UI.h>
 #include <math/seadMathCalcCommon.h>
 
-void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style, s32 OriginalKey)
+void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style, s32 RootKey)
 {
     // const
     static const s32 NoteIsDark[12] = { 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0 };
@@ -186,8 +186,8 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
         }
 
         bool isActive = Callback(UserData, NoteGetStatus, RealNum, 0.0f);
-        u32 colIdx = isActive ? (RealNum == OriginalKey ? 7 : 2)
-                              : (RealNum == OriginalKey ? 5 : 0);
+        u32 colIdx = isActive ? (RealNum == RootKey ? 7 : 2)
+                              : (RealNum == RootKey ? 5 : 0);
 
         draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[colIdx], 0.0f);
         draw_list->AddRect(NoteRect.Min, NoteRect.Max, Style->Colors[4], 0.0f);
@@ -220,8 +220,8 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
         }
 
         bool isActive = Callback(UserData, NoteGetStatus, RealNum, 0.0f);
-        u32 colIdx = isActive ? (RealNum == OriginalKey ? 8 : 3)
-                              : (RealNum == OriginalKey ? 6 : 1);
+        u32 colIdx = isActive ? (RealNum == RootKey ? 8 : 3)
+                              : (RealNum == RootKey ? 6 : 1);
 
         draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[colIdx], 0.0f);
         draw_list->AddRect(NoteRect.Min, NoteRect.Max, Style->Colors[4], 0.0f);

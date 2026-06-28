@@ -130,7 +130,7 @@ bool BankFileReader::ReadVelocityRegionInfo(VelocityRegionInfo* info, s32 progra
     const BankFile::RegionParameter* regionParameter = velocityRegion->GetRegionParameter();
     if (!regionParameter)
     {
-        info->originalKey       = velocityRegion->GetOriginalKey();
+        info->rootKey       = velocityRegion->GetRootKey();
         info->volume            = velocityRegion->GetVolume();
         info->pan               = velocityRegion->GetPan();
         info->pitch             = velocityRegion->GetPitch();
@@ -141,7 +141,7 @@ bool BankFileReader::ReadVelocityRegionInfo(VelocityRegionInfo* info, s32 progra
     }
     else
     {
-        info->originalKey       = regionParameter->originalKey;
+        info->rootKey       = regionParameter->rootKey;
         info->volume            = regionParameter->volume;
         info->pan               = regionParameter->pan;
         info->pitch             = regionParameter->pitch;

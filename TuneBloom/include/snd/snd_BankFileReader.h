@@ -12,7 +12,7 @@ struct VelocityRegionInfo
     f32 pitch;
     AdshrCurve adshrCurve;
 
-    u8 originalKey;
+    u8 rootKey;
     u8 volume;
     u8 pan;
     bool isIgnoreNoteOff;

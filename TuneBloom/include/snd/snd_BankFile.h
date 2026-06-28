@@ -286,7 +286,7 @@ struct BankFile
         nw::ut::ResU32 waveIdTableIndex;
         Util::BitFlag optionParameter;
 
-        u8 GetOriginalKey() const;
+        u8 GetRootKey() const;
         u8 GetVolume() const;
         u8 GetPan() const;
         f32 GetPitch() const;
@@ -301,7 +301,7 @@ struct BankFile
     struct RegionParameter
     {
         u8 padding1[3];
-        u8 originalKey;
+        u8 rootKey;
         u8 padding2[3];
         u8 volume;
         u8 padding3[2];

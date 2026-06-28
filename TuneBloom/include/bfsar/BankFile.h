@@ -28,7 +28,7 @@ public:
             , mVelocityMax(velocityMax)
 
             , mWaveFileRef(this)
-            , mOriginalKey(60)
+            , mRootKey(60)
             , mVolume(127)
             , mPan(64)
             , mPitch(1.0f)
@@ -78,15 +78,15 @@ public:
             return mWaveFileRef;
         }
 
-        u8 getOriginalKey() const
+        u8 getRootKey() const
         {
-            return mOriginalKey;
+            return mRootKey;
         }
 
-        void setOriginalKey(u8 originalKey)
+        void setRootKey(u8 rootKey)
         {
-            originalKey = sead::MathCalcCommon<u8>::clampMax(originalKey, 127);
-            mOriginalKey = originalKey;
+            rootKey = sead::MathCalcCommon<u8>::clampMax(rootKey, 127);
+            mRootKey = rootKey;
         }
 
         u8 getVolume() const
@@ -174,7 +174,7 @@ public:
         u8 mVelocityMax;
 
         ItemReference mWaveFileRef;
-        u8 mOriginalKey;
+        u8 mRootKey;
         u8 mVolume;
         u8 mPan;
         f32 mPitch;

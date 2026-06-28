@@ -14,6 +14,29 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
+#include <cstdio>
+
+static sead::FixedSafeString<24> FormatKeyName(s32 key)
+{
+    if (key < 0 || key >= static_cast<s32>(MmlCommandNote::sKeysNum))
+        return sead::FixedSafeString<24>("-");
+
+    const char* s = MmlCommandNote::sKeys[key];
+    char letter = s[0];
+    
+    if (letter >= 'a' && letter <= 'z')
+        letter = static_cast<char>(letter - 'a' + 'A');
+    
+    const char* accidental = (s[1] == 's') ? "#" : "";
+
+    char octave[8];
+    if (s[2] == 'm')
+        snprintf(octave, sizeof(octave), "-%s", s + 3);
+    else
+        snprintf(octave, sizeof(octave), "%s", s + 2);
+
+    return sead::FormatFixedSafeString<24>("%c%s%s (%d)", letter, accidental, octave, key);
+}
 
 static bool KeyPresed[128] = { false };
 
@@ -191,11 +214,14 @@ void BankFile::VelocityRegion::drawUI()
 
     {
         u8 originalKey = getOriginalKey();
-        if (ImGui::InputScalar("Original Key", ImGuiDataType_U8, &originalKey, &cStepU8))
+        if (ImGui::InputScalar("Root Key", ImGuiDataType_U8, &originalKey, &cStepU8))
         {
             setOriginalKey(originalKey);
             SetUnsavedChanges(true);
         }
+        
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", FormatKeyName(originalKey).cstr());
     }
 
     {
@@ -962,37 +988,44 @@ void DrawKeyboardWithRegions(
         canvasPos = sDrag.initialCanvasPos;
     }
 
-    s32 fixedBegin = beginNote;
-    if (NoteIsDark[fixedBegin % 12] > 0)
-        fixedBegin++;
+    const s32 fixedBegin = beginNote;
+    const s32 fixedEnd = endNote;
+    const s32 numKeys = std::max(1, fixedEnd - fixedBegin + 1);
 
-    s32 fixedEnd = endNote;
-    if (NoteIsDark[fixedEnd % 12] > 0)
-        fixedEnd--;
-
-    s32 countWhite = 0;
-    for (s32 i = fixedBegin; i <= fixedEnd; i++)
-    {
-        if (NoteIsDark[i % 12] == 0)
-            countWhite++;
-    }
-
-    // Zoom/scroll state
     static f32 sZoom = 1.0f;
+    static f32 sZoomTarget = 1.0f;
     static f32 sScrollX = 0.0f;
+    static f32 sAnchorNorm = 0.0f;
+    static f32 sAnchorScreenX = 0.0f;
+    static bool sMiddlePan = false;
+
+    auto requestZoom = [&](f32 target, f32 screenX)
+    {
+        const f32 curZW = std::max(1.0f, sZoom * width);
+        const f32 sx = sead::MathCalcCommon<f32>::clamp2(0.0f, screenX, width);
+        sAnchorNorm = sead::MathCalcCommon<f32>::clamp2(0.0f, (sScrollX + sx) / curZW, 1.0f);
+        sAnchorScreenX = sx;
+        sZoomTarget = sead::MathCalcCommon<f32>::clamp2(1.0f, target, 8.0f);
+    };
 
     {
         ImGuiIO& io = ImGui::GetIO();
+
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+            sMiddlePan = true;
+        
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+            sMiddlePan = false;
+        if (sMiddlePan)
+        {
+            sScrollX -= io.MouseDelta.x;
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+        }
+
         if (ImGui::IsWindowHovered())
         {
-            if (io.KeyCtrl && io.MouseWheel != 0.0f)
-            {
-                f32 oldZoom = sZoom;
-                sZoom *= 1.0f + io.MouseWheel * 0.1f;
-                sZoom = sead::MathCalcCommon<f32>::clamp2(0.5f, sZoom, 3.0f);
-                f32 mouseX = sead::MathCalcCommon<f32>::clamp2(0.0f, io.MousePos.x - visibleCanvasPos.x, width);
-                sScrollX = (sScrollX + mouseX) * (sZoom / oldZoom) - mouseX;
-            }
+            if (io.MouseWheel != 0.0f && !io.KeyShift)
+                requestZoom(sZoomTarget * (1.0f + io.MouseWheel * 0.20f), io.MousePos.x - visibleCanvasPos.x);
 
             if (io.KeyShift && io.MouseWheel != 0.0f)
                 sScrollX += io.MouseWheel * 30.0f;
@@ -1002,24 +1035,21 @@ void DrawKeyboardWithRegions(
 
             if (io.KeyCtrl)
             {
-                if (ImGui::IsKeyPressed(ImGuiKey_Equal))
-                {
-                    f32 oldZoom = sZoom;
-                    sZoom *= 1.25f;
-                    sZoom = sead::MathCalcCommon<f32>::clamp2(0.5f, sZoom, 3.0f);
-                    f32 viewCenter = sScrollX + width * 0.5f;
-                    sScrollX = viewCenter * (sZoom / oldZoom) - width * 0.5f;
-                }
-                if (ImGui::IsKeyPressed(ImGuiKey_Minus))
-                {
-                    f32 oldZoom = sZoom;
-                    sZoom /= 1.25f;
-                    sZoom = sead::MathCalcCommon<f32>::clamp2(0.5f, sZoom, 3.0f);
-                    f32 viewCenter = sScrollX + width * 0.5f;
-                    sScrollX = viewCenter * (sZoom / oldZoom) - width * 0.5f;
-                }
+                if (ImGui::IsKeyPressed(ImGuiKey_Equal)) requestZoom(sZoomTarget * 1.25f, width * 0.5f);
+                if (ImGui::IsKeyPressed(ImGuiKey_Minus)) requestZoom(sZoomTarget / 1.25f, width * 0.5f);
             }
         }
+
+        if (fabsf(sZoomTarget - sZoom) > 0.0005f)
+        {
+            const f32 dt = io.DeltaTime > 0.0f ? io.DeltaTime : (1.0f / 60.0f);
+            const f32 a = 1.0f - expf(-dt * 40.0f);
+            sZoom += (sZoomTarget - sZoom) * a;
+            if (fabsf(sZoomTarget - sZoom) < 0.0015f) sZoom = sZoomTarget;
+            const f32 zw = std::max(1.0f, sZoom * width);
+            sScrollX = sAnchorNorm * zw - sAnchorScreenX;
+        }
+        sZoom = sead::MathCalcCommon<f32>::clamp2(1.0f, sZoom, 8.0f);
     }
 
     f32 zoomedWidth = std::max(1.0f, sZoom * width);
@@ -1029,53 +1059,19 @@ void DrawKeyboardWithRegions(
     canvasPos.x -= sScrollX;
     canvasSize.x = zoomedWidth;
 
-    f32 noteWidth = zoomedWidth / (f32)countWhite;
-    f32 noteWidth2 = noteWidth * 0.6f;
-
-    auto GetWhiteIndex = [&](s32 key) -> s32
-    {
-        s32 absWhite = (key / 12) * 7 + NoteLightNumber[key % 12] - 1;
-        s32 baseAbsWhite = (fixedBegin / 12) * 7 + NoteLightNumber[fixedBegin % 12] - 1;
-        return absWhite - baseAbsWhite;
-    };
+    f32 noteWidth = zoomedWidth / (f32)numKeys;
 
     auto GetKeyRect = [&](s32 key, f32& outMin, f32& outMax)
     {
-        s32 note = key % 12;
-        if (NoteIsDark[note])
-        {
-            f32 baseX = IM_ROUND(GetWhiteIndex(key + 1) * noteWidth);
-            f32 offset = NoteDarkOffset[note] * noteWidth2;
-            outMin = IM_ROUND(baseX + offset);
-            outMax = IM_ROUND(baseX + offset + noteWidth2);
-        }
-        else
-        {
-            s32 wIndex = GetWhiteIndex(key);
-            outMin = IM_ROUND(wIndex * noteWidth);
-            outMax = IM_ROUND((wIndex + 1) * noteWidth);
-        }
+        outMin = IM_ROUND((key - fixedBegin) * noteWidth);
+        outMax = IM_ROUND((key - fixedBegin + 1) * noteWidth);
     };
 
     auto XToKey = [&](f32 x) -> s32
     {
         f32 local = x - canvasPos.x;
-        s32 bestKey = beginNote;
-        f32 minDist = 99999.0f;
-        for (s32 k = fixedBegin; k <= fixedEnd; k++)
-        {
-            f32 kMin, kMax;
-            GetKeyRect(k, kMin, kMax);
-
-            f32 center = (kMin + kMax) * 0.5f;
-            f32 d = fabsf(local - center);
-            if (d < minDist)
-            {
-                minDist = d; bestKey = k;
-            }
-        }
-
-        return bestKey;
+        s32 k = fixedBegin + static_cast<s32>(std::floor(local / noteWidth));
+        return sead::MathCalcCommon<s32>::clamp2(fixedBegin, k, fixedEnd);
     };
 
     ImVec2 mouse = ImGui::GetIO().MousePos;
@@ -1109,7 +1105,7 @@ void DrawKeyboardWithRegions(
 
         AddMode addMode = AddMode::None;
         BankFile::KeyRegion* addNode = nullptr;
-        ImU32 emptyAreaColor = IM_COL32(255, 0, 0, 255);
+        ImU32 emptyAreaColor = IM_COL32(210, 100, 100, 150);
 
         if (instrument->getKeyRegionList().size() == 0)
         {
@@ -1320,11 +1316,8 @@ void DrawKeyboardWithRegions(
                     splitter.SetCurrentChannel(draw, 0);
                 }
 
-                ImU32 color = IM_COL32(140, 140, 140, 255);
-                if (sSubSelectedItem == velRegion)
-                {
-                    color = ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_Header));
-                }
+                const bool selected = (sSubSelectedItem == velRegion);
+                ImU32 color = selected ? ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)) : ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_Button));
 
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
                 {
@@ -1375,7 +1368,7 @@ void DrawKeyboardWithRegions(
                 }
 
                 draw->AddRectFilled(p0, p1, color);
-                draw->AddRect(p0, p1, IM_COL32(0,0,0,255));
+                draw->AddRect(p0, p1, selected ? IM_COL32(255, 226, 120, 255) : IM_COL32(0, 0, 0, 160), 0.0f, 0, selected ? 2.0f : 1.0f);
 
                 const char* name = "(null)";
                 if (velRegion->getWaveFileRef().isAttached())
@@ -1450,6 +1443,18 @@ void DrawKeyboardWithRegions(
         }
 
         splitter.Merge(draw);
+
+        for (s32 gk = fixedBegin; gk <= fixedEnd; gk++)
+        {
+            if (gk % 12 != 0)
+                continue;
+            
+            f32 gMin, gMax;
+            GetKeyRect(gk, gMin, gMax);
+            const f32 lx = canvasPos.x + gMin;
+            draw->AddLine(ImVec2(lx, canvasPos.y), ImVec2(lx, canvasPos.y + regionHeight), IM_COL32(255, 255, 255, 40));
+            draw->AddText(ImVec2(lx + 3.0f, canvasPos.y + regionHeight - ImGui::GetFontSize() - 2.0f),IM_COL32(225, 230, 240, 170), FormatKeyName(gk).cstr());
+        }
 
         if (addMode != AddMode::None)
         {
@@ -1734,6 +1739,42 @@ void DrawKeyboardWithRegions(
         ImGui::SetCursorScreenPos(ImVec2(visibleCanvasPos.x, afterKB.y));
     }
 
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        ImDrawList* d2 = ImGui::GetWindowDrawList();
+
+        const f32 trackH = 14.0f;
+        ImVec2 trackOrigin = ImGui::GetCursorScreenPos();
+        d2->AddRectFilled(trackOrigin, ImVec2(trackOrigin.x + width, trackOrigin.y + trackH),IM_COL32(0x2a, 0x33, 0x40, 255));
+
+        const f32 visibleFrac = (zoomedWidth > 0.0f) ? (width / zoomedWidth) : 1.0f;
+        const f32 thumbW = std::max(16.0f, std::min(width, visibleFrac * width));
+        const f32 travel = std::max(0.0f, width - thumbW);
+        const f32 thumbLeft = (maxScroll > 0.0f) ? (sScrollX / maxScroll) * travel : 0.0f;
+        const bool fitsAll = zoomedWidth <= width + 0.5f;
+        d2->AddRectFilled(ImVec2(trackOrigin.x + thumbLeft, trackOrigin.y + 1.0f), ImVec2(trackOrigin.x + thumbLeft + thumbW, trackOrigin.y + trackH - 1.0f), fitsAll ? IM_COL32(0x3d, 0x5a, 0x73, 160) : IM_COL32(0x7f, 0xd1, 0xff, 255), 3.0f);
+
+        ImGui::InvisibleButton("###PianoScroll", ImVec2(width, trackH));
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive())
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        if (ImGui::IsItemActive() && travel > 0.0f)
+        {
+            const f32 mx = io.MousePos.x - trackOrigin.x - thumbW * 0.5f;
+            const f32 t = sead::MathCalcCommon<f32>::clamp2(0.0f, mx, travel) / travel;
+            sScrollX = t * maxScroll;
+        }
+
+        if (ImGui::SmallButton("-###PianoZoomOut")) requestZoom(sZoomTarget / 1.25f, width * 0.5f);
+        ImGui::SameLine();
+        ImGui::Text("zoom %.0f%%", sZoom * 100.0f);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+###PianoZoomIn")) requestZoom(sZoomTarget * 1.25f, width * 0.5f);
+        ImGui::SameLine();
+        if (ImGui::Button("Fit###PianoZoomFit")) requestZoom(1.0f, width * 0.5f);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(scroll: zoom, Shift+scroll / middle-drag: pan)");
+    }
+
     s32 key[2] = { -1, -1 };
     s32 vel[2] = { -1, -1 };
     if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
@@ -1746,15 +1787,21 @@ void DrawKeyboardWithRegions(
         vel[1] = velRegion->getVelocityMax();
     }
 
-    ImGui::Text("Key         ");
+    sead::FixedSafeString<24> keyMinStr = FormatKeyName(key[0]);
+    sead::FixedSafeString<24> keyMaxStr = FormatKeyName(key[1]);
+
+    ImGui::Text("Key Range   ");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(200.0f);
 
     ImGui::BeginDisabled();
-    ImGui::InputInt2("###Key", key);
+    ImGui::SetNextItemWidth(98.0f);
+    ImGui::InputText("###KeyMin", keyMinStr.getBuffer(), keyMinStr.getBufferSize());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(98.0f);
+    ImGui::InputText("###KeyMax", keyMaxStr.getBuffer(), keyMaxStr.getBufferSize());
     ImGui::EndDisabled();
 
-    ImGui::Text("Velocity    ");
+    ImGui::Text("Vel Range   ");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(200.0f);
 
@@ -1762,18 +1809,14 @@ void DrawKeyboardWithRegions(
     ImGui::InputInt2("###Velocity", vel);
     ImGui::EndDisabled();
 
-    sead::FixedSafeString<16> origKey("-");
-    if (originalKey >= 0 && originalKey < MmlCommandNote::sKeysNum)
-    {
-        origKey = MmlCommandNote::sKeys[originalKey];
-    }
-
-    ImGui::Text("Original Key");
+    ImGui::Text("Root Key    ");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(200.0f);
 
+    sead::FixedSafeString<24> formattedRoot = FormatKeyName(originalKey);
+
     ImGui::BeginDisabled();
-    ImGui::InputText("###Orig", origKey.getBuffer(), origKey.getBufferSize());
+    ImGui::InputText("###Orig", formattedRoot.getBuffer(), formattedRoot.getBufferSize());
     ImGui::EndDisabled();
 }
 

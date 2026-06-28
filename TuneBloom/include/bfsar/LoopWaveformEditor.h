@@ -14,6 +14,10 @@ struct LoopWaveformState {
     u32 viewEnd = 0;
     bool viewInitialized = false;
 
+    double viewStartAnim = 0.0, viewEndAnim = 0.0;
+    double viewStartTarget = 0.0, viewEndTarget = 0.0;
+    bool viewAnimInit = false;
+
     enum class Dragging { None, Start, End, Pan, Scrollbar } dragging = Dragging::None;
     float dragAnchorMouseX = 0.0f;
     u32 dragAnchorViewStart = 0;

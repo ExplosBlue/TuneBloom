@@ -56,25 +56,41 @@ static void ClampView(LoopWaveformState& st, u32 totalSamples)
     st.viewEnd = static_cast<u32>(std::max<s64>(static_cast<s64>(st.viewStart), viewEnd));
 }
 
+static void ClampRangeD(double& vs, double& ve, u32 totalSamples)
+{
+    const double total = static_cast<double>(totalSamples);
+    if (vs < 0.0) { ve -= vs; vs = 0.0; }
+    if (ve > total) { vs -= (ve - total); ve = total; }
+    if (vs < 0.0) vs = 0.0;
+    if (ve - vs < 16.0) ve = std::min(total, vs + 16.0);
+    if (ve < vs) ve = vs;
+}
+
+static void SnapView(LoopWaveformState& st)
+{
+    st.viewStartTarget = st.viewStartAnim = static_cast<double>(st.viewStart);
+    st.viewEndTarget = st.viewEndAnim = static_cast<double>(st.viewEnd);
+}
+
 static void ResetView(LoopWaveformState& st, u32 totalSamples)
 {
-    st.viewStart = 0;
-    st.viewEnd = totalSamples;
+    st.viewStartTarget = 0.0;
+    st.viewEndTarget = static_cast<double>(totalSamples);
     st.viewInitialized = true;
 }
 
 static void ZoomAt(LoopWaveformState& st, double sampleCenter, double factor, u32 totalSamples)
 {
-    const double curSpan = static_cast<double>(ViewSpan(st));
+    const double curStart = st.viewStartTarget;
+    const double curSpan = std::max(1.0, st.viewEndTarget - st.viewStartTarget);
     const double newSpan = std::max(16.0, std::min(static_cast<double>(totalSamples), curSpan * factor));
-    const double frac = (sampleCenter - static_cast<double>(st.viewStart)) / curSpan;
+    const double frac = (sampleCenter - curStart) / curSpan;
 
-    const s64 newStart = static_cast<s64>(std::lround(sampleCenter - frac * newSpan));
-    const s64 newEnd = static_cast<s64>(std::lround(static_cast<double>(newStart) + newSpan));
-
-    st.viewStart = static_cast<u32>(std::max<s64>(0, newStart));
-    st.viewEnd = static_cast<u32>(std::max<s64>(static_cast<s64>(st.viewStart), newEnd));
-    ClampView(st, totalSamples);
+    double ns = sampleCenter - frac * newSpan;
+    double ne = ns + newSpan;
+    ClampRangeD(ns, ne, totalSamples);
+    st.viewStartTarget = ns;
+    st.viewEndTarget = ne;
 }
 
 static void ZoomToLoop(LoopWaveformState& st, u32 loopStart, u32 loopEnd, u32 totalSamples)
@@ -82,12 +98,11 @@ static void ZoomToLoop(LoopWaveformState& st, u32 loopStart, u32 loopEnd, u32 to
     const u32 len = loopEnd > loopStart ? (loopEnd - loopStart) : 0;
     const u32 pad = std::max<u32>(64, static_cast<u32>(std::lround(len * 0.3)));
 
-    const s64 vs = static_cast<s64>(loopStart) - static_cast<s64>(pad);
-    const s64 ve = static_cast<s64>(loopEnd) + static_cast<s64>(pad);
-
-    st.viewStart = static_cast<u32>(std::max<s64>(0, vs));
-    st.viewEnd = static_cast<u32>(std::max<s64>(static_cast<s64>(st.viewStart), ve));
-    ClampView(st, totalSamples);
+    double vs = static_cast<double>(loopStart) - static_cast<double>(pad);
+    double ve = static_cast<double>(loopEnd) + static_cast<double>(pad);
+    ClampRangeD(vs, ve, totalSamples);
+    st.viewStartTarget = vs;
+    st.viewEndTarget = ve;
 }
 
 static inline u32 ClampIdx(s64 i, u32 n)
@@ -296,6 +311,7 @@ static bool HandleInteraction(LoopWaveformState& st, const std::vector<float>& m
             st.viewStart = static_cast<u32>(std::max<s64>(0, newStart));
             st.viewEnd = static_cast<u32>(std::max<s64>(static_cast<s64>(st.viewStart), newEnd));
             ClampView(st, n);
+            SnapView(st);
         }
         else
         {
@@ -340,6 +356,7 @@ static bool HandleInteraction(LoopWaveformState& st, const std::vector<float>& m
             st.viewStart = static_cast<u32>(std::max<s64>(0, newStart));
             st.viewEnd = static_cast<u32>(std::max<s64>(static_cast<s64>(st.viewStart), newEnd));
             ClampView(st, n);
+            SnapView(st);
         }
         else
         {
@@ -363,7 +380,41 @@ bool LoopWaveformEditor(const char* idStr, LoopWaveformState& state,
     const u32 n = static_cast<u32>(mono.size());
 
     if (!state.viewInitialized && n > 0)
-        ResetView(state, n);
+    {
+        state.viewStart = 0; state.viewEnd = n;
+        state.viewStartAnim = 0.0; state.viewEndAnim = static_cast<double>(n);
+        state.viewStartTarget = 0.0; state.viewEndTarget = static_cast<double>(n);
+        state.viewInitialized = true;
+        state.viewAnimInit = true;
+    }
+    if (!state.viewAnimInit)
+    {
+        state.viewStartAnim = state.viewStartTarget = static_cast<double>(state.viewStart);
+        state.viewEndAnim = state.viewEndTarget = static_cast<double>(state.viewEnd);
+        state.viewAnimInit = true;
+    }
+
+    if (n > 0)
+    {
+        const double dt = GetIO().DeltaTime > 0.0f ? GetIO().DeltaTime : (1.0 / 60.0);
+        const double a = 1.0 - std::exp(-dt * 40.0);
+        state.viewStartAnim += (state.viewStartTarget - state.viewStartAnim) * a;
+        state.viewEndAnim += (state.viewEndTarget - state.viewEndAnim) * a;
+        if (std::fabs(state.viewStartTarget - state.viewStartAnim) < 0.75 &&
+            std::fabs(state.viewEndTarget - state.viewEndAnim) < 0.75)
+        {
+            state.viewStartAnim = state.viewStartTarget;
+            state.viewEndAnim = state.viewEndTarget;
+        }
+        s64 vs = std::llround(state.viewStartAnim);
+        s64 ve = std::llround(state.viewEndAnim);
+        if (vs < 0) vs = 0;
+        if (ve > static_cast<s64>(n)) ve = n;
+        if (ve <= vs) ve = std::min<s64>(n, vs + 1);
+        if (vs >= ve) vs = ve > 0 ? ve - 1 : 0;
+        state.viewStart = static_cast<u32>(vs);
+        state.viewEnd = static_cast<u32>(ve);
+    }
 
     if (size.x <= 0.0f) size.x = GetContentRegionAvail().x;
     if (size.x < 1.0f) size.x = 1.0f;
@@ -415,6 +466,7 @@ bool LoopWaveformEditor(const char* idStr, LoopWaveformState& state,
             state.viewStart = static_cast<u32>(std::max(0.0, clickedSample - half));
             state.viewEnd = state.viewStart + ViewSpan(state);
             ClampView(state, n);
+            SnapView(state);
 
             state.dragging = LoopWaveformState::Dragging::Scrollbar;
             state.dragAnchorMouseX = sbIo.MousePos.x;
@@ -431,6 +483,7 @@ bool LoopWaveformEditor(const char* idStr, LoopWaveformState& state,
                 state.viewStart = static_cast<u32>(std::max<s64>(0, newStart));
                 state.viewEnd = state.viewStart + static_cast<u32>(span);
                 ClampView(state, n);
+                SnapView(state);
             }
             else
             {

@@ -62,10 +62,10 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
     ImVec2 MousePos = ImGui::GetIO().MousePos;
 
     // sizes
-    s32 CountNotesAllign7 = (EndOctaveNote / 12 - BeginOctaveNote / 12) * 7 + NoteLightNumber[EndOctaveNote % 12] - (NoteLightNumber[BeginOctaveNote % 12] - 1);
+    s32 CountNotes = EndOctaveNote - BeginOctaveNote + 1;
 
     f32 NoteHeight    = Size.y;
-    f32 NoteWidth     = Size.x / (f32)CountNotesAllign7;
+    f32 NoteWidth     = Size.x / (f32)CountNotes;
 
     f32 NoteHeight2   = NoteHeight * Style->NoteDarkHeight;
     f32 NoteWidth2    = NoteWidth * Style->NoteDarkWidth;
@@ -160,25 +160,24 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
     s32 NoteMouseColision = -1;
     f32 NoteMouseVel = 0.0f;
 
-    f32 OffsetX = bb.Min.x;
-    f32 OffsetY = bb.Min.y;
-    f32 OffsetY2 = OffsetY + NoteHeight;
+    auto IsBlackKey = [&](s32 k) -> bool
+    {
+        return k >= BeginOctaveNote && k <= EndOctaveNote && NoteIsDark[k % 12] > 0;
+    };
+
     for (s32 RealNum = BeginOctaveNote; RealNum <= EndOctaveNote; RealNum++)
     {
         s32 Octave = RealNum / 12;
         s32 i      = RealNum % 12;
-
         if (NoteIsDark[i] > 0)
-        {
             continue;
-        }
 
-        ImRect NoteRect( 
-            round(OffsetX), 
-            OffsetY, 
-            round(OffsetX + NoteWidth), 
-            OffsetY2 
-        );
+        f32 cellL = bb.Min.x + (RealNum - BeginOctaveNote) * NoteWidth;
+        f32 cellR = cellL + NoteWidth;
+        f32 L = IsBlackKey(RealNum - 1) ? cellL - NoteWidth * 0.5f : cellL;
+        f32 R = IsBlackKey(RealNum + 1) ? cellR + NoteWidth * 0.5f : cellR;
+
+        ImRect NoteRect(round(L), bb.Min.y, round(R), bb.Min.y + NoteHeight);
 
         if (held && NoteRect.Contains(MousePos))
         {
@@ -187,69 +186,32 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
         }
 
         bool isActive = Callback(UserData, NoteGetStatus, RealNum, 0.0f);
-
-        u32 colIdx;
-        if (isActive)
-        {
-            if (RealNum == OriginalKey)
-            {
-                colIdx = 7;
-            }
-            else
-            {
-                colIdx = 2;
-            }
-        }
-        else
-        {
-            if (RealNum == OriginalKey)
-            {
-                colIdx = 5;
-            }
-            else
-            {
-                colIdx = 0;
-            }
-        }
+        u32 colIdx = isActive ? (RealNum == OriginalKey ? 7 : 2)
+                              : (RealNum == OriginalKey ? 5 : 0);
 
         draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[colIdx], 0.0f);
-
         draw_list->AddRect(NoteRect.Min, NoteRect.Max, Style->Colors[4], 0.0f);
 
         if (Octave > 0 && i == 0)
         {
             draw_list->AddText(
-                ImVec2(NoteRect.Min.x + NoteWidth / 2.0f - 3, NoteRect.Min.y + 50),
+                ImVec2(cellL + NoteWidth / 2.0f - 3, bb.Min.y + 50),
                 IM_COL32(0, 0, 255, 255),
                 sead::FormatFixedSafeString<8>("%d", Octave - 1).cstr()
             );
         }
-
-        OffsetX += NoteWidth;
     }
 
-    // draw dark notes
-    OffsetX = bb.Min.x;
-    OffsetY = bb.Min.y;
-    OffsetY2 = OffsetY + NoteHeight2;
+    // Draw black keys
     for (s32 RealNum = BeginOctaveNote; RealNum <= EndOctaveNote; RealNum++)
     {
-        s32 Octave = RealNum / 12;
-        s32 i      = RealNum % 12;
-
+        s32 i = RealNum % 12;
         if (NoteIsDark[i] == 0)
-        {
-            OffsetX += NoteWidth;
             continue;
-        }
 
-        f32 OffsetDark = NoteDarkOffset[i] * NoteWidth2;
-        ImRect NoteRect(
-            round(OffsetX + OffsetDark), 
-            OffsetY, 
-            round(OffsetX + NoteWidth2 + OffsetDark),
-            OffsetY2
-        );
+        f32 cellL = bb.Min.x + (RealNum - BeginOctaveNote) * NoteWidth;
+        f32 bx0 = cellL + (NoteWidth - NoteWidth2) * 0.5f;
+        ImRect NoteRect(round(bx0), bb.Min.y, round(bx0 + NoteWidth2), bb.Min.y + NoteHeight2);
 
         if (held && NoteRect.Contains(MousePos))
         {
@@ -258,33 +220,10 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
         }
 
         bool isActive = Callback(UserData, NoteGetStatus, RealNum, 0.0f);
-
-        u32 colIdx;
-        if (isActive)
-        {
-            if (RealNum == OriginalKey)
-            {
-                colIdx = 8;
-            }
-            else
-            {
-                colIdx = 3;
-            }
-        }
-        else
-        {
-            if (RealNum == OriginalKey)
-            {
-                colIdx = 6;
-            }
-            else
-            {
-                colIdx = 1;
-            }
-        }
+        u32 colIdx = isActive ? (RealNum == OriginalKey ? 8 : 3)
+                              : (RealNum == OriginalKey ? 6 : 1);
 
         draw_list->AddRectFilled(NoteRect.Min, NoteRect.Max, Style->Colors[colIdx], 0.0f);
-
         draw_list->AddRect(NoteRect.Min, NoteRect.Max, Style->Colors[4], 0.0f);
     }
 

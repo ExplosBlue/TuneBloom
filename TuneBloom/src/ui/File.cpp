@@ -96,7 +96,7 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     if (defaultName && *defaultName)
         defaultPath = std::filesystem::path(defaultName).make_preferred().string();
 
-    std::string result = pfd::save_file(title ? title : "", defaultPath, filtersVec, pfd::opt::force_overwrite).result();
+    std::string result = pfd::save_file(title ? title : "", defaultPath, filtersVec, pfd::opt::none).result();
     if (result.empty())
         return false;
 

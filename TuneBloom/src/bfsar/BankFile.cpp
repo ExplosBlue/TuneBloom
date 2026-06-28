@@ -779,6 +779,8 @@ void BankFile::drawUI()
 }
 
 static BankFile::KeyRegion* sContextKeyRegion = nullptr;
+static s32 sContextSplitKey = -1;
+static s32 sContextSplitVel = -1;
 
 void SelectVelocity(BankFile::KeyRegion* keyRegion, BankFile::VelocityRegion* velocityRegion)
 {
@@ -861,7 +863,12 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             snd::internal::driver::SoundThreadLock lock;
 
             u8 newKeyMax = keyRegion->getKeyMax();
-            u8 newKeyMin = (keyRegion->getKeyMax() + keyRegion->getKeyMin()) / 2 + 1;
+            s32 splitMin = sContextSplitKey;
+
+            if (splitMin <= keyRegion->getKeyMin() || splitMin > keyRegion->getKeyMax())
+                splitMin = (keyRegion->getKeyMax() + keyRegion->getKeyMin()) / 2 + 1;
+            
+            u8 newKeyMin = static_cast<u8>(splitMin);
 
             keyRegion->setKeyMax(newKeyMin - 1, *instrument);
             SetUnsavedChanges(true);
@@ -895,7 +902,12 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             snd::internal::driver::SoundThreadLock lock;
 
             u8 newVelMax = velocityRegion->getVelocityMax();
-            u8 newVelMin = (velocityRegion->getVelocityMax() + velocityRegion->getVelocityMin()) / 2 + 1;
+            s32 splitVelMin = sContextSplitVel;
+
+            if (splitVelMin <= velocityRegion->getVelocityMin() || splitVelMin > velocityRegion->getVelocityMax())
+                splitVelMin = (velocityRegion->getVelocityMax() + velocityRegion->getVelocityMin()) / 2 + 1;
+            
+            u8 newVelMin = static_cast<u8>(splitVelMin);
 
             velocityRegion->setVelocityMax(newVelMin - 1, *keyRegion);
             SetUnsavedChanges(true);
@@ -1421,6 +1433,9 @@ void DrawKeyboardWithRegions(
                 {
                     ImGui::OpenPopup("VelocityRegionContextMenu");
                     SelectVelocity(keyRegion, velRegion);
+                    
+                    sContextSplitKey = XToKey(mouse.x);
+                    sContextSplitVel = 127 - (s32)IM_ROUND(((mouse.y - canvasPos.y) / regionHeight) * 128.0f);
                 }
 
                 draw->AddRectFilled(p0, p1, color);

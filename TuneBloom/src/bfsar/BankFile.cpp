@@ -78,9 +78,10 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
             if (!velocityRegion)
             {
                 PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<32>("Invalid VelocityRegion(%d)", vel) });
+                return false;
             }
 
-            sSoundPlayer.playBankNote(static_cast<u8>(Key), vel, *velocityRegion);
+            sSoundPlayer.playBankNotePoly(static_cast<u8>(Key), vel, *velocityRegion);
 
             break;
         }
@@ -89,7 +90,7 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
         {
             KeyPresed[Key] = false;
 
-            sSoundPlayer.stopAllPlayers(false);
+            sSoundPlayer.stopBankNote(static_cast<u8>(Key));
 
             break;
         }
@@ -100,23 +101,35 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
 
 static MidiInput sMidiInput;
 
-static void MidiInputCallback(void* userData, s32 msg, s32 key, f32 vel)
+static void MidiInputCallback(void *userData, s32 msg, s32 key, f32 vel)
 {
+    if (msg == 3)
+    {
+        sSoundPlayer.setBankPitchBend(vel);
+        return;
+    }
+    if (msg == 4)
+    {
+        if (key == 1)
+            sSoundPlayer.setBankModulation(vel);
+        return;
+    }
+
     if (key < 0 || key >= 128)
         return;
 
-    Item* selected = sSelectedItem;
-    if (selected && selected->getItemType() == Item::ItemType::BankFileInstrument)
+    if (msg == 2)
     {
-        if (msg == 1)
-            KeyboardFunc(selected, NoteOn, key, vel);
-        else if (msg == 2)
-            KeyboardFunc(selected, NoteOff, key, 0.0f);
+        KeyPresed[key] = false;
+        sSoundPlayer.stopBankNote(static_cast<u8>(key));
+        return;
     }
-    else
+
+    if (msg == 1)
     {
-        if (msg == 2)
-            KeyPresed[key] = false;
+        Item *selected = sSelectedItem;
+        if (selected && selected->getItemType() == Item::ItemType::BankFileInstrument)
+            KeyboardFunc(selected, NoteOn, key, vel);
     }
 }
 

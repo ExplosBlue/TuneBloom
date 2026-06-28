@@ -24,9 +24,11 @@ struct DeviceEntry
 static std::vector<DeviceEntry> sDeviceList;
 
 #if defined(SEAD_PLATFORM_WINDOWS)
-static std::string WideToUtf8(const wchar_t* str)
+static std::string WideToUtf8(const wchar_t *str)
 {
-    if (!str || !*str) return {};
+    if (!str || !*str)
+        return {};
+    
     int len = WideCharToMultiByte(CP_UTF8, 0, str, -1, nullptr, 0, nullptr, nullptr);
     std::string ret(static_cast<size_t>(len) - 1, '\0');
     WideCharToMultiByte(CP_UTF8, 0, str, -1, &ret[0], len, nullptr, nullptr);
@@ -46,7 +48,7 @@ static void PopulateDeviceList()
     {
         MIDIINCAPSW caps;
         if (midiInGetDevCapsW(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
-            sDeviceList.push_back({ WideToUtf8(caps.szPname) });
+            sDeviceList.push_back({WideToUtf8(caps.szPname)});
     }
 
 #elif defined(SEAD_PLATFORM_MACOSX)
@@ -63,18 +65,18 @@ static void PopulateDeviceList()
         {
             char buf[256];
             if (CFStringGetCString(str, buf, sizeof(buf), kCFStringEncodingUTF8))
-                sDeviceList.push_back({ buf });
+                sDeviceList.push_back({buf});
             CFRelease(str);
         }
     }
 
 #elif defined(SEAD_PLATFORM_LINUX)
-    snd_seq_t* seq = nullptr;
+    snd_seq_t *seq = nullptr;
     if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0) < 0)
         return;
 
-    snd_seq_client_info_t* cinfo;
-    snd_seq_port_info_t* pinfo;
+    snd_seq_client_info_t *cinfo;
+    snd_seq_port_info_t *pinfo;
     snd_seq_client_info_alloca(&cinfo);
     snd_seq_port_info_alloca(&pinfo);
 
@@ -82,7 +84,7 @@ static void PopulateDeviceList()
     while (snd_seq_query_next_client(seq, cinfo) >= 0)
     {
         int client = snd_seq_client_info_get_client(cinfo);
-        const char* cname = snd_seq_client_info_get_name(cinfo);
+        const char *cname = snd_seq_client_info_get_name(cinfo);
 
         snd_seq_port_info_set_client(pinfo, client);
         snd_seq_port_info_set_port(pinfo, -1);
@@ -92,8 +94,8 @@ static void PopulateDeviceList()
             if (caps & SND_SEQ_PORT_CAP_READ)
             {
                 int port = snd_seq_port_info_get_port(pinfo);
-                const char* pname = snd_seq_port_info_get_name(pinfo);
-                sDeviceList.push_back({ std::string(cname) + ":" + std::string(pname), client, port });
+                const char *pname = snd_seq_port_info_get_name(pinfo);
+                sDeviceList.push_back({std::string(cname) + ":" + std::string(pname), client, port});
             }
         }
     }
@@ -104,36 +106,61 @@ static void PopulateDeviceList()
 
 #if defined(SEAD_PLATFORM_MACOSX)
 // CoreMIDI callback — runs on a system thread, queues events for poll()
-static void MidiReadProc(const MIDIPacketList* pktList, void* refCon, void*)
+static void MidiReadProc(const MIDIPacketList *pktList, void *refCon, void *)
 {
-    auto* self = static_cast<MidiInput*>(refCon);
+    auto *self = static_cast<MidiInput *>(refCon);
     if (!self)
         return;
 
-    const MIDIPacket* pkt = &pktList->packet[0];
+    const MIDIPacket *pkt = &pktList->packet[0];
     for (UInt32 i = 0; i < pktList->numPackets; i++)
     {
         if (pkt->length >= 3)
         {
             u8 status = pkt->data[0];
-            u8 note = pkt->data[1];
-            u8 vel = pkt->data[2];
+            u8 d1 = pkt->data[1];
+            u8 d2 = pkt->data[2];
+            u8 hi = status & 0xF0;
 
-            s32 msg;
-            if ((status & 0xF0) == 0x90 && vel > 0)
+            s32 msg, key;
+            f32 val;
+            if (hi == 0x90 && d2 > 0)
+            {
                 msg = 1;
-            else if ((status & 0xF0) == 0x80 || ((status & 0xF0) == 0x90 && vel == 0))
+                key = d1;
+                val = d2 / 127.0f;
+            }
+            else if (hi == 0x80 || (hi == 0x90 && d2 == 0))
+            {
                 msg = 2;
+                key = d1;
+                val = 0.0f;
+            }
+            else if (hi == 0xE0)
+            {
+                msg = 3;
+                key = 0;
+                val = ((s32)d1 | ((s32)d2 << 7)) / 8192.0f - 1.0f;
+            }
+            else if (hi == 0xB0)
+            {
+                msg = 4;
+                key = d1;
+                val = d2 / 127.0f;
+            }
             else
+            {
+                pkt = MIDIPacketNext(pkt);
                 continue;
+            }
 
             s32 w = self->mQueueWrite;
             s32 n = (w + 1) % MidiInput::kQueueSize;
             if (n != self->mQueueRead)
             {
                 self->mQueue[w].msg = msg;
-                self->mQueue[w].key = note;
-                self->mQueue[w].vel = vel / 127.0f;
+                self->mQueue[w].key = key;
+                self->mQueue[w].vel = val;
                 self->mQueueWrite = n;
             }
         }
@@ -149,19 +176,41 @@ static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_
     if (wMsg != MIM_DATA)
         return;
 
-    auto* self = reinterpret_cast<MidiInput*>(dwInstance);
+    auto *self = reinterpret_cast<MidiInput *>(dwInstance);
     if (!self)
         return;
 
     u8 status = dwParam1 & 0xFF;
-    u8 note = (dwParam1 >> 8) & 0xFF;
-    u8 vel = (dwParam1 >> 16) & 0xFF;
+    u8 d1 = (dwParam1 >> 8) & 0xFF;
+    u8 d2 = (dwParam1 >> 16) & 0xFF;
+    u8 hi = status & 0xF0;
 
-    s32 msg;
-    if ((status & 0xF0) == 0x90 && vel > 0)
+    s32 msg, key;
+    f32 val;
+    if (hi == 0x90 && d2 > 0)
+    {
         msg = 1;
-    else if ((status & 0xF0) == 0x80 || ((status & 0xF0) == 0x90 && vel == 0))
+        key = d1;
+        val = d2 / 127.0f;
+    }
+    else if (hi == 0x80 || (hi == 0x90 && d2 == 0))
+    {
         msg = 2;
+        key = d1;
+        val = 0.0f;
+    }
+    else if (hi == 0xE0)
+    {
+        msg = 3;
+        key = 0;
+        val = ((s32)d1 | ((s32)d2 << 7)) / 8192.0f - 1.0f;
+    }
+    else if (hi == 0xB0)
+    {
+        msg = 4;
+        key = d1;
+        val = d2 / 127.0f;
+    }
     else
         return;
 
@@ -170,14 +219,14 @@ static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_
     if (n != self->mQueueRead)
     {
         self->mQueue[w].msg = msg;
-        self->mQueue[w].key = note;
-        self->mQueue[w].vel = vel / 127.0f;
+        self->mQueue[w].key = key;
+        self->mQueue[w].vel = val;
         self->mQueueWrite = n;
     }
 }
 #endif
 
-bool MidiInput::start(Callback callback, void* userData, u32 deviceIndex)
+bool MidiInput::start(Callback callback, void *userData, u32 deviceIndex)
 {
     stop();
 
@@ -191,15 +240,15 @@ bool MidiInput::start(Callback callback, void* userData, u32 deviceIndex)
     PopulateDeviceList();
 
 #if defined(SEAD_PLATFORM_LINUX)
-    snd_seq_t* seq = nullptr;
+    snd_seq_t *seq = nullptr;
     if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0) < 0)
         return false;
 
     snd_seq_set_client_name(seq, "TuneBloom");
 
     int port = snd_seq_create_simple_port(seq, "MIDI Input",
-        SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
-        SND_SEQ_PORT_TYPE_APPLICATION);
+                                          SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
+                                          SND_SEQ_PORT_TYPE_APPLICATION);
 
     if (port < 0)
     {
@@ -209,7 +258,7 @@ bool MidiInput::start(Callback callback, void* userData, u32 deviceIndex)
 
     if (deviceIndex < sDeviceList.size())
     {
-        const auto& entry = sDeviceList[deviceIndex];
+        const auto &entry = sDeviceList[deviceIndex];
         snd_seq_connect_from(seq, port, entry.client, entry.port);
     }
 
@@ -252,9 +301,9 @@ bool MidiInput::start(Callback callback, void* userData, u32 deviceIndex)
 
     HMIDIIN handle = nullptr;
     MMRESULT res = midiInOpen(&handle, deviceIndex,
-        reinterpret_cast<DWORD_PTR>(&MidiInProc),
-        reinterpret_cast<DWORD_PTR>(this),
-        CALLBACK_FUNCTION);
+                              reinterpret_cast<DWORD_PTR>(&MidiInProc),
+                              reinterpret_cast<DWORD_PTR>(this),
+                              CALLBACK_FUNCTION);
 
     if (res != MMSYSERR_NOERROR)
         return false;
@@ -281,7 +330,7 @@ void MidiInput::stop()
 #if defined(SEAD_PLATFORM_LINUX)
     if (mSeq)
     {
-        snd_seq_close(static_cast<snd_seq_t*>(mSeq));
+        snd_seq_close(static_cast<snd_seq_t *>(mSeq));
         mSeq = nullptr;
     }
     mPort = -1;
@@ -323,8 +372,8 @@ void MidiInput::poll()
     if (!mSeq)
         return;
 
-    snd_seq_t* seq = static_cast<snd_seq_t*>(mSeq);
-    snd_seq_event_t* ev = nullptr;
+    snd_seq_t *seq = static_cast<snd_seq_t *>(mSeq);
+    snd_seq_event_t *ev = nullptr;
     while (snd_seq_event_input_pending(seq, 1) > 0)
     {
         if (snd_seq_event_input(seq, &ev) < 0 || !ev)
@@ -343,6 +392,16 @@ void MidiInput::poll()
         {
             u8 note = ev->data.note.note;
             mCallback(mUserData, 2, note, 0.0f);
+            break;
+        }
+        case SND_SEQ_EVENT_PITCHBEND:
+        {
+            mCallback(mUserData, 3, 0, ev->data.control.value / 8192.0f);
+            break;
+        }
+        case SND_SEQ_EVENT_CONTROLLER:
+        {
+            mCallback(mUserData, 4, (s32)ev->data.control.param, ev->data.control.value / 127.0f);
             break;
         }
         default:
@@ -368,7 +427,7 @@ u32 MidiInput::getDeviceCount()
     return static_cast<u32>(sDeviceList.size());
 }
 
-const char* MidiInput::getDeviceName(u32 index)
+const char *MidiInput::getDeviceName(u32 index)
 {
     PopulateDeviceList();
     if (index >= sDeviceList.size())

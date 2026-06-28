@@ -34,6 +34,12 @@ public:
         {
             mTrackVolume[i] = 1.0f;
         }
+
+        for (u32 i = 0; i < cMaxBankVoices; i++)
+        {
+            mBankVoiceKey[i] = -1;
+            mBankVoiceAge[i] = 0;
+        }
     }
 
     ~SoundPlayer()
@@ -60,6 +66,12 @@ public:
     bool writeSeqWavFile(const sead::SafeString& path, const std::vector<f32>& left, const std::vector<f32>& right, u32 sampleRate = 0);
     bool playWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0, bool updateSelection = true);
     bool playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
+
+    bool playBankNotePoly(u8 key, u8 velocity, const BankFile::VelocityRegion &velocityRegion);
+    void stopBankNote(u8 key);
+    void stopAllBankNotes(bool immediate);
+    void setBankPitchBend(f32 normalized);
+    void setBankModulation(f32 amount01);
 
     void pause(bool isPause);
     bool seek(f32 progress);
@@ -110,10 +122,17 @@ public:
     void drawParameters();
     void drawSeqVars();
 
+public:
+    static const u32 cMaxBankVoices = 16;
+    static constexpr f32 cBankPitchBendRange = 2.0f; // semitones at full bend
+
 private:
     void initPlayerParam_();
     void initPlayerTrack_();
     void initSeqVars_();
+
+    void applyBankExpression_(snd::internal::driver::Channel* channel);
+    s32 allocBankVoice_();
 
     struct SeqVarInfo
     {
@@ -191,6 +210,13 @@ private:
     SequenceSoundPlayer mSequencePlayer;
     StreamSoundPlayer mStreamPlayer;
     WaveSoundPlayer mWavePlayer;
+
+    WaveSoundPlayer mBankVoices[cMaxBankVoices];
+    s32 mBankVoiceKey[cMaxBankVoices];
+    u32 mBankVoiceAge[cMaxBankVoices];
+    u32 mBankVoiceCounter = 0;
+    f32 mBankPitchBendSemis = 0.0f;
+    f32 mBankModulation = 0.0f;
 
     // SequenceNoteOnCallback mSequenceNoteOnCallback;
     SequenceNoteOnCallback2 mSequenceNoteOnCallback2;

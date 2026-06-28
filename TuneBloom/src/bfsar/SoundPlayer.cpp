@@ -681,6 +681,140 @@ bool SoundPlayer::playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegi
     return true;
 }
 
+s32 SoundPlayer::allocBankVoice_()
+{
+    for (u32 i = 0; i < cMaxBankVoices; i++)
+    {
+        if (!mBankVoices[i].isActive())
+            return (s32)i;
+    }
+
+    s32 oldest = 0;
+    for (u32 i = 1; i < cMaxBankVoices; i++)
+    {
+        if (mBankVoiceAge[i] < mBankVoiceAge[oldest])
+            oldest = (s32)i;
+    }
+    return oldest;
+}
+
+void SoundPlayer::applyBankExpression_(snd::internal::driver::Channel *channel)
+{
+    if (!channel)
+        return;
+
+    channel->setUserPitch(mBankPitchBendSemis);
+
+    snd::internal::CurveLfoParam lfo;
+    lfo.curve = (u8)snd::internal::CurveLfoParam::CurveType::Sine;
+    lfo.speed = 5.0f;
+    lfo.depth = mBankModulation * 0.5f;
+    lfo.range = 1;
+    lfo.delay = 0;
+    lfo.phase = 0;
+    channel->setLfoParam(lfo, 0);
+    channel->setLfoTarget(snd::internal::driver::Channel::LfoTarget::Pitch, 0);
+}
+
+bool SoundPlayer::playBankNotePoly(u8 key, u8 velocity, const BankFile::VelocityRegion &velocityRegion)
+{
+    const WaveFile *waveFile = static_cast<const WaveFile *>(velocityRegion.getWaveFileRef().getItem());
+    if (!waveFile)
+        return false;
+
+    if (waveFile->getChannels().isEmpty())
+    {
+        PopupMgr::instance()->addPopup({"Wave File has no channels", nullptr});
+        return false;
+    }
+
+    const_cast<WaveFile *>(waveFile)->updateLoop();
+
+    snd::internal::driver::SoundThreadLock lock;
+
+    s32 slot = allocBankVoice_();
+    WaveSoundPlayer &voice = mBankVoices[slot];
+
+    voice.deinit(true);
+    voice.init();
+    voice.prepare(*waveFile);
+    voice.setBankNoteInfo(key, velocity, velocityRegion);
+
+    applyBankExpression_(voice.getChannel());
+
+    mBankVoiceKey[slot] = (s32)key;
+    mBankVoiceAge[slot] = ++mBankVoiceCounter;
+
+    return true;
+}
+
+void SoundPlayer::stopBankNote(u8 key)
+{
+    snd::internal::driver::SoundThreadLock lock;
+
+    for (u32 i = 0; i < cMaxBankVoices; i++)
+    {
+        if (mBankVoiceKey[i] != (s32)key)
+            continue;
+
+        snd::internal::driver::Channel *ch = mBankVoices[i].getChannel();
+
+        if (ch)
+            ch->noteOff();
+
+        mBankVoiceKey[i] = -1;
+    }
+}
+
+void SoundPlayer::stopAllBankNotes(bool immediate)
+{
+    snd::internal::driver::SoundThreadLock lock;
+
+    for (u32 i = 0; i < cMaxBankVoices; i++)
+    {
+        if (immediate)
+        {
+            mBankVoices[i].deinit(true);
+        }
+        else
+        {
+            snd::internal::driver::Channel *ch = mBankVoices[i].getChannel();
+            if (ch)
+                ch->noteOff();
+        }
+        mBankVoiceKey[i] = -1;
+    }
+}
+
+void SoundPlayer::setBankPitchBend(f32 normalized)
+{
+    mBankPitchBendSemis = sead::Mathf::clamp2(-1.0f, normalized, 1.0f) * cBankPitchBendRange;
+
+    snd::internal::driver::SoundThreadLock lock;
+    for (u32 i = 0; i < cMaxBankVoices; i++)
+    {
+        if (!mBankVoices[i].isActive())
+            continue;
+
+        snd::internal::driver::Channel *ch = mBankVoices[i].getChannel();
+
+        if (ch)
+            ch->setUserPitch(mBankPitchBendSemis);
+    }
+}
+
+void SoundPlayer::setBankModulation(f32 amount01)
+{
+    mBankModulation = sead::Mathf::clamp2(0.0f, amount01, 1.0f);
+
+    snd::internal::driver::SoundThreadLock lock;
+    for (u32 i = 0; i < cMaxBankVoices; i++)
+    {
+        if (mBankVoices[i].isActive())
+            applyBankExpression_(mBankVoices[i].getChannel());
+    }
+}
+
 void SoundPlayer::pause(bool isPause)
 {
     if (isCurrentPlayer())
@@ -726,6 +860,7 @@ void SoundPlayer::reset()
     mSampleRate = 0;
     mSampleCount = 0;
 
+    stopAllBankNotes(true);
     stopAllPlayers(true);
     stopAllVoices();
 }
@@ -743,6 +878,8 @@ void SoundPlayer::setVolume(f32 volume)
 
 void SoundPlayer::invalidateBankFile(const BankFile& bankFile)
 {
+    stopAllBankNotes(true);
+
     snd::internal::driver::SoundThreadLock lock;
     mSequencePlayer.invalidateBankFile(bankFile);
 }

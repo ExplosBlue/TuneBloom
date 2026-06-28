@@ -58,6 +58,8 @@ public:
 
     bool isChannelActive() const { return mChannel && mChannel->isActive(); }
 
+    snd::internal::driver::Channel* getChannel() const { return mChannel; }
+
     bool startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr = nullptr, const Sound* sound = nullptr);
     void closeChannel(bool stop = false);
     void updateChannel();

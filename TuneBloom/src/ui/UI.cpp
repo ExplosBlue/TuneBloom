@@ -1609,7 +1609,7 @@ static bool WriteWavCustom(const sead::SafeString& path, u32 sampleRate, const s
     device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
     if (!handle.getDevice())
     {
-        device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+        device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
         if (!handle.getDevice())
             return false;
     }
@@ -2081,7 +2081,7 @@ void DrawExportDialog()
 static void WriteSequenceFile(const SequenceFile* seq, sead::FileDevice* device, const char* path)
 {
     sead::FileHandle handle;
-    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
     if (handle.getDevice())
     {
         sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
@@ -2092,7 +2092,7 @@ static void WriteSequenceFile(const SequenceFile* seq, sead::FileDevice* device,
 static void WriteWaveFile(const WaveFile* wave, sead::FileDevice* device, const char* path)
 {
     sead::FileHandle handle;
-    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
     if (handle.getDevice())
     {
         sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
@@ -2194,7 +2194,7 @@ static void ExportBankBundle(const BankFile* bank, sead::FileDevice* device, sea
 
         // Write wave to temp file
         sead::FileHandle tempHandle;
-        if (device->tryOpen(&tempHandle, tempPath, sead::FileDevice::FileOpenFlag::eCreate, 0))
+        if (device->tryOpen(&tempHandle, tempPath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0))
         {
             sead::FileDeviceWriteStream tempStream(&tempHandle, sead::Stream::Modes::eBinary);
             wave->write(&tempHandle, &tempStream, sead::Endian::eBig, true);
@@ -2354,7 +2354,7 @@ static void ExportInstrumentBundle(const BankFile::Instrument* instr, sead::File
         tempPath.format("%s/tb_ibnk_%llu.tmp", tmpDir.c_str(), (unsigned long long)sTempCounter++);
 
         sead::FileHandle tempHandle;
-        if (device->tryOpen(&tempHandle, tempPath, sead::FileDevice::FileOpenFlag::eCreate, 0))
+        if (device->tryOpen(&tempHandle, tempPath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0))
         {
             sead::FileDeviceWriteStream tempStream(&tempHandle, sead::Stream::Modes::eBinary);
             wave->write(&tempHandle, &tempStream, sead::Endian::eBig, true);
@@ -2551,7 +2551,7 @@ static void DrawFileExportDialogs()
                     if (device)
                     {
                         sead::FileHandle handle;
-                        device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                        device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
                         if (handle.getDevice())
                         {
                             ExportBankBundle(bank, device, &handle);
@@ -2589,7 +2589,7 @@ static void DrawFileExportDialogs()
                 if (device)
                 {
                     sead::FileHandle handle;
-                    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
                     if (handle.getDevice())
                     {
                         ExportBankBundle(bank, device, &handle);
@@ -2633,7 +2633,7 @@ static void DrawFileExportDialogs()
             if (device)
             {
                 sead::FileHandle handle;
-                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+                device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
                 if (handle.getDevice())
                 {
                     ExportInstrumentBundle(instr, device, &handle);

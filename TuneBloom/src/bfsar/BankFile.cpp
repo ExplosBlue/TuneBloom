@@ -977,6 +977,62 @@ void DrawKeyboardWithRegions(
     BankFile::Instrument* instrument
 )
 {
+    s32 key[2] = { -1, -1 };
+    s32 vel[2] = { -1, -1 };
+    s32 rootKey = -1;
+
+    if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
+    {
+        BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
+        BankFile::KeyRegion* keyRegion = sContextKeyRegion;
+        key[0] = keyRegion->getKeyMin();
+        key[1] = keyRegion->getKeyMax();
+        vel[0] = velRegion->getVelocityMin();
+        vel[1] = velRegion->getVelocityMax();
+        rootKey = velRegion->getRootKey();
+    }
+
+    sead::FixedSafeString<24> keyMinStr = FormatKeyName(key[0]);
+    sead::FixedSafeString<24> keyMaxStr = FormatKeyName(key[1]);
+    sead::FixedSafeString<24> formattedRoot = FormatKeyName(rootKey);
+
+    ImGui::BeginDisabled();
+
+    // Key Range
+    ImGui::Text("Key Range");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(90.0f);
+    ImGui::InputText("###KeyMin", keyMinStr.getBuffer(), keyMinStr.getBufferSize());
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(90.0f);
+    ImGui::InputText("###KeyMax", keyMaxStr.getBuffer(), keyMaxStr.getBufferSize());
+
+    // Vertical separator
+    ImGui::SameLine();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+
+    // Vel Range
+    ImGui::SameLine();
+    ImGui::Text("Vel Range");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(80.0f);
+    ImGui::InputInt2("###Velocity", vel);
+
+    // Vertical separator
+    ImGui::SameLine();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+
+    // Root Key
+    ImGui::SameLine();
+    ImGui::Text("Root Key");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(90.0f);
+    ImGui::InputText("###Root", formattedRoot.getBuffer(), formattedRoot.getBufferSize());
+
+    ImGui::EndDisabled();
+
+    ImGui::Separator();
+
     ImVec2 canvasPos = ImGui::GetCursorScreenPos();
     ImVec2 visibleCanvasPos = canvasPos;
     ImVec2 canvasSize(width, regionHeight + keyboardHeight);
@@ -1013,7 +1069,7 @@ void DrawKeyboardWithRegions(
 
         if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
             sMiddlePan = true;
-        
+
         if (!ImGui::IsMouseDown(ImGuiMouseButton_Middle))
             sMiddlePan = false;
         if (sMiddlePan)
@@ -1713,13 +1769,6 @@ void DrawKeyboardWithRegions(
 
     static s32 sPrevNote = -1;
 
-    s32 rootKey = -1;
-    if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
-    {
-        BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
-        rootKey = velRegion->getRootKey();
-    }
-
     ImGui_PianoKeyboard(
         "Keyboard",
         ImVec2(zoomedWidth, keyboardHeight),
@@ -1774,50 +1823,6 @@ void DrawKeyboardWithRegions(
         ImGui::SameLine();
         ImGui::TextDisabled("(scroll: zoom, Shift+scroll / middle-drag: pan)");
     }
-
-    s32 key[2] = { -1, -1 };
-    s32 vel[2] = { -1, -1 };
-    if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
-    {
-        BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
-        BankFile::KeyRegion* keyRegion = sContextKeyRegion;
-        key[0] = keyRegion->getKeyMin();
-        key[1] = keyRegion->getKeyMax();
-        vel[0] = velRegion->getVelocityMin();
-        vel[1] = velRegion->getVelocityMax();
-    }
-
-    sead::FixedSafeString<24> keyMinStr = FormatKeyName(key[0]);
-    sead::FixedSafeString<24> keyMaxStr = FormatKeyName(key[1]);
-
-    ImGui::Text("Key Range   ");
-    ImGui::SameLine();
-
-    ImGui::BeginDisabled();
-    ImGui::SetNextItemWidth(98.0f);
-    ImGui::InputText("###KeyMin", keyMinStr.getBuffer(), keyMinStr.getBufferSize());
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(98.0f);
-    ImGui::InputText("###KeyMax", keyMaxStr.getBuffer(), keyMaxStr.getBufferSize());
-    ImGui::EndDisabled();
-
-    ImGui::Text("Vel Range   ");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(200.0f);
-
-    ImGui::BeginDisabled();
-    ImGui::InputInt2("###Velocity", vel);
-    ImGui::EndDisabled();
-
-    ImGui::Text("Root Key    ");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(200.0f);
-
-    sead::FixedSafeString<24> formattedRoot = FormatKeyName(rootKey);
-
-    ImGui::BeginDisabled();
-    ImGui::InputText("###Root", formattedRoot.getBuffer(), formattedRoot.getBufferSize());
-    ImGui::EndDisabled();
 }
 
 InstanciateItemCallback CreateInstrumentFunc(bool clear)

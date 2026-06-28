@@ -158,6 +158,11 @@ void BfsarTask::prepare()
         heap->adjust();
     }
 
+    LoadAudioConfig();
+    ApplyAudioConfig();
+    LoadMidiConfig();
+    AutoConnectMidiDevices();
+
     sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
     SEAD_ASSERT(fw);
 

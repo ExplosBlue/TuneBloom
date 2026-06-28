@@ -89,6 +89,16 @@ public:
     static void setOutputSampleRate(u32 rate);
     static u32 getOutputSampleRate();
 
+    static void setMasterVolume(f32 volume);
+    static f32 getMasterVolume();
+
+    static void refreshPlaybackDevices();
+    static u32 getPlaybackDeviceCount();
+    static const char* getPlaybackDeviceName(u32 index);
+    static u32 getPlaybackDevice();
+    static void setPlaybackDevice(u32 index);
+    static void setPlaybackDeviceByName(const char* name);
+
     static bool detail_isStreamLoadWait()
     {
         return sIsStreamLoadWait;

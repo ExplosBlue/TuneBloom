@@ -427,6 +427,12 @@ u32 MidiInput::getDeviceCount()
     return static_cast<u32>(sDeviceList.size());
 }
 
+void MidiInput::refreshDevices()
+{
+    sDeviceList.clear();
+    PopulateDeviceList();
+}
+
 const char *MidiInput::getDeviceName(u32 index)
 {
     PopulateDeviceList();

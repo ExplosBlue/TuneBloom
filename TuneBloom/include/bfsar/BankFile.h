@@ -585,3 +585,9 @@ inline BankFile::VelocityRegion* BankFile::VelocityRegion::getNext(const KeyRegi
 }
 
 void PollMidiInput();
+
+bool MidiConnectDevice(s32 deviceIndex);
+void MidiDisconnectDevice(const char* name);
+void MidiDisconnectAll();
+bool MidiIsDeviceConnected(const char* name);
+u32 MidiConnectedCount();

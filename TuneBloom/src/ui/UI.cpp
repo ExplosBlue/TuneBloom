@@ -27,6 +27,8 @@
 #endif
 
 #include <midi/SeqMidiExporter.h>
+#include <midi/MidiInput.h>
+#include <bfsar/BankFile.h>
 
 #include <bfsar/LoopAnalysis.h>
 #include <bfsar/LoopWaveformEditor.h>
@@ -81,6 +83,10 @@ sead::FixedSafeString<512> sRecentFileClick;
 
 sead::FixedSafeString<512> sDroppedWavPath;
 Item* sWavDropTargetVel = nullptr;
+
+std::vector<std::string> gMidiEnabledDevices;
+std::string gPlaybackDeviceName;
+f32 gMasterVolume = 1.0f;
 
 static bool sPendingExport = false;
 static std::vector<Sound*> sPendingExportSounds;
@@ -295,6 +301,299 @@ bool TryExit()
     }
 }
 
+static bool sPrefsRequestOpen = false;
+
+void OpenPreferencesWindow()
+{
+    sPrefsRequestOpen = true;
+}
+
+static const float kPrefLabelW = 160.0f;
+static const float kPrefCtrlW  = 300.0f;
+
+static void PrefLabel(const char* text)
+{
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(text);
+    ImGui::SameLine(kPrefLabelW);
+    ImGui::SetNextItemWidth(kPrefCtrlW);
+}
+
+static void PrefSectionTitle(const char* title)
+{
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    ImGui::SeparatorText(title);
+}
+
+static void DrawAudioOptions()
+{
+    PrefSectionTitle(ICON_LC_VOLUME_2 " Audio");
+    ImGui::Indent(10.0f);
+
+    {
+        const u32 devCount = snd::SoundSystem::getPlaybackDeviceCount();
+        const u32 cur = snd::SoundSystem::getPlaybackDevice();
+        PrefLabel("Playback device");
+        if (ImGui::BeginCombo("##pbdev", snd::SoundSystem::getPlaybackDeviceName(cur)))
+        {
+            for (u32 i = 0; i < devCount; i++)
+            {
+                bool sel = (i == cur);
+                if (ImGui::Selectable(snd::SoundSystem::getPlaybackDeviceName(i), sel))
+                {
+                    snd::SoundSystem::setPlaybackDevice(i);
+                    gPlaybackDeviceName = (i == 0) ? std::string() : snd::SoundSystem::getPlaybackDeviceName(i);
+                    SaveAudioConfig();
+                }
+                if (sel)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Refresh##pb"))
+            snd::SoundSystem::refreshPlaybackDevices();
+    }
+
+    {
+        int volPct = (int)(gMasterVolume * 100.0f + 0.5f);
+        PrefLabel("Playback volume");
+        if (ImGui::SliderInt("##vol", &volPct, 0, 100, "%d%%"))
+        {
+            gMasterVolume = volPct / 100.0f;
+            snd::SoundSystem::setMasterVolume(gMasterVolume);
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            SaveAudioConfig();
+    }
+
+    {
+        int outRateIdx = 3;
+        for (u32 i = 0; i < sizeof(sOutSampleRateValues) / sizeof(sOutSampleRateValues[0]); i++)
+        {
+            if (sOutSampleRateValues[i] == gOutputSampleRate)
+            { outRateIdx = static_cast<int>(i); break; }
+        }
+        PrefLabel("Sample rate (hz)");
+        if (ImGui::Combo("##srate", &outRateIdx, sOutSampleRateItems, IM_ARRAYSIZE(sOutSampleRateItems)))
+        {
+            gOutputSampleRate = sOutSampleRateValues[outRateIdx];
+            snd::SoundSystem::setOutputSampleRate(gOutputSampleRate);
+            SaveAudioConfig();
+        }
+    }
+
+    ImGui::Unindent(10.0f);
+}
+
+static bool DrawMidiDeviceRow(const char* name, const char* status, ImVec4 statusColor)
+{
+    const float pillW = 110.0f;
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(name);
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - pillW);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, statusColor);
+    bool clicked = ImGui::Button(status, ImVec2(pillW, 0.0f));
+    ImGui::PopStyleColor();
+    return clicked;
+}
+
+static void DrawMidiOptions()
+{
+    PrefSectionTitle(ICON_LC_PIANO " MIDI Input");
+    ImGui::Indent(10.0f);
+
+    if (ImGui::Button("Refresh device list"))
+        MidiInput::refreshDevices();
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize("(?)").x);
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("Click a device's status to connect or disconnect it.");
+
+    ImGui::Spacing();
+
+    const u32 devCount = MidiInput::getDeviceCount();
+
+    u32 rowCount = devCount;
+    for (const std::string& en : gMidiEnabledDevices)
+    {
+        bool present = false;
+        for (u32 i = 0; i < devCount; i++)
+            if (en == MidiInput::getDeviceName(i)) { present = true; break; }
+        if (!present)
+            rowCount++;
+    }
+
+    const float rowH = ImGui::GetFrameHeightWithSpacing();
+    const u32 visRows = rowCount == 0 ? 1 : (rowCount > 6 ? 6 : rowCount);
+    const float listH = visRows * rowH + ImGui::GetStyle().WindowPadding.y * 2.0f;
+
+    if (ImGui::BeginChild("##midilist", ImVec2(0.0f, listH), true))
+    {
+        bool any = false;
+
+        for (u32 i = 0; i < devCount; i++)
+        {
+            const char* name = MidiInput::getDeviceName(i);
+            if (!name || !*name)
+                continue;
+
+            any = true;
+            const bool connected = MidiIsDeviceConnected(name);
+
+            ImGui::PushID((int)i);
+            if (DrawMidiDeviceRow(name,
+                                  connected ? "Connected" : "Disabled",
+                                  connected ? ImVec4(0.45f, 0.85f, 0.5f, 1.0f) : ImVec4(0.62f, 0.62f, 0.62f, 1.0f)))
+            {
+                if (connected)
+                {
+                    MidiDisconnectDevice(name);
+                    SetMidiDeviceEnabled(name, false);
+                }
+                else if (MidiConnectDevice((s32)i))
+                {
+                    SetMidiDeviceEnabled(name, true);
+                }
+            }
+            ImGui::PopID();
+        }
+
+        for (size_t e = 0; e < gMidiEnabledDevices.size(); e++)
+        {
+            const std::string& name = gMidiEnabledDevices[e];
+
+            bool present = false;
+            for (u32 i = 0; i < devCount; i++)
+                if (name == MidiInput::getDeviceName(i)) { present = true; break; }
+            if (present)
+                continue;
+
+            any = true;
+            ImGui::PushID((int)(1000 + e));
+            bool clicked = DrawMidiDeviceRow(name.c_str(), "Unavailable", ImVec4(0.82f, 0.56f, 0.30f, 1.0f));
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Not connected. Click to forget this device.");
+            if (clicked)
+            {
+                MidiDisconnectDevice(name.c_str());
+                SetMidiDeviceEnabled(name.c_str(), false);
+                ImGui::PopID();
+                break;
+            }
+            ImGui::PopID();
+        }
+
+        if (!any)
+            ImGui::TextDisabled("No MIDI input devices found.");
+    }
+    ImGui::EndChild();
+
+    ImGui::Unindent(10.0f);
+}
+
+static void DrawAppearanceOptions()
+{
+    PrefSectionTitle(ICON_LC_PALETTE " Appearance");
+    ImGui::Indent(10.0f);
+
+    float h, s, v;
+    ImGui::ColorConvertRGBtoHSV(gAccentColor.x, gAccentColor.y, gAccentColor.z, h, s, v);
+
+    bool changed = false;
+    bool done = false;
+
+    PrefLabel("Accent color");
+    if (ImGui::SliderFloat("##color", &h, 0.0f, 1.0f, ""))
+    {
+        ImVec4 c;
+        ImGui::ColorConvertHSVtoRGB(h, 0.50f, 0.60f, c.x, c.y, c.z);
+        c.w = 1.0f;
+        gAccentColor = c;
+        changed = true;
+    }
+    if (ImGui::IsItemDeactivatedAfterEdit())
+        done = true;
+
+    PrefLabel("Brightness");
+    if (ImGui::SliderFloat("##bright", &gThemeBrightness, 0.3f, 1.7f, "%.2f"))
+        changed = true;
+    if (ImGui::IsItemDeactivatedAfterEdit())
+        done = true;
+
+    ImGui::Dummy(ImVec2(0.0f, 2.0f));
+    if (ImGui::Button("Reset to default"))
+    {
+        gAccentColor = ImVec4(0.24f, 0.50f, 0.88f, 1.00f);
+        gThemeBrightness = 1.0f;
+        changed = true;
+        done = true;
+    }
+
+    if (changed)
+        ApplyThemeFromAccent(gAccentColor);
+    if (done)
+        SaveAccentColor();
+
+    ImGui::Unindent(10.0f);
+}
+
+static void DrawAdvancedOptions()
+{
+    PrefSectionTitle(ICON_LC_CPU " Advanced");
+    ImGui::Indent(10.0f);
+    ImGui::Checkbox("Show system window", &sShowSystemWindow);
+    ImGui::Unindent(10.0f);
+}
+
+static void DrawPreferencesWindow()
+{
+    if (sPrefsRequestOpen)
+    {
+        sPrefsRequestOpen = false;
+        snd::SoundSystem::refreshPlaybackDevices();
+        MidiInput::refreshDevices();
+        ImGui::OpenPopup(ICON_LC_SETTINGS_2 " Preferences###PrefsPopup");
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(600.0f, 600.0f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(520.0f, 320.0f), ImVec2(4096.0f, 4096.0f));
+
+    if (ImGui::BeginPopupModal(ICON_LC_SETTINGS_2 " Preferences###PrefsPopup", nullptr, ImGuiWindowFlags_NoScrollbar))
+    {
+        const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
+        ImGui::BeginChild("##prefsbody", ImVec2(0.0f, -footer), false);
+
+        DrawAudioOptions();
+        DrawMidiOptions();
+        DrawAppearanceOptions();
+        DrawAdvancedOptions();
+
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+
+        ImGui::Separator();
+        const float bw = 120.0f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::GetContentRegionAvail().x - bw) * 0.5f);
+        if (ImGui::Button("Close", ImVec2(bw, 0.0f)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
 void DrawMenuBar()
 {
     if (ImGui::BeginMainMenuBar())
@@ -399,60 +698,9 @@ void DrawMenuBar()
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("More"))
+        if (ImGui::MenuItem(ICON_LC_SETTINGS_2 " Preferences"))
         {
-            ImGui::MenuItem(ICON_LC_CPU " System Window", nullptr, &sShowSystemWindow);
-            // ImGui::MenuItem("Demo Window", nullptr, &sShowDemoWindow);
-
-            int outRateIdx = 3;
-            for (u32 i = 0; i < sizeof(sOutSampleRateValues) / sizeof(sOutSampleRateValues[0]); i++)
-            {
-                if (sOutSampleRateValues[i] == gOutputSampleRate)
-                { outRateIdx = static_cast<int>(i); break; }
-            }
-            if (ImGui::Combo("Output Sample Rate", &outRateIdx, sOutSampleRateItems, IM_ARRAYSIZE(sOutSampleRateItems)))
-            {
-                gOutputSampleRate = sOutSampleRateValues[outRateIdx];
-                snd::SoundSystem::setOutputSampleRate(gOutputSampleRate);
-            }
-
-            ImGui::Separator();
-            {
-                float h, s, v;
-                ImGui::ColorConvertRGBtoHSV(gAccentColor.x, gAccentColor.y, gAccentColor.z, h, s, v);
-
-                bool changed = false;
-                bool done = false;
-
-                ImVec4 ctPreview;
-                ImGui::ColorConvertHSVtoRGB(h, 0.50f, 0.60f, ctPreview.x, ctPreview.y, ctPreview.z);
-                ctPreview.w = 1.0f;
-                ImGui::ColorButton("##ct", ctPreview, ImGuiColorEditFlags_NoTooltip, ImVec2(14, 14));
-                ImGui::SameLine();
-                if (ImGui::SliderFloat("Color", &h, 0.0f, 1.0f, ""))
-                {
-                    ImVec4 c;
-                    ImGui::ColorConvertHSVtoRGB(h, 0.50f, 0.60f, c.x, c.y, c.z);
-                    c.w = 1.0f;
-                    gAccentColor = c;
-                    changed = true;
-                }
-                if (ImGui::IsItemDeactivatedAfterEdit())
-                    done = true;
-
-                if (ImGui::SliderFloat("Brightness", &gThemeBrightness, 0.3f, 1.7f, "%.1f"))
-                    changed = true;
-                if (ImGui::IsItemDeactivatedAfterEdit())
-                    done = true;
-
-                if (changed)
-                    ApplyThemeFromAccent(gAccentColor);
-
-                if (done)
-                    SaveAccentColor();
-            }
-
-            ImGui::EndMenu();
+            OpenPreferencesWindow();
         }
 
         if (ImGui::BeginMenu("Help"))
@@ -666,6 +914,157 @@ void LoadRecentFiles()
     }
 }
 
+void SaveMidiConfig()
+{
+    std::string path = GetConfigDir() + "/midi.cfg";
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    CreateDirectoryA(GetConfigDir().c_str(), NULL);
+#else
+    mkdir(GetConfigDir().c_str(), 0755);
+#endif
+
+    FILE* f = fopen(path.c_str(), "w");
+    if (f)
+    {
+        for (const std::string& name : gMidiEnabledDevices)
+            fprintf(f, "device=%s\n", name.c_str());
+        fclose(f);
+    }
+}
+
+void LoadMidiConfig()
+{
+    gMidiEnabledDevices.clear();
+
+    std::string path = GetConfigDir() + "/midi.cfg";
+
+    FILE* f = fopen(path.c_str(), "r");
+    if (f)
+    {
+        char buf[1024];
+        while (fgets(buf, sizeof(buf), f))
+        {
+            size_t len = strlen(buf);
+            if (len > 0 && buf[len - 1] == '\n')
+                buf[len - 1] = '\0';
+
+            if (strncmp(buf, "device=", 7) == 0 && buf[7])
+                gMidiEnabledDevices.push_back(buf + 7);
+        }
+        fclose(f);
+    }
+}
+
+bool IsMidiDeviceEnabled(const char* name)
+{
+    if (!name)
+        return false;
+    for (const std::string& n : gMidiEnabledDevices)
+        if (n == name)
+            return true;
+    return false;
+}
+
+void SetMidiDeviceEnabled(const char* name, bool enabled)
+{
+    if (!name || !*name)
+        return;
+
+    bool changed = false;
+    if (enabled)
+    {
+        if (!IsMidiDeviceEnabled(name))
+        {
+            gMidiEnabledDevices.push_back(name);
+            changed = true;
+        }
+    }
+    else
+    {
+        for (size_t i = 0; i < gMidiEnabledDevices.size(); i++)
+        {
+            if (gMidiEnabledDevices[i] == name)
+            {
+                gMidiEnabledDevices.erase(gMidiEnabledDevices.begin() + i);
+                changed = true;
+                break;
+            }
+        }
+    }
+
+    if (changed)
+        SaveMidiConfig();
+}
+
+void AutoConnectMidiDevices()
+{
+    u32 count = MidiInput::getDeviceCount();
+    for (u32 i = 0; i < count; i++)
+    {
+        const char* name = MidiInput::getDeviceName(i);
+        if (IsMidiDeviceEnabled(name))
+            MidiConnectDevice(static_cast<s32>(i));
+    }
+}
+
+void SaveAudioConfig()
+{
+    std::string path = GetConfigDir() + "/audio.cfg";
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    CreateDirectoryA(GetConfigDir().c_str(), NULL);
+#else
+    mkdir(GetConfigDir().c_str(), 0755);
+#endif
+
+    FILE* f = fopen(path.c_str(), "w");
+    if (f)
+    {
+        fprintf(f, "samplerate=%u\n", gOutputSampleRate);
+        fprintf(f, "volume=%f\n", gMasterVolume);
+        fprintf(f, "device=%s\n", gPlaybackDeviceName.c_str());
+        fclose(f);
+    }
+}
+
+void LoadAudioConfig()
+{
+    gPlaybackDeviceName.clear();
+
+    std::string path = GetConfigDir() + "/audio.cfg";
+
+    FILE* f = fopen(path.c_str(), "r");
+    if (f)
+    {
+        char buf[1024];
+        while (fgets(buf, sizeof(buf), f))
+        {
+            size_t len = strlen(buf);
+            if (len > 0 && buf[len - 1] == '\n')
+                buf[len - 1] = '\0';
+
+            if (strncmp(buf, "samplerate=", 11) == 0)
+                gOutputSampleRate = (u32)atoi(buf + 11);
+            else if (strncmp(buf, "volume=", 7) == 0)
+                gMasterVolume = (f32)atof(buf + 7);
+            else if (strncmp(buf, "device=", 7) == 0)
+                gPlaybackDeviceName = buf + 7;
+        }
+        fclose(f);
+    }
+}
+
+void ApplyAudioConfig()
+{
+    snd::SoundSystem::refreshPlaybackDevices();
+    if (!gPlaybackDeviceName.empty())
+        snd::SoundSystem::setPlaybackDeviceByName(gPlaybackDeviceName.c_str());
+    if (gOutputSampleRate != snd::SoundSystem::getOutputSampleRate())
+        snd::SoundSystem::setOutputSampleRate(gOutputSampleRate);
+    snd::SoundSystem::setMasterVolume(gMasterVolume);
+}
+
 void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -856,7 +1255,8 @@ void DrawUI()
     DrawPropertiesUI();
     DrawPlayerUI();
 
-    //? Must run after DrawFileUI so the bank editor has had a chance to match the drop to a region
+    DrawPreferencesWindow();
+
     DrawWavRegionDropImport();
 
     if (!sDroppedFilePath.isEmpty())

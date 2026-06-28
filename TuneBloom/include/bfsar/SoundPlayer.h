@@ -124,7 +124,7 @@ public:
 
 public:
     static const u32 cMaxBankVoices = 16;
-    static constexpr f32 cBankPitchBendRange = 2.0f; // semitones at full bend
+    static constexpr f32 cBankPitchBendRange = 2.0f;
 
 private:
     void initPlayerParam_();

@@ -16,6 +16,8 @@
 #include <heap/seadHeapMgr.h>
 #include <thread/seadThreadUtil.h>
 
+#include <cstring>
+
 #define MINIAUDIO_IMPLEMENTATION
 #include "snd/miniaudio.h"
 
@@ -323,6 +325,12 @@ f32* SoundSystem::calcFFT()
 static u32 sOutputSampleRate = 48000;
 static ma_device device;
 
+static ma_context sContext;
+static bool sContextReady = false;
+static ma_device_info* sPlaybackInfos = nullptr;
+static ma_uint32 sPlaybackInfoCount = 0;
+static s32 sSelectedPlaybackDevice = 0; // 0 = system default
+
 static void DataCallback(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount);
 
 static void InitDevice()
@@ -338,10 +346,27 @@ static void InitDevice()
     config.noPreSilencedOutputBuffer = false;
     config.noClip = false;
 
-    if (ma_device_init(nullptr, &config, &device) != MA_SUCCESS)
+    ma_context* ctx = sContextReady ? &sContext : nullptr;
+    if (sContextReady && sSelectedPlaybackDevice > 0 && (u32)(sSelectedPlaybackDevice - 1) < sPlaybackInfoCount)
+        config.playback.pDeviceID = &sPlaybackInfos[sSelectedPlaybackDevice - 1].id;
+
+    if (ma_device_init(ctx, &config, &device) != MA_SUCCESS)
     {
-        SEAD_ASSERT_MSG(false, "Failed to initialize the device.");
-        return;
+        if (config.playback.pDeviceID)
+        {
+            config.playback.pDeviceID = nullptr;
+            sSelectedPlaybackDevice = 0;
+            if (ma_device_init(ctx, &config, &device) != MA_SUCCESS)
+            {
+                SEAD_ASSERT_MSG(false, "Failed to initialize the device.");
+                return;
+            }
+        }
+        else
+        {
+            SEAD_ASSERT_MSG(false, "Failed to initialize the device.");
+            return;
+        }
     }
 
     ma_device_start(&device);
@@ -395,12 +420,25 @@ static void InitSDK(sead::Heap* heap)
 {
     sead::CurrentHeapSetter chs(heap);
     sOutputSampleRate = internal::driver::HardwareMgr::cSampleRate;
+
+    if (ma_context_init(nullptr, 0, nullptr, &sContext) == MA_SUCCESS)
+    {
+        sContextReady = true;
+        ma_context_get_devices(&sContext, &sPlaybackInfos, &sPlaybackInfoCount, nullptr, nullptr);
+    }
+
     InitDevice();
 }
 
 static void QuitSDK()
 {
     ma_device_uninit(&device);
+
+    if (sContextReady)
+    {
+        ma_context_uninit(&sContext);
+        sContextReady = false;
+    }
 }
 
 void SoundSystem::pauseAudio()
@@ -427,6 +465,76 @@ void SoundSystem::setOutputSampleRate(u32 rate)
 u32 SoundSystem::getOutputSampleRate()
 {
     return sOutputSampleRate;
+}
+
+void SoundSystem::setMasterVolume(f32 volume)
+{
+    internal::driver::HardwareMgr::instance()->setMasterVolume(volume, 0);
+}
+
+f32 SoundSystem::getMasterVolume()
+{
+    return internal::driver::HardwareMgr::instance()->getMasterVolume();
+}
+
+void SoundSystem::refreshPlaybackDevices()
+{
+    if (sContextReady)
+        ma_context_get_devices(&sContext, &sPlaybackInfos, &sPlaybackInfoCount, nullptr, nullptr);
+}
+
+u32 SoundSystem::getPlaybackDeviceCount()
+{
+    return sPlaybackInfoCount + 1;
+}
+
+const char *SoundSystem::getPlaybackDeviceName(u32 index)
+{
+    if (index == 0)
+        return "System Default";
+
+    u32 i = index - 1;
+    if (i < sPlaybackInfoCount)
+        return sPlaybackInfos[i].name;
+
+    return "";
+}
+
+u32 SoundSystem::getPlaybackDevice()
+{
+    return (u32)sSelectedPlaybackDevice;
+}
+
+void SoundSystem::setPlaybackDevice(u32 index)
+{
+    if ((s32)index == sSelectedPlaybackDevice)
+        return;
+    if (index > sPlaybackInfoCount)
+        return;
+
+    sSelectedPlaybackDevice = (s32)index;
+
+    ma_device_stop(&device);
+    ma_device_uninit(&device);
+    InitDevice();
+}
+
+void SoundSystem::setPlaybackDeviceByName(const char *name)
+{
+    if (!name || !*name)
+    {
+        setPlaybackDevice(0);
+        return;
+    }
+
+    for (ma_uint32 i = 0; i < sPlaybackInfoCount; i++)
+    {
+        if (strcmp(sPlaybackInfos[i].name, name) == 0)
+        {
+            setPlaybackDevice(i + 1);
+            return;
+        }
+    }
 }
 
 /*

@@ -17,6 +17,7 @@ public:
 
     static u32 getDeviceCount();
     static const char* getDeviceName(u32 index);
+    static void refreshDevices();
     s32 getCurrentDeviceIndex() const { return mDeviceIndex; }
 
     struct QueuedEvent { s32 msg; s32 key; f32 vel; };

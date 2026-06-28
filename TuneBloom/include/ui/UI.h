@@ -100,6 +100,21 @@ std::vector<std::string>& GetRecentFiles();
 void SaveRecentFiles();
 void LoadRecentFiles();
 
+extern std::vector<std::string> gMidiEnabledDevices;
+void SaveMidiConfig();
+void LoadMidiConfig();
+void AutoConnectMidiDevices();
+bool IsMidiDeviceEnabled(const char* name);
+void SetMidiDeviceEnabled(const char* name, bool enabled);
+
+extern std::string gPlaybackDeviceName;
+extern f32 gMasterVolume;
+void SaveAudioConfig();
+void LoadAudioConfig();
+void ApplyAudioConfig();
+
+void OpenPreferencesWindow();
+
 class FileWindow : public Item
 {
 public:

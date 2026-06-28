@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
+#include <string>
 #include <cstdio>
 
 static sead::FixedSafeString<24> FormatKeyName(s32 key)
@@ -99,7 +100,14 @@ static bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
     return false;
 }
 
-static MidiInput sMidiInput;
+static void MidiInputCallback(void *userData, s32 msg, s32 key, f32 vel);
+
+struct MidiConn
+{
+    MidiInput input;
+    std::string name;
+};
+static std::vector<MidiConn*> sMidiConns;
 
 static void MidiInputCallback(void *userData, s32 msg, s32 key, f32 vel)
 {
@@ -135,7 +143,77 @@ static void MidiInputCallback(void *userData, s32 msg, s32 key, f32 vel)
 
 void PollMidiInput()
 {
-    sMidiInput.poll();
+    for (MidiConn* c : sMidiConns)
+        c->input.poll();
+}
+
+bool MidiIsDeviceConnected(const char* name)
+{
+    if (!name)
+        return false;
+
+    for (MidiConn* c : sMidiConns)
+        if (c->name == name)
+            return true;
+
+    return false;
+}
+
+bool MidiConnectDevice(s32 deviceIndex)
+{
+    if (deviceIndex < 0)
+        return false;
+
+    const char* name = MidiInput::getDeviceName(static_cast<u32>(deviceIndex));
+    if (!name || !*name)
+        return false;
+
+    if (MidiIsDeviceConnected(name))
+        return true;
+
+    MidiConn* c = new MidiConn();
+    c->name = name;
+    c->input.start(&MidiInputCallback, nullptr, static_cast<u32>(deviceIndex));
+    if (!c->input.isRunning())
+    {
+        delete c;
+        return false;
+    }
+
+    sMidiConns.push_back(c);
+    return true;
+}
+
+void MidiDisconnectDevice(const char* name)
+{
+    if (!name)
+        return;
+
+    for (size_t i = 0; i < sMidiConns.size(); i++)
+    {
+        if (sMidiConns[i]->name == name)
+        {
+            sMidiConns[i]->input.stop();
+            delete sMidiConns[i];
+            sMidiConns.erase(sMidiConns.begin() + i);
+            return;
+        }
+    }
+}
+
+void MidiDisconnectAll()
+{
+    for (MidiConn* c : sMidiConns)
+    {
+        c->input.stop();
+        delete c;
+    }
+    sMidiConns.clear();
+}
+
+u32 MidiConnectedCount()
+{
+    return static_cast<u32>(sMidiConns.size());
 }
 
 void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
@@ -1209,16 +1287,12 @@ void DrawKeyboardWithRegions(
             if (io.MouseWheel != 0.0f)
             {
                 if (io.KeyCtrl)
-                    //? Ctrl+scroll: horizontal (key) zoom
                     requestZoom(sZoomTarget * (1.0f + io.MouseWheel * 0.20f), io.MousePos.x - visibleCanvasPos.x);
                 else if (io.KeyAlt)
-                    //? Alt+scroll: vertical (velocity) zoom
                     requestZoomY(sZoomTargetY * (1.0f + io.MouseWheel * 0.20f), io.MousePos.y - visibleCanvasPos.y);
                 else if (io.KeyShift)
-                    //? Shift+scroll: horizontal (key) pan
                     sScrollXTarget -= io.MouseWheel * kPanStep;
                 else
-                    //? Scroll: vertical (velocity) pan
                     sScrollYTarget -= io.MouseWheel * kPanStep;
             }
 
@@ -2194,13 +2268,12 @@ void BankFile::drawFileUI()
     }
     ImGui::EndChild();
 
-    //? Draggable splitter: resize the velocity-region height (keyboard height is unaffected)
     ImGui::InvisibleButton("##RegionSplitter", ImVec2(ImGui::GetContentRegionAvail().x, kSplitterH));
     const bool splitterActive = ImGui::IsItemActive();
     if (splitterActive || ImGui::IsItemHovered())
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
     if (splitterActive)
-        sRegionHeight -= ImGui::GetIO().MouseDelta.y; //? drag up grows the region, down shrinks it
+        sRegionHeight -= ImGui::GetIO().MouseDelta.y;
     {
         const ImVec2 gmin = ImGui::GetItemRectMin();
         const ImVec2 gmax = ImGui::GetItemRectMax();
@@ -2213,62 +2286,32 @@ void BankFile::drawFileUI()
     if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar))
     {
         {
-            static s32 sMidiDeviceIndex = 0;
-            u32 devCount = MidiInput::getDeviceCount();
+            u32 midiCount = MidiConnectedCount();
+            bool connected = midiCount > 0;
 
-            bool connected = sMidiInput.isRunning();
-            f32 comboW = ImGui::CalcTextSize("MMMMMMMMMMMMMMM").x + ImGui::GetStyle().FramePadding.x * 4;
-            f32 btnW = ImGui::CalcTextSize("Disconnect MIDI").x + ImGui::GetStyle().FramePadding.x * 2;
-            f32 helpW = ImGui::CalcTextSize("?").x + ImGui::GetStyle().FramePadding.x * 2;
+            sead::FixedSafeString<160> statusStr;
+            if (midiCount == 1)
+                statusStr.format("MIDI: on");
+            else if (midiCount > 1)
+                statusStr.format("MIDI: %u devices", midiCount);
+            else
+                statusStr.format("MIDI: off");
+
             f32 spacing = ImGui::GetStyle().ItemSpacing.x;
+            f32 statusW = ImGui::CalcTextSize(statusStr.cstr()).x;
+            f32 btnW = ImGui::CalcTextSize("MIDI Settings").x + ImGui::GetStyle().FramePadding.x * 2;
+            f32 helpW = ImGui::CalcTextSize("?").x + ImGui::GetStyle().FramePadding.x * 2;
 
             float rightX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+            ImGui::SetCursorPosX(rightX - statusW - btnW - helpW - spacing * 3);
 
-            if (connected) ImGui::BeginDisabled();
-            ImGui::SetCursorPosX(rightX - comboW - btnW - helpW - spacing * 2);
-            if (devCount > 0)
-            {
-                const char* preview = MidiInput::getDeviceName(static_cast<u32>(sMidiDeviceIndex));
-                if (!preview || !*preview) preview = "No device";
-                ImGui::SetNextItemWidth(comboW);
-                if (ImGui::BeginCombo("##midiDev", preview))
-                {
-                    for (u32 i = 0; i < devCount; i++)
-                    {
-                        bool isSelected = (static_cast<u32>(sMidiDeviceIndex) == i);
-                        if (ImGui::Selectable(MidiInput::getDeviceName(i), isSelected))
-                            sMidiDeviceIndex = static_cast<s32>(i);
-                        if (isSelected)
-                            ImGui::SetItemDefaultFocus();
-                    }
-                    ImGui::EndCombo();
-                }
-            }
-            else
-            {
-                ImGui::SetNextItemWidth(comboW);
-                ImGui::TextUnformatted("No MIDI devices");
-            }
-            if (connected) ImGui::EndDisabled();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(connected ? ImVec4(0.45f, 0.85f, 0.5f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", statusStr.cstr());
 
-            ImGui::SameLine(rightX - btnW - helpW - spacing, 0);
-            const char* label = connected ? "Disconnect MIDI" : "Connect MIDI";
-            if (ImGui::SmallButton(label))
-            {
-                if (connected)
-                    sMidiInput.stop();
-                else
-                {
-                    sMidiInput.start(&MidiInputCallback, nullptr, static_cast<u32>(sMidiDeviceIndex));
-                    if (!sMidiInput.isRunning())
-                        ImGui::OpenPopup("MIDI Unsupported");
-                }
-            }
-            if (ImGui::BeginPopup("MIDI Unsupported"))
-            {
-                ImGui::TextUnformatted("Could not connect to the selected MIDI input device.\nMake sure it is connected and working.");
-                ImGui::EndPopup();
-            }
+            ImGui::SameLine(0.0f, spacing);
+            if (ImGui::SmallButton("MIDI Settings"))
+                OpenPreferencesWindow();
+
             ImGui::SameLine();
             if (ImGui::SmallButton("?"))
                 ImGui::OpenPopup("Keyboard Help");
@@ -2286,13 +2329,6 @@ void BankFile::drawFileUI()
                 ImGui::TextUnformatted("Controls:");
                 ImGui::TextUnformatted("  Left/Right arrows: shift octave");
                 ImGui::TextUnformatted("  Backspace: reset to C3");
-                ImGui::Separator();
-                ImGui::TextUnformatted("Zoom/Scroll:");
-                ImGui::TextUnformatted("  Scroll: pan velocity (vertical)");
-                ImGui::TextUnformatted("  Shift+Scroll: pan keys (horizontal)");
-                ImGui::TextUnformatted("  Ctrl+Scroll or Ctrl++/-: zoom keys (horizontal)");
-                ImGui::TextUnformatted("  Alt+Scroll: zoom velocity (vertical)");
-                ImGui::TextUnformatted("  Middle-drag: pan keys (horizontal)");
                 ImGui::EndPopup();
             }
         }
@@ -2301,14 +2337,13 @@ void BankFile::drawFileUI()
 
         DrawKeyboardWithRegions(
             width,
-            70.0f, // keyboard height
-            sRegionHeight,  // region height
+            70.0f,         // keyboard height
+            sRegionHeight, // region height
             0,
             127,
             (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::BankFileInstrument)
-                ? static_cast<Instrument*>(sSelectedItem)
-                : nullptr
-        );
+                ? static_cast<Instrument *>(sSelectedItem)
+                : nullptr);
 
         f32 endY = ImGui::GetCursorScreenPos().y;
         sKeyboardHeight = endY - startY + ImGui::GetStyle().WindowPadding.y;

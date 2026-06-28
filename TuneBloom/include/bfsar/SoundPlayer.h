@@ -58,7 +58,7 @@ public:
 
     void exportSeqToWav(const sead::SafeString& path, const Sound* sound, u32 maxDurationSecs = 180, u32 targetSampleRate = 0);
     bool writeSeqWavFile(const sead::SafeString& path, const std::vector<f32>& left, const std::vector<f32>& right, u32 sampleRate = 0);
-    bool playWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0);
+    bool playWaveFile(const WaveFile& wave, s32 channel = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0, bool updateSelection = true);
     bool playBankNote(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
 
     void pause(bool isPause);

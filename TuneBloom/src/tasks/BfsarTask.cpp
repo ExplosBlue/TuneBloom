@@ -173,16 +173,21 @@ void BfsarTask::prepare()
             return; // ignore dropped files while a popup is open
         }
 
-        if (count == 1)
-        {
-            sDroppedFilePath = paths[0];
-        }
-
         for (s32 i = 0; i < count; i++)
         {
             if (sead::SafeString(paths[i]).endsWith(".bfsar") || sead::SafeString(paths[i]).endsWith(".bcsar"))
             {
                 sDroppedFilePath = paths[i];
+                return;
+            }
+        }
+
+        if (count >= 1)
+        {
+            sead::SafeString p(paths[0]);
+            if (p.endsWith(".wav") || p.endsWith(".WAV") || p.endsWith(".Wav"))
+            {
+                sDroppedWavPath = paths[0];
                 return;
             }
         }

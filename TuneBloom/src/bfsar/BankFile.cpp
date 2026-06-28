@@ -1535,6 +1535,12 @@ void DrawKeyboardWithRegions(
                 ImVec2 ip1 = ImVec2(p1.x, std::min(p1.y, canvasPos.y + regionHeight));
                 ImGui::ItemAdd(ImRect(ip0, ip1), ImGui::GetID(velRegion));
 
+                if (!sDroppedWavPath.isEmpty() && !sWavDropTargetVel && mouse.x >= ip0.x && mouse.x <= ip1.x && mouse.y >= ip0.y && mouse.y <= ip1.y)
+                {
+                    sWavDropTargetVel = velRegion;
+                    draw->AddRect(ip0, ip1, IM_COL32(120, 230, 140, 255), 0.0f, 0, 2.5f);
+                }
+
                 if (ImGui::IsItemHovered())
                 {
                     drawGrabBar = true;

@@ -601,7 +601,7 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
     return true;
 }
 
-bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* sound, u32 startOffsetSample)
+bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* sound, u32 startOffsetSample, bool updateSelection)
 {
     SEAD_ASSERT(wave.getItemType() == Item::ItemType::WaveFile);
 
@@ -637,7 +637,8 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
         mPlayingWaveFile = &wave;
     }
 
-    sSelectedItem = const_cast<WaveFile*>(&wave);
+    if (updateSelection)
+        sSelectedItem = const_cast<WaveFile*>(&wave);
 
     return true;
 }

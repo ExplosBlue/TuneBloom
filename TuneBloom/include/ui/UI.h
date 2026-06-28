@@ -64,7 +64,8 @@ extern SoundPlayer sSoundPlayer;
 extern sead::FixedSafeString<512> sDroppedFilePath;
 extern sead::FixedSafeString<512> sRecentFileClick;
 
-//
+extern sead::FixedSafeString<512> sDroppedWavPath;
+extern Item* sWavDropTargetVel;
 
 void SelectItem(Item* item);
 

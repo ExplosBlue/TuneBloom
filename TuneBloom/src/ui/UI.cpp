@@ -79,6 +79,9 @@ bool sSoundSetStickyEdit = false;
 sead::FixedSafeString<512> sDroppedFilePath;
 sead::FixedSafeString<512> sRecentFileClick;
 
+sead::FixedSafeString<512> sDroppedWavPath;
+Item* sWavDropTargetVel = nullptr;
+
 static bool sPendingExport = false;
 static std::vector<Sound*> sPendingExportSounds;
 static Sound::SoundType sPendingExportType;
@@ -809,6 +812,8 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
     ImGui::PopStyleVar(2);
 }
 
+static void DrawWavRegionDropImport();
+
 void DrawUI()
 {
     if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
@@ -850,6 +855,9 @@ void DrawUI()
     DrawFileUI(dockspaceId);
     DrawPropertiesUI();
     DrawPlayerUI();
+
+    //? Must run after DrawFileUI so the bank editor has had a chance to match the drop to a region
+    DrawWavRegionDropImport();
 
     if (!sDroppedFilePath.isEmpty())
     {
@@ -4981,13 +4989,13 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
         sSoundPlayer.stopAllPlayers(true);
         rebuildPreview();
         const u32 off = (sCache.previewMode == ImportPreviewCache::PreviewMode::Loop) ? loopStart : 0u;
-        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, off);
+        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, off, false);
     };
 
     if (ImGui::Button(ICON_LC_PLAY " Preview"))
     {
         ensurePreviewFresh();
-        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, 0);
+        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, 0, false);
         sCache.previewMode = ImportPreviewCache::PreviewMode::Full;
     }
     ImGui::SameLine();
@@ -4995,7 +5003,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
     if (ImGui::Button(ICON_LC_REPEAT " Loop"))
     {
         ensurePreviewFresh();
-        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, loopStart);
+        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, loopStart, false);
         sCache.previewMode = ImportPreviewCache::PreviewMode::Loop;
     }
     if (!loopActive) ImGui::EndDisabled();
@@ -5679,6 +5687,109 @@ void DrawWaveFilesUI()
 
         ImGui::EndPopup();
     }
+}
+
+static void DrawWavRegionDropImport()
+{
+    static WaveFile::RiffWaveInfo sDropInfo;
+    static WaveFile::Encoding sDropEncoding = WaveFile::Encoding::DspAdpcm;
+    static sead::FixedSafeString<512> sDropName;
+    static BankFile::VelocityRegion* sDropTarget = nullptr;
+
+    if (sWavDropTargetVel && !sDroppedWavPath.isEmpty())
+    {
+        sDropInfo.clear();
+        sDropInfo.path = sDroppedWavPath;
+        sDropEncoding = WaveFile::Encoding::DspAdpcm;
+        sDropTarget = static_cast<BankFile::VelocityRegion*>(sWavDropTargetVel);
+
+        sead::Path::getFileName(&sDropName, sDropInfo.path);
+        s32 dotPos = sDropName.rfindIndex(".");
+        if (dotPos != -1)
+            sDropName.trim(dotPos);
+
+        const bool ok = WaveFile::readRiffWavInfo(&sDropInfo);
+
+        sDroppedWavPath.clear();
+        sWavDropTargetVel = nullptr;
+
+        if (ok)
+            ImGui::OpenPopup("WavRegionImport");
+        else
+            sDropTarget = nullptr;
+    }
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(560.0f, 660.0f), ImGuiCond_Appearing);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(440.0f, 360.0f), ImVec2(4096.0f, 4096.0f));
+
+    if (ImGui::BeginPopupModal("WavRegionImport", nullptr, ImGuiWindowFlags_NoTitleBar))
+    {
+        ImGui::Text("Import '%s' onto velocity region", sDropName.cstr());
+
+        DrawWaveImportInfo(&sDropEncoding, &sDropInfo);
+
+        ImGui::Separator();
+
+        ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
+
+        if (ImGui::Button("Import", buttonSize))
+        {
+            sSoundPlayer.stopAllPlayers(true);
+
+            FinalizeImportInfoForCommit_(&sDropInfo);
+
+            if (!sDropInfo.isLoop)
+                sDropInfo.loopStartFrame = 0;
+
+            WaveFile* wave = new WaveFile();
+            wave->setEnableName(true);
+            wave->getName() = sDropName;
+
+            if (wave->readWavFile(sDropInfo, sDropEncoding))
+            {
+                sBfsar.getWaveFileList().pushBack(wave);
+                sBfsar.updateList(sBfsar.getWaveFileList());
+
+                if (sDropTarget)
+                    sDropTarget->getWaveFileRef().attach(wave);
+
+                SetUnsavedChanges(true);
+            }
+            else
+            {
+                delete wave;
+                PopupMgr::instance()->addPopup({ "Failed to import WAV file" });
+            }
+
+            sDropTarget = nullptr;
+            sDropInfo.clear();
+            sDropName.clear();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", buttonSize))
+        {
+            sSoundPlayer.stopAllPlayers(true);
+
+            sDropTarget = nullptr;
+            sDropInfo.clear();
+            sDropName.clear();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+    else if (!sDroppedWavPath.isEmpty() && !sWavDropTargetVel)
+    {
+        sDroppedWavPath.clear();
+        PopupMgr::instance()->addPopup({ "Drop a WAV onto a velocity region to import it" });
+    }
+
+    return;
 }
 
 FileWindow* OpenFileWindow(Item* item)

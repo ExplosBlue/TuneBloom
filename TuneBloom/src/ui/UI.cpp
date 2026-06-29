@@ -5769,18 +5769,19 @@ struct ImportPreviewCache
 
 static ImportPreviewCache sImportCache;
 
-static void FinalizeImportInfoForCommit_(WaveFile::RiffWaveInfo* info)
+static std::string FinalizeImportInfoForCommit(WaveFile::RiffWaveInfo *info)
 {
     if (!info || !sImportCache.hasDecoded)
-        return;
-    
+        return {};
+
     if (IsNativeWaveFile_(info->path))
-        return;
+        return {};
 
     if (std::strcmp(sImportCache.cachedPath.cstr(), info->path.cstr()) != 0)
-        return;
+        return {};
+
     if (sImportCache.workingChannels.empty())
-        return;
+        return {};
 
     const bool isLoop = info->isLoop;
     const u32 ls = sImportCache.workingLoopStart;
@@ -5790,25 +5791,26 @@ static void FinalizeImportInfoForCommit_(WaveFile::RiffWaveInfo* info)
     const bool manualLoop = (sImportCache.loopMode == ImportPreviewCache::LoopMode::Manual);
     const bool bakeNeeded = isLoop && manualLoop && sImportCache.crossfadeSamples(ls, le) > 0;
     const bool truncateNeeded = isLoop && le < workingLen;
+
     if (sImportCache.isUnmodified() && !bakeNeeded && !truncateNeeded)
-        return;
+        return {};
 
     char tempPathBuf[600];
     snprintf(tempPathBuf, sizeof(tempPathBuf), "%s.loopbloom_processed.wav", sImportCache.cachedPath.cstr());
 
-    std::vector<std::vector<float>> baked =
-        sImportCache.bakedChannels(manualLoop, ls, le, sImportCache.waveformState.equalPowerCurve);
+    std::vector<std::vector<float>> baked = sImportCache.bakedChannels(manualLoop, ls, le, sImportCache.waveformState.equalPowerCurve);
 
     if (truncateNeeded)
     {
-        for (auto& ch : baked)
-            if (ch.size() > le) ch.resize(le);
+        for (auto &ch : baked)
+            if (ch.size() > le)
+                ch.resize(le);
     }
 
-    std::string written = TempWavWriter::write(baked, sImportCache.workingSampleRate,
-                                                isLoop, ls, le, tempPathBuf);
+    std::string written = TempWavWriter::write(baked, sImportCache.workingSampleRate, isLoop, ls, le, tempPathBuf);
+
     if (written.empty())
-        return;
+        return {};
 
     info->path.copy(written.c_str());
     WaveFile::readRiffWavInfo(info);
@@ -5816,6 +5818,8 @@ static void FinalizeImportInfoForCommit_(WaveFile::RiffWaveInfo* info)
     info->isLoop = isLoop;
     info->loopStartFrame = ls;
     info->loopEndFrame = le;
+
+    return written;
 }
 
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)
@@ -6305,9 +6309,7 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         waveFile->setEnableName(true);
         waveFile->getName() = sFileName;
 
-        // produce the processed temp WAV now (if any processing was applied)
-        // and repoint sRiffWaveInfo at it -- deferred from edit time to here
-        FinalizeImportInfoForCommit_(&sRiffWaveInfo);
+        std::string tempPath = FinalizeImportInfoForCommit(&sRiffWaveInfo);
 
         if (!sRiffWaveInfo.isLoop)
         {
@@ -6315,6 +6317,10 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         }
 
         bool success = waveFile->readWavFile(sRiffWaveInfo, sEncoding);
+
+        if (!tempPath.empty())
+            ::remove(tempPath.c_str());
+        
         if (!success)
         {
             delete waveFile;
@@ -6590,18 +6596,18 @@ void DrawWaveFilesUI()
 
         if (ImGui::Button("Replace", buttonSize))
         {
-            FinalizeImportInfoForCommit_(&sRiffWaveInfo);
+            std::string tempPath = FinalizeImportInfoForCommit(&sRiffWaveInfo);
 
             if (!sRiffWaveInfo.isLoop)
-            {
                 sRiffWaveInfo.loopStartFrame = 0;
-            }
 
             bool success = sImportWaveFile->readWavFile(sRiffWaveInfo, sEncoding);
+
+            if (!tempPath.empty())
+                ::remove(tempPath.c_str());
+            
             if (success)
-            {
                 sImportWaveFile->getName() = sWavFileName;
-            }
 
             sImportWaveFile = nullptr;
             sRiffWaveInfo.clear();
@@ -6674,7 +6680,7 @@ static void DrawWavRegionDropImport()
         {
             sSoundPlayer.stopAllPlayers(true);
 
-            FinalizeImportInfoForCommit_(&sDropInfo);
+            std::string tempPath = FinalizeImportInfoForCommit(&sDropInfo);
 
             if (!sDropInfo.isLoop)
                 sDropInfo.loopStartFrame = 0;
@@ -6685,6 +6691,9 @@ static void DrawWavRegionDropImport()
 
             if (wave->readWavFile(sDropInfo, sDropEncoding))
             {
+                if (!tempPath.empty())
+                    ::remove(tempPath.c_str());
+                
                 sBfsar.getWaveFileList().pushBack(wave);
                 sBfsar.updateList(sBfsar.getWaveFileList());
 
@@ -6695,6 +6704,9 @@ static void DrawWavRegionDropImport()
             }
             else
             {
+                if (!tempPath.empty())
+                    ::remove(tempPath.c_str());
+                
                 delete wave;
                 PopupMgr::instance()->addPopup({ "Failed to import WAV file" });
             }

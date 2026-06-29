@@ -157,7 +157,7 @@ void ClearInsertAfterItem()
     sInsertAfterItem = nullptr;
 }
 
-static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, ContextMenuCallback menuCallback, Item*& selectedItem)
+static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, ContextMenuCallback menuCallback, Item*& selectedItem, ContextMenuCallback beforeDeleteCallback = nullptr)
 {
     bool add = false;
 
@@ -210,6 +210,9 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
                 add = true;
             }
         }
+
+        if (beforeDeleteCallback)
+            beforeDeleteCallback(item, false);
 
         if (item && item->getItemType() == Item::ItemType::Sound)
         {
@@ -275,7 +278,7 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
 
 static Item* sScrollItem = nullptr;
 
-void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow)
+void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback)
 {
     const bool cUseChild = true;
 
@@ -468,7 +471,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
     if (canEdit)
     {
-        if (ItemContextMenu(nullptr, createCallback, menuCallback, selectedItem))
+        if (ItemContextMenu(nullptr, createCallback, menuCallback, selectedItem, beforeDeleteCallback))
         {
             add = true;
         }
@@ -673,7 +676,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         if (canEdit)
         {
-            if (ItemContextMenu(item, createCallback, menuCallback, selectedItem))
+            if (ItemContextMenu(item, createCallback, menuCallback, selectedItem, beforeDeleteCallback))
             {
                 add = true;
             }

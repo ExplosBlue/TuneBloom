@@ -584,7 +584,9 @@ inline BankFile::VelocityRegion* BankFile::VelocityRegion::getNext(const KeyRegi
     return nullptr;
 }
 
+s16 FindNextAvailableProgramNo(const Item::List& instrumentList, const BankFile::Instrument* skipInstrument = nullptr);
 void PollMidiInput();
+void DeselectVelocity();
 
 bool MidiConnectDevice(s32 deviceIndex);
 void MidiDisconnectDevice(const char* name);

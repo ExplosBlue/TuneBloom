@@ -2217,22 +2217,59 @@ void DrawKeyboardWithRegions(
     }
 }
 
+s16 FindNextAvailableProgramNo(const Item::List &instrumentList, const BankFile::Instrument *skipInstrument)
+{
+    std::unordered_set<s16> used;
+    for (const Item *it : instrumentList)
+    {
+        if (it == skipInstrument)
+            continue;
+        
+        used.insert(static_cast<const BankFile::Instrument *>(it)->getProgramNo());
+    }
+
+    s16 prog = 0;
+
+    while (used.count(prog))
+        prog++;
+    
+    return prog;
+}
+
+static BankFile *sCurrentEditBank = nullptr;
+
 InstanciateItemCallback CreateInstrumentFunc(bool clear)
 {
-    auto doCreate = []() -> Item*
+    static s16 sAddProgramNo = 0;
+
+    if (clear)
+        sAddProgramNo = 0;
+
+    if (sCurrentEditBank)
     {
-        BankFile::Instrument* instr = new BankFile::Instrument();
+        ImGui::SetNextItemWidth(60.0f);
+        ImGui::InputScalar("Program Number", ImGuiDataType_S16, &sAddProgramNo);
+        ImGui::SameLine();
+
+        if (ImGui::Button("Next Available"))
+            sAddProgramNo = FindNextAvailableProgramNo(sCurrentEditBank->getInstrumentList(), nullptr);
+    }
+
+    auto doCreate = []() -> Item *
+    {
+        BankFile::Instrument *instr = new BankFile::Instrument();
         instr->setEnableName(true);
         instr->getName() = "Instrument";
+        instr->setProgramNo(sAddProgramNo);
 
-        BankFile::KeyRegion* keyRegion = new BankFile::KeyRegion(0, 127);
+        BankFile::KeyRegion *keyRegion = new BankFile::KeyRegion(0, 127);
         keyRegion->setId(0);
         keyRegion->setEnableName(true);
         keyRegion->getName() = "KeyRegion";
 
         instr->getKeyRegionList().pushBack(keyRegion);
 
-        BankFile::VelocityRegion* velRegion = new BankFile::VelocityRegion(0, 127);
+        BankFile::VelocityRegion *velRegion = new BankFile::VelocityRegion(0, 127);
         velRegion->setId(0);
         velRegion->setEnableName(true);
         velRegion->getName() = "VelocityRegion";
@@ -2245,30 +2282,127 @@ InstanciateItemCallback CreateInstrumentFunc(bool clear)
     return doCreate;
 }
 
-static BankFile* sCurrentEditBank = nullptr;
-
-static void InstrumentContextMenuFunc(Item* item, bool afterDelete)
+static void InstrumentBeforeDeleteMenuFunc(Item *item, bool)
 {
-    if (afterDelete)
-        return;
-
-    ImGui::Separator();
-
     {
         bool disabled = (sCurrentEditBank == nullptr);
-        if (disabled) ImGui::BeginDisabled();
-        if (ImGui::MenuItem("Import Instrument"))
+        if (disabled)
+            ImGui::BeginDisabled();
+        if (ImGui::MenuItem("Import"))
             RequestImportInstrument(sCurrentEditBank);
-        if (disabled) ImGui::EndDisabled();
+        if (disabled)
+            ImGui::EndDisabled();
     }
 
     {
         bool disabled = (item == nullptr);
-        if (disabled) ImGui::BeginDisabled();
-        if (ImGui::MenuItem("Export Instrument"))
-            RequestExportInstrument(item);
-        if (disabled) ImGui::EndDisabled();
+        if (disabled)
+            ImGui::BeginDisabled();
+        if (ImGui::MenuItem("Duplicate"))
+        {
+            auto *src = static_cast<BankFile::Instrument *>(item);
+            auto &bankList = sCurrentEditBank->getInstrumentList();
+
+            std::unordered_set<s16> used;
+            for (const Item *it : bankList)
+                used.insert(static_cast<const BankFile::Instrument *>(it)->getProgramNo());
+            s16 nextProg = 0;
+            while (used.count(nextProg))
+                nextProg++;
+
+            BankFile::Instrument *dup = new BankFile::Instrument();
+            dup->setEnableName(src->isEnableName());
+            dup->getName() = src->getName();
+
+            auto copyVel = [](BankFile::VelocityRegion *dst, const BankFile::VelocityRegion *src)
+            {
+                dst->getWaveFileRef().attach(const_cast<Item *>(src->getWaveFileRef().getItem()));
+                dst->setRootKey(src->getRootKey());
+                dst->setVolume(src->getVolume());
+                dst->setPan(src->getPan());
+                dst->setPitch(src->getPitch());
+                dst->setIsIgnoreNoteOff(src->getIsIgnoreNoteOff());
+                dst->setKeyGroup(src->getKeyGroup());
+                dst->setInterpolationType(src->getInterpolationType());
+                dst->setAdshrCurve(src->getAdshrCurve());
+            };
+
+            for (const Item *krItem : src->getKeyRegionList())
+            {
+                const auto *srcKr = static_cast<const BankFile::KeyRegion *>(krItem);
+                auto *kr = new BankFile::KeyRegion(srcKr->getKeyMin(), srcKr->getKeyMax());
+                for (const Item *vrItem : srcKr->getVelocityRegionList())
+                {
+                    const auto *srcVr = static_cast<const BankFile::VelocityRegion *>(vrItem);
+                    auto *dstVr = new BankFile::VelocityRegion(srcVr->getVelocityMin(), srcVr->getVelocityMax());
+                    copyVel(dstVr, srcVr);
+                    kr->getVelocityRegionList().pushBack(dstVr);
+                }
+                dup->getKeyRegionList().pushBack(kr);
+            }
+
+            dup->setProgramNo(nextProg);
+            bankList.pushBack(dup);
+            sBfsar.updateList(bankList);
+            SetUnsavedChanges(true);
+        }
+        if (disabled)
+            ImGui::EndDisabled();
     }
+}
+
+static void InstrumentContextMenuFunc(Item *item, bool afterDelete)
+{
+    if (afterDelete)
+        return;
+
+    {
+        bool disabled = (item == nullptr);
+        if (disabled)
+            ImGui::BeginDisabled();
+        if (ImGui::MenuItem("Replace"))
+            RequestReplaceInstrument(item, sCurrentEditBank);
+        if (disabled)
+            ImGui::EndDisabled();
+    }
+
+    ImGui::Separator();
+
+    {
+        bool disabled = (item == nullptr);
+        if (disabled)
+            ImGui::BeginDisabled();
+        if (ImGui::MenuItem("Export"))
+            RequestExportInstrument(item);
+        if (disabled)
+            ImGui::EndDisabled();
+    }
+
+    {
+        bool disabled = (sCurrentEditBank == nullptr);
+        if (disabled)
+            ImGui::BeginDisabled();
+        if (ImGui::MenuItem("Sort by number"))
+        {
+            auto &list = sCurrentEditBank->getInstrumentList();
+            std::vector<BankFile::Instrument *> instruments;
+            for (Item *it : list)
+                instruments.push_back(static_cast<BankFile::Instrument *>(it));
+            std::sort(instruments.begin(), instruments.end(),
+                      [](const BankFile::Instrument *a, const BankFile::Instrument *b)
+                      { return a->getProgramNo() < b->getProgramNo(); });
+            for (BankFile::Instrument *instr : instruments)
+                static_cast<Item *>(instr)->erase();
+            for (BankFile::Instrument *instr : instruments)
+                list.pushBack(instr);
+            sBfsar.updateList(list);
+            SetUnsavedChanges(true);
+        }
+        if (disabled)
+            ImGui::EndDisabled();
+    }
+
+    ImGui::Separator();
 }
 
 void BankFile::drawFileUI()
@@ -2291,9 +2425,8 @@ void BankFile::drawFileUI()
     }
 
     if (ImGui::BeginChild("Instruments", ImVec2(0.0f, topHeight), ImGuiChildFlags_Border))
-    {
-        DrawAllItemsUI("Instrument", mInstrumentList, &CreateInstrumentFunc, nullptr, &InstrumentContextMenuFunc, nullptr, true);
-    }
+        DrawAllItemsUI("Instrument", mInstrumentList, &CreateInstrumentFunc, nullptr, &InstrumentContextMenuFunc, nullptr, false, &InstrumentBeforeDeleteMenuFunc);
+    
     ImGui::EndChild();
 
     ImGui::InvisibleButton("##RegionSplitter", ImVec2(ImGui::GetContentRegionAvail().x, kSplitterH));

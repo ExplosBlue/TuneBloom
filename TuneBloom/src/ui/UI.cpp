@@ -105,6 +105,14 @@ static bool sPendingImportBankBundle = false;
 static BankFile::Instrument* sPendingExportInstrument = nullptr;
 static BankFile* sPendingImportInstrumentBank = nullptr;
 
+static u8* sIbnkFileData = nullptr;
+static BankFile* sIbnkTargetBank = nullptr;
+static std::string sIbnkInstrumentName;
+static s16 sIbnkProgramNo;
+static u32 sIbnkWaveCount;
+static u32 sIbnkDataOffset;
+static BankFile::Instrument* sIbnkReplaceTarget = nullptr;
+
 void RequestExportInstrument(Item* instrument)
 {
     sPendingExportInstrument = static_cast<BankFile::Instrument*>(instrument);
@@ -112,7 +120,29 @@ void RequestExportInstrument(Item* instrument)
 
 void RequestImportInstrument(Item* targetBank)
 {
+    sIbnkReplaceTarget = nullptr;
     sPendingImportInstrumentBank = static_cast<BankFile*>(targetBank);
+}
+
+static void CloseIbnkImport()
+{
+    if (sIbnkFileData)
+    {
+        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+        if (device)
+            device->unload(sIbnkFileData);
+    }
+
+    sIbnkFileData = nullptr;
+    sIbnkTargetBank = nullptr;
+    sIbnkInstrumentName.clear();
+    sIbnkReplaceTarget = nullptr;
+}
+
+void RequestReplaceInstrument(Item* instrument, Item* bank)
+{
+    sIbnkReplaceTarget = static_cast<BankFile::Instrument*>(instrument);
+    sPendingImportInstrumentBank = static_cast<BankFile*>(bank);
 }
 
 // Export progress state (frame-by-frame batch export)
@@ -2330,7 +2360,7 @@ static void ExportInstrumentBundle(const BankFile::Instrument* instr, sead::File
     sead::FileDeviceWriteStream stream(handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(sead::Endian::eBig);
 
-    stream.writeU32(0x49424E44); // "IBND"
+    stream.writeU32(0x49424E44);
     stream.writeU32(1);
 
     const char* instrName = instr->getNameOrNull().cstr();
@@ -2621,9 +2651,25 @@ static void DrawFileExportDialogs()
 
         sead::FixedSafeString<512> defaultPath;
         {
-            const char* rawName = instr->getNameOrNull().cstr();
             std::string cwd = std::filesystem::current_path().string();
-            defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
+            std::string bankName;
+            for (const auto& node : sBfsar.getBankFileList())
+            {
+                const auto* bank = static_cast<const BankFile*>(node);
+                for (const auto& iNode : bank->getInstrumentList())
+                {
+                    if (iNode == instr)
+                    {
+                        bankName = bank->getNameOrNull().cstr();
+                        break;
+                    }
+                }
+                if (!bankName.empty()) break;
+            }
+            if (!bankName.empty())
+                defaultPath.format("%s/%s_prog_%d.%s", cwd.c_str(), bankName.c_str(), instr->getProgramNo(), ext);
+            else
+                defaultPath.format("%s/%s.%s", cwd.c_str(), instr->getNameOrNull().cstr(), ext);
         }
 
         sead::FixedSafeString<512> path;
@@ -2675,8 +2721,6 @@ static void DrawFileExportDialogs()
                     u32 offset = 0;
                     auto readU32 = [&]() -> u32 { u32 v; sead::MemUtil::copy(&v, fileData + offset, 4); offset += 4; return sead::Endian::toHostU32(sead::Endian::eBig, v); };
                     auto readU16 = [&]() -> u16 { u16 v; sead::MemUtil::copy(&v, fileData + offset, 2); offset += 2; return sead::Endian::toHostU16(sead::Endian::eBig, v); };
-                    auto readU8  = [&]() -> u8 { return fileData[offset++]; };
-                    auto readF32 = [&]() -> f32 { u32 v; sead::MemUtil::copy(&v, fileData + offset, 4); offset += 4; v = sead::Endian::toHostU32(sead::Endian::eBig, v); f32 r; sead::MemUtil::copy(&r, &v, 4); return r; };
                     auto readString = [&]() -> std::string { u32 len = readU32(); std::string s; if (len > 0) s.assign(reinterpret_cast<const char*>(fileData + offset), len); offset += len; return s; };
 
                     u32 magic = readU32();
@@ -2695,168 +2739,241 @@ static void DrawFileExportDialogs()
                         return;
                     }
 
-                    std::string instrName = readString();
-                    s16 programNo = (s16)readU16();
+                    sIbnkFileData = fileData;
+                    sIbnkTargetBank = targetBank;
+                    sIbnkInstrumentName = readString();
+                    sIbnkProgramNo = (s16)readU16();
+                    sIbnkWaveCount = readU32();
+                    sIbnkDataOffset = offset;
 
-                    u32 waveCount = readU32();
-                    std::unordered_map<std::string, WaveFile*> waveMap;
-
-                    for (u32 i = 0; i < waveCount; i++)
-                    {
-                        std::string waveName = readString();
-                        u32 waveSize = readU32();
-                        if (waveSize == 0)
-                            continue;
-
-                        {
-                            nw::ut::BinaryFileHeader* hdr = reinterpret_cast<nw::ut::BinaryFileHeader*>(fileData + offset);
-                            u16 bom;
-                            sead::MemUtil::copy(&bom, fileData + offset + 4, 2);
-                            bool le = *reinterpret_cast<u8*>(&bom) == 0xFF;
-                            u32 ver = sBfsar.getVersionForBfwav();
-                            if (le)
-                            {
-                                fileData[offset + 8] = (ver >> 0) & 0xFF;
-                                fileData[offset + 9] = (ver >> 8) & 0xFF;
-                                fileData[offset + 10] = (ver >> 16) & 0xFF;
-                                fileData[offset + 11] = (ver >> 24) & 0xFF;
-                            }
-                            else
-                            {
-                                fileData[offset + 8] = (ver >> 24) & 0xFF;
-                                fileData[offset + 9] = (ver >> 16) & 0xFF;
-                                fileData[offset + 10] = (ver >> 8) & 0xFF;
-                                fileData[offset + 11] = (ver >> 0) & 0xFF;
-                            }
-                            const char* wantSig = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
-                            hdr->signature[0] = wantSig[0];
-                            hdr->signature[1] = wantSig[1];
-                            hdr->signature[2] = wantSig[2];
-                            hdr->signature[3] = wantSig[3];
-                        }
-
-                        WaveFile* existingWave = nullptr;
-                        for (const auto& node : sBfsar.getWaveFileList())
-                        {
-                            if (node->getName() == waveName.c_str())
-                            {
-                                existingWave = static_cast<WaveFile*>(node);
-                                break;
-                            }
-                        }
-
-                        if (existingWave)
-                        {
-                            waveMap[waveName.c_str()] = existingWave;
-                            offset += waveSize;
-                            continue;
-                        }
-
-                        WaveFile* newWave = new WaveFile();
-                        newWave->setEnableName(true);
-                        newWave->getName() = waveName.c_str();
-                        if (newWave->read(fileData + offset))
-                        {
-                            newWave->setFormat(sBfsar.getFormat());
-                            newWave->setVersion(sBfsar.getVersionForBfwav());
-                            sBfsar.getWaveFileList().pushBack(newWave);
-                            sBfsar.updateList(sBfsar.getWaveFileList());
-                            SetUnsavedChanges(true);
-                            waveMap[waveName.c_str()] = newWave;
-                        }
-                        else
-                        {
-                            delete newWave;
-                            PopupMgr::instance()->pushCurrentItemError("Failed to read bundled wave file");
-                        }
-
-                        offset += waveSize;
-                    }
-
-                    BankFile::Instrument* instr = new BankFile::Instrument();
-                    instr->setEnableName(true);
-                    instr->getName() = instrName.empty() ? "Instrument" : instrName.c_str();
-                    instr->setProgramNo(programNo);
-
-                    u16 krCount = readU16();
-                    for (u16 k = 0; k < krCount; k++)
-                    {
-                        u8 keyMin = readU8();
-                        u8 keyMax = readU8();
-                        u16 vrCount = readU16();
-
-                        BankFile::KeyRegion* kr = new BankFile::KeyRegion(keyMin, keyMax);
-
-                        for (u16 v = 0; v < vrCount; v++)
-                        {
-                            std::string refWaveName = readString();
-                            u8 velMin = readU8();
-                            u8 velMax = readU8();
-                            u8 rootKey = readU8();
-                            u8 volume = readU8();
-                            u8 pan = readU8();
-                            f32 pitch = readF32();
-                            bool ignoreNoteOff = readU8() != 0;
-                            u8 keyGroup = readU8();
-                            u8 interpolationType = readU8();
-                            u8 attack = readU8();
-                            u8 decay = readU8();
-                            u8 sustain = readU8();
-                            u8 hold = readU8();
-                            u8 release = readU8();
-
-                            BankFile::VelocityRegion* vr = new BankFile::VelocityRegion(velMin, velMax);
-                            vr->setRootKey(rootKey);
-                            vr->setVolume(volume);
-                            vr->setPan(pan);
-                            vr->setPitch(pitch);
-                            vr->setIsIgnoreNoteOff(ignoreNoteOff);
-                            vr->setKeyGroup(keyGroup);
-                            vr->setInterpolationType(interpolationType);
-
-                            snd::AdshrCurve adsr;
-                            adsr.attack = attack;
-                            adsr.decay = decay;
-                            adsr.sustain = sustain;
-                            adsr.hold = hold;
-                            adsr.release = release;
-                            vr->setAdshrCurve(adsr);
-
-                            WaveFile* foundWave = nullptr;
-                            auto waveIt = waveMap.find(refWaveName.c_str());
-                            if (waveIt != waveMap.end())
-                            {
-                                foundWave = waveIt->second;
-                            }
-                            else if (!refWaveName.empty())
-                            {
-                                for (const auto& node : sBfsar.getWaveFileList())
-                                {
-                                    if (node->getName() == refWaveName.c_str())
-                                    {
-                                        foundWave = static_cast<WaveFile*>(node);
-                                        break;
-                                    }
-                                }
-                            }
-                            if (foundWave)
-                                vr->getWaveFileRef().attach(foundWave);
-
-                            kr->getVelocityRegionList().pushBack(vr);
-                        }
-
-                        instr->getKeyRegionList().pushBack(kr);
-                    }
-
-                    targetBank->getInstrumentList().pushBack(instr);
-                    sBfsar.updateList(targetBank->getInstrumentList());
-                    SetUnsavedChanges(true);
-
-                    device->unload(fileData);
+                    ImGui::OpenPopup(sIbnkReplaceTarget ? "Replace Instrument" : "Import Instrument");
                 }
             }
         }
     }
+
+    const char *popupName = sIbnkReplaceTarget ? "Replace Instrument" : "Import Instrument";
+    if (sIbnkFileData && ImGui::BeginPopupModal(popupName, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        if (sIbnkReplaceTarget)
+        {
+            sead::FixedSafeString<256> replaceInfo;
+            replaceInfo.format("Replacing: Program %d", sIbnkReplaceTarget->getProgramNo());
+            ImGui::TextUnformatted(replaceInfo.cstr());
+        }
+
+        ImGui::SetNextItemWidth(60.0f);
+        ImGui::InputScalar("Program Number", ImGuiDataType_S16, &sIbnkProgramNo);
+        ImGui::SameLine();
+
+        if (ImGui::Button("Next Available"))
+            sIbnkProgramNo = FindNextAvailableProgramNo(sIbnkTargetBank->getInstrumentList(), sIbnkReplaceTarget);
+
+        ImGui::Text("Waves to import: %u", sIbnkWaveCount);
+
+        ImGui::Separator();
+
+        const float bw = 120.0f;
+
+        if (ImGui::Button("Import", ImVec2(bw, 0.0f)))
+        {
+            u32 offset = sIbnkDataOffset;
+            u8 *fileData = sIbnkFileData;
+
+            auto readU32 = [&]() -> u32
+            { u32 v; sead::MemUtil::copy(&v, fileData + offset, 4); offset += 4; return sead::Endian::toHostU32(sead::Endian::eBig, v); };
+            auto readU16 = [&]() -> u16
+            { u16 v; sead::MemUtil::copy(&v, fileData + offset, 2); offset += 2; return sead::Endian::toHostU16(sead::Endian::eBig, v); };
+            auto readU8 = [&]() -> u8
+            { return fileData[offset++]; };
+            auto readF32 = [&]() -> f32
+            { u32 v; sead::MemUtil::copy(&v, fileData + offset, 4); offset += 4; v = sead::Endian::toHostU32(sead::Endian::eBig, v); f32 r; sead::MemUtil::copy(&r, &v, 4); return r; };
+            auto readString = [&]() -> std::string
+            { u32 len = readU32(); std::string s; if (len > 0) s.assign(reinterpret_cast<const char*>(fileData + offset), len); offset += len; return s; };
+
+            auto findWaveByName = [](const char *name) -> WaveFile *
+            {
+                for (const auto &node : sBfsar.getWaveFileList())
+                    if (node->getName() == name)
+                        return static_cast<WaveFile *>(node);
+                
+                return nullptr;
+            };
+
+            std::unordered_map<std::string, WaveFile *> waveMap;
+
+            for (u32 i = 0; i < sIbnkWaveCount; i++)
+            {
+                std::string waveName = readString();
+                u32 waveSize = readU32();
+                if (waveSize == 0)
+                    continue;
+
+                if (WaveFile *existing = findWaveByName(waveName.c_str()))
+                {
+                    waveMap[waveName] = existing;
+                    offset += waveSize;
+                    continue;
+                }
+
+                {
+                    nw::ut::BinaryFileHeader *hdr = reinterpret_cast<nw::ut::BinaryFileHeader *>(fileData + offset);
+                    u16 bom;
+                    sead::MemUtil::copy(&bom, fileData + offset + 4, 2);
+                    bool le = *reinterpret_cast<u8 *>(&bom) == 0xFF;
+                    u32 ver = sBfsar.getVersionForBfwav();
+                    if (le)
+                    {
+                        fileData[offset + 8] = (ver >> 0) & 0xFF;
+                        fileData[offset + 9] = (ver >> 8) & 0xFF;
+                        fileData[offset + 10] = (ver >> 16) & 0xFF;
+                        fileData[offset + 11] = (ver >> 24) & 0xFF;
+                    }
+                    else
+                    {
+                        fileData[offset + 8] = (ver >> 24) & 0xFF;
+                        fileData[offset + 9] = (ver >> 16) & 0xFF;
+                        fileData[offset + 10] = (ver >> 8) & 0xFF;
+                        fileData[offset + 11] = (ver >> 0) & 0xFF;
+                    }
+                    const char* wantSig = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
+                    hdr->signature[0] = wantSig[0];
+                    hdr->signature[1] = wantSig[1];
+                    hdr->signature[2] = wantSig[2];
+                    hdr->signature[3] = wantSig[3];
+                }
+
+                WaveFile* newWave = new WaveFile();
+                newWave->setEnableName(true);
+                newWave->getName() = waveName.c_str();
+                if (newWave->read(fileData + offset))
+                {
+                    newWave->setFormat(sBfsar.getFormat());
+                    newWave->setVersion(sBfsar.getVersionForBfwav());
+                    sBfsar.getWaveFileList().pushBack(newWave);
+                    sBfsar.updateList(sBfsar.getWaveFileList());
+                    SetUnsavedChanges(true);
+                    waveMap[waveName] = newWave;
+                }
+                else
+                {
+                    delete newWave;
+                    PopupMgr::instance()->pushCurrentItemError("Failed to read bundled wave file");
+                }
+
+                offset += waveSize;
+            }
+
+            BankFile::Instrument *instr;
+            if (sIbnkReplaceTarget)
+            {
+                DeselectVelocity();
+                instr = sIbnkReplaceTarget;
+                instr->getKeyRegionList().clear();
+                if (!sIbnkInstrumentName.empty())
+                    instr->getName() = sIbnkInstrumentName.c_str();
+                instr->setProgramNo(sIbnkProgramNo);
+            }
+            else
+            {
+                instr = new BankFile::Instrument();
+                instr->setEnableName(true);
+                instr->getName() = sIbnkInstrumentName.empty() ? "Instrument" : sIbnkInstrumentName.c_str();
+                instr->setProgramNo(sIbnkProgramNo);
+            }
+
+            u16 krCount = readU16();
+            for (u16 k = 0; k < krCount; k++)
+            {
+                u8 keyMin = readU8();
+                u8 keyMax = readU8();
+                u16 vrCount = readU16();
+
+                BankFile::KeyRegion* kr = new BankFile::KeyRegion(keyMin, keyMax);
+
+                for (u16 v = 0; v < vrCount; v++)
+                {
+                    std::string refWaveName = readString();
+                    u8 velMin = readU8();
+                    u8 velMax = readU8();
+                    u8 rootKey = readU8();
+                    u8 volume = readU8();
+                    u8 pan = readU8();
+                    f32 pitch = readF32();
+                    bool ignoreNoteOff = readU8() != 0;
+                    u8 keyGroup = readU8();
+                    u8 interpolationType = readU8();
+                    u8 attack = readU8();
+                    u8 decay = readU8();
+                    u8 sustain = readU8();
+                    u8 hold = readU8();
+                    u8 release = readU8();
+
+                    BankFile::VelocityRegion* vr = new BankFile::VelocityRegion(velMin, velMax);
+                    vr->setRootKey(rootKey);
+                    vr->setVolume(volume);
+                    vr->setPan(pan);
+                    vr->setPitch(pitch);
+                    vr->setIsIgnoreNoteOff(ignoreNoteOff);
+                    vr->setKeyGroup(keyGroup);
+                    vr->setInterpolationType(interpolationType);
+
+                    snd::AdshrCurve adsr;
+                    adsr.attack = attack;
+                    adsr.decay = decay;
+                    adsr.sustain = sustain;
+                    adsr.hold = hold;
+                    adsr.release = release;
+                    vr->setAdshrCurve(adsr);
+
+                    WaveFile* foundWave = nullptr;
+                    auto waveIt = waveMap.find(refWaveName.c_str());
+                    if (waveIt != waveMap.end())
+                    {
+                        foundWave = waveIt->second;
+                    }
+                    else if (!refWaveName.empty())
+                    {
+                        for (const auto& node : sBfsar.getWaveFileList())
+                        {
+                            if (node->getName() == refWaveName.c_str())
+                            {
+                                foundWave = static_cast<WaveFile*>(node);
+                                break;
+                            }
+                        }
+                    }
+                    if (foundWave)
+                        vr->getWaveFileRef().attach(foundWave);
+
+                    kr->getVelocityRegionList().pushBack(vr);
+                }
+
+                instr->getKeyRegionList().pushBack(kr);
+            }
+
+            if (!sIbnkReplaceTarget)
+                sIbnkTargetBank->getInstrumentList().pushBack(instr);
+
+            sBfsar.updateList(sIbnkTargetBank->getInstrumentList());
+            SetUnsavedChanges(true);
+
+            CloseIbnkImport();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(bw, 0.0f)))
+        {
+            CloseIbnkImport();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+    else if (sIbnkFileData && !ImGui::IsPopupOpen(popupName))
+        CloseIbnkImport();
 
     if (sPendingImportSequenceFile)
     {

@@ -50,6 +50,8 @@ UIType sSelectedUIType = UIType::ProjectInfo;
 
 ImVec4 gAccentColor = ImVec4(0.24f, 0.50f, 0.88f, 1.00f);
 f32 gThemeBrightness = 1.0f;
+f32 gThemeSaturation = 1.0f;
+f32 gThemeContrast = 1.0f;
 
 void SetUITab(UIType type)
 {
@@ -569,7 +571,19 @@ static void DrawAppearanceOptions()
         done = true;
 
     PrefLabel("Brightness");
-    if (ImGui::SliderFloat("##bright", &gThemeBrightness, 0.3f, 1.7f, "%.2f"))
+    if (ImGui::SliderFloat("##bright", &gThemeBrightness, 0.3f, 2.5f, "%.2f"))
+        changed = true;
+    if (ImGui::IsItemDeactivatedAfterEdit())
+        done = true;
+
+    PrefLabel("Saturation");
+    if (ImGui::SliderFloat("##sat", &gThemeSaturation, 0.0f, 2.0f, "%.2f"))
+        changed = true;
+    if (ImGui::IsItemDeactivatedAfterEdit())
+        done = true;
+
+    PrefLabel("Contrast");
+    if (ImGui::SliderFloat("##contrast", &gThemeContrast, 0.5f, 1.8f, "%.2f"))
         changed = true;
     if (ImGui::IsItemDeactivatedAfterEdit())
         done = true;
@@ -579,6 +593,8 @@ static void DrawAppearanceOptions()
     {
         gAccentColor = ImVec4(0.24f, 0.50f, 0.88f, 1.00f);
         gThemeBrightness = 1.0f;
+        gThemeSaturation = 1.0f;
+        gThemeContrast = 1.0f;
         changed = true;
         done = true;
     }
@@ -802,8 +818,15 @@ void OpenURL(const char* url)
 
 static ImVec4 HSV(float h, float s, float v, float a = 1.0f)
 {
+    s *= gThemeSaturation;
+    if (s > 1.0f) s = 1.0f;
+    if (s < 0.0f) s = 0.0f;
+
     v *= gThemeBrightness;
+    v = (v - 0.5f) * gThemeContrast + 0.5f;
     if (v > 1.0f) v = 1.0f;
+    if (v < 0.0f) v = 0.0f;
+
     ImVec4 c;
     ImGui::ColorConvertHSVtoRGB(h, s, v, c.x, c.y, c.z);
     c.w = a;
@@ -913,7 +936,7 @@ void SaveAccentColor()
     FILE* f = fopen(path.c_str(), "w");
     if (f)
     {
-        fprintf(f, "%f %f %f %f %f\n", gAccentColor.x, gAccentColor.y, gAccentColor.z, gAccentColor.w, gThemeBrightness);
+        fprintf(f, "%f %f %f %f %f %f %f\n", gAccentColor.x, gAccentColor.y, gAccentColor.z, gAccentColor.w, gThemeBrightness, gThemeSaturation, gThemeContrast);
         fclose(f);
     }
 }
@@ -925,9 +948,13 @@ void LoadAccentColor()
     FILE* f = fopen(path.c_str(), "r");
     if (f)
     {
-        int n = fscanf(f, "%f %f %f %f %f", &gAccentColor.x, &gAccentColor.y, &gAccentColor.z, &gAccentColor.w, &gThemeBrightness);
+        int n = fscanf(f, "%f %f %f %f %f %f %f", &gAccentColor.x, &gAccentColor.y, &gAccentColor.z, &gAccentColor.w, &gThemeBrightness, &gThemeSaturation, &gThemeContrast);
         if (n < 5)
             gThemeBrightness = 1.0f;
+        if (n < 6)
+            gThemeSaturation = 1.0f;
+        if (n < 7)
+            gThemeContrast = 1.0f;
         fclose(f);
     }
 }

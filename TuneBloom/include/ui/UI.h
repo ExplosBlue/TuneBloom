@@ -88,6 +88,8 @@ extern Item* sMultiSelectAnchorArr[];
 
 extern ImVec4 gAccentColor;
 extern f32 gThemeBrightness;
+extern f32 gThemeSaturation;
+extern f32 gThemeContrast;
 extern u32 gOutputSampleRate;
 extern bool sSoundSetStickyEdit;
 void ApplyThemeFromAccent(ImVec4 accent);

@@ -710,42 +710,92 @@ void DrawMenuBar()
                 }
             }
 
+            if (!GetRecentFiles().empty())
+            {
+                float maxNameW = 0.0f;
+
+                for (auto &f : GetRecentFiles())
+                {
+                    const char *p = f.c_str();
+                    const char *n = p;
+                    
+                    if (const char *sep = strrchr(p, '/'))
+                        n = sep + 1;
+                    else if (const char *sep = strrchr(p, '\\'))
+                        n = sep + 1;
+                    
+                    maxNameW = std::max(maxNameW, ImGui::CalcTextSize(n).x);
+                }
+
+                float trashW = ImGui::CalcTextSize(ICON_LC_TRASH).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                float minMenuW = maxNameW + trashW + ImGui::GetStyle().ItemSpacing.x * 3.0f + ImGui::GetStyle().WindowPadding.x * 2.0f;
+
+                ImGui::SetNextWindowSizeConstraints(ImVec2(minMenuW, 0), ImVec2(FLT_MAX, FLT_MAX));
+            }
+
             if (ImGui::BeginMenu(ICON_LC_CLOCK " Open Recent"))
             {
-                for (size_t i = 0; i < GetRecentFiles().size(); i++)
-                {
-                    const char* path = GetRecentFiles()[i].c_str();
-                    const char* name = path;
-                    if (const char* sep = strrchr(path, '/'))
-                        name = sep + 1;
-                    else if (const char* sep = strrchr(path, '\\'))
-                        name = sep + 1;
-                    if (ImGui::MenuItem(name, nullptr))
-                    {
-                        if (bfsarOpen)
-                        {
-                            sWantsOpen = true;
-                            sRecentFileClick = path;
-                        }
-                        else
-                        {
-                            OpenFile(path);
-                        }
-                    }
-                    if (ImGui::IsItemHovered())
-                        ImGui::SetTooltip("%s", path);
-                }
                 if (GetRecentFiles().empty())
                 {
                     ImGui::BeginDisabled();
                     ImGui::MenuItem("(empty)");
                     ImGui::EndDisabled();
                 }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Clear recents"))
+                else
                 {
-                    GetRecentFiles().clear();
-                    SaveRecentFiles();
+                    int pendingDelete = -1;
+
+                    for (size_t i = 0; i < GetRecentFiles().size(); i++)
+                    {
+                        const std::string &entry = GetRecentFiles()[i];
+                        const char *path = entry.c_str();
+                        const char *name = path;
+
+                        if (const char *sep = strrchr(path, '/'))
+                            name = sep + 1;
+                        else if (const char *sep = strrchr(path, '\\'))
+                            name = sep + 1;
+
+                        ImGui::PushID((int)i);
+
+                        float trashW = ImGui::CalcTextSize(ICON_LC_TRASH).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+                        float fullW = ImGui::GetContentRegionAvail().x;
+                        float selW = fullW - trashW - ImGui::GetStyle().ItemSpacing.x;
+
+                        if (ImGui::Selectable(name, false, 0, ImVec2(selW, 0)))
+                        {
+                            if (bfsarOpen)
+                            {
+                                sWantsOpen = true;
+                                sRecentFileClick = path;
+                            }
+                            else
+                                OpenFile(path);
+                        }
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("%s", path);
+
+                        ImGui::SameLine();
+
+                        if (ImGui::Button(ICON_LC_TRASH "##del"))
+                            pendingDelete = (int)i;
+
+                        ImGui::PopID();
+                    }
+
+                    if (pendingDelete >= 0)
+                    {
+                        GetRecentFiles().erase(GetRecentFiles().begin() + pendingDelete);
+                        SaveRecentFiles();
+                    }
+
+                    ImGui::Separator();
+                    
+                    if (ImGui::MenuItem("Clear recents"))
+                    {
+                        GetRecentFiles().clear();
+                        SaveRecentFiles();
+                    }
                 }
                 ImGui::EndMenu();
             }

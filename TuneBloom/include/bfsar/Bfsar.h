@@ -160,6 +160,16 @@ public:
         mIncludeStringTable = includeStringTable;
     }
 
+    bool getSaveMetadata() const
+    {
+        return mSaveMetadata;
+    }
+
+    void setSaveMetadata(bool v)
+    {
+        mSaveMetadata = v;
+    }
+
     const SoundArchivePlayerInfo& getSoundArchivePlayerInfo() const
     {
         return mSoundArchivePlayerInfo;
@@ -442,6 +452,8 @@ private:
 
     bool validateName_(const sead::SafeString& name, const Item::List& list, const Item* ignoreItem = nullptr) const;
 
+    void readNamesFromMetadata_(const sead::SafeString& filePath);
+
 private:
     bool mOpen;
     ArchiveFormat mFormat;
@@ -450,6 +462,7 @@ private:
     sead::Endian::Types mEndian;
     u32 mVersion;
     bool mIncludeStringTable;
+    bool mSaveMetadata;
     SoundArchivePlayerInfo mSoundArchivePlayerInfo;
 
     Sound::List mSoundList;

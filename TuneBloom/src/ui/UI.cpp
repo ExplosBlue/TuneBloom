@@ -88,6 +88,8 @@ std::vector<std::string> gMidiEnabledDevices;
 std::string gPlaybackDeviceName;
 f32 gMasterVolume = 1.0f;
 
+bool sSaveMetadataDefault = true;
+
 static bool sPendingExport = false;
 static std::vector<Sound*> sPendingExportSounds;
 static Sound::SoundType sPendingExportType;
@@ -323,6 +325,8 @@ static bool sWantsClose = false;
 static bool sWantsExit = false;
 static bool sWantsAbout = false;
 static bool sNeedsNewFileFormat = false;
+static bool sWantsSaveDirect = false;
+static bool (*sPendingFileAction)() = nullptr;
 
 static bool NewFileFormatTrigger()
 {
@@ -592,6 +596,18 @@ static void DrawAdvancedOptions()
     PrefSectionTitle(ICON_LC_CPU " Advanced");
     ImGui::Indent(10.0f);
     ImGui::Checkbox("Show system window", &sShowSystemWindow);
+    ImGui::Checkbox("Save external archive metadata", &sSaveMetadataDefault);
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::TextUnformatted("When enabled, a metadata json is created during\n"
+                               "saving to track instrument and wave file names.\n"
+                               "If one already exists, it is updated regardless.");
+        ImGui::EndTooltip();
+    }
+
+    if (ImGui::IsItemDeactivatedAfterEdit())
+        SaveMetadataConfig();
+
     ImGui::Unindent(10.0f);
 }
 
@@ -715,7 +731,7 @@ void DrawMenuBar()
 
             if (ImGui::MenuItem(ICON_LC_SAVE " Save", "Ctrl+S"))
             {
-                SaveFile();
+                sWantsSaveDirect = true;
             }
 
             if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As", "Ctrl+Shift+S"))
@@ -1108,6 +1124,45 @@ void ApplyAudioConfig()
     snd::SoundSystem::setMasterVolume(gMasterVolume);
 }
 
+void SaveMetadataConfig()
+{
+    std::string path = GetConfigDir() + "/metadata.cfg";
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    CreateDirectoryA(GetConfigDir().c_str(), NULL);
+#else
+    mkdir(GetConfigDir().c_str(), 0755);
+#endif
+
+    FILE* f = fopen(path.c_str(), "w");
+    if (f)
+    {
+        fprintf(f, "save=%d\n", sSaveMetadataDefault ? 1 : 0);
+        fclose(f);
+    }
+}
+
+void LoadMetadataConfig()
+{
+    std::string path = GetConfigDir() + "/metadata.cfg";
+
+    FILE* f = fopen(path.c_str(), "r");
+    if (f)
+    {
+        char buf[1024];
+        while (fgets(buf, sizeof(buf), f))
+        {
+            size_t len = strlen(buf);
+            if (len > 0 && buf[len - 1] == '\n')
+                buf[len - 1] = '\0';
+
+            if (strncmp(buf, "save=", 5) == 0)
+                sSaveMetadataDefault = atoi(buf + 5) != 0;
+        }
+        fclose(f);
+    }
+}
+
 void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -1256,6 +1311,32 @@ void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 
 static void DrawWavRegionDropImport();
 
+static bool ShouldWarnAboutMissingMetadata()
+{
+    if (!sBfsar.isOpen() || sBfsar.getSaveMetadata())
+        return false;
+
+    for (Item *bfItem : sBfsar.getBankFileList())
+    {
+        BankFile *bf = static_cast<BankFile *>(bfItem);
+        for (Item *instItem : bf->getInstrumentList())
+        {
+            BankFile::Instrument *inst = static_cast<BankFile::Instrument *>(instItem);
+            if (inst->isNameValid())
+                return true;
+        }
+    }
+
+    for (Item *wfItem : sBfsar.getWaveFileList())
+    {
+        WaveFile *wf = static_cast<WaveFile *>(wfItem);
+        if (wf->isNameValid())
+            return true;
+    }
+
+    return false;
+}
+
 void DrawUI()
 {
     if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
@@ -1263,7 +1344,7 @@ void DrawUI()
         if (ImGui::IsKeyDown(ImGuiKey_ModCtrl) && !ImGui::IsKeyDown(ImGuiKey_ModShift))
         {
             if (ImGui::IsKeyPressed(ImGuiKey_S) && sBfsar.isOpen())
-                SaveFile();
+                sWantsSaveDirect = true;
 
             if (ImGui::IsKeyPressed(ImGuiKey_O))
             {
@@ -1389,11 +1470,20 @@ void DrawUI()
 
         if (ImGui::Button("Yes", buttonSize))
         {
-            if (SaveFile())
+            if (ShouldWarnAboutMissingMetadata())
             {
-                sFileAction();
+                sPendingFileAction = sFileAction;
+                ImGui::CloseCurrentPopup();
+                ImGui::OpenPopup("###MetadataWarning");
             }
-            ImGui::CloseCurrentPopup();
+            else
+            {
+                if (SaveFile())
+                {
+                    sFileAction();
+                }
+                ImGui::CloseCurrentPopup();
+            }
         }
 
         ImGui::SameLine();
@@ -1414,6 +1504,65 @@ void DrawUI()
         }
 
         ImGui::EndPopup();
+    }
+
+    if (sWantsSaveDirect)
+    {
+        sWantsSaveDirect = false;
+        if (ShouldWarnAboutMissingMetadata())
+        {
+            sPendingFileAction = nullptr;
+            ImGui::OpenPopup("###MetadataWarning");
+        }
+        else
+        {
+            SaveFile();
+        }
+    }
+
+    {
+        ImVec2 c = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(c, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Save Names ?###MetadataWarning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text(ICON_LC_TRIANGLE_ALERT " This archive has named instruments or waves,\n"
+                                               "but metadata saving is disabled for this archive.\n"
+                                               "Save anyway without names, or enable metadata saving.");
+            ImGui::Separator();
+
+            bool saveMeta = sBfsar.getSaveMetadata();
+            ImGui::Checkbox("Save instrument/wave names for this archive", &saveMeta);
+            if (saveMeta != sBfsar.getSaveMetadata())
+                sBfsar.setSaveMetadata(saveMeta);
+
+            ImGui::Separator();
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+            f32 bw = 120.0f;
+            if (ImGui::Button("Save", ImVec2(bw, 0.0f)))
+            {
+                if (SaveFile())
+                {
+                    if (sPendingFileAction)
+                    {
+                        sPendingFileAction();
+                        sPendingFileAction = nullptr;
+                    }
+                }
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel", ImVec2(bw, 0.0f)))
+            {
+                sPendingFileAction = nullptr;
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
     }
 
     if (sNeedsNewFileFormat)

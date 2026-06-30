@@ -10,6 +10,8 @@
 
 #include <dsp/dsp.h>
 
+#include <string>
+
 class Sound;
 struct DecodedPcm;
 
@@ -524,6 +526,9 @@ private:
     bool mUseOriginalData;
     u8* mOriginalData;
     u32 mOriginalDataSize;
+
+    std::string mMd5Hash;
+    u32 mWaveArchiveId = UINT32_MAX;
 
     friend class Bfsar;
     friend class BfwarFile;

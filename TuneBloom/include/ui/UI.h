@@ -113,6 +113,10 @@ void SaveAudioConfig();
 void LoadAudioConfig();
 void ApplyAudioConfig();
 
+extern bool sSaveMetadataDefault;
+void SaveMetadataConfig();
+void LoadMetadataConfig();
+
 void OpenPreferencesWindow();
 
 void RequestExportInstrument(Item* instrument);

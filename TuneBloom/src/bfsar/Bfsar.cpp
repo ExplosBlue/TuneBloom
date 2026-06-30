@@ -33,11 +33,18 @@
 #include <VectorSet.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <map>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
+
+static void getMetadataPath_(sead::BufferedSafeString* out, const sead::SafeString& archivePath)
+{
+    out->format("%s.metadata.json", archivePath.cstr());
+}
 
 Bfsar::Bfsar()
     : mOpen(false)
@@ -47,6 +54,7 @@ Bfsar::Bfsar()
     , mEndian(sead::Endian::eBig)
     , mVersion(0x00010000)
     , mIncludeStringTable(true)
+    , mSaveMetadata(true)
     , mSoundArchivePlayerInfo()
 
     , mSoundList()
@@ -88,6 +96,7 @@ void Bfsar::create(ArchiveFormat format)
     mEndian = format == ArchiveFormat::BCSAR ? sead::Endian::eLittle : sead::Endian::eBig;
     mVersion = 0x00010000;
     mIncludeStringTable = true;
+    mSaveMetadata = sSaveMetadataDefault;
     mSoundArchivePlayerInfo.sequenceSoundMax = 64;
     mSoundArchivePlayerInfo.sequenceTrackMax = 64;
     mSoundArchivePlayerInfo.streamSoundMax = 4;
@@ -141,6 +150,24 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
     }
 
     delete bfsarFile;
+
+    if (success)
+    {
+        readNamesFromMetadata_(filePath);
+
+        sead::FixedSafeString<520> metadataPath;
+        getMetadataPath_(&metadataPath, filePath);
+        FILE* f = fopen(metadataPath.cstr(), "rb");
+        if (f)
+        {
+            fclose(f);
+            mSaveMetadata = true;
+        }
+        else
+        {
+            mSaveMetadata = sSaveMetadataDefault;
+        }
+    }
 
     mOpen = true;
 
@@ -913,6 +940,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                     }
 
                     mWaveFileList.pushBack(wave);
+                    wave->mMd5Hash = hash;
+                    wave->mWaveArchiveId = waveArchiveId;
                     warcFileCache[0].emplace_back(hash, globalId, waveFile, waveFileSize);
                     waveIdMapSet[0].insert(globalId);
                 }
@@ -1018,6 +1047,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 }
 
                 mWaveFileList.pushBack(wave);
+                wave->mMd5Hash = hash;
+                wave->mWaveArchiveId = waveArchiveId;
                 warcFileCache[i].emplace_back(hash, globalId, waveFile, waveFileSize);
                 waveIdMapSet[i].insert(globalId);
             }
@@ -3123,6 +3154,7 @@ struct pair_equal
     }
 };
 
+static std::string EscapeJsonString_(const std::string& s);
 void Bfsar::save_(sead::FileHandle& handle)
 {
     LOG_FUNC();
@@ -5543,6 +5575,106 @@ void Bfsar::save_(sead::FileHandle& handle)
 
         LOG_FMT("Stream files written: %d", (s32)writenFiles.size());
     }
+
+    // Write metadata names file
+    if (mSaveMetadata)
+    {
+        sead::FixedSafeString<520> metadataPath;
+        getMetadataPath_(&metadataPath, *mFilePath);
+
+        FILE *f = fopen(metadataPath.cstr(), "wb");
+        if (f)
+        {
+            std::string json;
+            json += "{\n";
+
+            // Banks -> instruments
+            json += "  \"banks\": {\n";
+            bool firstBank = true;
+            for (Item *bfItem : mBankFileList)
+            {
+                BankFile *bf = static_cast<BankFile *>(bfItem);
+
+                std::string bankSection;
+                bool firstInst = true;
+                for (Item *instItem : bf->getInstrumentList())
+                {
+                    BankFile::Instrument *inst = static_cast<BankFile::Instrument *>(instItem);
+                    if (inst->isNameValid())
+                    {
+                        if (firstInst)
+                        {
+                            bankSection += "        \"instruments\": {\n";
+                            firstInst = false;
+                        }
+                        else
+                        {
+                            bankSection += ",\n";
+                        }
+                        bankSection += "          \"" + std::to_string(inst->getProgramNo()) + "\": \"" + EscapeJsonString_(inst->getName().cstr()) + "\"";
+                    }
+                }
+
+                if (!firstInst)
+                {
+                    bankSection += "\n        }";
+                    if (!firstBank)
+                        json += ",\n";
+                    json += "    \"" + std::to_string(bf->getId()) + "\": {\n";
+                    json += bankSection + "\n      }";
+                    firstBank = false;
+                }
+            }
+            if (firstBank)
+                json += "    ";
+            json += "\n  },\n";
+
+            // WaveArchives -> waves
+            json += "  \"waveArchives\": {\n";
+            bool firstWarc = true;
+            for (const auto &warcPair : warcWaveFiles)
+            {
+                const WaveArchive *warc = warcPair.first;
+                const VectorSet<const WaveFile *> &waveFiles = warcPair.second;
+
+                bool firstWave = true;
+                std::string warcSection;
+                for (const WaveFile *wf : waveFiles)
+                {
+                    if (wf->isNameValid())
+                    {
+                        if (firstWave)
+                        {
+                            warcSection += "        \"waves\": {\n";
+                            firstWave = false;
+                        }
+                        else
+                        {
+                            warcSection += ",\n";
+                        }
+                        warcSection += "          \"" + wf->mMd5Hash + "\": \"" + EscapeJsonString_(wf->getName().cstr()) + "\"";
+                    }
+                }
+
+                if (!firstWave)
+                {
+                    warcSection += "\n        }";
+                    if (!firstWarc)
+                        json += ",\n";
+                    json += "    \"" + std::to_string(warc->getId()) + "\": {\n";
+                    json += warcSection + "\n      }";
+                    firstWarc = false;
+                }
+            }
+            if (firstWarc)
+                json += "    ";
+            json += "\n  }\n}\n";
+
+            fwrite(json.data(), 1, json.size(), f);
+            fclose(f);
+        }
+    }
+
     LOG_FMT("=== Archive saved (%.4s) ===", getArchiveMagic());
     {
         auto it = mGroupList.robustBegin();
@@ -5810,4 +5942,460 @@ bool Bfsar::validateName_(const sead::SafeString& name, const Item::List& list, 
     }
 
     return true;
+}
+
+static std::string EscapeJsonString_(const std::string &s)
+{
+    std::string out;
+    out.reserve(s.size() + 8);
+    for (char c : s)
+    {
+        switch (c)
+        {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            out += c;
+            break;
+        }
+    }
+    return out;
+}
+
+void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
+{
+    sead::FixedSafeString<520> metadataPath;
+    getMetadataPath_(&metadataPath, filePath);
+
+    FILE *f = fopen(metadataPath.cstr(), "rb");
+    if (!f)
+        return;
+
+    fseek(f, 0, SEEK_END);
+    long fileSize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (fileSize <= 0)
+    {
+        fclose(f);
+        return;
+    }
+
+    std::string content;
+    content.resize(fileSize);
+    fread(&content[0], 1, fileSize, f);
+    fclose(f);
+
+    size_t pos = 0;
+
+    auto skipWS = [&]()
+    {
+        while (pos < content.size() && (content[pos] == ' ' || content[pos] == '\t' || content[pos] == '\n' || content[pos] == '\r'))
+            pos++;
+    };
+
+    auto parseString = [&]() -> std::string
+    {
+        if (pos >= content.size() || content[pos] != '"')
+            return {};
+        pos++;
+        std::string result;
+        while (pos < content.size() && content[pos] != '"')
+        {
+            if (content[pos] == '\\')
+            {
+                pos++;
+                if (pos >= content.size())
+                    break;
+                switch (content[pos])
+                {
+                case '"':
+                    result += '"';
+                    break;
+                case '\\':
+                    result += '\\';
+                    break;
+                case '/':
+                    result += '/';
+                    break;
+                case 'n':
+                    result += '\n';
+                    break;
+                case 't':
+                    result += '\t';
+                    break;
+                case 'r':
+                    result += '\r';
+                    break;
+                default:
+                    result += content[pos];
+                    break;
+                }
+            }
+            else
+            {
+                result += content[pos];
+            }
+            pos++;
+        }
+        if (pos < content.size() && content[pos] == '"')
+            pos++;
+        return result;
+    };
+
+    auto skipValue = [&]()
+    {
+        if (pos >= content.size())
+            return;
+        if (content[pos] == '{')
+        {
+            int depth = 1;
+            pos++;
+            while (pos < content.size() && depth > 0)
+            {
+                if (content[pos] == '{')
+                    depth++;
+                else if (content[pos] == '}')
+                    depth--;
+                pos++;
+            }
+        }
+        else if (content[pos] == '[')
+        {
+            int depth = 1;
+            pos++;
+            while (pos < content.size() && depth > 0)
+            {
+                if (content[pos] == '[')
+                    depth++;
+                else if (content[pos] == ']')
+                    depth--;
+                pos++;
+            }
+        }
+        else if (content[pos] == '"')
+        {
+            parseString();
+        }
+        else
+        {
+            while (pos < content.size() && content[pos] != ',' && content[pos] != '}' && content[pos] != ']' && content[pos] != '\n')
+                pos++;
+        }
+    };
+
+    skipWS();
+    if (pos >= content.size() || content[pos] != '{')
+        return;
+    pos++;
+
+    while (pos < content.size())
+    {
+        skipWS();
+        if (pos >= content.size() || content[pos] == '}')
+            break;
+
+        std::string key = parseString();
+        if (key.empty())
+        {
+            skipWS();
+            if (content[pos] == ',')
+                pos++;
+            continue;
+        }
+
+        skipWS();
+        if (pos >= content.size() || content[pos] != ':')
+            break;
+        pos++;
+        skipWS();
+
+        if (key == "banks")
+        {
+            if (pos >= content.size() || content[pos] != '{')
+            {
+                skipValue();
+                goto next_member;
+            }
+            pos++;
+
+            while (pos < content.size())
+            {
+                skipWS();
+                if (pos >= content.size() || content[pos] == '}')
+                    break;
+
+                std::string bankIdStr = parseString();
+                if (bankIdStr.empty())
+                {
+                    skipWS();
+                    if (content[pos] == ',')
+                        pos++;
+                    continue;
+                }
+
+                skipWS();
+                if (pos >= content.size() || content[pos] != ':')
+                    break;
+                pos++;
+                skipWS();
+
+                if (pos >= content.size() || content[pos] != '{')
+                {
+                    skipValue();
+                    goto next_bank;
+                }
+                pos++;
+
+                char *end = nullptr;
+                u32 bankId = static_cast<u32>(std::strtoul(bankIdStr.c_str(), &end, 10));
+                if (end == bankIdStr.c_str() || *end != '\0')
+                {
+                    goto next_bank;
+                }
+
+                while (pos < content.size())
+                {
+                    skipWS();
+                    if (pos >= content.size() || content[pos] == '}')
+                        break;
+
+                    std::string bankMember = parseString();
+                    skipWS();
+                    if (pos >= content.size() || content[pos] != ':')
+                        break;
+                    pos++;
+                    skipWS();
+
+                    if (bankMember == "instruments")
+                    {
+                        if (pos >= content.size() || content[pos] != '{')
+                        {
+                            skipValue();
+                            goto next_bank_member;
+                        }
+                        pos++;
+
+                        while (pos < content.size())
+                        {
+                            skipWS();
+                            if (pos >= content.size() || content[pos] == '}')
+                                break;
+
+                            std::string progStr = parseString();
+                            skipWS();
+                            if (pos >= content.size() || content[pos] != ':')
+                                break;
+                            pos++;
+                            skipWS();
+
+                            std::string instName = parseString();
+
+                            char *end2 = nullptr;
+                            s16 programNo = static_cast<s16>(std::strtol(progStr.c_str(), &end2, 10));
+                            if (end2 == progStr.c_str() || *end2 != '\0')
+                            {
+                                skipWS();
+                                if (pos < content.size() && content[pos] == ',')
+                                    pos++;
+                                continue;
+                            }
+                            for (Item *bfItem : mBankFileList)
+                            {
+                                BankFile *bf = static_cast<BankFile *>(bfItem);
+                                if (bf->getId() == bankId)
+                                {
+                                    for (Item *instItem : bf->getInstrumentList())
+                                    {
+                                        BankFile::Instrument *inst = static_cast<BankFile::Instrument *>(instItem);
+                                        if (inst->getProgramNo() == programNo)
+                                        {
+                                            inst->getName() = instName.c_str();
+                                            inst->setEnableName(true);
+                                            goto found_instrument;
+                                        }
+                                    }
+                                found_instrument:;
+                                    break;
+                                }
+                            }
+
+                            skipWS();
+                            if (pos < content.size() && content[pos] == ',')
+                                pos++;
+                        }
+
+                        if (pos < content.size() && content[pos] == '}')
+                            pos++;
+                    }
+                    else
+                    {
+                        skipValue();
+                    }
+
+                next_bank_member:;
+                    skipWS();
+                    if (pos < content.size() && content[pos] == ',')
+                        pos++;
+                }
+
+                if (pos < content.size() && content[pos] == '}')
+                    pos++;
+
+            next_bank:;
+                skipWS();
+                if (pos < content.size() && content[pos] == ',')
+                    pos++;
+            }
+
+            if (pos < content.size() && content[pos] == '}')
+                pos++;
+        }
+        else if (key == "waveArchives")
+        {
+            if (pos >= content.size() || content[pos] != '{')
+            {
+                skipValue();
+                goto next_member;
+            }
+            pos++;
+
+            while (pos < content.size())
+            {
+                skipWS();
+                if (pos >= content.size() || content[pos] == '}')
+                    break;
+
+                std::string warcIdStr = parseString();
+                if (warcIdStr.empty())
+                {
+                    skipWS();
+                    if (content[pos] == ',')
+                        pos++;
+                    continue;
+                }
+
+                skipWS();
+                if (pos >= content.size() || content[pos] != ':')
+                    break;
+                pos++;
+                skipWS();
+
+                if (pos >= content.size() || content[pos] != '{')
+                {
+                    skipValue();
+                    goto next_warc;
+                }
+                pos++;
+
+                char *end3 = nullptr;
+                u32 warcId_ = static_cast<u32>(std::strtoul(warcIdStr.c_str(), &end3, 10));
+                if (end3 == warcIdStr.c_str() || *end3 != '\0')
+                {
+                    goto next_warc;
+                }
+                (void)warcId_;
+
+                while (pos < content.size())
+                {
+                    skipWS();
+                    if (pos >= content.size() || content[pos] == '}')
+                        break;
+
+                    std::string warcMember = parseString();
+                    skipWS();
+                    if (pos >= content.size() || content[pos] != ':')
+                        break;
+                    pos++;
+                    skipWS();
+
+                    if (warcMember == "waves")
+                    {
+                        if (pos >= content.size() || content[pos] != '{')
+                        {
+                            skipValue();
+                            goto next_warc_member;
+                        }
+                        pos++;
+
+                        while (pos < content.size())
+                        {
+                            skipWS();
+                            if (pos >= content.size() || content[pos] == '}')
+                                break;
+
+                            std::string md5Hash = parseString();
+                            skipWS();
+                            if (pos >= content.size() || content[pos] != ':')
+                                break;
+                            pos++;
+                            skipWS();
+
+                            std::string waveName = parseString();
+
+                            for (Item *wfItem : mWaveFileList)
+                            {
+                                WaveFile *wf = static_cast<WaveFile *>(wfItem);
+                                if (wf->mMd5Hash == md5Hash)
+                                {
+                                    wf->getName() = waveName.c_str();
+                                    wf->setEnableName(true);
+                                    break;
+                                }
+                            }
+
+                            skipWS();
+                            if (pos < content.size() && content[pos] == ',')
+                                pos++;
+                        }
+
+                        if (pos < content.size() && content[pos] == '}')
+                            pos++;
+                    }
+                    else
+                    {
+                        skipValue();
+                    }
+
+                next_warc_member:;
+                    skipWS();
+                    if (pos < content.size() && content[pos] == ',')
+                        pos++;
+                }
+
+                if (pos < content.size() && content[pos] == '}')
+                    pos++;
+
+            next_warc:;
+                skipWS();
+                if (pos < content.size() && content[pos] == ',')
+                    pos++;
+            }
+
+            if (pos < content.size() && content[pos] == '}')
+                pos++;
+        }
+        else
+        {
+            skipValue();
+        }
+
+    next_member:;
+        skipWS();
+        if (pos < content.size() && content[pos] == ',')
+            pos++;
+    }
 }

@@ -384,5 +384,6 @@ static void SetupImGuiStyle()
 
     LoadAccentColor();
     LoadRecentFiles();
+    LoadMetadataConfig();
     ApplyThemeFromAccent(gAccentColor);
 }

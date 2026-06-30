@@ -326,7 +326,13 @@ public:
         sead::FixedSafeString<256> getFormattedName() const override
         {
             sead::FixedSafeString<256> name;
-            name.appendWithFormat("Instrument %d", mProgramNo);
+
+            if (isNameValid()) {
+                name.appendWithFormat("[%d] %s", mProgramNo, mName.cstr());
+            } else {
+                name.appendWithFormat("Instrument %d", mProgramNo);
+            }
+
             return name;
         }
 

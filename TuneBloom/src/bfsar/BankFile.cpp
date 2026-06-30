@@ -783,6 +783,39 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
 
 void BankFile::Instrument::drawUI()
 {
+    bool enableName = isEnableName();
+    if (ImGui::Checkbox("Enable Name", &enableName))
+    {
+        setEnableName(enableName);
+        if (!enableName)
+            getName().clear();
+        SetUnsavedChanges(true);
+    }
+
+    if (!isEnableName())
+        ImGui::BeginDisabled();
+
+    sead::FixedSafeString<256> name(getName());
+    if (ImGui::InputText("Name", name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
+    {
+        if (name != getName())
+        {
+            if (name.isEmpty())
+            {
+                setEnableName(false);
+            }
+            else
+            {
+                getName() = name;
+                setEnableName(true);
+            }
+            SetUnsavedChanges(true);
+        }
+    }
+
+    if (!isEnableName())
+        ImGui::EndDisabled();
+
     static ImS16 cStepS16 = 1;
     {
         s16 program = getProgramNo();

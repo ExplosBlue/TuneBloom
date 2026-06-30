@@ -365,6 +365,39 @@ void WaveFile::drawUI()
     DrawVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3);
     ImGui::EndDisabled();
 
+    bool enableName = isEnableName();
+    if (ImGui::Checkbox("Enable Name", &enableName))
+    {
+        setEnableName(enableName);
+        if (!enableName)
+            getName().clear();
+        SetUnsavedChanges(true);
+    }
+
+    if (!isEnableName())
+        ImGui::BeginDisabled();
+
+    sead::FixedSafeString<256> name(getName());
+    if (ImGui::InputText("Name", name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
+    {
+        if (name != getName())
+        {
+            if (name.isEmpty())
+            {
+                setEnableName(false);
+            }
+            else
+            {
+                getName() = name;
+                setEnableName(true);
+            }
+            SetUnsavedChanges(true);
+        }
+    }
+
+    if (!isEnableName())
+        ImGui::EndDisabled();
+
     ImGui::SeparatorText("");
 
     const ImU32 cStepU32 = 1;

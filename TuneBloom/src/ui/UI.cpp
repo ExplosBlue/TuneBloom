@@ -3,6 +3,8 @@
 
 #include <ui/PopupMgr.h>
 
+#include <theme/SystemTheme.h>
+
 //#include <snd/SoundThread.h>
 #include <snd/SoundSystem.h>
 
@@ -52,6 +54,7 @@ ImVec4 gAccentColor = ImVec4(0.24f, 0.50f, 0.88f, 1.00f);
 f32 gThemeBrightness = 1.0f;
 f32 gThemeSaturation = 1.0f;
 f32 gThemeContrast = 1.0f;
+bool gThemeIsDark = true;
 
 void SetUITab(UIType type)
 {
@@ -499,7 +502,7 @@ static void DrawMidiOptions()
             ImGui::PushID((int)i);
             if (DrawMidiDeviceRow(name,
                                   connected ? "Connected" : "Disabled",
-                                  connected ? ImVec4(0.45f, 0.85f, 0.5f, 1.0f) : ImVec4(0.62f, 0.62f, 0.62f, 1.0f)))
+                                  connected ? ImVec4(0.45f, 0.85f, 0.5f, 1.0f) : ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]))
             {
                 if (connected)
                 {
@@ -558,6 +561,12 @@ static void DrawAppearanceOptions()
     bool changed = false;
     bool done = false;
 
+    PrefLabel("Theme");
+    int mode = gThemeIsDark ? 0 : 1;
+    if (ImGui::RadioButton("Dark", mode == 0)) { gThemeIsDark = true; changed = true; done = true; }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Light", mode == 1)) { gThemeIsDark = false; changed = true; done = true; }
+
     PrefLabel("Accent color");
     if (ImGui::SliderFloat("##color", &h, 0.0f, 1.0f, ""))
     {
@@ -595,6 +604,7 @@ static void DrawAppearanceOptions()
         gThemeBrightness = 1.0f;
         gThemeSaturation = 1.0f;
         gThemeContrast = 1.0f;
+        gThemeIsDark = true;
         changed = true;
         done = true;
     }
@@ -837,67 +847,85 @@ void ApplyThemeFromAccent(ImVec4 accent)
 {
     float h, s, v;
     ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, h, s, v);
-
-    if (s < 0.05f)
-        h = 0.0f;
+    if (s < 0.05f) h = 0.0f;
 
     ImVec4* colors = ImGui::GetStyle().Colors;
+    bool dark = gThemeIsDark;
 
-    colors[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.93f, 0.90f);
-    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.52f, 1.00f);
-    colors[ImGuiCol_WindowBg] = HSV(h, 0.40f, 0.17f);
-    colors[ImGuiCol_ChildBg] = HSV(h, 0.35f, 0.13f);
-    colors[ImGuiCol_PopupBg] = HSV(h, 0.38f, 0.15f, 0.85f);
-    colors[ImGuiCol_Border] = HSV(h, 0.30f, 0.40f, 0.65f);
-    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_FrameBg] = HSV(h, 0.42f, 0.22f);
-    colors[ImGuiCol_FrameBgHovered] = HSV(h, 0.45f, 0.32f, 0.40f);
-    colors[ImGuiCol_FrameBgActive] = HSV(h, 0.48f, 0.38f, 0.45f);
-    colors[ImGuiCol_TitleBg] = HSV(h, 0.30f, 0.12f, 0.83f);
-    colors[ImGuiCol_TitleBgActive] = HSV(h, 0.32f, 0.14f, 0.87f);
-    colors[ImGuiCol_TitleBgCollapsed] = HSV(h, 0.35f, 0.20f, 0.20f);
-    colors[ImGuiCol_MenuBarBg] = HSV(h, 0.35f, 0.13f, 0.80f);
-    colors[ImGuiCol_ScrollbarBg] = HSV(h, 0.38f, 0.20f, 0.60f);
-    colors[ImGuiCol_ScrollbarGrab] = HSV(h, 0.40f, 0.38f, 0.51f);
-    colors[ImGuiCol_ScrollbarGrabHovered] = HSV(h, 0.45f, 0.48f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive] = HSV(h, 0.50f, 0.56f, 0.91f);
-    colors[ImGuiCol_CheckMark] = HSV(h, 0.60f, 0.80f, 0.83f);
-    colors[ImGuiCol_SliderGrab] = HSV(h, 0.40f, 0.45f, 0.62f);
-    colors[ImGuiCol_SliderGrabActive] = HSV(h, 0.50f, 0.65f, 0.84f);
-    colors[ImGuiCol_Button] = HSV(h, 0.50f, 0.60f, 0.49f);
-    colors[ImGuiCol_ButtonHovered] = HSV(h, 0.50f, 0.70f, 0.68f);
-    colors[ImGuiCol_ButtonActive] = HSV(h, 0.55f, 0.50f, 1.00f);
-    colors[ImGuiCol_Header] = HSV(h, 0.45f, 0.50f, 0.53f);
-    colors[ImGuiCol_HeaderHovered] = HSV(h, 0.50f, 0.65f, 1.00f);
-    colors[ImGuiCol_HeaderActive] = HSV(h, 0.55f, 0.55f, 1.00f);
-    colors[ImGuiCol_Separator] = HSV(h, 0.15f, 0.30f, 0.50f);
-    colors[ImGuiCol_SeparatorHovered] = HSV(h, 0.40f, 0.55f, 0.78f);
-    colors[ImGuiCol_SeparatorActive] = HSV(h, 0.50f, 0.65f, 1.00f);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(1.00f, 1.00f, 1.00f, 0.85f);
-    colors[ImGuiCol_ResizeGripHovered] = ImVec4(1.00f, 1.00f, 1.00f, 0.60f);
-    colors[ImGuiCol_ResizeGripActive] = ImVec4(1.00f, 1.00f, 1.00f, 0.90f);
-    colors[ImGuiCol_Tab] = HSV(h, 0.35f, 0.18f);
-    colors[ImGuiCol_TabHovered] = HSV(h, 0.50f, 0.55f, 0.80f);
-    colors[ImGuiCol_TabActive] = HSV(h, 0.38f, 0.24f);
-    colors[ImGuiCol_TabUnfocused] = HSV(h, 0.30f, 0.14f);
-    colors[ImGuiCol_TabUnfocusedActive] = HSV(h, 0.32f, 0.20f);
-    colors[ImGuiCol_DockingPreview] = HSV(h, 0.50f, 0.65f, 0.70f);
-    colors[ImGuiCol_DockingEmptyBg] = HSV(h, 0.00f, 0.20f);
-    colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
-    colors[ImGuiCol_PlotLinesHovered] = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-    colors[ImGuiCol_PlotHistogram] = HSV(h, 0.55f, 0.65f, 1.00f);
-    colors[ImGuiCol_PlotHistogramHovered] = HSV(h, 0.55f, 0.80f, 1.00f);
-    colors[ImGuiCol_TableHeaderBg] = HSV(h, 0.35f, 0.22f);
-    colors[ImGuiCol_TableBorderStrong] = HSV(h, 0.20f, 0.25f);
-    colors[ImGuiCol_TableBorderLight] = HSV(h, 0.15f, 0.18f);
-    colors[ImGuiCol_TableRowBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TableRowBgAlt] = ImVec4(1.00f, 1.00f, 1.00f, 0.06f);
-    colors[ImGuiCol_TextSelectedBg] = HSV(h, 0.40f, 0.40f, 0.35f);
-    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
-    colors[ImGuiCol_NavHighlight] = HSV(h, 0.50f, 0.60f, 1.00f);
-    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+    auto C = [&](float s, float v, float a = 1.0f) { return HSV(h, s, v, a); };
+    auto D = [&](float ds, float dv, float ls, float lv) { return dark ? C(ds, dv) : C(ls, lv); };
+    auto F = [&](ImVec4 d, ImVec4 l) { return dark ? d : l; };
+
+    colors[ImGuiCol_Text]              = F({0.92f, 0.92f, 0.93f, 0.90f}, {0.07f, 0.07f, 0.08f, 0.97f});
+    colors[ImGuiCol_TextDisabled]      = ImVec4(0.50f, 0.50f, 0.52f, 1.00f);
+
+    colors[ImGuiCol_WindowBg]          = D(0.40f, 0.17f, 0.08f, 0.98f);
+    colors[ImGuiCol_ChildBg]           = D(0.35f, 0.13f, 0.06f, 1.00f);
+    colors[ImGuiCol_PopupBg]           = dark ? C(0.38f, 0.15f, 0.85f) : C(0.08f, 0.99f, 0.97f);
+    colors[ImGuiCol_Border]            = dark ? C(0.30f, 0.40f, 0.65f) : C(0.10f, 0.82f, 0.55f);
+    colors[ImGuiCol_BorderShadow]      = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+
+    colors[ImGuiCol_FrameBg]           = D(0.42f, 0.22f, 0.12f, 0.95f);
+    colors[ImGuiCol_FrameBgHovered]    = dark ? C(0.45f, 0.32f, 0.40f) : C(0.30f, 0.88f, 0.35f);
+    colors[ImGuiCol_FrameBgActive]     = dark ? C(0.48f, 0.38f, 0.45f) : C(0.35f, 0.83f, 0.42f);
+
+    colors[ImGuiCol_TitleBg]           = dark ? C(0.30f, 0.12f, 0.83f) : C(0.15f, 0.93f, 0.90f);
+    colors[ImGuiCol_TitleBgActive]     = dark ? C(0.32f, 0.14f, 0.87f) : C(0.20f, 0.88f, 0.95f);
+    colors[ImGuiCol_TitleBgCollapsed]  = dark ? C(0.35f, 0.20f, 0.20f) : C(0.12f, 0.94f, 0.40f);
+    colors[ImGuiCol_MenuBarBg]         = dark ? C(0.35f, 0.13f, 0.80f) : C(0.08f, 0.96f, 0.90f);
+
+    colors[ImGuiCol_ScrollbarBg]           = dark ? C(0.38f, 0.20f, 0.60f) : C(0.06f, 0.93f, 0.55f);
+    colors[ImGuiCol_ScrollbarGrab]         = dark ? C(0.40f, 0.38f, 0.51f) : C(0.20f, 0.70f, 0.50f);
+    colors[ImGuiCol_ScrollbarGrabHovered]  = dark ? C(0.45f, 0.48f, 1.00f) : C(0.30f, 0.65f, 0.62f);
+    colors[ImGuiCol_ScrollbarGrabActive]   = dark ? C(0.50f, 0.56f, 0.91f) : C(0.40f, 0.70f, 0.78f);
+
+    colors[ImGuiCol_CheckMark]             = dark ? C(0.60f, 0.80f, 0.83f) : C(0.60f, 0.70f, 0.78f);
+    colors[ImGuiCol_SliderGrab]            = dark ? C(0.40f, 0.45f, 0.62f) : C(0.45f, 0.55f, 0.55f);
+    colors[ImGuiCol_SliderGrabActive]      = dark ? C(0.50f, 0.65f, 0.84f) : C(0.55f, 0.65f, 0.78f);
+
+    colors[ImGuiCol_Button]                = dark ? C(0.50f, 0.60f, 0.49f) : C(0.18f, 0.99f, 0.55f);
+    colors[ImGuiCol_ButtonHovered]         = dark ? C(0.50f, 0.70f, 0.68f) : C(0.32f, 1.00f, 0.65f);
+    colors[ImGuiCol_ButtonActive]          = dark ? C(0.55f, 0.50f, 1.00f) : C(0.45f, 1.00f, 0.80f);
+
+    colors[ImGuiCol_Header]                = dark ? C(0.45f, 0.50f, 0.53f) : C(0.15f, 0.99f, 0.38f);
+    colors[ImGuiCol_HeaderHovered]         = dark ? C(0.50f, 0.65f, 1.00f) : C(0.28f, 1.00f, 0.55f);
+    colors[ImGuiCol_HeaderActive]          = dark ? C(0.55f, 0.55f, 1.00f) : C(0.40f, 1.00f, 0.72f);
+
+    colors[ImGuiCol_Separator]             = dark ? C(0.15f, 0.30f, 0.50f) : C(0.10f, 0.40f, 0.32f);
+    colors[ImGuiCol_SeparatorHovered]      = dark ? C(0.40f, 0.55f, 0.78f) : C(0.35f, 0.50f, 0.55f);
+    colors[ImGuiCol_SeparatorActive]       = dark ? C(0.50f, 0.65f, 1.00f) : C(0.45f, 0.60f, 0.78f);
+
+    colors[ImGuiCol_ResizeGrip]            = F({1.00f, 1.00f, 1.00f, 0.85f}, {0.00f, 0.00f, 0.00f, 0.25f});
+    colors[ImGuiCol_ResizeGripHovered]     = F({1.00f, 1.00f, 1.00f, 0.60f}, {0.00f, 0.00f, 0.00f, 0.45f});
+    colors[ImGuiCol_ResizeGripActive]      = F({1.00f, 1.00f, 1.00f, 0.90f}, {0.00f, 0.00f, 0.00f, 0.65f});
+
+    colors[ImGuiCol_Tab]                   = D(0.35f, 0.18f, 0.14f, 0.99f);
+    colors[ImGuiCol_TabHovered]            = dark ? C(0.50f, 0.55f, 0.80f) : C(0.30f, 1.00f, 0.50f);
+    colors[ImGuiCol_TabActive]             = dark ? C(0.38f, 0.24f) : C(0.22f, 0.99f);
+    colors[ImGuiCol_TabUnfocused]          = D(0.30f, 0.14f, 0.08f, 0.96f);
+    colors[ImGuiCol_TabUnfocusedActive]    = D(0.32f, 0.20f, 0.12f, 0.90f);
+
+    colors[ImGuiCol_DockingPreview]        = dark ? C(0.50f, 0.65f, 0.70f) : C(0.45f, 0.55f, 0.50f);
+    colors[ImGuiCol_DockingEmptyBg]        = D(0.00f, 0.20f, 0.00f, 0.85f);
+
+    colors[ImGuiCol_PlotLines]             = F({1.00f, 1.00f, 1.00f, 1.00f}, {0.08f, 0.08f, 0.10f, 1.00f});
+    colors[ImGuiCol_PlotLinesHovered]      = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogram]         = dark ? C(0.55f, 0.65f, 1.00f) : C(0.50f, 0.62f, 0.75f);
+    colors[ImGuiCol_PlotHistogramHovered]  = dark ? C(0.55f, 0.80f, 1.00f) : C(0.55f, 0.75f, 0.82f);
+
+    colors[ImGuiCol_TableHeaderBg]         = D(0.35f, 0.22f, 0.12f, 0.91f);
+    colors[ImGuiCol_TableBorderStrong]     = D(0.20f, 0.25f, 0.15f, 0.62f);
+    colors[ImGuiCol_TableBorderLight]      = D(0.15f, 0.18f, 0.10f, 0.88f);
+    colors[ImGuiCol_TableRowBg]            = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_TableRowBgAlt]         = F({1.00f, 1.00f, 1.00f, 0.06f}, {0.00f, 0.00f, 0.00f, 0.03f});
+
+    colors[ImGuiCol_TextSelectedBg]        = dark ? C(0.40f, 0.40f, 0.35f) : C(0.35f, 0.45f, 0.25f);
+    colors[ImGuiCol_DragDropTarget]        = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+
+    colors[ImGuiCol_NavHighlight]          = dark ? C(0.50f, 0.60f, 1.00f) : C(0.45f, 0.55f, 0.70f);
+    colors[ImGuiCol_NavWindowingHighlight] = F({1.00f, 1.00f, 1.00f, 0.70f}, {0.00f, 0.00f, 0.00f, 0.40f});
+    colors[ImGuiCol_NavWindowingDimBg]     = F({0.80f, 0.80f, 0.80f, 0.20f}, {0.20f, 0.20f, 0.20f, 0.20f});
+    colors[ImGuiCol_ModalWindowDimBg]      = F({0.80f, 0.80f, 0.80f, 0.35f}, {0.20f, 0.20f, 0.20f, 0.25f});
 }
 
 static std::string GetConfigDir()
@@ -936,7 +964,7 @@ void SaveAccentColor()
     FILE* f = fopen(path.c_str(), "w");
     if (f)
     {
-        fprintf(f, "%f %f %f %f %f %f %f\n", gAccentColor.x, gAccentColor.y, gAccentColor.z, gAccentColor.w, gThemeBrightness, gThemeSaturation, gThemeContrast);
+        fprintf(f, "%f %f %f %f %f %f %f %d\n", gAccentColor.x, gAccentColor.y, gAccentColor.z, gAccentColor.w, gThemeBrightness, gThemeSaturation, gThemeContrast, gThemeIsDark ? 1 : 0);
         fclose(f);
     }
 }
@@ -948,14 +976,20 @@ void LoadAccentColor()
     FILE* f = fopen(path.c_str(), "r");
     if (f)
     {
-        int n = fscanf(f, "%f %f %f %f %f %f %f", &gAccentColor.x, &gAccentColor.y, &gAccentColor.z, &gAccentColor.w, &gThemeBrightness, &gThemeSaturation, &gThemeContrast);
+        int isDarkInt = 1;
+        int n = fscanf(f, "%f %f %f %f %f %f %f %d", &gAccentColor.x, &gAccentColor.y, &gAccentColor.z, &gAccentColor.w, &gThemeBrightness, &gThemeSaturation, &gThemeContrast, &isDarkInt);
         if (n < 5)
             gThemeBrightness = 1.0f;
         if (n < 6)
             gThemeSaturation = 1.0f;
         if (n < 7)
             gThemeContrast = 1.0f;
+        gThemeIsDark = (n < 8) ? systemtheme::isDark() : (isDarkInt != 0);
         fclose(f);
+    }
+    else
+    {
+        gThemeIsDark = systemtheme::isDark();
     }
 }
 

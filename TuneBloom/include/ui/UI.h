@@ -221,8 +221,19 @@ inline void DupeNamePopup(const char* name = "###Dupe")
     WarningPopup(name, "An item with this name already exists.\nPlease use another one.");
 }
 
+bool ComboScroll(const char *label, int *current_item, const char *const items[], int items_count, int popup_max_height_in_items = -1);
+
+struct SortState
+{
+    int mode = -1;
+    bool ascending = true;
+};
+
+bool DrawSortToolbar(SortState &state, bool showFileSize = false, bool trailingDivider = false);
+bool DrawIncludeStreamWavesCheckbox(bool* value);
+
 InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback instanciateItemCallback, ItemPropertiesCallback itemPropertiesCallback);
-void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback = nullptr, ItemNamePrefixCallback nameCallback = nullptr, ContextMenuCallback menuCallback = nullptr, ItemFilterCallback filterCallback = nullptr, bool disableAddWindow = false, ContextMenuCallback beforeDeleteCallback = nullptr);
+void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback = nullptr, ItemNamePrefixCallback nameCallback = nullptr, ContextMenuCallback menuCallback = nullptr, ItemFilterCallback filterCallback = nullptr, bool disableAddWindow = false, ContextMenuCallback beforeDeleteCallback = nullptr, int sortMode = -1, bool sortAscending = true);
 void DrawItemPropertiesUI();
 bool ItemSelector(const char* name, const Item::List& list, Item** item, bool allowNone = false);
 bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** warc, const Item::List& warcList);
@@ -245,6 +256,7 @@ inline void CenteredTextX(const char* text, f32 sizeX = ImGui::GetWindowSize().x
 }
 
 void HelpMarker(const char* desc);
+void FormatFileSizeWithPct(sead::BufferedSafeString& out, u32 fileSize, u32 totalSize);
 
 //? Keyboard
 

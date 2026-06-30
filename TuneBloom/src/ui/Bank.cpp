@@ -69,9 +69,12 @@ const char* BankNamePrefixFunc(Item* item)
 
 void DrawBanksUI()
 {
+    static SortState sSortState;
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Bank", sBfsar.getBankList(),
-        &CreateBankFunc, &BankNamePrefixFunc, nullptr, GetItemFilterCallback()
-    );
+                   &CreateBankFunc, &BankNamePrefixFunc, nullptr, GetItemFilterCallback(),
+                   false, nullptr, sSortState.mode, sSortState.ascending);
 }
 
 void DrawBankPropertiesUI()

@@ -31,19 +31,23 @@ const Item* Player::validate(sead::BufferedSafeString& error) const
 
 InstanciateItemCallback CreatePlayerFunc(bool clear)
 {
-    return CreateItemFunc(clear, []() -> Item* { return new Player(); }, nullptr);
+    return CreateItemFunc(clear, []() -> Item * { return new Player(); }, nullptr);
 }
 
 void DrawPlayersUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Player", sBfsar.getPlayerList(),
-        &CreatePlayerFunc, nullptr, nullptr, GetItemFilterCallback()
-    );
+                   &CreatePlayerFunc, nullptr, nullptr, GetItemFilterCallback(),
+                   false, nullptr, sSortState.mode, sSortState.ascending);
 }
 
 void DrawPlayerPropertiesUI()
 {
-    Player* player = static_cast<Player*>(sSelectedItem);
+    Player *player = static_cast<Player *>(sSelectedItem);
 
     const ImU32 cStepU32 = 1;
 

@@ -19,8 +19,12 @@ InstanciateItemCallback CreateWaveArchiveFunc(bool clear)
 
 void DrawWaveArchivesUI()
 {
+    static SortState sSortState;
+    
+    DrawSortToolbar(sSortState);
     DrawAllItemsUI("Wave Archive", sBfsar.getWaveArchiveList(),
-        &CreateWaveArchiveFunc, nullptr, nullptr, GetItemFilterCallback()
+        &CreateWaveArchiveFunc, nullptr, nullptr, GetItemFilterCallback(),
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
 }
 

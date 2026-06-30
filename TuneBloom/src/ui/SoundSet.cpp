@@ -277,10 +277,10 @@ void DrawSoundSetPropertiesUI()
     const ImU32 cStepU32 = 1;
 
     {
-        static const char* sSoundSetTypes[] = { "Wave", "Sequence" };
+        static const char *sSoundSetTypes[] = {"Wave", "Sequence"};
 
         SoundSet::SoundSetType soundSetType = soundSet->getSoundSetType();
-        if (ImGui::Combo("Sound Type", (s32*)&soundSetType, sSoundSetTypes, IM_ARRAYSIZE(sSoundSetTypes)))
+        if (ComboScroll("Sound Type", (s32 *)&soundSetType, sSoundSetTypes, IM_ARRAYSIZE(sSoundSetTypes)))
         {
             soundSet->setSoundSetType(soundSetType);
             SetUnsavedChanges(true);

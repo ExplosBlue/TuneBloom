@@ -59,14 +59,18 @@ const Item* Group::validate(sead::BufferedSafeString& error) const
 
 InstanciateItemCallback CreateGroupFunc(bool clear)
 {
-    return CreateItemFunc(clear, []() -> Item* { return new Group(); }, nullptr);
+    return CreateItemFunc(clear, []() -> Item * { return new Group(); }, nullptr);
 }
 
 void DrawGroupsUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Group", sBfsar.getGroupList(),
-        &CreateGroupFunc, nullptr, nullptr, GetItemFilterCallback()
-    );
+                   &CreateGroupFunc, nullptr, nullptr, GetItemFilterCallback(),
+                   false, nullptr, sSortState.mode, sSortState.ascending);
 }
 
 void DrawGroupPropertiesUI()
@@ -81,7 +85,7 @@ void DrawGroupPropertiesUI()
         };
 
         u32 outputType = (u32)group->getOutputType();
-        if (ImGui::Combo("Output Type", (s32*)&outputType, sOutputTypes, IM_ARRAYSIZE(sOutputTypes)))
+        if (ComboScroll("Output Type", (s32*)&outputType, sOutputTypes, IM_ARRAYSIZE(sOutputTypes)))
         {
             group->setOutputType(static_cast<Group::OutputType>(outputType));
             SetUnsavedChanges(true);
@@ -115,7 +119,7 @@ void Group::ItemInfo::drawUI()
 
     {
         u32 itemRefType = (u32)mItemRefType - 1;
-        if (ImGui::Combo("Item Type", (s32*)&itemRefType, sItemIdTypes, IM_ARRAYSIZE(sItemIdTypes)))
+        if (ComboScroll("Item Type", (s32 *)&itemRefType, sItemIdTypes, IM_ARRAYSIZE(sItemIdTypes)))
         {
             mItemRefType = static_cast<ItemType>(itemRefType + 1);
             mItemRef.detach();
@@ -186,7 +190,7 @@ void Group::ItemInfo::drawUI()
             loadItem = 0;
         }
 
-        if (ImGui::Combo("Load Items", (s32*)&loadItem, items, itemCount))
+        if (ComboScroll("Load Items", (s32 *)&loadItem, items, itemCount))
         {
             mLoadItem = loadItem;
             SetUnsavedChanges(true);

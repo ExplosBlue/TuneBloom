@@ -194,14 +194,14 @@ void DrawSoundPropertiesUI()
             ImGui::BeginDisabled();
 
         {
-            static const char* sPanModes[] = {
+            static const char *sPanModes[] = {
                 "Dual",
                 "Balance",
                 //"Invalid"
             };
 
             snd::PanMode panMode = sound->getPanMode();
-            if (ImGui::Combo("Pan Mode", (s32*)&panMode, sPanModes, IM_ARRAYSIZE(sPanModes)))
+            if (ComboScroll("Pan Mode", (s32 *)&panMode, sPanModes, IM_ARRAYSIZE(sPanModes)))
             {
                 sound->setPanMode(panMode);
                 SetUnsavedChanges(true);
@@ -223,7 +223,7 @@ void DrawSoundPropertiesUI()
             };
 
             snd::PanCurve panCurve = sound->getPanCurve();
-            if (ImGui::Combo("Pan Curve", (s32*)&panCurve, sPanCurves, IM_ARRAYSIZE(sPanCurves)))
+            if (ComboScroll("Pan Curve", (s32*)&panCurve, sPanCurves, IM_ARRAYSIZE(sPanCurves)))
             {
                 sound->setPanCurve(panCurve);
                 SetUnsavedChanges(true);
@@ -410,10 +410,10 @@ void DrawSoundPropertiesUI()
             }
 
             {
-                static const char* sCurveTypes[] = { "Logarithmic", "Linear" };
+                static const char *sCurveTypes[] = {"Logarithmic", "Linear"};
 
                 u32 decayCurve = (enableSound3DInfo ? sound3DInfo.getDecayCurve() : Sound::Sound3DInfo::DecayCurve::Logarithmic) - 1;
-                if (ImGui::Combo("Decay Curve", (s32*)&decayCurve, sCurveTypes, IM_ARRAYSIZE(sCurveTypes)))
+                if (ComboScroll("Decay Curve", (s32 *)&decayCurve, sCurveTypes, IM_ARRAYSIZE(sCurveTypes)))
                 {
                     sound3DInfo.setDecayCurve(decayCurve + 1);
                     SetUnsavedChanges(true);
@@ -437,14 +437,14 @@ void DrawSoundPropertiesUI()
     }
 
     {
-        static const char* sSoundTypes[] = {
+        static const char *sSoundTypes[] = {
             "Sequence",
             "Stream",
             "Wave"
         };
 
         u32 soundType = (u32)sound->getSoundType() - 1;
-        if (ImGui::Combo("Sound Type", (s32*)&soundType, sSoundTypes, IM_ARRAYSIZE(sSoundTypes)))
+        if (ComboScroll("Sound Type", (s32 *)&soundType, sSoundTypes, IM_ARRAYSIZE(sSoundTypes)))
         {
             sound->setSoundType(static_cast<Sound::SoundType>(soundType + 1));
             SetUnsavedChanges(true);
@@ -826,11 +826,11 @@ void DrawSoundPropertiesUI()
                         ImGui::BeginDisabled();
 
                     {
-                        const char* streamFmt = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
-                        const char* streamTypeLabels[] = { streamFmt, "ADTS (AAC)" };
+                        const char *streamFmt = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+                        const char *streamTypeLabels[] = {streamFmt, "ADTS (AAC)"};
 
                         u32 streamType = (enableSend ? strmSoundInfo.getStreamType() : Sound::StreamSoundInfo::StreamType::NwStreamBinary) - 1;
-                        if (ImGui::Combo("Stream Type", (s32*)&streamType, streamTypeLabels, IM_ARRAYSIZE(streamTypeLabels)))
+                        if (ComboScroll("Stream Type", (s32 *)&streamType, streamTypeLabels, IM_ARRAYSIZE(streamTypeLabels)))
                         {
                             strmSoundInfo.setStreamType(static_cast<Sound::StreamSoundInfo::StreamType>(streamType + 1));
                             SetUnsavedChanges(true);

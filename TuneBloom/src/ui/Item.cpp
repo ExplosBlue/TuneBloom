@@ -161,7 +161,8 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
 {
     bool add = false;
 
-    if (item ? ImGui::BeginPopupContextItem() : ImGui::BeginPopupContextWindow())
+    sead::FormatFixedSafeString<64> ctxId("%p", item);
+    if (item ? ImGui::BeginPopupContextItem(ctxId.cstr()) : ImGui::BeginPopupContextWindow())
     {
         if (item)
         {
@@ -263,26 +264,83 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
         if (menuCallback)
         {
             menuCallback(item, false);
-        }
-
-        if (menuCallback)
-        {
             menuCallback(item, true);
         }
 
-        ImGui::End();
+        ImGui::EndPopup();
     }
 
     return add;
 }
 
-static Item* sScrollItem = nullptr;
+static Item *sScrollItem = nullptr;
 
-void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback)
+void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback, int sortMode, bool sortAscending)
 {
     const bool cUseChild = true;
 
     bool isSubWindow = false;
+    bool hasItem = false;
+
+    std::vector<Item *> displayItems;
+    displayItems.reserve(list.size());
+
+    for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+        if (it->val())
+            displayItems.push_back(it->val());
+
+    if (sortMode == -1)
+    {
+        std::sort(displayItems.begin(), displayItems.end(), [sortAscending](Item *a, Item *b)
+        {
+            return sortAscending ? a->getId() < b->getId() : a->getId() > b->getId();
+        });
+    }
+    else if (sortMode == 0)
+    {
+        std::sort(displayItems.begin(), displayItems.end(), [sortAscending](Item *a, Item *b)
+        {
+            s32 cmp = a->getName().compare(b->getName());
+            return sortAscending ? cmp < 0 : cmp > 0;
+        });
+    }
+    else if (sortMode == 1)
+    {
+        std::sort(displayItems.begin(), displayItems.end(), [sortAscending](Item *a, Item *b)
+        {
+            if (a->getItemType() != Item::ItemType::WaveFile || b->getItemType() != Item::ItemType::WaveFile)
+                return sortAscending ? a->getItemType() == Item::ItemType::WaveFile : b->getItemType() == Item::ItemType::WaveFile;
+            
+            u32 sizeA = static_cast<WaveFile*>(a)->getFileSize();
+            u32 sizeB = static_cast<WaveFile*>(b)->getFileSize();
+            return sortAscending ? sizeA < sizeB : sizeA > sizeB;
+        });
+    }
+
+    bool hasWaveFilePanel = false;
+    f32 maxSizeW = 0.0f;
+    f32 infoPanelWidth = 0.0f;
+
+    for (Item *item : displayItems)
+    {
+        if (!item || (filterCallback && !filterCallback(item)))
+            continue;
+        
+        if (item->getItemType() == Item::ItemType::WaveFile)
+        {
+            hasWaveFilePanel = true;
+            break;
+        }
+    }
+
+    if (hasWaveFilePanel)
+    {
+        maxSizeW = ImGui::CalcTextSize("000.00 MB").x;
+        f32 sepGap = 4.0f;
+        infoPanelWidth = sepGap + maxSizeW + sepGap + ImGui::GetStyle().ScrollbarSize + 20.0f;
+        if (infoPanelWidth < 200.0f)
+            infoPanelWidth = 200.0f;
+    }
 
     if (cUseChild)
     {
@@ -477,22 +535,41 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         }
     }
 
-    if (list.size() == 0)
+    bool tableOpen = false;
+    if (hasWaveFilePanel)
     {
-        sead::FormatFixedSafeString<64> str("No %ss", listName);
-        CenteredText(str.cstr());
+        f32 sepGap = 4.0f;
+        f32 sizeColWidth = maxSizeW + sepGap * 2.0f;
+
+        tableOpen = ImGui::BeginTable("FileTable", 2,
+            ImGuiTableFlags_NoSavedSettings |
+            ImGuiTableFlags_SizingFixedFit |
+            ImGuiTableFlags_BordersInnerV
+        //  maybe later
+        //  ImGuiTableFlags_RowBg
+        );
+
+        if (tableOpen)
+        {
+            ImGui::TableSetupColumn("##Name", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("##Size", ImGuiTableColumnFlags_WidthFixed, sizeColWidth);
+        }
     }
 
-    bool hasItem = false;
-    for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+    for (Item *item : displayItems)
     {
-        Item* item = static_cast<Item*>((*it).val());
         if (!item || (filterCallback && !filterCallback(item)))
             continue;
 
+        if (tableOpen)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+        }
+
         hasItem = true;
 
-        const char* namePrefix = "";
+        const char *namePrefix = "";
         if (nameCallback)
         {
             namePrefix = nameCallback(item);
@@ -548,7 +625,7 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
         bool isMultiSelected = std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item) != sMultiSelectedItems.end();
         bool selected = isSingleSelected || isMultiSelected;
         sead::FormatFixedSafeString<512> selName("%s%s%s###%p", namePrefix, name.cstr(), postFix, item);
-        if (ImGui::Selectable(selName.cstr(), selected))
+        if (ImGui::Selectable(selName.cstr(), selected, tableOpen ? ImGuiSelectableFlags_SpanAllColumns : ImGuiSelectableFlags_None))
         {
             bool ctrl = ImGui::GetIO().KeyCtrl;
             bool shift = ImGui::GetIO().KeyShift;
@@ -649,16 +726,19 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
 
         if (item->getItemType() == Item::ItemType::WaveFile)
         {
-            WaveFile* waveFile = static_cast<WaveFile*>(item);
+            WaveFile *waveFile = static_cast<WaveFile *>(item);
             if (waveFile->getIsLoopDirty())
             {
                 f32 fontSize = ImGui::GetFontSize();
                 f32 textSize = ImGui::CalcTextSize(selName.cstr()).x;
                 f32 xPadding = ImGui::GetStyle().FramePadding.x + fontSize * 0.5f;
-                f32 lineHeight = sead::Mathf::max(sead::Mathf::min(ImGui::GetCurrentWindow()->DC.CurrLineSize.y, fontSize + ImGui::GetStyle().FramePadding.y * 2.0f), fontSize);
-
+                f32 lineHeight = sead::Mathf::max(sead::Mathf::min(
+                    ImGui::GetCurrentWindow()->DC.CurrLineSize.y,
+                    fontSize + ImGui::GetStyle().FramePadding.y * 2.0f),
+                    fontSize
+                );
+                
                 ImVec2 pos = ImVec2(cursor.x + textSize + xPadding, cursor.y + lineHeight * 0.67f);
-
                 ImGui::RenderBullet(ImGui::GetWindowDrawList(), pos, ImGui::GetColorU32(ImGuiCol_Text));
             }
         }
@@ -733,7 +813,28 @@ void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback c
                 ImGui::PopStyleColor();
             }
         }
+
+        if (tableOpen && item->getItemType() == Item::ItemType::WaveFile)
+        {
+            u32 fileSize = static_cast<WaveFile *>(item)->getFileSize();
+            sead::FixedSafeString<32> sizeStr;
+            if (fileSize >= 1024 * 1024)
+                sizeStr.format("%.2f MB", (f32)fileSize / (1024.0f * 1024.0f));
+            else if (fileSize >= 1024)
+                sizeStr.format("%.1f KB", (f32)fileSize / 1024.0f);
+            else
+                sizeStr.format("%u B", fileSize);
+
+            ImGui::TableSetColumnIndex(1);
+            f32 avail = ImGui::GetContentRegionAvail().x;
+            f32 tw    = ImGui::CalcTextSize(sizeStr.cstr()).x;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - tw);
+            ImGui::TextUnformatted(sizeStr.cstr());
+        }
     }
+
+    if (tableOpen)
+        ImGui::EndTable();
 
     if (list.size() > 0 && !hasItem)
     {
@@ -1570,6 +1671,53 @@ bool ItemSelector(const char* name, const Item::List& list, Item** itemPtr, bool
 
             if (pressed)
                 ImGui::OpenPopup(popupIdStr.cstr(), ImGuiPopupFlags_None);
+
+            if (!popupOpen && hovered && ImGui::GetIO().MouseWheel != 0.0f)
+            {
+                int delta = -(int)ImGui::GetIO().MouseWheel;
+                int total = (int)list.size() + (allowNone ? 1 : 0);
+                if (total > (allowNone ? 1 : 0))
+                {
+                    int curIdx = -1;
+                    if (*itemPtr)
+                    {
+                        int i = 0;
+                        for (auto it = list.robustBegin(); it != list.robustEnd(); ++it, ++i)
+                        {
+                            if ((*it).val() == *itemPtr)
+                            {
+                                curIdx = allowNone ? i + 1 : i;
+                                break;
+                            }
+                        }
+                    }
+                    int newIdx = curIdx + delta;
+                    if (newIdx < 0) newIdx = 0;
+                    if (newIdx >= total) newIdx = total - 1;
+                    if (newIdx != curIdx)
+                    {
+                        if (allowNone && newIdx == 0)
+                        {
+                            *itemPtr = nullptr;
+                        }
+                        else
+                        {
+                            int target = allowNone ? newIdx - 1 : newIdx;
+                            int i = 0;
+                            for (auto it = list.robustBegin(); it != list.robustEnd(); ++it, ++i)
+                            {
+                                if (i == target)
+                                {
+                                    *itemPtr = (*it).val();
+                                    break;
+                                }
+                            }
+                        }
+                        ret = true;
+                    }
+                }
+                ImGui::GetIO().MouseWheel = 0.0f;
+            }
         }
 
         // Position and size the popup like a standard combo (always set, even if popup not yet open on first frame)
@@ -1902,7 +2050,7 @@ bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** war
             ImGui::EndDisabled();
         }
 
-        ImGui::End();
+        ImGui::EndPopup();
     }
 
     ImGuiButtonFlags buttonFlags = ImGuiButtonFlags_Repeat | ImGuiButtonFlags_DontClosePopups;

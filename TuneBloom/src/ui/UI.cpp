@@ -418,7 +418,7 @@ static void DrawAudioOptions()
             { outRateIdx = static_cast<int>(i); break; }
         }
         PrefLabel("Sample rate (hz)");
-        if (ImGui::Combo("##srate", &outRateIdx, sOutSampleRateItems, IM_ARRAYSIZE(sOutSampleRateItems)))
+        if (ComboScroll("##srate", &outRateIdx, sOutSampleRateItems, IM_ARRAYSIZE(sOutSampleRateItems)))
         {
             gOutputSampleRate = sOutSampleRateValues[outRateIdx];
             snd::SoundSystem::setOutputSampleRate(gOutputSampleRate);
@@ -1826,7 +1826,7 @@ void DrawExportDialog()
 
             ImGui::Separator();
             ImGui::SetNextItemWidth(140);
-            ImGui::Combo("Sample rate", &sSeqSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
+            ComboScroll("Sample rate", &sSeqSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
             ImGui::Separator();
 
             if (ImGui::Button("Export", ImVec2(120, 0)))
@@ -1921,7 +1921,7 @@ void DrawExportDialog()
 
             ImGui::Separator();
             ImGui::SetNextItemWidth(140);
-            ImGui::Combo("Sample rate", &sStrmSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
+            ComboScroll("Sample rate", &sStrmSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
             ImGui::Separator();
 
             if (ImGui::Button("Export", ImVec2(120, 0)))
@@ -2073,7 +2073,7 @@ void DrawExportDialog()
             }
 
             ImGui::SetNextItemWidth(140);
-            ImGui::Combo("Sample rate", &sStrmSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
+            ComboScroll("Sample rate", &sStrmSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
             ImGui::Separator();
 
             if (ImGui::Button("Export", ImVec2(120, 0)))
@@ -4002,7 +4002,7 @@ InstanciateItemCallback CreateGroupItemFunc(bool clear)
 
     {
         u32 itemRefType = (u32)sItemRefType - 1;
-        if (ImGui::Combo("Item Type", (s32*)&itemRefType, Group::ItemInfo::sItemIdTypes, IM_ARRAYSIZE(Group::ItemInfo::sItemIdTypes)))
+        if (ComboScroll("Item Type", (s32*)&itemRefType, Group::ItemInfo::sItemIdTypes, IM_ARRAYSIZE(Group::ItemInfo::sItemIdTypes)))
         {
             sItemRefType = static_cast<Item::ItemType>(itemRefType + 1);
             sItemRef = nullptr;
@@ -4069,7 +4069,7 @@ InstanciateItemCallback CreateGroupItemFunc(bool clear)
             loadItem = 0;
         }
 
-        if (ImGui::Combo("Load Items", (s32*)&loadItem, items, itemCount))
+        if (ComboScroll("Load Items", (s32*)&loadItem, items, itemCount))
         {
             sLoadItem = loadItem;
         }
@@ -4814,7 +4814,7 @@ void DrawProjectInfoUI()
         };
 
         sead::Endian::Types endian = sBfsar.getEndian();
-        if (ImGui::Combo("Byte Order", (s32*)&endian, sEndianTypes, IM_ARRAYSIZE(sEndianTypes)))
+        if (ComboScroll("Byte Order", (s32*)&endian, sEndianTypes, IM_ARRAYSIZE(sEndianTypes)))
         {
             sBfsar.setEndian(endian);
             SetUnsavedChanges(true);
@@ -4932,7 +4932,7 @@ InstanciateItemCallback CreateSoundFunc(bool clear)
             ItemSelector("Player", sBfsar.getPlayerList(), &sPlayer, false);
 
             static const char* sSoundTypes[] = { "Invalid", "Sequence", "Stream", "Wave" };
-            ImGui::Combo("Sound Type", (s32*)&sSoundType, sSoundTypes, IM_ARRAYSIZE(sSoundTypes));
+            ComboScroll("Sound Type", (s32*)&sSoundType, sSoundTypes, IM_ARRAYSIZE(sSoundTypes));
 
             WarningPopup("###Player", "Select a valid Player !" "\nIf there are none please add one first.");
             WarningPopup("###SoundType", "Select a valid Sound Type !");
@@ -5154,8 +5154,13 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
 
 void DrawAllSoundsUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Sound", sBfsar.getSoundList(),
-        &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback()
+        &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback(),
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
 }
 
@@ -5181,34 +5186,49 @@ const char* SoundNamePrefixFunc2(Item* item)
 
 void DrawStreamSoundsUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Stream Sound", sBfsar.getSoundList(), &CreateStreamSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
             return sound->getSoundType() == Sound::SoundType::Strm && ItemMatchesFilter(sound);
-        }
+        },
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
 }
 
 void DrawWaveSoundsUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Wave Sound", sBfsar.getSoundList(), &CreateWaveSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
             return sound->getSoundType() == Sound::SoundType::Wave && ItemMatchesFilter(sound);
-        }
+        },
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
 }
 
 void DrawSequenceSoundsUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Sequence Sound", sBfsar.getSoundList(), &CreateSequenceSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
             return sound->getSoundType() == Sound::SoundType::Seq && ItemMatchesFilter(sound);
-        }
+        },
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
 }
 
@@ -5247,7 +5267,7 @@ InstanciateItemCallback CreateSoundSetFunc(bool clear)
             ImGui::Separator();
 
             static const char* sSoundSetTypes[] = { "Wave", "Sequence" };
-            ImGui::Combo("Sound Type", (s32*)&sSoundSetType, sSoundSetTypes, IM_ARRAYSIZE(sSoundSetTypes));
+            ComboScroll("Sound Type", (s32*)&sSoundSetType, sSoundSetTypes, IM_ARRAYSIZE(sSoundSetTypes));
         }
         else if (validate)
         {
@@ -5461,12 +5481,16 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
 
 void DrawAllSoundSetsUI()
 {
+    static SortState sSortState;
+
     const f32 cVisHeight = 32.0f;
     f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
+    DrawSortToolbar(sSortState);
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Sound Set", sBfsar.getSoundSetList(),
-        &CreateSoundSetFunc, &SoundSetNamePrefixFunc, nullptr, GetItemFilterCallback()
+        &CreateSoundSetFunc, &SoundSetNamePrefixFunc, nullptr, GetItemFilterCallback(),
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
     ImGui::EndChild();
 
@@ -5480,16 +5504,20 @@ void DrawAllSoundSetsUI()
 
 void DrawWaveSoundSetsUI()
 {
+    static SortState sSortState;
+
     const f32 cVisHeight = 32.0f;
     f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
+    DrawSortToolbar(sSortState);
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Wave Sound Set", sBfsar.getSoundSetList(), &CreateWaveSoundSetFunc, nullptr, nullptr,
         [](const Item* item)
         {
             const SoundSet* soundSet = static_cast<const SoundSet*>(item);
             return soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave && ItemMatchesFilter(soundSet);
-        }
+        },
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
     ImGui::EndChild();
 
@@ -5503,16 +5531,20 @@ void DrawWaveSoundSetsUI()
 
 void DrawSequenceSoundSetsUI()
 {
+    static SortState sSortState;
+
     const f32 cVisHeight = 32.0f;
     f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
 
+    DrawSortToolbar(sSortState);
     ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
     DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), &CreateSequenceSoundSetFunc, nullptr, &SequenceSoundSetContextMenuFunc,
         [](const Item* item)
         {
             const SoundSet* soundSet = static_cast<const SoundSet*>(item);
             return soundSet->getSoundSetType() == SoundSet::SoundSetType::Seq && ItemMatchesFilter(soundSet);
-        }
+        },
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
     ImGui::EndChild();
 
@@ -5831,7 +5863,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
 
     if (!sCache.pcm.isValid())
     {
-        ImGui::Combo("Encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
+        ComboScroll("Encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
         ImGui::Separator();
         DrawWaveLoopInfo(info->isLoop, info->loopStartFrame, info->loopEndFrame,
                           info->sampleCount, info->sampleRate, true, nullptr, true);
@@ -5967,7 +5999,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
         };
 
         field("Encoding", "How the sample is stored in the bank/archive.");
-        ImGui::Combo("##encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
+        ComboScroll("##encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
 
         // Sample rate
         static const u32 kRatePresets[] = { 8000, 11025, 16000, 22050, 32000, 44100, 48000 };
@@ -5997,7 +6029,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
         const char* channelModeNames[] = { "Keep all channels", "Left only (mono)", "Right only (mono)", "Mix to mono" };
         s32 channelModeIdx = static_cast<s32>(sCache.channelMode);
         field("Channels", "Which channel(s) of the source to import.");
-        if (ImGui::Combo("##channels", &channelModeIdx, channelModeNames, IM_ARRAYSIZE(channelModeNames)))
+        if (ComboScroll("##channels", &channelModeIdx, channelModeNames, IM_ARRAYSIZE(channelModeNames)))
         { sCache.channelMode = static_cast<AudioProcessing::ChannelMode>(channelModeIdx); sCache.derivedDirty = true; }
         if (srcChannels > 2)
         {
@@ -6041,7 +6073,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
         ImGui::SetNextItemWidth(210.0f);
         const char* loopModeNames[] = { "Detect from WAV", "Disabled", "Manual" };
         s32 modeIdx = static_cast<s32>(sCache.loopMode);
-        if (ImGui::Combo("##loopmode", &modeIdx, loopModeNames, IM_ARRAYSIZE(loopModeNames)))
+        if (ComboScroll("##loopmode", &modeIdx, loopModeNames, IM_ARRAYSIZE(loopModeNames)))
         {
             sCache.loopMode = static_cast<LoopMode>(modeIdx);
             changed = true;
@@ -6568,10 +6600,31 @@ void BankFileContextMenuFunc(Item* item, bool afterDelete)
     }
 }
 
+static bool sWaveFilesIncludeStream = true;
+
+static bool WaveFilesFilter(const Item* item)
+{
+    if (!sWaveFilesIncludeStream && item->getItemType() == Item::ItemType::WaveFile)
+    {
+        const WaveFile* wave = static_cast<const WaveFile*>(item);
+        if (wave->getIsStreamExtended())
+            return false;
+    }
+    ItemFilterCallback textFilter = GetItemFilterCallback();
+    return textFilter ? textFilter(item) : true;
+}
+
 void DrawWaveFilesUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState, true, true);
+    DrawIncludeStreamWavesCheckbox(&sWaveFilesIncludeStream);
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
+
     DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(),
-        &CreateWaveFileFunc, &WaveFileNamePrefixFunc, &WaveFileContextMenuFunc, GetItemFilterCallback()
+        &CreateWaveFileFunc, &WaveFileNamePrefixFunc, &WaveFileContextMenuFunc, &WaveFilesFilter,
+        false, nullptr, sSortState.mode, sSortState.ascending
     );
 
     if (sImportWaveFile && !sRiffWaveInfo.path.isEmpty())
@@ -6793,8 +6846,12 @@ const char* SequenceFileNamePrefixFunc(Item* item)
 
 void DrawSequenceFilesUI()
 {
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+
     DrawAllItemsUI("Sequence File", sBfsar.getSequenceFileList(),
-        &CreateSequenceFileFunc, &SequenceFileNamePrefixFunc, &SequenceFileContextMenuFunc, GetItemFilterCallback(), true
+        &CreateSequenceFileFunc, &SequenceFileNamePrefixFunc, &SequenceFileContextMenuFunc, GetItemFilterCallback(), true, nullptr, sSortState.mode, sSortState.ascending
     );
 }
 
@@ -6828,9 +6885,134 @@ const char* BankFileNamePrefixFunc(Item* item)
 
 void DrawBankFilesUI()
 {
-    DrawAllItemsUI("Bank File", sBfsar.getBankFileList(),
-        &CreateBankFileFunc, &BankFileNamePrefixFunc, &BankFileContextMenuFunc, GetItemFilterCallback(), true
+    static SortState sSortState;
+
+    DrawSortToolbar(sSortState);
+    DrawAllItemsUI(
+        "Bank File", 
+        sBfsar.getBankFileList(), 
+        &CreateBankFileFunc, 
+        &BankFileNamePrefixFunc, 
+        &BankFileContextMenuFunc, 
+        GetItemFilterCallback(), 
+        true, 
+        nullptr, 
+        sSortState.mode, 
+        sSortState.ascending
     );
+}
+
+bool ComboScroll(const char *label, int *current_item, const char *const items[], int items_count, int popup_max_height_in_items)
+{
+    bool changed = ImGui::Combo(label, current_item, items, items_count, popup_max_height_in_items);
+
+    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+    {
+        int delta = -(int)ImGui::GetIO().MouseWheel;
+        *current_item += delta;
+
+        if (*current_item < 0)
+            *current_item = 0;
+
+        if (*current_item >= items_count)
+            *current_item = items_count - 1;
+
+        ImGui::GetIO().MouseWheel = 0.0f;
+        changed = true;
+    }
+
+    return changed;
+}
+
+bool DrawSortToolbar(SortState &state, bool showFileSize, bool trailingDivider)
+{
+    bool changed = false;
+
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
+    ImGui::Indent(ImGui::GetStyle().FramePadding.x);
+    ImGui::SetNextItemWidth(110.0f);
+
+    const char *items[] = {"Default", "Name", "File Size"};
+    int numItems = showFileSize ? 3 : 2;
+    const char *preview = items[state.mode + 1];
+
+    if (ImGui::BeginCombo("##Sort", preview))
+    {
+        for (int i = 0; i < numItems; i++)
+        {
+            bool selected = i == state.mode + 1;
+
+            if (ImGui::Selectable(items[i], selected))
+            {
+                if (i - 1 != state.mode)
+                    state.ascending = true;
+                state.mode = i - 1;
+                changed = true;
+            }
+
+            if (selected)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+    {
+        int delta = -(int)ImGui::GetIO().MouseWheel;
+        int newMode = state.mode + delta;
+
+        if (newMode < -1)
+            newMode = -1;
+        
+        if (newMode > numItems - 2)
+            newMode = numItems - 2;
+        
+        if (newMode != state.mode)
+        {
+            state.ascending = true;
+            state.mode = newMode;
+            changed = true;
+        }
+
+        ImGui::GetIO().MouseWheel = 0.0f;
+    }
+
+    ImGui::SameLine(0, 2);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+
+    if (ImGui::Button(state.ascending ? ICON_LC_ARROW_UP : ICON_LC_ARROW_DOWN))
+    {
+        state.ascending = !state.ascending;
+        changed = true;
+    }
+
+    ImGui::PopStyleVar();
+
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip(state.ascending ? "Ascending" : "Descending");
+
+    ImGui::Unindent(ImGui::GetStyle().FramePadding.x);
+
+    if (trailingDivider)
+    {
+        ImGui::SameLine(0, 8);
+        ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+        ImGui::SameLine(0, 8);
+    }
+    else
+        ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
+
+    return changed;
+}
+
+bool DrawIncludeStreamWavesCheckbox(bool *value)
+{
+    bool changed = ImGui::Checkbox("Include Stream Waves", value);
+    
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("When enabled, includes wave files derived from stream sound data.");
+    
+    return changed;
 }
 
 static void FormatFileSize(sead::BufferedSafeString& out, u32 bytes)
@@ -6882,7 +7064,7 @@ struct FileStatBlock
     WaveFile* wave;
     u32 size;
     sead::FixedSafeString<256> name;
-    sead::FixedSafeString<32> sizeStr;
+    sead::FixedSafeString<48> sizeStr;
     ImRect rect;
 };
 
@@ -7005,14 +7187,9 @@ void DrawFileStatisticsUI()
 {
     static bool sIncludeStreamWaves = true;
 
-    ImGui::Checkbox("Include Stream Waves", &sIncludeStreamWaves);
-    ImGui::SameLine();
-    ImGui::TextDisabled("(?)");
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::Text("When enabled, includes wave files derived from stream sound data.");
-        ImGui::EndTooltip();
-    }
+    ImGui::Indent(ImGui::GetStyle().FramePadding.x);
+    DrawIncludeStreamWavesCheckbox(&sIncludeStreamWaves);
+    ImGui::Unindent(ImGui::GetStyle().FramePadding.x);
 
     ImGui::Separator();
 

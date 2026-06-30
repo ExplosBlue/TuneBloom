@@ -140,7 +140,7 @@ void InnerFile::drawUI()
         };
 
         sead::Endian::Types endian = mEndian;
-        if (ImGui::Combo("Byte Order", (s32*)&endian, sEndianTypes, IM_ARRAYSIZE(sEndianTypes)))
+        if (ComboScroll("Byte Order", (s32*)&endian, sEndianTypes, IM_ARRAYSIZE(sEndianTypes)))
         {
             mEndian = endian;
             SetUnsavedChanges(true);

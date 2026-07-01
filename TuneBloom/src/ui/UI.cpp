@@ -29,6 +29,7 @@
 #endif
 
 #include <midi/SeqMidiExporter.h>
+#include <midi/SeqSoundFontExporter.h>
 #include <midi/MidiInput.h>
 #include <bfsar/BankFile.h>
 
@@ -107,6 +108,15 @@ static std::vector<WaveFile*> sPendingExportWaveFiles;
 static std::vector<WaveFile*> sPendingExportWaveToWavs;
 static std::vector<Sound*> sPendingExportMidiSounds;
 static std::vector<BankFile*> sPendingExportBankBundles;
+static std::vector<BankFile*> sPendingExportBankSf2;
+static std::vector<BankFile*> sPendingExportBankDls;
+
+enum class MidiExportPendingKind { None, SingleOrMulti, SoundSet };
+static MidiExportPendingKind sMidiExportPendingKind = MidiExportPendingKind::None;
+static SoundSet* sPendingExportMidiSoundSet = nullptr;
+static bool sMidiExportWantSf2 = true;
+static bool sMidiExportWantDls = false;
+static bool sMidiExportFormatsConfirmed = false;
 static bool sPendingImportBankBundle = false;
 
 static BankFile::Instrument* sPendingExportInstrument = nullptr;
@@ -235,6 +245,7 @@ void DrawPropertiesUI();
 void DrawExportDialog();
 static void DrawFileExportDialogs();
 void DrawExportConfirmPopup();
+void DrawMidiExportFormatPopup();
 void DrawExportProgressPopup();
 
 void DrawAllSoundsUI();
@@ -1755,6 +1766,7 @@ void DrawUI()
     DrawExportDialog();
     DrawFileExportDialogs();
     DrawExportConfirmPopup();
+    DrawMidiExportFormatPopup();
     DrawExportProgressPopup();
 }
 
@@ -2134,7 +2146,9 @@ void DrawExportDialog()
                     }
                 }
             }
+            
             ImGui::SameLine();
+
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
                 sPendingExport = false;
@@ -2224,7 +2238,9 @@ void DrawExportDialog()
                     }
                 }
             }
+
             ImGui::SameLine();
+
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
                 sPendingExport = false;
@@ -2355,7 +2371,9 @@ void DrawExportDialog()
                     ImGui::CloseCurrentPopup();
                 }
             }
+
             ImGui::SameLine();
+
             if (ImGui::Button("Cancel", ImVec2(120, 0)))
             {
                 sPendingExport = false;
@@ -2920,6 +2938,98 @@ static void DrawFileExportDialogs()
             }
         }
         sPendingExportBankBundles.clear();
+    }
+
+    if (!sPendingExportBankSf2.empty())
+    {
+        s32 bankCount = (s32)sPendingExportBankSf2.size();
+
+        if (bankCount > 1)
+        {
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select export directory"))
+            {
+                for (BankFile *bank : sPendingExportBankSf2)
+                {
+                    sead::FixedSafeString<512> filePath;
+                    filePath.format("%s/%s.sf2", dirPath.cstr(), bank->getNameOrNull().cstr());
+                    exportBankToSf2(filePath, *bank);
+                }
+                sExportConfirmMessage.format("Exported %d banks to SF2 successfully.", bankCount);
+                sShowExportConfirm = true;
+            }
+        }
+        else
+        {
+            BankFile *bank = sPendingExportBankSf2[0];
+
+            sead::FixedSafeString<512> path;
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {{"SoundFont (*.sf2)", "*.sf2"}};
+
+            sead::FixedSafeString<512> defaultPath;
+            {
+                const char *rawName = bank->getNameOrNull().cstr();
+                std::string cwd = std::filesystem::current_path().string();
+                defaultPath.format("%s/%s.sf2", cwd.c_str(), rawName);
+            }
+
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, "sf2", defaultPath.cstr()))
+            {
+                if (exportBankToSf2(path, *bank))
+                    sExportConfirmMessage.copy("Bank exported to SF2 successfully.");
+                else
+                    sExportConfirmMessage.copy("SF2 export failed (bank has no instruments or waves).");
+                sShowExportConfirm = true;
+            }
+        }
+        sPendingExportBankSf2.clear();
+    }
+
+    if (!sPendingExportBankDls.empty())
+    {
+        s32 bankCount = (s32)sPendingExportBankDls.size();
+
+        if (bankCount > 1)
+        {
+            sead::FixedSafeString<512> dirPath;
+            if (SelectFolderDialog(&dirPath, "Select export directory"))
+            {
+                for (BankFile *bank : sPendingExportBankDls)
+                {
+                    sead::FixedSafeString<512> filePath;
+                    filePath.format("%s/%s.dls", dirPath.cstr(), bank->getNameOrNull().cstr());
+                    exportBankToDls(filePath, *bank);
+                }
+                sExportConfirmMessage.format("Exported %d banks to DLS successfully.", bankCount);
+                sShowExportConfirm = true;
+            }
+        }
+        else
+        {
+            BankFile *bank = sPendingExportBankDls[0];
+
+            sead::FixedSafeString<512> path;
+            const u32 filterCount = 1;
+            FileFilter filters[filterCount] = {{"DLS (*.dls)", "*.dls"}};
+
+            sead::FixedSafeString<512> defaultPath;
+            {
+                const char *rawName = bank->getNameOrNull().cstr();
+                std::string cwd = std::filesystem::current_path().string();
+                defaultPath.format("%s/%s.dls", cwd.c_str(), rawName);
+            }
+
+            if (SaveFileDialog(&path, nullptr, filterCount, filters, "dls", defaultPath.cstr()))
+            {
+                if (exportBankToDls(path, *bank))
+                    sExportConfirmMessage.copy("Bank exported to DLS successfully.");
+                else
+                    sExportConfirmMessage.copy("DLS export failed (bank has no instruments or waves).");
+                sShowExportConfirm = true;
+            }
+        }
+        sPendingExportBankDls.clear();
     }
 
     if (sPendingExportInstrument)
@@ -3682,7 +3792,7 @@ static void DrawFileExportDialogs()
         sPendingExportWaveToWavs.clear();
     }
 
-    if (!sPendingExportMidiSounds.empty())
+    if (sMidiExportPendingKind == MidiExportPendingKind::SingleOrMulti && sMidiExportFormatsConfirmed)
     {
         s32 midiCount = (s32)sPendingExportMidiSounds.size();
 
@@ -3691,24 +3801,38 @@ static void DrawFileExportDialogs()
             sead::FixedSafeString<512> dirPath;
             if (SelectFolderDialog(&dirPath, "Select directory for MIDI export"))
             {
-                for (Sound* sound : sPendingExportMidiSounds)
+                for (Sound *sound : sPendingExportMidiSounds)
                 {
                     sead::FixedSafeString<512> filePath;
                     BuildExportPathFromDir(&filePath, dirPath.cstr(), sound, "midi");
                     if (!exportSeqToMidi(filePath, *sound))
                     {
-                        PopupMgr::instance()->addPopup({ "Failed to export MIDI file", nullptr });
+                        PopupMgr::instance()->addPopup({"Failed to export MIDI file", nullptr});
+                    }
+
+                    if (sMidiExportWantSf2)
+                    {
+                        sead::FixedSafeString<512> sf2Path;
+                        BuildExportPathFromDir(&sf2Path, dirPath.cstr(), sound, "sf2");
+                        exportSeqSoundToSf2(sf2Path, *sound);
+                    }
+
+                    if (sMidiExportWantDls)
+                    {
+                        sead::FixedSafeString<512> dlsPath;
+                        BuildExportPathFromDir(&dlsPath, dirPath.cstr(), sound, "dls");
+                        exportSeqSoundToDls(dlsPath, *sound);
                     }
                 }
             }
         }
-        else
+        else if (midiCount == 1)
         {
-            Sound* sound = sPendingExportMidiSounds[0];
+            Sound *sound = sPendingExportMidiSounds[0];
 
             sead::FixedSafeString<512> path;
             const u32 filterCount = 1;
-            FileFilter filters[filterCount] = { { "MIDI (*.midi)", "*.midi" } };
+            FileFilter filters[filterCount] = {{"MIDI (*.midi)", "*.midi"}};
 
             sead::FixedSafeString<512> defaultPath;
             BuildDefaultExportPath(&defaultPath, sound, "midi");
@@ -3717,11 +3841,71 @@ static void DrawFileExportDialogs()
             {
                 if (!exportSeqToMidi(path, *sound))
                 {
-                    PopupMgr::instance()->addPopup({ "Failed to export MIDI file", nullptr });
+                    PopupMgr::instance()->addPopup({"Failed to export MIDI file", nullptr});
+                }
+
+                if (sMidiExportWantSf2)
+                {
+                    sead::FixedSafeString<512> sf2Path(path);
+                    s32 dot = sf2Path.rfindIndex(".");
+
+                    if (dot >= 0)
+                        sf2Path.trim(dot);
+
+                    sf2Path.append(".sf2");
+                    exportSeqSoundToSf2(sf2Path, *sound);
+                }
+
+                if (sMidiExportWantDls)
+                {
+                    sead::FixedSafeString<512> dlsPath(path);
+                    s32 dot = dlsPath.rfindIndex(".");
+
+                    if (dot >= 0)
+                        dlsPath.trim(dot);
+
+                    dlsPath.append(".dls");
+                    exportSeqSoundToDls(dlsPath, *sound);
                 }
             }
         }
+
         sPendingExportMidiSounds.clear();
+        sMidiExportPendingKind = MidiExportPendingKind::None;
+        sMidiExportFormatsConfirmed = false;
+    }
+
+    if (sMidiExportPendingKind == MidiExportPendingKind::SoundSet && sMidiExportFormatsConfirmed)
+    {
+        SoundSet *soundSet = sPendingExportMidiSoundSet;
+        if (soundSet)
+        {
+            sead::FixedSafeString<512> dirPath;
+            if (SaveFileDialog(&dirPath, "Select directory for MIDI export"))
+            {
+                const char *p = dirPath.cstr();
+                const char *lastSlash = nullptr;
+                for (const char *c = p; *c; c++)
+                    if (*c == '/' || *c == '\\')
+                        lastSlash = c;
+
+                sead::FixedSafeString<512> exportDir;
+                if (lastSlash)
+                    exportDir.format("%.*s", (s32)(lastSlash - p), p);
+                else
+                    exportDir = ".";
+
+                exportSeqSoundSetToMidiDir(exportDir, *soundSet);
+                if (sMidiExportWantSf2)
+                    exportSeqSoundSetToSf2Dir(exportDir, *soundSet);
+                if (sMidiExportWantDls)
+                    exportSeqSoundSetToDlsDir(exportDir, *soundSet);
+            }
+        }
+
+        sPendingExportMidiSoundSet = nullptr;
+        sMidiExportPendingKind = MidiExportPendingKind::None;
+        sMidiExportFormatsConfirmed = false;
     }
 }
 
@@ -3743,6 +3927,47 @@ void DrawExportConfirmPopup()
         if (ImGui::Button("OK", ImVec2(120, 0)))
         {
             sShowExportConfirm = false;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+}
+
+void DrawMidiExportFormatPopup()
+{
+    if (sMidiExportPendingKind == MidiExportPendingKind::None || sMidiExportFormatsConfirmed)
+        return;
+
+    ImGui::OpenPopup("Finish Export");
+
+    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("Finish Export", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::TextUnformatted("Export instruments used by the sequence?");
+        ImGui::Separator();
+
+        ImGui::Checkbox("Export SoundFont (.sf2)", &sMidiExportWantSf2);
+        ImGui::Checkbox("Export DLS (.dls)", &sMidiExportWantDls);
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Export", ImVec2(120, 0)))
+        {
+            sMidiExportFormatsConfirmed = true;
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        {
+            sPendingExportMidiSounds.clear();
+            sPendingExportMidiSoundSet = nullptr;
+            sMidiExportPendingKind = MidiExportPendingKind::None;
+            sMidiExportFormatsConfirmed = false;
             ImGui::CloseCurrentPopup();
         }
 
@@ -3894,6 +4119,7 @@ void DrawExportProgressPopup()
             sPendingExportSounds.clear();
             ImGui::CloseCurrentPopup();
         }
+        
         ImGui::EndPopup();
     }
 
@@ -5434,7 +5660,7 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
     if (!canExport)
         ImGui::BeginDisabled();
 
-    if (ImGui::MenuItem("Export to WAV"))
+    if (ImGui::MenuItem("Export WAV"))
     {
         auto sounds = CollectSoundsForAction(item);
         if (!sounds.empty())
@@ -5452,11 +5678,15 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
     if (!isSeq)
         ImGui::BeginDisabled();
 
-    if (ImGui::MenuItem("Export to MIDI"))
+    if (ImGui::MenuItem("Export MIDI"))
     {
         auto sounds = CollectSoundsForAction(item);
         if (!sounds.empty())
+        {
             sPendingExportMidiSounds = std::move(sounds);
+            sMidiExportPendingKind = MidiExportPendingKind::SingleOrMulti;
+            sMidiExportFormatsConfirmed = false;
+        }
     }
 
     if (!isSeq)
@@ -5893,25 +6123,11 @@ void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
     if (!hasSeq)
         ImGui::BeginDisabled();
 
-    if (ImGui::MenuItem("Export to MIDI"))
+    if (ImGui::MenuItem("Export MIDI"))
     {
-        sead::FixedSafeString<512> dirPath;
-        if (SaveFileDialog(&dirPath, "Select directory for MIDI export"))
-        {
-            const char* p = dirPath.cstr();
-            const char* lastSlash = nullptr;
-            for (const char* c = p; *c; c++)
-                if (*c == '/' || *c == '\\')
-                    lastSlash = c;
-
-            sead::FixedSafeString<512> exportDir;
-            if (lastSlash)
-                exportDir.format("%.*s", (s32)(lastSlash - p), p);
-            else
-                exportDir = ".";
-
-            exportSeqSoundSetToMidiDir(exportDir, *soundSet);
-        }
+        sPendingExportMidiSoundSet = soundSet;
+        sMidiExportPendingKind = MidiExportPendingKind::SoundSet;
+        sMidiExportFormatsConfirmed = false;
     }
 
     if (!hasSeq)
@@ -6807,7 +7023,7 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
                 sPendingExportWaveFiles = std::move(waves);
         }
 
-        if (ImGui::MenuItem("Export to WAV"))
+        if (ImGui::MenuItem("Export WAV"))
         {
             auto waves = CollectWaveFilesForAction(item);
             if (!waves.empty())
@@ -6907,7 +7123,24 @@ void BankFileContextMenuFunc(Item* item, bool afterDelete)
                 sPendingExportBankBundles = std::move(banks);
         }
 
-        if (disabled) ImGui::EndDisabled();
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Export SF2"))
+        {
+            auto banks = CollectBankFilesForAction(item);
+            if (!banks.empty())
+                sPendingExportBankSf2 = std::move(banks);
+        }
+
+        if (ImGui::MenuItem("Export DLS"))
+        {
+            auto banks = CollectBankFilesForAction(item);
+            if (!banks.empty())
+                sPendingExportBankDls = std::move(banks);
+        }
+
+        if (disabled)
+            ImGui::EndDisabled();
     }
 }
 

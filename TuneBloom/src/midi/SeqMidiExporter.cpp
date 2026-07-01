@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 // ─── MIDI writing helpers ─────────────────────────────────────
@@ -211,7 +213,8 @@ struct CallFrame {
 };
 
 static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
-                              u32 startOffset, const char* trackName, u8 midiChannel)
+                              u32 startOffset, const char* trackName, u8 midiChannel,
+                              std::set<std::pair<u16, u16>>* outUsedPrograms = nullptr)
 {
     TrackResult   result;
     const u32     midiPPQN = 480;
@@ -224,6 +227,7 @@ static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
     u32 tick        = 0;
     s8  transpose   = 0;
     bool noteWait   = true;
+    u8  bankIndex   = 0;
 
     // Control flow
     std::vector<CallFrame> callStack;
@@ -310,8 +314,11 @@ static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
         case 0x81: // MML_PRG
         {
             s32 pg = readArg(&ptr, end, useArgType ? argType : ARG_VMIDI, littleEndian);
-            if (doExec)
+            if (doExec) {
                 result.track.addEvent(tick, 0xC0 | midiChannel, (u8)(pg & 0x7F));
+                if (outUsedPrograms)
+                    outUsedPrograms->insert({ (u16)bankIndex, (u16)pg });
+            }
             off = (u32)(ptr - base);
             continue;
         }
@@ -457,6 +464,7 @@ static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
                     break;
 
                 case 0xB6:
+                    bankIndex = (u8)(arg1 & 0xFF);
                     result.track.addEvent(tick, 0xB0 | midiChannel, 0, (u8)(arg1 & 0xFF));
                     break;
 
@@ -555,6 +563,34 @@ static bool writeSMF(const char* path,
 }
 
 // ─── Public API ───────────────────────────────────────────────
+
+std::set<std::pair<u16, u16>> collectUsedPrograms(const SequenceFile& seqFile, u32 startOffset)
+{
+    std::set<std::pair<u16, u16>> used;
+
+    const u8* bytes = seqFile.getSeqBytes();
+    u32       sz    = seqFile.getSeqBytesSize();
+    if (!bytes || sz == 0) return used;
+
+    bool littleEndian = seqFile.getSeqParamEndian() == sead::Endian::eLittle;
+    u32 startOff = startOffset < sz ? startOffset : 0;
+
+    auto mainResult = parseTrack(bytes, sz, littleEndian, startOff, "", 0, &used);
+
+    std::vector<OpenedTrack> pending = std::move(mainResult.openedTracks);
+    u8 nextChannel = 1;
+    while (!pending.empty() && nextChannel < 16)
+    {
+        OpenedTrack ot = pending.back();
+        pending.pop_back();
+
+        auto subResult = parseTrack(bytes, sz, littleEndian, ot.offset, "", nextChannel++, &used);
+        for (auto& st : subResult.openedTracks)
+            pending.push_back(st);
+    }
+
+    return used;
+}
 
 bool exportSeqToMidi(const sead::SafeString& path, const SequenceFile& seqFile, const char* trackName, u32 startOffset)
 {

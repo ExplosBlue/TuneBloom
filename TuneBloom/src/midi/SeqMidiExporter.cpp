@@ -47,36 +47,46 @@ static void writeBE32(std::vector<u8>& out, u32 v)
 
 // ─── MIDI track builder ───────────────────────────────────────
 
+enum { PRIO_OTHER = 0, PRIO_NOTE_OFF = 1, PRIO_NOTE_ON = 2 };
+
 class MidiTrackBuilder
 {
-    std::vector<u8> mData;
-    u32             mLastTick;
+    struct AbsEvent {
+        u32             tick;
+        int             prio;
+        u32             order;
+        std::vector<u8> bytes;
+    };
+
+    std::vector<AbsEvent> mEvents;
+    u32                   mOrder = 0;
 
 public:
-    MidiTrackBuilder()
-        : mLastTick(0)
+    void addEvent(u32 tick, u8 status, u8 data1, u8 data2 = 0, int prio = PRIO_OTHER)
     {
-    }
-
-    void addEvent(u32 tick, u8 status, u8 data1, u8 data2 = 0)
-    {
-        writeVLQ(mData, tick - mLastTick);
-        mLastTick = tick;
-        mData.push_back(status);
-        mData.push_back(data1);
+        AbsEvent e;
+        e.tick = tick;
+        e.prio = prio;
+        e.order = mOrder++;
+        e.bytes.push_back(status);
+        e.bytes.push_back(data1);
         if ((status & 0xF0) != 0xC0 && (status & 0xF0) != 0xD0)
-            mData.push_back(data2);
+            e.bytes.push_back(data2);
+        mEvents.push_back(std::move(e));
     }
 
-    void addMeta(u32 tick, u8 type, const u8* data, u32 len)
+    void addMeta(u32 tick, u8 type, const u8* data, u32 len, int prio = PRIO_OTHER)
     {
-        writeVLQ(mData, tick - mLastTick);
-        mLastTick = tick;
-        mData.push_back(0xFF);
-        mData.push_back(type);
-        writeVLQ(mData, len);
+        AbsEvent e;
+        e.tick = tick;
+        e.prio = prio;
+        e.order = mOrder++;
+        e.bytes.push_back(0xFF);
+        e.bytes.push_back(type);
+        writeVLQ(e.bytes, len);
         for (u32 i = 0; i < len; i++)
-            mData.push_back(data[i]);
+            e.bytes.push_back(data[i]);
+        mEvents.push_back(std::move(e));
     }
 
     void addTempo(u32 tick, u32 usPerQN)
@@ -95,10 +105,30 @@ public:
             addMeta(tick, 0x03, (const u8*)name, (u32)std::strlen(name));
     }
 
-    void endTrack(u32 tick) { addMeta(tick, 0x2F, nullptr, 0); }
+    std::vector<u8> finalize()
+    {
+        std::stable_sort(mEvents.begin(), mEvents.end(),
+            [](const AbsEvent& a, const AbsEvent& b) {
+                if (a.tick != b.tick) return a.tick < b.tick;
+                if (a.prio != b.prio) return a.prio < b.prio;
+                return a.order < b.order;
+            });
 
-    const std::vector<u8>& data() const { return mData; }
-    u32                    lastTick() const { return mLastTick; }
+        std::vector<u8> out;
+        u32 last = 0;
+        for (const AbsEvent& e : mEvents) {
+            writeVLQ(out, e.tick - last);
+            last = e.tick;
+            out.insert(out.end(), e.bytes.begin(), e.bytes.end());
+        }
+
+        // End of track
+        writeVLQ(out, 0);
+        out.push_back(0xFF);
+        out.push_back(0x2F);
+        out.push_back(0x00);
+        return out;
+    }
 };
 
 // ─── Bounded bytecode reader ──────────────────────────────────
@@ -193,7 +223,7 @@ static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
     u32 tempoBPM    = 120;
     u32 tick        = 0;
     s8  transpose   = 0;
-    bool noteWait   = false;
+    bool noteWait   = true;
 
     // Control flow
     std::vector<CallFrame> callStack;
@@ -253,11 +283,11 @@ static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
                 if (length > 0)
                     scaledLen = (u32)((u64)(s32)length * midiPPQN / seqTimebase);
 
-                result.track.addEvent(tick, 0x90 | midiChannel, (u8)noteKey, vel);
-                if (scaledLen > 0)
-                    result.track.addEvent(tick + scaledLen, 0x80 | midiChannel, (u8)noteKey, 0);
+                u32 offLen = scaledLen > 0 ? scaledLen : 1;
+                result.track.addEvent(tick, 0x90 | midiChannel, (u8)noteKey, vel, PRIO_NOTE_ON);
+                result.track.addEvent(tick + offLen, 0x80 | midiChannel, (u8)noteKey, 0, PRIO_NOTE_OFF);
 
-                if (noteWait && scaledLen > 0)
+                if (noteWait)
                     tick += scaledLen;
             }
             off = (u32)(ptr - base);
@@ -485,7 +515,6 @@ static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
     next_track_iter:;
     }
 
-    result.track.endTrack(tick);
     result.endTick = tick;
     return result;
 }
@@ -511,7 +540,7 @@ static bool writeSMF(const char* path,
 
     // ── Track chunks ──
     for (auto& t : tracks) {
-        const std::vector<u8>& td = t.data();
+        std::vector<u8> td = t.finalize();
         writeTag("MTrk");
         writeBE32(file, (u32)td.size());
         file.insert(file.end(), td.begin(), td.end());
@@ -527,14 +556,14 @@ static bool writeSMF(const char* path,
 
 // ─── Public API ───────────────────────────────────────────────
 
-bool exportSeqToMidi(const sead::SafeString& path, const SequenceFile& seqFile, const char* trackName)
+bool exportSeqToMidi(const sead::SafeString& path, const SequenceFile& seqFile, const char* trackName, u32 startOffset)
 {
     const u8* bytes = seqFile.getSeqBytes();
     u32       sz    = seqFile.getSeqBytesSize();
     if (!bytes || sz == 0) return false;
 
     bool littleEndian = seqFile.getSeqParamEndian() == sead::Endian::eLittle;
-    u32 startOff = 0;
+    u32 startOff = startOffset < sz ? startOffset : 0;
 
     // First pass: parse main track, discover opened sub-tracks
     auto mainResult = parseTrack(bytes, sz, littleEndian, startOff, trackName, 0);
@@ -586,7 +615,8 @@ bool exportSeqToMidi(const sead::SafeString& path, const Sound& sound)
     if (name.isEmpty())
         name = "Sequence";
 
-    return exportSeqToMidi(path, *seqFile, name.cstr());
+    u32 startOffset = sound.getSequenceSoundInfo().getStartOffset();
+    return exportSeqToMidi(path, *seqFile, name.cstr(), startOffset);
 }
 
 bool exportSeqSoundSetToMidiDir(const sead::SafeString& dirPath, const SoundSet& soundSet)

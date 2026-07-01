@@ -118,8 +118,20 @@ static void MidiInputCallback(void *userData, s32 msg, s32 key, f32 vel)
     }
     if (msg == 4)
     {
-        if (key == 1)
+        switch (key)
+        {
+        case 1:
             sSoundPlayer.setBankModulation(vel);
+            break;
+        case 11:
+            sSoundPlayer.setBankExpression(vel);
+            break;
+        case 64:
+            sSoundPlayer.setBankSustain(vel >= 0.5f);
+            break;
+        default:
+            break;
+        }
         return;
     }
 
@@ -269,6 +281,8 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
 void BankFile::VelocityRegion::drawUI()
 {
     static const ImU8 cStepU8 = 1;
+    static const ImU8 cAdsrMin = 0;
+    static const ImU8 cAdsrMax = 127;
 
     if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::BankFileInstrument)
     {
@@ -316,8 +330,9 @@ void BankFile::VelocityRegion::drawUI()
     }
 
     {
+        static const ImU8 cVolumeMax = 255;
         u8 volume = getVolume();
-        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cAdsrMin, &cVolumeMax))
         {
             setVolume(volume);
             SetUnsavedChanges(true);
@@ -326,7 +341,7 @@ void BankFile::VelocityRegion::drawUI()
 
     {
         u8 pan = getPan();
-        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cStepU8))
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cAdsrMin, &cAdsrMax))
         {
             setPan(pan);
             SetUnsavedChanges(true);
@@ -383,30 +398,20 @@ void BankFile::VelocityRegion::drawUI()
         snd::AdshrCurve adshrCurve = getAdshrCurve();
 
         bool edited = false;
-        if (ImGui::InputScalar("Attack", ImGuiDataType_U8, &adshrCurve.attack, &cStepU8))
-        {
+        if (ImGui::SliderScalar("Attack", ImGuiDataType_U8, &adshrCurve.attack, &cAdsrMin, &cAdsrMax))
             edited = true;
-        }
 
-        if (ImGui::InputScalar("Decay", ImGuiDataType_U8, &adshrCurve.decay, &cStepU8))
-        {
+        if (ImGui::SliderScalar("Decay", ImGuiDataType_U8, &adshrCurve.decay, &cAdsrMin, &cAdsrMax))
             edited = true;
-        }
 
-        if (ImGui::InputScalar("Sustain", ImGuiDataType_U8, &adshrCurve.sustain, &cStepU8))
-        {
+        if (ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &adshrCurve.sustain, &cAdsrMin, &cAdsrMax))
             edited = true;
-        }
 
-        if (ImGui::InputScalar("Hold", ImGuiDataType_U8, &adshrCurve.hold, &cStepU8))
-        {
+        if (ImGui::SliderScalar("Hold", ImGuiDataType_U8, &adshrCurve.hold, &cAdsrMin, &cAdsrMax))
             edited = true;
-        }
 
-        if (ImGui::InputScalar("Release", ImGuiDataType_U8, &adshrCurve.release, &cStepU8))
-        {
+        if (ImGui::SliderScalar("Release", ImGuiDataType_U8, &adshrCurve.release, &cAdsrMin, &cAdsrMax))
             edited = true;
-        }
 
         if (edited)
         {

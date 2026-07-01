@@ -743,6 +743,7 @@ bool SoundPlayer::playBankNotePoly(u8 key, u8 velocity, const BankFile::Velocity
     applyBankExpression_(voice.getChannel());
 
     mBankVoiceKey[slot] = (s32)key;
+    mBankVoiceHeld[slot] = false;
     mBankVoiceAge[slot] = ++mBankVoiceCounter;
 
     return true;
@@ -756,6 +757,12 @@ void SoundPlayer::stopBankNote(u8 key)
     {
         if (mBankVoiceKey[i] != (s32)key)
             continue;
+
+        if (mBankSustainOn)
+        {
+            mBankVoiceHeld[i] = true;
+            continue;
+        }
 
         snd::internal::driver::Channel *ch = mBankVoices[i].getChannel();
 
@@ -812,6 +819,39 @@ void SoundPlayer::setBankModulation(f32 amount01)
     {
         if (mBankVoices[i].isActive())
             applyBankExpression_(mBankVoices[i].getChannel());
+    }
+}
+
+void SoundPlayer::setBankExpression(f32 amount01)
+{
+    mBankExpression = sead::Mathf::clamp2(0.0f, amount01, 1.0f);
+
+    snd::internal::driver::SoundThreadLock lock;
+    for (u32 i = 0; i < cMaxBankVoices; i++)
+    {
+        if (mBankVoices[i].isActive())
+            applyBankExpression_(mBankVoices[i].getChannel());
+    }
+}
+
+void SoundPlayer::setBankSustain(bool on)
+{
+    mBankSustainOn = on;
+    if (on)
+        return;
+
+    snd::internal::driver::SoundThreadLock lock;
+    for (u32 i = 0; i < cMaxBankVoices; i++)
+    {
+        if (!mBankVoiceHeld[i])
+            continue;
+
+        snd::internal::driver::Channel *ch = mBankVoices[i].getChannel();
+        if (ch)
+            ch->noteOff();
+
+        mBankVoiceHeld[i] = false;
+        mBankVoiceKey[i] = -1;
     }
 }
 

@@ -1110,6 +1110,8 @@ void DrawSoundPropertiesUI()
 
                 {
                     snd::AdshrCurve adshrCurve = waveSoundInfo.getAdshrCurve();
+                    static const ImU8 cAdsrMin = 0;
+                    static const ImU8 cAdsrMax = 127;
 
                     bool edited = false;
                     // if (ImGui::InputScalar("Attack", ImGuiDataType_U8, &adshrCurve.attack, &cStepU8))
@@ -1132,7 +1134,7 @@ void DrawSoundPropertiesUI()
                     //     edited = true;
                     // }
 
-                    if (ImGui::InputScalar("Release", ImGuiDataType_U8, &adshrCurve.release, &cStepU8))
+                    if (ImGui::SliderScalar("Release", ImGuiDataType_U8, &adshrCurve.release, &cAdsrMin, &cAdsrMax))
                     {
                         edited = true;
                     }

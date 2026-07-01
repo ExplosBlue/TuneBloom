@@ -39,6 +39,7 @@ public:
         {
             mBankVoiceKey[i] = -1;
             mBankVoiceAge[i] = 0;
+            mBankVoiceHeld[i] = false;
         }
     }
 
@@ -72,6 +73,8 @@ public:
     void stopAllBankNotes(bool immediate);
     void setBankPitchBend(f32 normalized);
     void setBankModulation(f32 amount01);
+    void setBankExpression(f32 amount01);
+    void setBankSustain(bool on);
 
     void pause(bool isPause);
     bool seek(f32 progress);
@@ -217,6 +220,9 @@ private:
     u32 mBankVoiceCounter = 0;
     f32 mBankPitchBendSemis = 0.0f;
     f32 mBankModulation = 0.0f;
+    f32 mBankExpression = 1.0f;
+    bool mBankSustainOn = false;
+    bool mBankVoiceHeld[cMaxBankVoices] = {};
 
     // SequenceNoteOnCallback mSequenceNoteOnCallback;
     SequenceNoteOnCallback2 mSequenceNoteOnCallback2;

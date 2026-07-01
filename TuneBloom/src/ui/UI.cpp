@@ -48,6 +48,7 @@
 #include <algorithm>
 #include <unordered_set>
 #include <filesystem>
+#include <ctime>
 
 UIType sSelectedUIType = UIType::ProjectInfo;
 
@@ -327,8 +328,21 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
 
 bool gUnsavedChanges = false;
 
+static bool sAutoBackupEnabled = true;
+static s32 sAutoBackupIntervalMinutes = 10;
+static s32 sAutoBackupMaxBackups = 20;
+static u64 sEditGeneration = 0;
+static u64 sLastBackupGeneration = 0;
+static bool sBackupFailurePopupShown = false;
+static s32 sBackupFailureStreak = 0;
+static const s32 cBackupFailureStreakBeforePopup = 3; // transient failures (e.g. mid-edit) are expected; only warn if it keeps happening
+static const float cBackupRetrySeconds = 20.0f; // retry sooner than a full interval after a failed attempt
+
 void SetUnsavedChanges(bool dirty)
 {
+    if (dirty)
+        sEditGeneration++;
+
     if (gUnsavedChanges != dirty)
     {
         gUnsavedChanges = dirty;
@@ -649,6 +663,84 @@ static void DrawAdvancedOptions()
     ImGui::Unindent(10.0f);
 }
 
+static void DrawFileOptions()
+{
+    struct BackupPreset
+    {
+        const char *label;
+        bool enabled;
+        s32 minutes;
+    };
+
+    static const BackupPreset kPresets[] = {
+        {"Never", false, 0},
+        {"Rarely (every 15 minutes)", true, 15},
+        {"Occasionally (every 10 minutes)", true, 10},
+        {"Regularly (every 5 minutes)", true, 5},
+        {"Frequently (every minute)", true, 1},
+    };
+
+    const int presetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
+
+    int cur = 0;
+    if (sAutoBackupEnabled)
+    {
+        cur = 3;
+        for (int i = 1; i < presetCount; i++)
+            if (kPresets[i].minutes == sAutoBackupIntervalMinutes)
+            {
+                cur = i;
+                break;
+            }
+    }
+
+    PrefSectionTitle(ICON_LC_FILE " File");
+    ImGui::Indent(10.0f);
+
+    PrefLabel("Automatic backup");
+    if (ImGui::BeginCombo("##autobackup", kPresets[cur].label))
+    {
+        for (int i = 0; i < presetCount; i++)
+        {
+            bool sel = (i == cur);
+            if (ImGui::Selectable(kPresets[i].label, sel))
+            {
+                sAutoBackupEnabled = kPresets[i].enabled;
+                if (kPresets[i].enabled)
+                    sAutoBackupIntervalMinutes = kPresets[i].minutes;
+                SaveBackupConfig();
+            }
+            if (sel)
+                ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::TextUnformatted("Controls how frequently backups are created. They are created\n"
+                               "in a 'tunebloom_backup' folder next to the open file when unsaved\n"
+                               "changes are present. Only manual saves affect the original file.");
+        ImGui::EndTooltip();
+    }
+
+    if (!sAutoBackupEnabled)
+        ImGui::BeginDisabled();
+
+    PrefLabel("Maximum backups");
+    ImGui::SliderInt("##maxbackups", &sAutoBackupMaxBackups, 1, 100, "%d");
+    if (ImGui::IsItemDeactivatedAfterEdit())
+    {
+        if (sAutoBackupMaxBackups < 1)
+            sAutoBackupMaxBackups = 1;
+        SaveBackupConfig();
+    }
+
+    if (!sAutoBackupEnabled)
+        ImGui::EndDisabled();
+
+    ImGui::Unindent(10.0f);
+}
+
 static void DrawPreferencesWindow()
 {
     if (sPrefsRequestOpen)
@@ -672,6 +764,7 @@ static void DrawPreferencesWindow()
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4.0f));
         ImGui::BeginChild("##prefsbody", ImVec2(0.0f, -footer), false);
 
+        DrawFileOptions();
         DrawAudioOptions();
         DrawMidiOptions();
         DrawAppearanceOptions();
@@ -1286,6 +1379,61 @@ void LoadMetadataConfig()
     }
 }
 
+void SaveBackupConfig()
+{
+    std::string path = GetConfigDir() + "/backup.cfg";
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    CreateDirectoryA(GetConfigDir().c_str(), NULL);
+#else
+    mkdir(GetConfigDir().c_str(), 0755);
+#endif
+
+    FILE *f = fopen(path.c_str(), "w");
+    if (f)
+    {
+        fprintf(f, "enabled=%d\n", sAutoBackupEnabled ? 1 : 0);
+        fprintf(f, "interval_minutes=%d\n", sAutoBackupIntervalMinutes);
+        fprintf(f, "max_backups=%d\n", sAutoBackupMaxBackups);
+        fclose(f);
+    }
+}
+
+void LoadBackupConfig()
+{
+    std::string path = GetConfigDir() + "/backup.cfg";
+    FILE *f = fopen(path.c_str(), "r");
+    
+    if (f)
+    {
+        char buf[1024];
+        while (fgets(buf, sizeof(buf), f))
+        {
+            size_t len = strlen(buf);
+            if (len > 0 && buf[len - 1] == '\n')
+                buf[len - 1] = '\0';
+
+            if (strncmp(buf, "enabled=", 8) == 0)
+                sAutoBackupEnabled = atoi(buf + 8) != 0;
+            else if (strncmp(buf, "interval_minutes=", 17) == 0)
+                sAutoBackupIntervalMinutes = atoi(buf + 17);
+            else if (strncmp(buf, "max_backups=", 12) == 0)
+                sAutoBackupMaxBackups = atoi(buf + 12);
+        }
+
+        fclose(f);
+
+        if (sAutoBackupIntervalMinutes < 1)
+            sAutoBackupIntervalMinutes = 1;
+        
+        if (sAutoBackupIntervalMinutes > 60)
+            sAutoBackupIntervalMinutes = 60;
+        
+        if (sAutoBackupMaxBackups < 1)
+            sAutoBackupMaxBackups = 1;
+    }
+}
+
 void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -1460,6 +1608,112 @@ static bool ShouldWarnAboutMissingMetadata()
     return false;
 }
 
+static bool RunAutoBackup()
+{
+    std::filesystem::path orig(sBfsar.getFilePath().cstr());
+    std::filesystem::path backupDir = orig.parent_path() / "tunebloom_backup";
+
+    std::string stem = orig.stem().string();
+    std::string ext = orig.extension().string();
+
+    std::time_t now = std::time(nullptr);
+    std::tm *lt = std::localtime(&now);
+    char ts[32];
+    std::strftime(ts, sizeof(ts), "%Y-%m-%d_%H-%M-%S", lt);
+
+    std::string fileName = stem + "_" + ts + ext;
+
+    std::error_code ec;
+    std::filesystem::create_directories(backupDir, ec);
+
+    std::filesystem::path outPath = backupDir / fileName;
+
+    sead::FixedSafeString<1024> outStr(outPath.string().c_str());
+
+    if (!sBfsar.saveBackup(outStr))
+    {
+        sBackupFailureStreak++;
+
+        // A single failed attempt is probably just transient
+        // so only bother the user if it keeps failing
+
+        if (sBackupFailureStreak >= cBackupFailureStreakBeforePopup && !sBackupFailurePopupShown)
+        {
+            PopupMgr::instance()->addPopup({"Failed to create an automated backup", nullptr});
+            sBackupFailurePopupShown = true;
+        }
+
+        return false;
+    }
+
+    sBackupFailureStreak = 0;
+    sBackupFailurePopupShown = false;
+    sLastBackupGeneration = sEditGeneration;
+
+    const size_t cap = (size_t)(sAutoBackupMaxBackups < 1 ? 1 : sAutoBackupMaxBackups);
+    std::string prefix = stem + "_";
+    std::vector<std::string> backups;
+
+    for (const auto &entry : std::filesystem::directory_iterator(backupDir, ec))
+    {
+        if (!entry.is_regular_file())
+            continue;
+
+        std::string name = entry.path().filename().string();
+
+        if (name.size() > prefix.size() &&
+            name.compare(0, prefix.size(), prefix) == 0 &&
+            entry.path().extension().string() == ext)
+        {
+            backups.push_back(name);
+        }
+    }
+
+    if (backups.size() > cap)
+    {
+        std::sort(backups.begin(), backups.end());
+        size_t removeCount = backups.size() - cap;
+
+        for (size_t i = 0; i < removeCount; i++)
+        {
+            std::filesystem::remove(backupDir / backups[i], ec);
+            std::filesystem::remove(backupDir / (backups[i] + ".metadata.json"), ec);
+        }
+    }
+
+    return true;
+}
+
+static void CheckAutoBackup()
+{
+    static float sAccumSeconds = 0.0f;
+
+    if (!sAutoBackupEnabled || !sBfsar.isOpen() || !gUnsavedChanges || sBfsar.getFilePath().isEmpty())
+    {
+        sAccumSeconds = 0.0f;
+        return;
+    }
+
+    sAccumSeconds += ImGui::GetIO().DeltaTime;
+    if (sAccumSeconds < sAutoBackupIntervalMinutes * 60.0f)
+        return;
+
+    if (sEditGeneration == sLastBackupGeneration)
+    {
+        sAccumSeconds = 0.0f;
+        return;
+    }
+
+    if (!RunAutoBackup())
+    {
+        // retry sooner than a full interval
+        sAccumSeconds = std::max(0.0f, sAutoBackupIntervalMinutes * 60.0f - cBackupRetrySeconds);
+        return;
+    }
+
+    sAccumSeconds = 0.0f;
+}
+
 void DrawUI()
 {
     if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
@@ -1503,6 +1757,8 @@ void DrawUI()
     DrawPlayerUI();
 
     DrawPreferencesWindow();
+
+    CheckAutoBackup();
 
     DrawWavRegionDropImport();
 

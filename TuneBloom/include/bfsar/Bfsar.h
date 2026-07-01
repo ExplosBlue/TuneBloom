@@ -58,6 +58,7 @@ public:
     bool open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath, sead::Heap* heap);
     bool save();
     bool saveAs(const sead::SafeString& filePath);
+    bool saveBackup(const sead::SafeString& path);
     void close();
 
     bool isOpen() const
@@ -421,7 +422,7 @@ public:
     }
 
     //? Validate every item for saving
-    bool validate_();
+    bool validate_(bool showErrors = true);
 
     const char* getArchiveMagic() const
     {
@@ -465,7 +466,7 @@ public:
 
 private:
     bool open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize, sead::Heap* heap);
-    void save_(sead::FileHandle& handle);
+    void save_(sead::FileHandle& handle, const sead::SafeString* metadataPathOverride = nullptr);
     void close_();
 
     bool validateName_(const sead::SafeString& name, const Item::List& list, const Item* ignoreItem = nullptr) const;

@@ -119,6 +119,8 @@ void ApplyAudioConfig();
 extern bool sSaveMetadataDefault;
 void SaveMetadataConfig();
 void LoadMetadataConfig();
+void SaveBackupConfig();
+void LoadBackupConfig();
 
 void OpenPreferencesWindow();
 

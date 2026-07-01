@@ -1450,6 +1450,12 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
     }
 }
 
+void ApplyRenameShortcut()
+{
+    if (ImGui::IsKeyPressed(ImGuiKey_F2, false) && !ImGui::IsAnyItemActive())
+        ImGui::SetKeyboardFocusHere();
+}
+
 void DrawItemPropertiesUI()
 {
     Item* item = sSelectedItem;
@@ -1503,6 +1509,7 @@ void DrawItemPropertiesUI()
         ImGui::BeginDisabled();
 
     sead::FixedSafeString<256> name(item->getName());
+    ApplyRenameShortcut();
     if (ImGui::InputText("Name", name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
     {
         if (name != item->getName())

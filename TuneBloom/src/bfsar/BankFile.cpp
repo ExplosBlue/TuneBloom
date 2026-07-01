@@ -796,6 +796,7 @@ void BankFile::Instrument::drawUI()
         ImGui::BeginDisabled();
 
     sead::FixedSafeString<256> name(getName());
+    ApplyRenameShortcut();
     if (ImGui::InputText("Name", name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
     {
         if (name != getName())
@@ -2274,25 +2275,43 @@ static BankFile *sCurrentEditBank = nullptr;
 InstanciateItemCallback CreateInstrumentFunc(bool clear)
 {
     static s16 sAddProgramNo = 0;
+    static sead::FixedSafeString<256> sAddName;
 
     if (clear)
-        sAddProgramNo = 0;
+    {
+        sAddName = "Instrument";
+        sAddProgramNo = sCurrentEditBank ? FindNextAvailableProgramNo(sCurrentEditBank->getInstrumentList(), nullptr) : 0;
+    }
 
     if (sCurrentEditBank)
     {
-        ImGui::SetNextItemWidth(60.0f);
-        ImGui::InputScalar("Program Number", ImGuiDataType_S16, &sAddProgramNo);
-        ImGui::SameLine();
+        ImGui::SetNextItemWidth(240.0f);
+        ImGui::InputText("Name", sAddName.getBuffer(), sAddName.getBufferSize());
 
-        if (ImGui::Button("Next Available"))
+        s16 progStep = 1;
+        s16 progStepFast = 10;
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::InputScalar("Program Number", ImGuiDataType_S16, &sAddProgramNo, &progStep, &progStepFast);
+
+        float wandW = ImGui::CalcTextSize(ICON_LC_WAND_2).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SameLine();
+        float avail = ImGui::GetContentRegionAvail().x;
+
+        if (avail > wandW)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - wandW);
+        
+        if (ImGui::Button(ICON_LC_WAND_2 "###NextAvailAdd"))
             sAddProgramNo = FindNextAvailableProgramNo(sCurrentEditBank->getInstrumentList(), nullptr);
+        
+            if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Use next available program number");
     }
 
     auto doCreate = []() -> Item *
     {
         BankFile::Instrument *instr = new BankFile::Instrument();
         instr->setEnableName(true);
-        instr->getName() = "Instrument";
+        instr->getName() = sAddName.isEmpty() ? "Instrument" : sAddName.cstr();
         instr->setProgramNo(sAddProgramNo);
 
         BankFile::KeyRegion *keyRegion = new BankFile::KeyRegion(0, 127);

@@ -378,6 +378,7 @@ void WaveFile::drawUI()
         ImGui::BeginDisabled();
 
     sead::FixedSafeString<256> name(getName());
+    ApplyRenameShortcut();
     if (ImGui::InputText("Name", name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
     {
         if (name != getName())

@@ -115,6 +115,7 @@ static BankFile* sPendingImportInstrumentBank = nullptr;
 static u8* sIbnkFileData = nullptr;
 static BankFile* sIbnkTargetBank = nullptr;
 static std::string sIbnkInstrumentName;
+static sead::FixedSafeString<256> sIbnkNameEdit;
 static s16 sIbnkProgramNo;
 static u32 sIbnkWaveCount;
 static u32 sIbnkDataOffset;
@@ -3034,6 +3035,9 @@ static void DrawFileExportDialogs()
                     sIbnkWaveCount = readU32();
                     sIbnkDataOffset = offset;
 
+                    sIbnkNameEdit = !sIbnkInstrumentName.empty() ? sIbnkInstrumentName.c_str()
+                                  : (sIbnkReplaceTarget ? sIbnkReplaceTarget->getName().cstr() : "Instrument");
+
                     ImGui::OpenPopup(sIbnkReplaceTarget ? "Replace Instrument" : "Import Instrument");
                 }
             }
@@ -3050,12 +3054,26 @@ static void DrawFileExportDialogs()
             ImGui::TextUnformatted(replaceInfo.cstr());
         }
 
-        ImGui::SetNextItemWidth(60.0f);
-        ImGui::InputScalar("Program Number", ImGuiDataType_S16, &sIbnkProgramNo);
-        ImGui::SameLine();
+        ImGui::SetNextItemWidth(240.0f);
+        ImGui::InputText("Name", sIbnkNameEdit.getBuffer(), sIbnkNameEdit.getBufferSize());
 
-        if (ImGui::Button("Next Available"))
+        s16 progStep = 1;
+        s16 progStepFast = 10;
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::InputScalar("Program Number", ImGuiDataType_S16, &sIbnkProgramNo, &progStep, &progStepFast);
+
+        float wandW = ImGui::CalcTextSize(ICON_LC_WAND_2).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        ImGui::SameLine();
+        float avail = ImGui::GetContentRegionAvail().x;
+
+        if (avail > wandW)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - wandW);
+        
+        if (ImGui::Button(ICON_LC_WAND_2 "###NextAvailImport"))
             sIbnkProgramNo = FindNextAvailableProgramNo(sIbnkTargetBank->getInstrumentList(), sIbnkReplaceTarget);
+        
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Use next available program number");
 
         ImGui::Text("Waves to import: %u", sIbnkWaveCount);
 
@@ -3158,15 +3176,20 @@ static void DrawFileExportDialogs()
                 DeselectVelocity();
                 instr = sIbnkReplaceTarget;
                 instr->getKeyRegionList().clear();
-                if (!sIbnkInstrumentName.empty())
-                    instr->getName() = sIbnkInstrumentName.c_str();
+                
+                if (!sIbnkNameEdit.isEmpty())
+                {
+                    instr->setEnableName(true);
+                    instr->getName() = sIbnkNameEdit.cstr();
+                }
+
                 instr->setProgramNo(sIbnkProgramNo);
             }
             else
             {
                 instr = new BankFile::Instrument();
                 instr->setEnableName(true);
-                instr->getName() = sIbnkInstrumentName.empty() ? "Instrument" : sIbnkInstrumentName.c_str();
+                instr->getName() = sIbnkNameEdit.isEmpty() ? "Instrument" : sIbnkNameEdit.cstr();
                 instr->setProgramNo(sIbnkProgramNo);
             }
 

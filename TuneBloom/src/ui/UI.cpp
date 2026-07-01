@@ -2429,19 +2429,34 @@ static void ExportBankBundle(const BankFile* bank, sead::FileDevice* device, sea
         }
 
         std::unordered_set<std::string> usedNames;
-        u32 uniqueId = 0;
         for (const WaveFile* wave : referencedWaves)
         {
             std::string name = wave->getName().cstr();
 
             if (name.empty() || nameCounts[name] > 1)
             {
-                sead::FixedSafeString<256> uniqueName;
-                do {
-                    uniqueName.format("_W%u", uniqueId++);
-                } while (nameCounts.find(uniqueName.cstr()) != nameCounts.end() || usedNames.count(uniqueName.cstr()));
-                usedNames.insert(uniqueName.cstr());
-                waveExportNames[wave] = uniqueName.cstr();
+                const std::string &hash = wave->getMd5Hash();
+                if (!hash.empty())
+                {
+                    std::string exportName = hash;
+                    u32 suffix = 0;
+                    while (nameCounts.find(exportName) != nameCounts.end() || usedNames.count(exportName))
+                        exportName = hash + "_" + std::to_string(suffix++);
+
+                    usedNames.insert(exportName);
+                    waveExportNames[wave] = exportName;
+                }
+                else
+                {
+                    sead::FixedSafeString<256> fallbackName;
+                    static u32 sWaveExportId = 0;
+                    do
+                    {
+                        fallbackName.format("_W%u", sWaveExportId++);
+                    } while (nameCounts.find(fallbackName.cstr()) != nameCounts.end() || usedNames.count(fallbackName.cstr()));
+                    usedNames.insert(fallbackName.cstr());
+                    waveExportNames[wave] = fallbackName.cstr();
+                }
             }
             else
             {
@@ -2596,18 +2611,31 @@ static void ExportInstrumentBundle(const BankFile::Instrument* instr, sead::File
             nameCounts[wave->getName().cstr()]++;
 
         std::unordered_set<std::string> usedNames;
-        u32 uniqueId = 0;
         for (const WaveFile* wave : referencedWaves)
         {
             std::string name = wave->getName().cstr();
             if (name.empty() || nameCounts[name] > 1)
             {
-                sead::FixedSafeString<256> uniqueName;
-                do {
-                    uniqueName.format("_W%u", uniqueId++);
-                } while (nameCounts.find(uniqueName.cstr()) != nameCounts.end() || usedNames.count(uniqueName.cstr()));
-                usedNames.insert(uniqueName.cstr());
-                waveExportNames[wave] = uniqueName.cstr();
+                const std::string& hash = wave->getMd5Hash();
+                if (!hash.empty())
+                {
+                    std::string exportName = hash;
+                    u32 suffix = 0;
+                    while (nameCounts.find(exportName) != nameCounts.end() || usedNames.count(exportName))
+                        exportName = hash + "_" + std::to_string(suffix++);
+                    usedNames.insert(exportName);
+                    waveExportNames[wave] = exportName;
+                }
+                else
+                {
+                    sead::FixedSafeString<256> fallbackName;
+                    static u32 sWaveExportId = 0;
+                    do {
+                        fallbackName.format("_W%u", sWaveExportId++);
+                    } while (nameCounts.find(fallbackName.cstr()) != nameCounts.end() || usedNames.count(fallbackName.cstr()));
+                    usedNames.insert(fallbackName.cstr());
+                    waveExportNames[wave] = fallbackName.cstr();
+                }
             }
             else
             {

@@ -465,6 +465,11 @@ public:
         return mIsStreamExtended;
     }
 
+    const std::string& getMd5Hash() const
+    {
+        return mMd5Hash;
+    }
+
     u32 getFileSize() const
     {
         if (mUseOriginalData && mOriginalData)

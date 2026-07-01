@@ -6112,9 +6112,12 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
         if (key.empty())
         {
             skipWS();
-            if (content[pos] == ',')
+            if (pos < content.size() && content[pos] == ',')
+            {
                 pos++;
-            continue;
+                continue;
+            }
+            break;
         }
 
         skipWS();
@@ -6142,9 +6145,12 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
                 if (bankIdStr.empty())
                 {
                     skipWS();
-                    if (content[pos] == ',')
+                    if (pos < content.size() && content[pos] == ',')
+                    {
                         pos++;
-                    continue;
+                        continue;
+                    }
+                    break;
                 }
 
                 skipWS();
@@ -6283,9 +6289,12 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
                 if (warcIdStr.empty())
                 {
                     skipWS();
-                    if (content[pos] == ',')
+                    if (pos < content.size() && content[pos] == ',')
+                    {
                         pos++;
-                    continue;
+                        continue;
+                    }
+                    break;
                 }
 
                 skipWS();

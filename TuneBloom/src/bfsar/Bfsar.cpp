@@ -26,12 +26,14 @@
 #include <snd/snd_WaveSoundFileReader.h>
 
 #include <snd/StreamSoundPlayer.h> //? For cStrmTrackNum
+#include <snd/SoundThread.h>
 
 #include <md5/md5.h>
 
 #include <VectorMap.h>
 #include <VectorSet.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -356,6 +358,209 @@ void Bfsar::updateList(Item::List& list)
 
         i++;
     }
+}
+
+static std::string WaveContentKey_(const WaveFile *wave)
+{
+    std::string blob;
+    auto put = [&](const void *p, u32 n)
+    { blob.append(static_cast<const char *>(p), n); };
+
+    u32 enc = static_cast<u32>(wave->getEncoding());
+    u32 rate = wave->getSampleRate();
+    u32 count = wave->getSampleCount();
+    u32 isLoop = wave->getIsLoop() ? 1u : 0u;
+    u32 loopS = wave->getOriginalLoopStartFrame();
+    u32 loopE = wave->getOriginalLoopEndFrame();
+    u32 chN = wave->getChannels().size();
+    
+    put(&enc, 4);
+    put(&rate, 4);
+    put(&count, 4);
+    put(&isLoop, 4);
+    put(&loopS, 4);
+    put(&loopE, 4);
+    put(&chN, 4);
+
+    for (u32 i = 0; i < chN; i++)
+    {
+        const WaveFile::Channel *ch = wave->getChannels().nth(i);
+        u32 sz = ch->getDataSizeMin();
+        put(&sz, 4);
+        if (ch->getData() && sz)
+            put(ch->getData(), sz);
+        if (wave->getEncoding() == WaveFile::Encoding::DspAdpcm)
+        {
+            const auto &ap = ch->getAdpcmParam(false);
+            put(&ap, sizeof(ap));
+        }
+    }
+
+    return md5(blob.data(), static_cast<u32>(blob.size()));
+}
+
+static bool WaveContentEqual_(const WaveFile *a, const WaveFile *b)
+{
+    if (a->getEncoding() != b->getEncoding())
+        return false;
+    
+    if (a->getSampleRate() != b->getSampleRate())
+        return false;
+    
+    if (a->getSampleCount() != b->getSampleCount())
+        return false;
+    
+    if (a->getIsLoop() != b->getIsLoop())
+        return false;
+    
+    if (a->getOriginalLoopStartFrame() != b->getOriginalLoopStartFrame())
+        return false;
+    
+    if (a->getOriginalLoopEndFrame() != b->getOriginalLoopEndFrame())
+        return false;
+
+    u32 n = a->getChannels().size();
+
+    if (n != b->getChannels().size())
+        return false;
+
+    for (u32 i = 0; i < n; i++)
+    {
+        const WaveFile::Channel *ca = a->getChannels().nth(i);
+        const WaveFile::Channel *cb = b->getChannels().nth(i);
+
+        u32 sz = ca->getDataSizeMin();
+
+        if (sz != cb->getDataSizeMin())
+            return false;
+        if (sz)
+        {
+            if (!ca->getData() || !cb->getData())
+                return ca->getData() == cb->getData();
+            
+            if (sead::MemUtil::compare(ca->getData(), cb->getData(), sz) != 0)
+                return false;
+        }
+        if (a->getEncoding() == WaveFile::Encoding::DspAdpcm)
+        {
+            if (sead::MemUtil::compare(&ca->getAdpcmParam(false), &cb->getAdpcmParam(false), sizeof(ca->getAdpcmParam(false))) != 0)
+                return false;
+        }
+    }
+
+    return true;
+}
+
+static int WaveNameScore_(const WaveFile *wave)
+{
+    if (!wave->isNameValid())
+        return 0;
+
+    std::string name = wave->getName().cstr();
+
+    if (name.rfind("GUESS", 0) == 0)
+        return 1;
+
+    return 2;
+}
+
+std::vector<Bfsar::WaveDuplicateGroup> Bfsar::findDuplicateWaves()
+{
+    std::vector<WaveDuplicateGroup> groups;
+    std::unordered_map<std::string, std::vector<WaveFile *>> buckets;
+
+    for (Item *it : mWaveFileList)
+    {
+        WaveFile *wave = static_cast<WaveFile *>(it);
+
+        if (wave->getIsStreamExtended())
+            continue;
+
+        std::string key = std::to_string(wave->mWaveArchiveId) + ":" + WaveContentKey_(wave);
+        buckets[key].push_back(wave);
+    }
+
+    for (auto &entry : buckets)
+    {
+        std::vector<WaveFile *> &waves = entry.second;
+
+        if (waves.size() < 2)
+            continue;
+
+        std::vector<WaveFile *> members;
+        members.push_back(waves[0]);
+
+        for (u32 i = 1; i < waves.size(); i++)
+        {
+            if (WaveContentEqual_(waves[0], waves[i]))
+                members.push_back(waves[i]);
+        }
+
+        if (members.size() < 2)
+            continue;
+
+        WaveDuplicateGroup group;
+        group.keep = members[0];
+
+        for (WaveFile *w : members)
+        {
+            if (WaveNameScore_(w) > WaveNameScore_(group.keep))
+                group.keep = w;
+        }
+
+        for (WaveFile *w : members)
+        {
+            if (w != group.keep)
+                group.remove.push_back(w);
+        }
+
+        groups.push_back(std::move(group));
+    }
+
+    std::sort(groups.begin(), groups.end(), [](const WaveDuplicateGroup &a, const WaveDuplicateGroup &b)
+              { return a.keep->getId() < b.keep->getId(); });
+
+    return groups;
+}
+
+Bfsar::WaveMergeResult Bfsar::mergeDuplicateWaves(const std::vector<WaveDuplicateGroup> &groups)
+{
+    WaveMergeResult result;
+
+    if (groups.empty())
+        return result;
+
+    snd::internal::driver::SoundThreadLock lock;
+
+    for (const WaveDuplicateGroup &group : groups)
+    {
+        if (!group.keep || group.remove.empty())
+            continue;
+
+        result.groups++;
+
+        for (WaveFile *dup : group.remove)
+        {
+            std::vector<ItemReference *> refs;
+            
+            for (auto rit = dup->mReferences.robustBegin(); rit != dup->mReferences.robustEnd(); ++rit)
+                refs.push_back(rit->val());
+
+            for (ItemReference *ref : refs)
+                ref->attach(group.keep);
+
+            result.bytesSaved += dup->getFileSize();
+            result.duplicatesRemoved++;
+
+            mWaveFileList.erase(dup);
+            delete dup;
+        }
+    }
+
+    if (result.duplicatesRemoved > 0)
+        updateList(mWaveFileList);
+
+    return result;
 }
 
 bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize, sead::Heap* heap)

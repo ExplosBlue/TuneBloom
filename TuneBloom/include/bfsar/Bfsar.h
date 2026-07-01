@@ -16,6 +16,8 @@
 
 #include <snd/snd_MemorySoundArchive.h>
 
+#include <vector>
+
 struct SoundArchivePlayerInfo
 {
     SoundArchivePlayerInfo()
@@ -292,6 +294,22 @@ public:
     bool validateName(const Item& item) const;
 
     void updateList(Item::List& list);
+
+    struct WaveDuplicateGroup
+    {
+        WaveFile* keep = nullptr;
+        std::vector<WaveFile*> remove;
+    };
+
+    struct WaveMergeResult
+    {
+        u32 groups = 0;
+        u32 duplicatesRemoved = 0;
+        u64 bytesSaved = 0;
+    };
+
+    std::vector<WaveDuplicateGroup> findDuplicateWaves();
+    WaveMergeResult mergeDuplicateWaves(const std::vector<WaveDuplicateGroup>& groups);
 
     u32 getVersionForBfwsd() const
     {

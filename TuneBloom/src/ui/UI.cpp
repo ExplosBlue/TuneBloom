@@ -6902,12 +6902,137 @@ static bool WaveFilesFilter(const Item* item)
     return textFilter ? textFilter(item) : true;
 }
 
+static sead::FixedSafeString<32> FormatByteSize(u64 bytes)
+{
+    sead::FixedSafeString<32> out;
+
+    if (bytes >= 1024 * 1024)
+        out.format("%.1f MB", bytes / (1024.0 * 1024.0));
+    else
+        out.format("%llu KB", (unsigned long long)(bytes / 1024));
+    
+    return out;
+}
+
 void DrawWaveFilesUI()
 {
     static SortState sSortState;
 
+    static std::vector<Bfsar::WaveDuplicateGroup> sPendingDedup;
+
     DrawSortToolbar(sSortState, true, true);
     DrawIncludeStreamWavesCheckbox(&sWaveFilesIncludeStream);
+
+    ImGui::SameLine();
+    {
+        const char *label = "Merge Duplicates";
+        float btnW = ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        float margin = ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - btnW - margin);
+
+        if (ImGui::Button(label))
+        {
+            sPendingDedup = sBfsar.findDuplicateWaves();
+
+            if (sPendingDedup.empty())
+                PopupMgr::instance()->addPopup({"No duplicate wave files found."});
+            else
+                ImGui::OpenPopup("Confirm Merge");
+        }
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Removes duplicate wave files, keeping the first instance.");
+    }
+
+    {
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(520.0f, 480.0f), ImGuiCond_Appearing);
+
+        if (ImGui::BeginPopupModal("Confirm Merge", nullptr, 0))
+        {
+            u32 removeCount = 0;
+            u64 saved = 0;
+
+            for (const Bfsar::WaveDuplicateGroup &g : sPendingDedup)
+            {
+                removeCount += static_cast<u32>(g.remove.size());
+                for (WaveFile *d : g.remove)
+                    saved += d->getFileSize();
+            }
+
+            ImGui::Text("Merge %u duplicate wave file(s)?", removeCount);
+
+            ImGui::PushTextWrapPos(0.0f);
+            ImGui::TextDisabled("References are repointed to the kept file. ~%s saved.", FormatByteSize(saved).cstr());
+            ImGui::PopTextWrapPos();
+
+            ImGui::Separator();
+            ImGui::BeginChild("DedupList", ImVec2(0.0f, -ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().ItemSpacing.y), true);
+            
+            const ImVec4 keepColor(0.45f, 0.85f, 0.45f, 1.0f);
+            const ImVec4 removeColor(0.90f, 0.45f, 0.45f, 1.0f);
+
+            for (u32 gi = 0; gi < sPendingDedup.size(); gi++)
+            {
+                const Bfsar::WaveDuplicateGroup &g = sPendingDedup[gi];
+                ImGui::TextColored(keepColor, "[%u] %s", g.keep->getId(), g.keep->getNameOrNull().cstr());
+                ImGui::Indent(16.0f);
+                
+                for (WaveFile *d : g.remove)
+                    ImGui::TextColored(removeColor, "Removed: [%u] %s", d->getId(), d->getNameOrNull().cstr());
+                
+                ImGui::Unindent(16.0f);
+
+                if (gi + 1 < sPendingDedup.size())
+                    ImGui::Separator();
+            }
+
+            ImGui::EndChild();
+            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
+
+            bool nothingToMerge = sPendingDedup.empty();
+
+            if (nothingToMerge)
+                ImGui::BeginDisabled();
+
+            if (ImGui::Button("Merge", buttonSize))
+            {
+                sSoundPlayer.reset();
+                
+                if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::WaveFile)
+                    sSelectedItem = nullptr;
+
+                Bfsar::WaveMergeResult r = sBfsar.mergeDuplicateWaves(sPendingDedup);
+                sPendingDedup.clear();
+
+                if (r.duplicatesRemoved > 0)
+                {
+                    SetUnsavedChanges(true);
+
+                    sead::FixedSafeString<128> msg;
+                    msg.format("Removed %u duplicate wave(s) in %u set(s) (~%s).", r.duplicatesRemoved, r.groups, FormatByteSize(r.bytesSaved).cstr());
+                    PopupMgr::instance()->addPopup({msg.cstr()});
+                }
+
+                ImGui::CloseCurrentPopup();
+            }
+
+            if (nothingToMerge)
+                ImGui::EndDisabled();
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel", buttonSize))
+            {
+                sPendingDedup.clear();
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+
     ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
 
     DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(),

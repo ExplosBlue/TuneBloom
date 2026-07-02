@@ -890,16 +890,31 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
         return false;
     }
 
-    char fmt[4];
-    stream.readMemBlock(fmt, 4);
-
-    if (sead::MemUtil::compare(fmt, "fmt ", 4) != 0)
+    // scan for fmt chunk
+    
+    u32 fmtChunkSize = 0;
+    for (;;)
     {
-        PopupMgr::instance()->addPopup({ "Invalid 'fmt ' header" });
-        return false;
+        if (stream.isEOF())
+        {
+            PopupMgr::instance()->addPopup({ "Invalid 'fmt ' header" });
+            return false;
+        }
+
+        char chunkId[4];
+        stream.readMemBlock(chunkId, 4);
+        u32 chunkSize = stream.readU32();
+
+        if (sead::MemUtil::compare(chunkId, "fmt ", 4) == 0)
+        {
+            fmtChunkSize = chunkSize;
+            break;
+        }
+        
+        stream.skip(chunkSize + (chunkSize & 1));
     }
 
-    out->chunkSize = stream.readU32();
+    out->chunkSize = fmtChunkSize;
 
     LOG_STR("RIFF header OK");
 
@@ -946,7 +961,7 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
         {
             out->sampleBytes = blockSize;
             out->dataStart = chunkStart;
-            stream.skip(blockSize);
+            stream.skip(blockSize + (blockSize & 1));
         }
         else if (sead::MemUtil::compare(block, "smpl", 4) == 0)
         {
@@ -974,10 +989,10 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
                     stream.skip(blockSize - 36);
             }
             else
-                stream.skip(blockSize);
+                stream.skip(blockSize + (blockSize & 1));
         }
         else
-            stream.skip(blockSize);
+            stream.skip(blockSize + (blockSize & 1));
     }
 
     if (out->sampleBytes == 0)

@@ -1028,13 +1028,6 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
 
     if (ImGui::BeginPopup("VelocityRegionContextMenu"))
     {
-        bool disable = false;
-        if (keyRegion->getVelocityRegionList().size() > 1)
-        {
-            disable = true;
-            ImGui::BeginDisabled();
-        }
-
         if (ImGui::MenuItem("Split Key Region") && keyRegion->getKeyNum() > 1)
         {
             snd::internal::driver::SoundThreadLock lock;
@@ -1044,7 +1037,7 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
 
             if (splitMin <= keyRegion->getKeyMin() || splitMin > keyRegion->getKeyMax())
                 splitMin = (keyRegion->getKeyMax() + keyRegion->getKeyMin()) / 2 + 1;
-            
+
             u8 newKeyMin = static_cast<u8>(splitMin);
 
             keyRegion->setKeyMax(newKeyMin - 1, *instrument);
@@ -1060,18 +1053,22 @@ void VelocityContextMenu(BankFile::Instrument* instrument, BankFile::KeyRegion* 
             sBfsar.updateList(instrument->getKeyRegionList());
             SetUnsavedChanges(true);
 
-            BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(0, 127);
-            newVelRegion->setId(0);
-            newVelRegion->setEnableName(true);
-            newVelRegion->getName() = "VelocityRegion";
-            copyVel(newVelRegion, velocityRegion);
+            for (Item* item : keyRegion->getVelocityRegionList())
+            {
+                BankFile::VelocityRegion* srcVelRegion = static_cast<BankFile::VelocityRegion*>(item);
+                BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(srcVelRegion->getVelocityMin(), srcVelRegion->getVelocityMax());
+                
+                newVelRegion->setId(0);
+                newVelRegion->setEnableName(true);
+                newVelRegion->getName() = "VelocityRegion";
+                
+                copyVel(newVelRegion, srcVelRegion);
 
-            newKeyRegion->getVelocityRegionList().pushBack(newVelRegion);
-        }
+                newKeyRegion->getVelocityRegionList().pushBack(newVelRegion);
+            }
 
-        if (disable)
-        {
-            ImGui::EndDisabled();
+            sBfsar.updateList(newKeyRegion->getVelocityRegionList());
+            SetUnsavedChanges(true);
         }
 
         if (ImGui::MenuItem("Split Velocity Region") && velocityRegion->getVelocityNum() > 1)

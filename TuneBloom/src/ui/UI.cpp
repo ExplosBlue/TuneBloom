@@ -886,6 +886,9 @@ void DrawMenuBar()
 
                         if (ImGui::Button(ICON_LC_TRASH "##del"))
                             pendingDelete = (int)i;
+                        
+                        if (ImGui::IsItemHovered())
+                            ImGui::SetTooltip("Remove from recents");
 
                         ImGui::PopID();
                     }

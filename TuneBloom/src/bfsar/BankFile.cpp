@@ -17,6 +17,53 @@
 #include <string>
 #include <cstdio>
 
+struct PianoRollPalette
+{
+    ImU32 canvasBg, placeholderText;
+    ImU32 gridLineOctave, gridLineOctaveLabel, gridLineVel, gridLineVelTick;
+    ImU32 grabBar;
+    ImU32 vScrollTrack, vScrollThumb, vScrollThumbHover;
+    ImU32 hScrollTrack, hScrollThumbFits, hScrollThumbOverflow;
+    ImU32 splitterHover;
+};
+
+static const PianoRollPalette& ActivePianoRollPalette_()
+{
+    static constexpr PianoRollPalette kDark = {
+        IM_COL32(20, 20, 30, 255),           // canvasBg
+        IM_COL32_WHITE,                      // placeholderText
+        IM_COL32(255, 255, 255, 40),         // gridLineOctave
+        IM_COL32(225, 230, 240, 170),        // gridLineOctaveLabel
+        IM_COL32(255, 255, 255, 28),         // gridLineVel
+        IM_COL32(255, 255, 255, 120),        // gridLineVelTick
+        IM_COL32(255, 255, 0, 255),          // grabBar
+        IM_COL32(0x2a, 0x33, 0x40, 170),     // vScrollTrack
+        IM_COL32(0x7f, 0xd1, 0xff, 220),     // vScrollThumb
+        IM_COL32(0xbf, 0xe6, 0xff, 255),     // vScrollThumbHover
+        IM_COL32(0x2a, 0x33, 0x40, 255),     // hScrollTrack
+        IM_COL32(0x3d, 0x5a, 0x73, 160),     // hScrollThumbFits
+        IM_COL32(0x7f, 0xd1, 0xff, 255),     // hScrollThumbOverflow
+        IM_COL32(0x7f, 0xd1, 0xff, 220),     // splitterHover
+    };
+    static constexpr PianoRollPalette kLight = {
+        IM_COL32(0xf2, 0xf3, 0xf5, 255),     // canvasBg
+        IM_COL32(0x40, 0x46, 0x4d, 255),     // placeholderText
+        IM_COL32(0, 0, 0, 35),               // gridLineOctave
+        IM_COL32(70, 75, 82, 200),           // gridLineOctaveLabel
+        IM_COL32(0, 0, 0, 25),               // gridLineVel
+        IM_COL32(0, 0, 0, 110),              // gridLineVelTick
+        IM_COL32(200, 120, 0, 255),          // grabBar
+        IM_COL32(0xd4, 0xd8, 0xde, 170),     // vScrollTrack
+        IM_COL32(0x1f, 0x6f, 0xa8, 220),     // vScrollThumb
+        IM_COL32(0x3a, 0x8e, 0xcf, 255),     // vScrollThumbHover
+        IM_COL32(0xd4, 0xd8, 0xde, 255),     // hScrollTrack
+        IM_COL32(0x8a, 0x9b, 0xac, 160),     // hScrollThumbFits
+        IM_COL32(0x1f, 0x6f, 0xa8, 255),     // hScrollThumbOverflow
+        IM_COL32(0x1f, 0x6f, 0xa8, 220),     // splitterHover
+    };
+    return gThemeIsDark ? kDark : kLight;
+}
+
 static sead::FixedSafeString<24> FormatKeyName(s32 key)
 {
     if (key < 0 || key >= static_cast<s32>(MmlCommandNote::sKeysNum))
@@ -1478,7 +1525,7 @@ void DrawKeyboardWithRegions(
     draw->AddRectFilled(
         canvasPos,
         ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
-        IM_COL32(20, 20, 30, 255)
+        ActivePianoRollPalette_().canvasBg
     );
 
     draw->PushClipRect(
@@ -1690,7 +1737,7 @@ void DrawKeyboardWithRegions(
                         draw->AddLine(
                             ImVec2(p0.x, p0.y),
                             ImVec2(p1.x, p0.y),
-                            IM_COL32(255, 255, 0, 255),
+                            ActivePianoRollPalette_().grabBar,
                             2.0f
                         );
                         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
@@ -1709,7 +1756,7 @@ void DrawKeyboardWithRegions(
                                 draw->AddLine(
                                     ImVec2(p0.x, p1.y),
                                     ImVec2(p1.x, p1.y),
-                                    IM_COL32(255, 255, 0, 255),
+                                    ActivePianoRollPalette_().grabBar,
                                     2.0f
                                 );
                                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
@@ -1834,7 +1881,7 @@ void DrawKeyboardWithRegions(
                     draw->AddLine(
                         ImVec2(r0.x, r0.y),
                         ImVec2(r0.x, r1.y),
-                        IM_COL32(255, 255, 0, 255),
+                        ActivePianoRollPalette_().grabBar,
                         2.0f
                     );
 
@@ -1846,7 +1893,7 @@ void DrawKeyboardWithRegions(
                     draw->AddLine(
                         ImVec2(r1.x, r0.y),
                         ImVec2(r1.x, r1.y),
-                        IM_COL32(255, 255, 0, 255),
+                        ActivePianoRollPalette_().grabBar,
                         2.0f
                     );
 
@@ -1888,8 +1935,8 @@ void DrawKeyboardWithRegions(
             f32 gMin, gMax;
             GetKeyRect(gk, gMin, gMax);
             const f32 lx = canvasPos.x + gMin;
-            draw->AddLine(ImVec2(lx, canvasPos.y), ImVec2(lx, canvasPos.y + regionHeight), IM_COL32(255, 255, 255, 40));
-            draw->AddText(ImVec2(lx + 3.0f, canvasPos.y + regionHeight - ImGui::GetFontSize() - 2.0f),IM_COL32(225, 230, 240, 170), FormatKeyName(gk).cstr());
+            draw->AddLine(ImVec2(lx, canvasPos.y), ImVec2(lx, canvasPos.y + regionHeight), ActivePianoRollPalette_().gridLineOctave);
+            draw->AddText(ImVec2(lx + 3.0f, canvasPos.y + regionHeight - ImGui::GetFontSize() - 2.0f), ActivePianoRollPalette_().gridLineOctaveLabel, FormatKeyName(gk).cstr());
         }
 
         {
@@ -1900,8 +1947,8 @@ void DrawKeyboardWithRegions(
                 if (gy < canvasPos.y - 0.5f || gy > canvasPos.y + regionHeight + 0.5f)
                     continue;
 
-                draw->AddLine(ImVec2(visibleCanvasPos.x, gy), ImVec2(visibleCanvasPos.x + width, gy), IM_COL32(255, 255, 255, 28));
-                draw->AddLine(ImVec2(visibleCanvasPos.x, gy), ImVec2(visibleCanvasPos.x + 8.0f, gy), IM_COL32(255, 255, 255, 120), 1.0f);
+                draw->AddLine(ImVec2(visibleCanvasPos.x, gy), ImVec2(visibleCanvasPos.x + width, gy), ActivePianoRollPalette_().gridLineVel);
+                draw->AddLine(ImVec2(visibleCanvasPos.x, gy), ImVec2(visibleCanvasPos.x + 8.0f, gy), ActivePianoRollPalette_().gridLineVelTick, 1.0f);
             }
         }
 
@@ -2155,7 +2202,7 @@ void DrawKeyboardWithRegions(
         f32 x = canvasPos.x + canvasSize.x / 2.0f - ts.x / 2.0f;
         f32 y = canvasPos.y + regionHeight / 2.0f - ts.y / 2.0f;
 
-        draw->AddText(ImVec2(x, y), IM_COL32_WHITE, text);
+        draw->AddText(ImVec2(x, y), ActivePianoRollPalette_().placeholderText, text);
     }
 
     draw->PopClipRect();
@@ -2163,9 +2210,9 @@ void DrawKeyboardWithRegions(
     if (maxScrollY > 0.0f)
     {
         const f32 thumbTop = (vsbTravel > 0.0f) ? (sScrollY / maxScrollY) * vsbTravel : 0.0f;
-        const ImU32 thumbCol = vScrollbarHot ? IM_COL32(0xbf, 0xe6, 0xff, 255) : IM_COL32(0x7f, 0xd1, 0xff, 220);
+        const ImU32 thumbCol = vScrollbarHot ? ActivePianoRollPalette_().vScrollThumbHover : ActivePianoRollPalette_().vScrollThumb;
 
-        draw->AddRectFilled(ImVec2(vsbTrackX, vsbTrackY0), ImVec2(vsbTrackX + vsbW, vsbTrackY1), IM_COL32(0x2a, 0x33, 0x40, 170), 3.0f);
+        draw->AddRectFilled(ImVec2(vsbTrackX, vsbTrackY0), ImVec2(vsbTrackX + vsbW, vsbTrackY1), ActivePianoRollPalette_().vScrollTrack, 3.0f);
         draw->AddRectFilled(ImVec2(vsbTrackX, vsbTrackY0 + thumbTop), ImVec2(vsbTrackX + vsbW, vsbTrackY0 + thumbTop + vsbThumbH), thumbCol, 3.0f);
     }
 
@@ -2198,14 +2245,14 @@ void DrawKeyboardWithRegions(
 
         const f32 trackH = 14.0f;
         ImVec2 trackOrigin = ImGui::GetCursorScreenPos();
-        d2->AddRectFilled(trackOrigin, ImVec2(trackOrigin.x + width, trackOrigin.y + trackH),IM_COL32(0x2a, 0x33, 0x40, 255));
+        d2->AddRectFilled(trackOrigin, ImVec2(trackOrigin.x + width, trackOrigin.y + trackH), ActivePianoRollPalette_().hScrollTrack);
 
         const f32 visibleFrac = (zoomedWidth > 0.0f) ? (width / zoomedWidth) : 1.0f;
         const f32 thumbW = std::max(16.0f, std::min(width, visibleFrac * width));
         const f32 travel = std::max(0.0f, width - thumbW);
         const f32 thumbLeft = (maxScroll > 0.0f) ? (sScrollX / maxScroll) * travel : 0.0f;
         const bool fitsAll = zoomedWidth <= width + 0.5f;
-        d2->AddRectFilled(ImVec2(trackOrigin.x + thumbLeft, trackOrigin.y + 1.0f), ImVec2(trackOrigin.x + thumbLeft + thumbW, trackOrigin.y + trackH - 1.0f), fitsAll ? IM_COL32(0x3d, 0x5a, 0x73, 160) : IM_COL32(0x7f, 0xd1, 0xff, 255), 3.0f);
+        d2->AddRectFilled(ImVec2(trackOrigin.x + thumbLeft, trackOrigin.y + 1.0f), ImVec2(trackOrigin.x + thumbLeft + thumbW, trackOrigin.y + trackH - 1.0f), fitsAll ? ActivePianoRollPalette_().hScrollThumbFits : ActivePianoRollPalette_().hScrollThumbOverflow, 3.0f);
 
         ImGui::InvisibleButton("###PianoScroll", ImVec2(width, trackH));
         if (ImGui::IsItemHovered() || ImGui::IsItemActive())
@@ -2496,7 +2543,7 @@ void BankFile::drawFileUI()
         const ImVec2 gmin = ImGui::GetItemRectMin();
         const ImVec2 gmax = ImGui::GetItemRectMax();
         const f32 cy = (gmin.y + gmax.y) * 0.5f;
-        const ImU32 gcol = (splitterActive || ImGui::IsItemHovered()) ? IM_COL32(0x7f, 0xd1, 0xff, 220) : IM_COL32(120, 130, 145, 130);
+        const ImU32 gcol = (splitterActive || ImGui::IsItemHovered()) ? ActivePianoRollPalette_().splitterHover : IM_COL32(120, 130, 145, 130);
         ImGui::GetWindowDrawList()->AddLine(ImVec2(gmin.x + 6.0f, cy), ImVec2(gmax.x - 6.0f, cy), gcol, 2.0f);
     }
 

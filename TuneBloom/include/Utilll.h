@@ -1,12 +1,14 @@
 #pragma once
 
 #include <framework/seadFramework.h>
+#include <gfx/seadColor.h>
 #include <gfx/seadTexture.h>
 
 namespace util {
 
 sead::Framework* getFramework();
 void setFramework_(sead::Framework* framework);
+void setClearColor(const sead::Color4f& color);
 
 sead::Texture* getIcon();
 void setIcon_(sead::Texture* icon);

@@ -1,5 +1,6 @@
 #include <Utilll.h>
 
+#include <AppFramework.h>
 #include <framework/glfw/seadGameFrameworkGlfwGL.h>
 #include <gfx/seadTexture.h>
 
@@ -17,6 +18,13 @@ sead::Framework* getFramework()
 void setFramework_(sead::Framework* framework)
 {
     sFramework = framework;
+}
+
+void setClearColor(const sead::Color4f& color)
+{
+    AppFramework* fw = sead::DynamicCast<AppFramework>(getFramework());
+    if (fw)
+        fw->setClearColor(color);
 }
 
 sead::Texture* getIcon()

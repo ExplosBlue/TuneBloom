@@ -154,6 +154,10 @@ void DrawSoundPropertiesUI()
     const ImU8 cStepU8 = 1;
     const ImU16 cStepU16 = 1;
     const ImU32 cStepU32 = 1;
+    const ImU8 cVolumeMin = 0;
+    const ImU8 cVolumeMax = 255;
+    const ImU8 cPanMin = 0;
+    const ImU8 cPanMax = 127;
 
     {
         Item* player = sound->getPlayerRef().getItem();
@@ -166,7 +170,7 @@ void DrawSoundPropertiesUI()
 
     {
         u8 volume = sound->getVolume();
-        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cVolumeMin, &cVolumeMax))
         {
             sound->setVolume(volume);
             SetUnsavedChanges(true);
@@ -1019,7 +1023,7 @@ void DrawSoundPropertiesUI()
 
                 {
                     u8 pan = waveSoundInfo.getPan();
-                    if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cStepU8))
+                    if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cPanMin, &cPanMax))
                     {
                         waveSoundInfo.setPan(pan);
                         SetUnsavedChanges(true);
@@ -1219,6 +1223,10 @@ void DrawSoundPropertiesUI()
 void Sound::StreamSoundInfo::Track::drawUI()
 {
     const ImU8 cStepU8 = 1;
+    const ImU8 cVolumeMin = 0;
+    const ImU8 cVolumeMax = 255;
+    const ImU8 cPanMin = 0;
+    const ImU8 cPanMax = 127;
 
     {
         Item* waveFile = getWaveFileRef().getItem();
@@ -1247,7 +1255,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
 
     {
         u8 volume = getVolume();
-        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cStepU8))
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cVolumeMin, &cVolumeMax))
         {
             setVolume(volume);
             SetUnsavedChanges(true);
@@ -1256,7 +1264,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
 
     {
         u8 pan = getPan();
-        if (ImGui::InputScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cStepU8))
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cPanMin, &cPanMax))
         {
             setPan(pan);
             SetUnsavedChanges(true);

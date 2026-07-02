@@ -133,6 +133,7 @@ private:
     bool mIsDirty;
     bool mLoadError;
     TextEditor* mTextEditor;
+    bool mTextEditorThemeIsDark = true;
     SeqTextInfo mSeqTextInfo;
     sead::HeapSafeString* mSeqText;
 

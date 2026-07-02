@@ -52,6 +52,8 @@ void SequenceFile::onOpenFileWindow()
 {
     SEAD_ASSERT(!mTextEditor);
     mTextEditor = new TextEditor();
+    mTextEditor->SetPalette(gThemeIsDark ? TextEditor::GetDarkPalette() : TextEditor::GetLightPalette());
+    mTextEditorThemeIsDark = gThemeIsDark;
 
     mIsDirty = false;
 
@@ -315,6 +317,13 @@ void SequenceFile::drawFileUI()
         float rightPaneWidth = availWidth - leftPaneWidth - splitterWidth;
 
         ImGui::BeginChild("SeqEditorPane", ImVec2(leftPaneWidth, 0), false);
+        
+        if (mTextEditorThemeIsDark != gThemeIsDark)
+        {
+            mTextEditor->SetPalette(gThemeIsDark ? TextEditor::GetDarkPalette() : TextEditor::GetLightPalette());
+            mTextEditorThemeIsDark = gThemeIsDark;
+        }
+
         mTextEditor->Render("SeqText");
         ImGui::EndChild();
 
@@ -495,6 +504,12 @@ void SequenceFile::drawFileUI()
     }
     else
     {
+        if (mTextEditorThemeIsDark != gThemeIsDark)
+        {
+            mTextEditor->SetPalette(gThemeIsDark ? TextEditor::GetDarkPalette() : TextEditor::GetLightPalette());
+            mTextEditorThemeIsDark = gThemeIsDark;
+        }
+
         mTextEditor->Render("SeqText");
     }
 

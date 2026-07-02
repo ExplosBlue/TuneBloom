@@ -270,8 +270,6 @@ bool Bfsar::saveBackup(const sead::SafeString &path)
     if (!handle.getDevice())
         return false;
 
-    // Mirror the metadata JSON next to the backup file itself (never the
-    // original project's .metadata.json) so backups stay self-contained.
     sead::FixedSafeString<520> backupMetadataPath;
     getMetadataPath_(&backupMetadataPath, path);
 

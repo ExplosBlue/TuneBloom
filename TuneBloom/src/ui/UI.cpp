@@ -335,8 +335,8 @@ static u64 sEditGeneration = 0;
 static u64 sLastBackupGeneration = 0;
 static bool sBackupFailurePopupShown = false;
 static s32 sBackupFailureStreak = 0;
-static const s32 cBackupFailureStreakBeforePopup = 3; // transient failures (e.g. mid-edit) are expected; only warn if it keeps happening
-static const float cBackupRetrySeconds = 20.0f; // retry sooner than a full interval after a failed attempt
+static const s32 cBackupFailureStreakBeforePopup = 3;
+static const float cBackupRetrySeconds = 20.0f;
 
 void SetUnsavedChanges(bool dirty)
 {
@@ -576,7 +576,7 @@ static void DrawMidiOptions()
     ImGui::Unindent(10.0f);
 }
 
-static void DrawAppearanceOptions()
+static bool DrawAppearanceOptions()
 {
     PrefSectionTitle(ICON_LC_PALETTE " Appearance");
     ImGui::Indent(10.0f);
@@ -635,12 +635,11 @@ static void DrawAppearanceOptions()
         done = true;
     }
 
-    if (changed)
-        ApplyThemeFromAccent(gAccentColor);
     if (done)
         SaveAccentColor();
 
     ImGui::Unindent(10.0f);
+    return changed;
 }
 
 static void DrawAdvancedOptions()
@@ -767,12 +766,15 @@ static void DrawPreferencesWindow()
         DrawFileOptions();
         DrawAudioOptions();
         DrawMidiOptions();
-        DrawAppearanceOptions();
+        bool themeChanged = DrawAppearanceOptions();
         DrawAdvancedOptions();
 
         ImGui::EndChild();
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
+
+        if (themeChanged)
+            ApplyThemeFromAccent(gAccentColor);
 
         ImGui::Separator();
         const float bw = 120.0f;
@@ -1081,6 +1083,9 @@ void ApplyThemeFromAccent(ImVec4 accent)
     colors[ImGuiCol_NavWindowingHighlight] = F({1.00f, 1.00f, 1.00f, 0.70f}, {0.00f, 0.00f, 0.00f, 0.40f});
     colors[ImGuiCol_NavWindowingDimBg]     = F({0.80f, 0.80f, 0.80f, 0.20f}, {0.20f, 0.20f, 0.20f, 0.20f});
     colors[ImGuiCol_ModalWindowDimBg]      = F({0.80f, 0.80f, 0.80f, 0.35f}, {0.20f, 0.20f, 0.20f, 0.25f});
+
+    const ImVec4& wbg = colors[ImGuiCol_WindowBg];
+    util::setClearColor(sead::Color4f(wbg.x, wbg.y, wbg.z, 1.0f));
 }
 
 static std::string GetConfigDir()
@@ -1633,9 +1638,6 @@ static bool RunAutoBackup()
     if (!sBfsar.saveBackup(outStr))
     {
         sBackupFailureStreak++;
-
-        // A single failed attempt is probably just transient
-        // so only bother the user if it keeps failing
 
         if (sBackupFailureStreak >= cBackupFailureStreakBeforePopup && !sBackupFailurePopupShown)
         {
@@ -4641,7 +4643,7 @@ void DrawInfoUI()
                 bool popColor = false;
                 if (!tabFilter.caseSensitive)
                 {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.2f, 0.2f, 0.5f));
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
                     popColor = true;
                 }
 

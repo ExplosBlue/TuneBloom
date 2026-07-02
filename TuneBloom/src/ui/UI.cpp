@@ -6417,6 +6417,9 @@ struct ImportPreviewCache
     u32 workingLoopStart = 0, workingLoopEnd = 0;
     bool workingLoopInit = false;
     double origLoopFracStart = 0.0, origLoopFracEnd = 1.0;
+    double manualLoopFracStart = 0.0, manualLoopFracEnd = 1.0;
+
+    u32 startOffsetSamples = 0;
 
     u32 targetSampleRate = 0;
     float speedMultiplier = 1.0f;
@@ -6453,19 +6456,71 @@ struct ImportPreviewCache
         channelIndexFor3Plus = 0;
         workingLoopInit = false;
         derivedDirty = true;
+        startOffsetSamples = 0;
+        manualLoopFracStart = 0.0;
+        manualLoopFracEnd = 1.0;
 
         const double sc = pcm.isValid() ? static_cast<double>(pcm.sampleCount) : 0.0;
         origLoopFracStart = sc > 0.0 ? static_cast<double>(info.loopStartFrame) / sc : 0.0;
-        origLoopFracEnd   = sc > 0.0 ? static_cast<double>(info.loopEndFrame) / sc : 1.0;
+        origLoopFracEnd = sc > 0.0 ? static_cast<double>(info.loopEndFrame) / sc : 1.0;
     }
 
     bool isUnmodified() const
     {
-        return targetSampleRate == pcm.sampleRate
-            && speedMultiplier == 1.0f
-            && !normalizeEnabled
-            && channelMode == AudioProcessing::ChannelMode::Stereo
-            && channelIndexFor3Plus == 0;
+        return targetSampleRate == pcm.sampleRate && speedMultiplier == 1.0f && !normalizeEnabled && channelMode == AudioProcessing::ChannelMode::Stereo && channelIndexFor3Plus == 0 && startOffsetSamples == 0;
+    }
+
+    void setStartOffsetSamples(u32 newOffset)
+    {
+        newOffset = std::min<u32>(newOffset, pcm.sampleCount > 0 ? pcm.sampleCount - 1 : 0);
+        if (newOffset == startOffsetSamples)
+            return;
+
+        if (loopMode == LoopMode::Manual && workingLoopInit)
+        {
+            const u32 oldTrimmedLen = (pcm.sampleCount > startOffsetSamples) ? (pcm.sampleCount - startOffsetSamples) : 0;
+            const u32 newTrimmedLen = (pcm.sampleCount > newOffset) ? (pcm.sampleCount - newOffset) : 0;
+
+            if (oldTrimmedLen > 0 && newTrimmedLen > 0)
+            {
+                const double origPosStart = startOffsetSamples + manualLoopFracStart * oldTrimmedLen;
+                const double origPosEnd = startOffsetSamples + manualLoopFracEnd * oldTrimmedLen;
+
+                manualLoopFracStart = std::min(1.0, std::max(0.0, (origPosStart - newOffset) / newTrimmedLen));
+                manualLoopFracEnd = std::min(1.0, std::max(0.0, (origPosEnd - newOffset) / newTrimmedLen));
+            }
+        }
+
+        startOffsetSamples = newOffset;
+        derivedDirty = true;
+    }
+
+    std::pair<u32, u32> detectFromWavLoop(u32 totalSamples) const
+    {
+        double fracStart = 0.0, fracEnd = 1.0;
+        const u32 origTrimmedLen = (pcm.sampleCount > startOffsetSamples) ? (pcm.sampleCount - startOffsetSamples) : 0;
+        
+        if (origTrimmedLen > 0)
+        {
+            const double origPosStart = origLoopFracStart * pcm.sampleCount;
+            const double origPosEnd = origLoopFracEnd * pcm.sampleCount;
+            fracStart = (origPosStart - startOffsetSamples) / static_cast<double>(origTrimmedLen);
+            fracEnd = (origPosEnd - startOffsetSamples) / static_cast<double>(origTrimmedLen);
+        }
+
+        fracStart = std::min(1.0, std::max(0.0, fracStart));
+        fracEnd = std::min(1.0, std::max(0.0, fracEnd));
+
+        u32 ls = static_cast<u32>(std::lround(fracStart * totalSamples));
+        u32 le = static_cast<u32>(std::lround(fracEnd * totalSamples));
+
+        if (le > totalSamples)
+            le = totalSamples;
+        
+        if (totalSamples > 0 && ls >= le)
+            ls = le > 0 ? le - 1 : 0;
+        
+        return {ls, le};
     }
 
     u32 crossfadeSamples(u32 ls, u32 le) const
@@ -6505,16 +6560,27 @@ struct ImportPreviewCache
     {
         const u32 oldLen = static_cast<u32>(mono.size());
         workingSampleRate = pcm.sampleRate;
+
+        std::vector<std::vector<float>> trimmed = pcm.channels;
+        if (startOffsetSamples > 0)
+        {
+            for (auto& ch : trimmed)
+            {
+                const u32 off = std::min<u32>(startOffsetSamples, static_cast<u32>(ch.size()));
+                ch.erase(ch.begin(), ch.begin() + off);
+            }
+        }
+
         if (isNative || isUnmodified())
         {
-            workingChannels = pcm.channels;
+            workingChannels = trimmed;
         }
         else
         {
-            if (static_cast<u32>(pcm.channels.size()) > 2 && channelIndexFor3Plus > 0)
-                workingChannels = AudioProcessing::selectChannelByIndex(pcm.channels, static_cast<u32>(channelIndexFor3Plus));
+            if (static_cast<u32>(trimmed.size()) > 2 && channelIndexFor3Plus > 0)
+                workingChannels = AudioProcessing::selectChannelByIndex(trimmed, static_cast<u32>(channelIndexFor3Plus));
             else
-                workingChannels = AudioProcessing::selectChannels(pcm.channels, channelMode);
+                workingChannels = AudioProcessing::selectChannels(trimmed, channelMode);
 
             if (speedMultiplier != 1.0f)
                 workingChannels = AudioProcessing::applySpeed(workingChannels, speedMultiplier).channels;
@@ -6549,21 +6615,24 @@ struct ImportPreviewCache
         period = mono.empty() ? 0u : LoopAnalysis::estimatePeriod(mono, workingSampleRate);
 
         const u32 newLen = static_cast<u32>(mono.size());
-        if (!workingLoopInit)
+
+        if (loopMode == LoopMode::Manual && workingLoopInit)
         {
-            workingLoopStart = static_cast<u32>(origLoopFracStart * newLen);
-            workingLoopEnd = static_cast<u32>(origLoopFracEnd * newLen);
+            const double fracStart = std::min(1.0, std::max(0.0, manualLoopFracStart));
+            const double fracEnd = std::min(1.0, std::max(0.0, manualLoopFracEnd));
+            workingLoopStart = static_cast<u32>(std::lround(fracStart * newLen));
+            workingLoopEnd = static_cast<u32>(std::lround(fracEnd * newLen));
+            if (workingLoopEnd > newLen) workingLoopEnd = newLen;
+            if (newLen > 0 && workingLoopStart >= workingLoopEnd)
+                workingLoopStart = workingLoopEnd > 0 ? workingLoopEnd - 1 : 0;
         }
-        else if (oldLen > 0 && oldLen != newLen)
+        else
         {
-            const double r = static_cast<double>(newLen) / static_cast<double>(oldLen);
-            workingLoopStart = static_cast<u32>(std::lround(workingLoopStart * r));
-            workingLoopEnd = static_cast<u32>(std::lround(workingLoopEnd * r));
+            const auto lp = detectFromWavLoop(newLen);
+            workingLoopStart = lp.first;
+            workingLoopEnd = lp.second;
         }
-        if (workingLoopEnd > newLen) workingLoopEnd = newLen;
-        if (newLen > 0 && workingLoopStart >= workingLoopEnd)
-            workingLoopStart = workingLoopEnd > 0 ? workingLoopEnd - 1 : 0;
-        
+
         workingLoopInit = true;
 
         if (oldLen > 0 && newLen > 0 && oldLen != newLen && waveformState.viewInitialized)
@@ -6826,6 +6895,27 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
             ImGui::SameLine(); ImGui::TextDisabled("of %u", srcChannels);
         }
 
+        // Start offset
+        {
+            const double maxOffsetMs = sCache.pcm.sampleRate && sCache.pcm.sampleCount > 0 ? static_cast<double>(sCache.pcm.sampleCount - 1) / sCache.pcm.sampleRate * 1000.0 : 0.0;
+            float offsetMs = sCache.pcm.sampleRate ? static_cast<float>(static_cast<double>(sCache.startOffsetSamples) / sCache.pcm.sampleRate * 1000.0) : 0.0f;
+
+            field("Start offset", "Trims leading samples from the source before any other processing.\nUseful for cutting off silence or a click at the start of a recording.");
+
+            if (ImGui::SliderFloat("##startoffset", &offsetMs, 0.0f, static_cast<float>(maxOffsetMs), "%.1f ms"))
+            {
+                const u32 newOffsetSamples = sCache.pcm.sampleRate ? static_cast<u32>(std::lround(static_cast<double>(offsetMs) / 1000.0 * sCache.pcm.sampleRate)) : 0u;
+                sCache.setStartOffsetSamples(newOffsetSamples);
+            }
+
+            ImGui::SameLine();
+            ImGui::TextDisabled("%u smp", sCache.startOffsetSamples);
+            ImGui::SameLine();
+
+            if (ImGui::SmallButton("Reset##offset"))
+                sCache.setStartOffsetSamples(0);
+        }
+
         // Speed
         field("Speed", "Varispeed: changes pitch and length together. 1.00x = unchanged.");
         if (ImGui::SliderFloat("##speed", &sCache.speedMultiplier, 0.25f, 4.0f, "%.2fx"))
@@ -6865,10 +6955,9 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
 
             if (sCache.loopMode == LoopMode::DetectFromWav)
             {
-                loopStart = static_cast<u32>(sCache.origLoopFracStart * totalSamples);
-                loopEnd   = static_cast<u32>(sCache.origLoopFracEnd * totalSamples);
-                if (loopEnd > totalSamples) loopEnd = totalSamples;
-                if (totalSamples > 0 && loopStart >= loopEnd) loopStart = loopEnd > 0 ? loopEnd - 1 : 0;
+                const auto lp = sCache.detectFromWavLoop(totalSamples);
+                loopStart = lp.first;
+                loopEnd = lp.second;
             }
         }
 
@@ -6902,14 +6991,6 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
                 loopStart = static_cast<u32>(lsField); loopEnd = static_cast<u32>(leField); changed = true;
             }
 
-            field("Crossfade");
-            
-            if (ImGui::SliderFloat("##xfade", &sCache.waveformState.crossfadeMs, 0.0f, 80.0f, "%.0f ms"))
-                changed = true;
-            ImGui::SameLine();
-            if (ImGui::Checkbox("Equal-power", &sCache.waveformState.equalPowerCurve))
-                changed = true;
-
             if (ImGui::Button("Suggest loop"))
             {
                 LoopAnalysis::SuggestResult sug = LoopAnalysis::suggestLoop(mono, workingSampleRate);
@@ -6933,6 +7014,19 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
                 "Suggest loop: auto-detect a clean loop region.\n"
                 "Snap to frame + period: align the loop to the 14-sample DSP-ADPCM frame grid and a\n"
                 "whole number of waveform periods, for the cleanest seam.");
+
+            const u32 loopLenNow = (loopEnd > loopStart) ? (loopEnd - loopStart) : 0;
+            const u32 xfadeMaxSamples = std::min(loopStart, loopLenNow > 0 ? loopLenNow - 1 : 0);
+            const float xfadeMax = std::max(1.0f, workingSampleRate ? static_cast<float>(xfadeMaxSamples) / workingSampleRate * 1000.0f : 1.0f);
+
+            field("Crossfade");
+            if (ImGui::SliderFloat("##xfade", &sCache.waveformState.crossfadeMs, 0.0f, xfadeMax, "%.0f ms"))
+                changed = true;
+
+            ImGui::SameLine();
+
+            if (ImGui::Checkbox("Equal-power", &sCache.waveformState.equalPowerCurve))
+                changed = true;
         }
         else if (sCache.loopMode == LoopMode::DetectFromWav)
         {
@@ -6947,6 +7041,13 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
 
     sCache.workingLoopStart = loopStart;
     sCache.workingLoopEnd = loopEnd;
+
+    if (manualLoop && totalSamples > 0)
+    {
+        sCache.manualLoopFracStart = std::min(1.0, std::max(0.0, (double)loopStart / totalSamples));
+        sCache.manualLoopFracEnd = std::min(1.0, std::max(0.0, (double)loopEnd / totalSamples));
+    }
+
     info->isLoop = loopActive;
     info->loopStartFrame = loopStart;
     info->loopEndFrame = loopEnd;

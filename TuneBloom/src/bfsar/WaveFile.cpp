@@ -407,7 +407,8 @@ void WaveFile::drawUI()
 
     {
         u32 encoding = (u32)getEncoding();
-        if (ImGui::Combo("Encoding", (s32*)&encoding, sEncodingTypes, IM_ARRAYSIZE(sEncodingTypes)))
+        
+        if (ComboScroll("Encoding", (s32*)&encoding, sEncodingTypes, IM_ARRAYSIZE(sEncodingTypes)))
         {
             if (encoding != (u32)getEncoding())
             {

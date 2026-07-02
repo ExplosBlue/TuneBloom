@@ -1485,6 +1485,38 @@ bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const cha
             OpenPopupEx(id);
     }
 
+    if (IsItemHovered() && GetIO().MouseWheel != 0.0f)
+    {
+        int step = GetIO().MouseWheel > 0.0f ? -1 : 1;
+        int curIdx = -1;
+
+        for (int i = 0; i < items_count; i++)
+            if (!sead::SafeString(items[i]).isEmpty() && strcmp(items[i], buf) == 0)
+            {
+                curIdx = i;
+                break;
+            }
+
+        int i = (curIdx == -1) ? (step > 0 ? -1 : items_count) : curIdx;
+
+        for (int tries = 0; tries < items_count; tries++)
+        {
+            i += step;
+            
+            if (i < 0 || i >= items_count)
+                break;
+
+            if (!sead::SafeString(items[i]).isEmpty())
+            {
+                strcpy(buf, items[i]);
+                ret = true;
+                break;
+            }
+        }
+
+        GetIO().MouseWheel = 0.0f;
+    }
+
     int itemCount = items_count;
     int maxVisibleItems = itemCount < 15 ? itemCount : 15;
     float itemHeight = GetFrameHeight() + style.ItemSpacing.y;

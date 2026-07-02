@@ -975,7 +975,7 @@ void SoundPlayer::drawParameters()
                 mCurrentPlayer->setPitch(mPitch);
             }
 
-            if (ImGui::SliderFloat("Pan", &mPan, -2.0f, 2.0f) && hasPlayer)
+            if (ImGui::SliderFloat(sead::FormatFixedSafeString<32>("Pan (%s)###pan", FormatPanLabel(mPan).cstr()).cstr(), &mPan, -2.0f, 2.0f) && hasPlayer)
             {
                 snd::internal::driver::SoundThreadLock lock;
                 mCurrentPlayer->setPan(mPan);
@@ -998,11 +998,13 @@ void SoundPlayer::drawParameters()
             };
 
             s32 biquadType = mBiquadType + 1;
-            if (ImGui::Combo("Biquad Filter Type", (s32*)&biquadType, sBiquadTypes, IM_ARRAYSIZE(sBiquadTypes)) && hasPlayer)
+
+            if (ComboScroll("Biquad Filter Type", (s32*)&biquadType, sBiquadTypes, IM_ARRAYSIZE(sBiquadTypes)) && hasPlayer)
             {
                 snd::internal::driver::SoundThreadLock lock;
                 mCurrentPlayer->setBiquadFilter(biquadType - 1, mCurrentPlayer->getBiquadFilterValue());
             }
+            
             mBiquadType = biquadType - 1;
 
             if (ImGui::SliderFloat("Biquad Filter Value", &mBiquadValue, 0.0f, 1.0f) && hasPlayer)

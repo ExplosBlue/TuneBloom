@@ -428,6 +428,28 @@ static void DrawAudioOptions()
             }
             ImGui::EndCombo();
         }
+
+        if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f && devCount > 0)
+        {
+            int delta = -(int)ImGui::GetIO().MouseWheel;
+            int newIdx = (int)cur + delta;
+
+            if (newIdx < 0)
+                newIdx = 0;
+
+            if (newIdx >= (int)devCount)
+                newIdx = (int)devCount - 1;
+
+            if (newIdx != (int)cur)
+            {
+                snd::SoundSystem::setPlaybackDevice((u32)newIdx);
+                gPlaybackDeviceName = (newIdx == 0) ? std::string() : snd::SoundSystem::getPlaybackDeviceName(newIdx);
+                SaveAudioConfig();
+            }
+
+            ImGui::GetIO().MouseWheel = 0.0f;
+        }
+
         ImGui::SameLine();
         if (ImGui::Button("Refresh##pb"))
             snd::SoundSystem::refreshPlaybackDevices();
@@ -714,6 +736,31 @@ static void DrawFileOptions()
         }
         ImGui::EndCombo();
     }
+
+    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+    {
+        int delta = -(int)ImGui::GetIO().MouseWheel;
+        int newIdx = cur + delta;
+
+        if (newIdx < 0)
+            newIdx = 0;
+        
+        if (newIdx >= presetCount)
+            newIdx = presetCount - 1;
+        
+        if (newIdx != cur)
+        {
+            sAutoBackupEnabled = kPresets[newIdx].enabled;
+
+            if (kPresets[newIdx].enabled)
+                sAutoBackupIntervalMinutes = kPresets[newIdx].minutes;
+            
+            SaveBackupConfig();
+        }
+
+        ImGui::GetIO().MouseWheel = 0.0f;
+    }
+
     if (ImGui::BeginItemTooltip())
     {
         ImGui::TextUnformatted("Controls how frequently backups are created. They are created\n"
@@ -6881,6 +6928,44 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
             ImGui::EndCombo();
         }
 
+        if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+        {
+            u32 effectiveRates[1 + IM_ARRAYSIZE(kRatePresets)];
+            int effectiveCount = 0;
+
+            effectiveRates[effectiveCount++] = sCache.pcm.sampleRate;
+
+            for (size_t i = 0; i < IM_ARRAYSIZE(kRatePresets); i++)
+                if (kRatePresets[i] != sCache.pcm.sampleRate)
+                    effectiveRates[effectiveCount++] = kRatePresets[i];
+
+            int curIdx = 0;
+
+            for (int i = 0; i < effectiveCount; i++)
+                if (effectiveRates[i] == sCache.targetSampleRate)
+                {
+                    curIdx = i;
+                    break;
+                }
+
+            int delta = -(int)ImGui::GetIO().MouseWheel;
+            int newIdx = curIdx + delta;
+
+            if (newIdx < 0)
+                newIdx = 0;
+            
+            if (newIdx >= effectiveCount)
+                newIdx = effectiveCount - 1;
+            
+            if (newIdx != curIdx)
+            {
+                sCache.targetSampleRate = effectiveRates[newIdx];
+                sCache.derivedDirty = true;
+            }
+            
+            ImGui::GetIO().MouseWheel = 0.0f;
+        }
+
         // Channels
         const u32 srcChannels = static_cast<u32>(sCache.pcm.channels.size());
         const char* channelModeNames[] = { "Keep all channels", "Left only (mono)", "Right only (mono)", "Mix to mono" };
@@ -7953,6 +8038,34 @@ bool ComboScroll(const char *label, int *current_item, const char *const items[]
     }
 
     return changed;
+}
+
+sead::FixedSafeString<24> FormatPanLabel(f32 pan)
+{
+    sead::FixedSafeString<24> out;
+
+    if (pan > -0.005f && pan < 0.005f)
+        out.copy("Centered");
+    else if (pan < 0.0f)
+        out.format("%d%% Left", static_cast<s32>(-pan * 100.0f + 0.5f));
+    else
+        out.format("%d%% Right", static_cast<s32>(pan * 100.0f + 0.5f));
+
+    return out;
+}
+
+sead::FixedSafeString<24> FormatPanLabel(u8 pan, u8 min, u8 center, u8 max)
+{
+    f32 normalized;
+
+    if (pan == center)
+        normalized = 0.0f;
+    else if (pan < center)
+        normalized = -static_cast<f32>(center - pan) / static_cast<f32>(center - min);
+    else
+        normalized = static_cast<f32>(pan - center) / static_cast<f32>(max - center);
+
+    return FormatPanLabel(normalized);
 }
 
 bool DrawSortToolbar(SortState &state, bool showFileSize, bool trailingDivider)

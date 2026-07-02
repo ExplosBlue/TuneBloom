@@ -5,6 +5,38 @@
 
 #include <bfsar/BfwsdFile.h>
 
+static constexpr ImS8 cStepS8 = 1;
+static constexpr ImU8 cStepU8 = 1;
+static constexpr ImU16 cStepU16 = 1;
+static constexpr ImU32 cStepU32 = 1;
+static constexpr ImU8 cVolumeMin = 0;
+static constexpr ImU8 cVolumeMax = 255;
+static constexpr ImU8 cPanMin = 0;
+static constexpr ImU8 cPanMax = 127;
+
+template <typename GetMain, typename SetMain, typename GetFx, typename SetFx>
+
+static void DrawMainAndFxSendUI(GetMain getMain, SetMain setMain, GetFx getFx, SetFx setFx)
+{
+    u8 mainSend = getMain();
+    
+    if (ImGui::SliderScalar("Main Send", ImGuiDataType_U8, &mainSend, &cPanMin, &cPanMax))
+    {
+        setMain(mainSend);
+        SetUnsavedChanges(true);
+    }
+
+    for (u32 i = 0; i < 3; i++)
+    {
+        u8 fxSend = getFx(i);
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cPanMin, &cPanMax))
+        {
+            setFx(i, fxSend);
+            SetUnsavedChanges(true);
+        }
+    }
+}
+
 Sound::~Sound()
 {
     if (this == sSoundPlayer.getPlayingSound())
@@ -150,15 +182,6 @@ void DrawSoundPropertiesUI()
 {
     Sound* sound = static_cast<Sound*>(sSelectedItem);
 
-    const ImS8 cStepS8 = 1;
-    const ImU8 cStepU8 = 1;
-    const ImU16 cStepU16 = 1;
-    const ImU32 cStepU32 = 1;
-    const ImU8 cVolumeMin = 0;
-    const ImU8 cVolumeMax = 255;
-    const ImU8 cPanMin = 0;
-    const ImU8 cPanMax = 127;
-
     {
         Item* player = sound->getPlayerRef().getItem();
         if (ItemSelector("Player", sBfsar.getPlayerList(), &player))
@@ -179,7 +202,8 @@ void DrawSoundPropertiesUI()
 
     {
         u8 remoteFilter = sound->getRemoteFilter();
-        if (ImGui::InputScalar("Remote Filter", ImGuiDataType_U8, &remoteFilter, &cStepU8))
+
+        if (ImGui::SliderScalar("Remote Filter", ImGuiDataType_U8, &remoteFilter, &cPanMin, &cPanMax))
         {
             sound->setRemoteFilter(remoteFilter);
             SetUnsavedChanges(true);
@@ -761,7 +785,9 @@ void DrawSoundPropertiesUI()
 
             {
                 u32 sampleRate = 0;
+
                 const Sound::StreamSoundInfo::Track::List& tracks = strmSoundInfo.getTrackList();
+                
                 for (s32 i = 0; i < tracks.size(); i++)
                 {
                     const auto& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
@@ -772,10 +798,9 @@ void DrawSoundPropertiesUI()
                         break;
                     }
                 }
+
                 if (sampleRate != 0)
-                {
                     ImGui::Text("Sample Rate: %u Hz", sampleRate);
-                }
             }
 
             {
@@ -786,6 +811,7 @@ void DrawSoundPropertiesUI()
 
                 {
                     f32 pitch = enableSend ? strmSoundInfo.getPitch() : 1.0f;
+
                     if (ImGui::SliderFloat("Pitch", &pitch, 0.0f, 8.0f))
                     {
                         strmSoundInfo.setPitch(pitch);
@@ -793,26 +819,15 @@ void DrawSoundPropertiesUI()
                     }
                 }
 
-                {
-                    u8 mainSend = enableSend ? strmSoundInfo.getMainSend() : 127;
-                    if (ImGui::InputScalar("Main Send", ImGuiDataType_U8, &mainSend, &cStepU8))
-                    {
-                        strmSoundInfo.setMainSend(mainSend);
-                        SetUnsavedChanges(true);
-                    }
-                }
-
-                for (u32 i = 0; i < 3; i++)
-                {
-                    u8 fxSend = enableSend ? strmSoundInfo.getFxSend(i) : 0;
-                    if (ImGui::InputScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cStepU8))
-                    {
-                        strmSoundInfo.setFxSend(i, fxSend);
-                        SetUnsavedChanges(true);
-                    }
-                }
+                DrawMainAndFxSendUI(
+                    [&] { return enableSend ? strmSoundInfo.getMainSend() : (u8)127; },
+                    [&](u8 v) { strmSoundInfo.setMainSend(v); },
+                    [&](u32 i) { return enableSend ? strmSoundInfo.getFxSend(i) : (u8)0; },
+                    [&](u32 i, u8 v) { strmSoundInfo.setFxSend(i, v); }
+                );
 
                 bool enableStreamSoundExtension = enableSend ? strmSoundInfo.isEnableStreamSoundExtension() : false;
+
                 if (ImGui::Checkbox("Enable Stream Sound Extension", &enableStreamSoundExtension))
                 {
                     strmSoundInfo.setEnableStreamSoundExtension(enableStreamSoundExtension);
@@ -1023,7 +1038,7 @@ void DrawSoundPropertiesUI()
 
                 {
                     u8 pan = waveSoundInfo.getPan();
-                    if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cPanMin, &cPanMax))
+                    if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%s)###pan", FormatPanLabel(pan, cPanMin, 64, cPanMax).cstr()).cstr(), ImGuiDataType_U8, &pan, &cPanMin, &cPanMax))
                     {
                         waveSoundInfo.setPan(pan);
                         SetUnsavedChanges(true);
@@ -1069,6 +1084,7 @@ void DrawSoundPropertiesUI()
 
             {
                 bool enableSend = waveSoundInfo.isEnableSend();
+
                 if (ImGui::Checkbox("Enable Send", &enableSend))
                 {
                     waveSoundInfo.setEnableSend(enableSend);
@@ -1078,24 +1094,12 @@ void DrawSoundPropertiesUI()
                 if (!enableSend)
                     ImGui::BeginDisabled();
 
-                {
-                    u8 mainSend = waveSoundInfo.getMainSend();
-                    if (ImGui::InputScalar("Main Send", ImGuiDataType_U8, &mainSend, &cStepU8))
-                    {
-                        waveSoundInfo.setMainSend(mainSend);
-                        SetUnsavedChanges(true);
-                    }
-                }
-
-                for (u32 i = 0; i < 3; i++)
-                {
-                    u8 fxSend = waveSoundInfo.getFxSend(i);
-                    if (ImGui::InputScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cStepU8))
-                    {
-                        waveSoundInfo.setFxSend(i, fxSend);
-                        SetUnsavedChanges(true);
-                    }
-                }
+                DrawMainAndFxSendUI(
+                    [&] { return waveSoundInfo.getMainSend(); },
+                    [&](u8 v) { waveSoundInfo.setMainSend(v); },
+                    [&](u32 i) { return waveSoundInfo.getFxSend(i); },
+                    [&](u32 i, u8 v) { waveSoundInfo.setFxSend(i, v); }
+                );
 
                 if (!enableSend)
                     ImGui::EndDisabled();
@@ -1222,12 +1226,6 @@ void DrawSoundPropertiesUI()
 
 void Sound::StreamSoundInfo::Track::drawUI()
 {
-    const ImU8 cStepU8 = 1;
-    const ImU8 cVolumeMin = 0;
-    const ImU8 cVolumeMax = 255;
-    const ImU8 cPanMin = 0;
-    const ImU8 cPanMax = 127;
-
     {
         Item* waveFile = getWaveFileRef().getItem();
         if (ItemSelector("Wave File", sBfsar.getWaveFileList(), &waveFile))
@@ -1264,7 +1262,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
 
     {
         u8 pan = getPan();
-        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cPanMin, &cPanMax))
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%s)###pan", FormatPanLabel(pan, cPanMin, 64, cPanMax).cstr()).cstr(), ImGuiDataType_U8, &pan, &cPanMin, &cPanMax))
         {
             setPan(pan);
             SetUnsavedChanges(true);
@@ -1291,34 +1289,19 @@ void Sound::StreamSoundInfo::Track::drawUI()
 
     {
         bool enableSend = sBfsar.isStreamSendAvailable();
+
         if (!enableSend)
-        {
             ImGui::BeginDisabled();
-        }
 
-        {
-            u8 mainSend = enableSend ? getMainSend() : 127;
-            if (ImGui::InputScalar("Main Send", ImGuiDataType_U8, &mainSend, &cStepU8))
-            {
-                setMainSend(mainSend);
-                SetUnsavedChanges(true);
-            }
-        }
-
-        for (u32 i = 0; i < 3; i++)
-        {
-            u8 fxSend = enableSend ? getFxSend(i) : 0;
-            if (ImGui::InputScalar(sead::FormatFixedSafeString<16>("Fx Send %u", i).cstr(), ImGuiDataType_U8, &fxSend, &cStepU8))
-            {
-                setFxSend(i, fxSend);
-                SetUnsavedChanges(true);
-            }
-        }
+        DrawMainAndFxSendUI(
+            [&] { return enableSend ? getMainSend() : (u8)127; },
+            [&](u8 v) { setMainSend(v); },
+            [&](u32 i) { return enableSend ? getFxSend(i) : (u8)0; },
+            [&](u32 i, u8 v) { setFxSend(i, v); }
+        );
 
         if (!enableSend)
-        {
             ImGui::EndDisabled();
-        }
     }
 
     {

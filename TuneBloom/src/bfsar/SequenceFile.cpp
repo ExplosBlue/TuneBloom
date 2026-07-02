@@ -291,7 +291,7 @@ void SequenceFile::drawFileUI()
             "Track 15"
         };
 
-        ImGui::Combo("Track", (s32*)&sFollowTrack, sTrackNames, IM_ARRAYSIZE(sTrackNames));
+        ComboScroll("Track", (s32*)&sFollowTrack, sTrackNames, IM_ARRAYSIZE(sTrackNames));
 
         if (sFollowSeq && sSoundPlayer.isCurrentPlayerSequence() && sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
         {

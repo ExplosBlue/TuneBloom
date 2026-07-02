@@ -2037,6 +2037,67 @@ bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** war
 
         ImGui::EndCombo();
     }
+
+    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+    {
+        int delta = -(int)ImGui::GetIO().MouseWheel;
+        int total = 2 + (int)warcList.size();
+        int curIdx = 0;
+
+        if (*warcType == WaveArchiveType::AutomaticIndividual)
+            curIdx = 1;
+        else if (*warcType == WaveArchiveType::Explicit && *warcPtr)
+        {
+            int i = 0;
+
+            for (auto it = warcList.robustBegin(); it != warcList.robustEnd(); ++it, ++i)
+                if ((*it).val() == *warcPtr)
+                {
+                    curIdx = 2 + i;
+                    break;
+                }
+        }
+
+        int newIdx = curIdx + delta;
+
+        if (newIdx < 0)
+            newIdx = 0;
+        
+        if (newIdx >= total)
+            newIdx = total - 1;
+
+        if (newIdx != curIdx)
+        {
+            if (newIdx == 0)
+            {
+                *warcType = WaveArchiveType::AutomaticShared;
+                *warcPtr = nullptr;
+            }
+            else if (newIdx == 1)
+            {
+                *warcType = WaveArchiveType::AutomaticIndividual;
+                *warcPtr = nullptr;
+            }
+            else
+            {
+                int target = newIdx - 2;
+                int i = 0;
+
+                for (auto it = warcList.robustBegin(); it != warcList.robustEnd(); ++it, ++i)
+                    if (i == target)
+                    {
+                        *warcType = WaveArchiveType::Explicit;
+                        *warcPtr = (*it).val();
+                        break;
+                    }
+            }
+
+            ret = true;
+        }
+
+        ImGui::GetIO().MouseWheel = 0.0f;
+    }
+
     ImGui::PopItemWidth();
 
     if (ImGui::BeginPopupContextItem())

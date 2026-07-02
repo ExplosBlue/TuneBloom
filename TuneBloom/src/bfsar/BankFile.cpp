@@ -388,7 +388,7 @@ void BankFile::VelocityRegion::drawUI()
 
     {
         u8 pan = getPan();
-        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%.3f)###pan", (static_cast<f32>(pan) / 64.0f) - 1.0f).cstr(), ImGuiDataType_U8, &pan, &cAdsrMin, &cAdsrMax))
+        if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Pan (%s)###pan", FormatPanLabel(pan, cAdsrMin, 64, cAdsrMax).cstr()).cstr(), ImGuiDataType_U8, &pan, &cAdsrMin, &cAdsrMax))
         {
             setPan(pan);
             SetUnsavedChanges(true);
@@ -434,7 +434,8 @@ void BankFile::VelocityRegion::drawUI()
         };
 
         u32 interpolationType = getInterpolationType();
-        if (ImGui::Combo("Interpolation Type", (s32*)&interpolationType, sInterpolationTypes, IM_ARRAYSIZE(sInterpolationTypes)))
+        
+        if (ComboScroll("Interpolation Type", (s32*)&interpolationType, sInterpolationTypes, IM_ARRAYSIZE(sInterpolationTypes)))
         {
             setInterpolationType(interpolationType);
             SetUnsavedChanges(true);

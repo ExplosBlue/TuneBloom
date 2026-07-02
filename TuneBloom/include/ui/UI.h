@@ -232,6 +232,9 @@ inline void DupeNamePopup(const char* name = "###Dupe")
 
 bool ComboScroll(const char *label, int *current_item, const char *const items[], int items_count, int popup_max_height_in_items = -1);
 
+sead::FixedSafeString<24> FormatPanLabel(f32 pan);
+sead::FixedSafeString<24> FormatPanLabel(u8 pan, u8 min, u8 center, u8 max);
+
 struct SortState
 {
     int mode = -1;

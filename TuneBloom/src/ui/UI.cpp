@@ -29,7 +29,7 @@
 #endif
 
 #include <midi/SeqMidiExporter.h>
-#include <midi/SeqSoundFontExporter.h>
+#include <midi/InstBankExporter.h>
 #include <midi/MidiInput.h>
 #include <bfsar/BankFile.h>
 
@@ -3263,7 +3263,7 @@ static void DrawFileExportDialogs()
                     filePath.format("%s/%s.sf2", dirPath.cstr(), bank->getNameOrNull().cstr());
                     exportBankToSf2(filePath, *bank);
                 }
-                sExportConfirmMessage.format("Exported %d banks to SF2 successfully.", bankCount);
+                sExportConfirmMessage.format("Exported %d banks as SF2 successfully.", bankCount);
                 sShowExportConfirm = true;
             }
         }
@@ -3285,7 +3285,7 @@ static void DrawFileExportDialogs()
             if (SaveFileDialog(&path, nullptr, filterCount, filters, "sf2", defaultPath.cstr()))
             {
                 if (exportBankToSf2(path, *bank))
-                    sExportConfirmMessage.copy("Bank exported to SF2 successfully.");
+                    sExportConfirmMessage.copy("Bank exported as SF2 successfully.");
                 else
                     sExportConfirmMessage.copy("SF2 export failed (bank has no instruments or waves).");
                 sShowExportConfirm = true;
@@ -3309,7 +3309,7 @@ static void DrawFileExportDialogs()
                     filePath.format("%s/%s.dls", dirPath.cstr(), bank->getNameOrNull().cstr());
                     exportBankToDls(filePath, *bank);
                 }
-                sExportConfirmMessage.format("Exported %d banks to DLS successfully.", bankCount);
+                sExportConfirmMessage.format("Exported %d banks as DLS successfully.", bankCount);
                 sShowExportConfirm = true;
             }
         }
@@ -3331,7 +3331,7 @@ static void DrawFileExportDialogs()
             if (SaveFileDialog(&path, nullptr, filterCount, filters, "dls", defaultPath.cstr()))
             {
                 if (exportBankToDls(path, *bank))
-                    sExportConfirmMessage.copy("Bank exported to DLS successfully.");
+                    sExportConfirmMessage.copy("Bank exported as DLS successfully.");
                 else
                     sExportConfirmMessage.copy("DLS export failed (bank has no instruments or waves).");
                 sShowExportConfirm = true;
@@ -7572,14 +7572,14 @@ void BankFileContextMenuFunc(Item* item, bool afterDelete)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Export SF2"))
+        if (ImGui::MenuItem("Export as SF2"))
         {
             auto banks = CollectBankFilesForAction(item);
             if (!banks.empty())
                 sPendingExportBankSf2 = std::move(banks);
         }
 
-        if (ImGui::MenuItem("Export DLS"))
+        if (ImGui::MenuItem("Export as DLS"))
         {
             auto banks = CollectBankFilesForAction(item);
             if (!banks.empty())

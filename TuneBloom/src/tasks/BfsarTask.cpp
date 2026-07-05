@@ -27,6 +27,9 @@
 #include <Utilll.h>
 #include <stb/stb_image.h>
 
+#include <cctype>
+#include <cstring>
+
 #include <Debug.h>
 
 #if defined(SEAD_PLATFORM_MACOSX)
@@ -174,28 +177,41 @@ void BfsarTask::prepare()
         TryExit();
     });
 
-    glfwSetDropCallback(fw->getWindowHandle(), [](GLFWwindow* window, s32 count, const char** paths)
+    glfwSetDropCallback(fw->getWindowHandle(), [](GLFWwindow *window, s32 count, const char **paths)
     {
         if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
-        {
             return; // ignore dropped files while a popup is open
-        }
+
+        auto hasExtensionCI = [](const char* path, const char* ext) -> bool
+        {
+            size_t pathLen = strlen(path);
+            size_t extLen = strlen(ext);
+            if (pathLen < extLen)
+                return false;
+
+            const char* suffix = path + (pathLen - extLen);
+            for (size_t i = 0; i < extLen; i++)
+            {
+                if (std::tolower((unsigned char)suffix[i]) != std::tolower((unsigned char)ext[i]))
+                    return false;
+            }
+            return true;
+        };
 
         for (s32 i = 0; i < count; i++)
         {
-            if (sead::SafeString(paths[i]).endsWith(".bfsar") || sead::SafeString(paths[i]).endsWith(".bcsar"))
+            if (hasExtensionCI(paths[i], ".bfsar") || hasExtensionCI(paths[i], ".bcsar"))
             {
                 sDroppedFilePath = paths[i];
                 return;
             }
         }
 
-        if (count >= 1)
+        for (s32 i = 0; i < count; i++)
         {
-            sead::SafeString p(paths[0]);
-            if (p.endsWith(".wav") || p.endsWith(".WAV") || p.endsWith(".Wav"))
+            if (hasExtensionCI(paths[i], ".wav"))
             {
-                sDroppedWavPath = paths[0];
+                sDroppedWavPath = paths[i];
                 return;
             }
         }

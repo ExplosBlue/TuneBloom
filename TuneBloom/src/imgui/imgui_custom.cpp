@@ -1508,7 +1508,7 @@ bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const cha
 
             if (!sead::SafeString(items[i]).isEmpty())
             {
-                strcpy(buf, items[i]);
+                ImStrncpy(buf, items[i], buf_size);
                 ret = true;
                 break;
             }

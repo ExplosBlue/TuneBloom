@@ -1172,13 +1172,60 @@ void DrawKeyboardWithRegions(
 
     if (sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
     {
-        selVel = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
+        selVel = static_cast<BankFile::VelocityRegion *>(sSubSelectedItem);
+
         selKey = sContextKeyRegion;
-        key[0] = selKey->getKeyMin();
-        key[1] = selKey->getKeyMax();
-        vel[0] = selVel->getVelocityMin();
-        vel[1] = selVel->getVelocityMax();
-        rootKey = selVel->getRootKey();
+        if (!(selKey && instrument))
+        {
+            selKey = nullptr;
+        }
+        else
+        {
+            bool ownsSelVel = false;
+            for (Item *velItem : selKey->getVelocityRegionList())
+            {
+                if (velItem == selVel)
+                {
+                    ownsSelVel = true;
+                    break;
+                }
+            }
+            if (!ownsSelVel)
+            {
+                selKey = nullptr;
+            }
+        }
+
+        if (!selKey && instrument)
+        {
+            for (Item *keyItem : instrument->getKeyRegionList())
+            {
+                BankFile::KeyRegion *keyRegion = static_cast<BankFile::KeyRegion *>(keyItem);
+                for (Item *velItem : keyRegion->getVelocityRegionList())
+                {
+                    if (velItem == selVel)
+                    {
+                        selKey = keyRegion;
+                        break;
+                    }
+                }
+                if (selKey)
+                    break;
+            }
+        }
+
+        if (selKey)
+        {
+            key[0] = selKey->getKeyMin();
+            key[1] = selKey->getKeyMax();
+            vel[0] = selVel->getVelocityMin();
+            vel[1] = selVel->getVelocityMax();
+            rootKey = selVel->getRootKey();
+        }
+        else
+        {
+            selVel = nullptr;
+        }
     }
 
     const bool hasSel = (selVel && selKey && instrument);
@@ -1330,6 +1377,20 @@ void DrawKeyboardWithRegions(
     static f32 sScrollYTarget = 0.0f;
     static f32 sAnchorNormY = 0.0f;
     static f32 sAnchorScreenY = 0.0f;
+
+    static const BankFile::Instrument *sLastInstrument = nullptr;
+    static u32 sLastInstrumentId = Item::cInvalidId;
+    const u32 curInstrumentId = instrument ? instrument->getId() : Item::cInvalidId;
+    
+    if (instrument != sLastInstrument || curInstrumentId != sLastInstrumentId)
+    {
+        sLastInstrument = instrument;
+        sLastInstrumentId = curInstrumentId;
+        sZoom = sZoomTarget = 1.0f;
+        sScrollX = sScrollXTarget = 0.0f;
+        sZoomY = sZoomTargetY = 1.0f;
+        sScrollY = sScrollYTarget = 0.0f;
+    }
 
     auto requestZoom = [&](f32 target, f32 screenX)
     {

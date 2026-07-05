@@ -296,9 +296,19 @@ static std::string instrumentDisplayName_(const ExportInstrument &in, const char
     return fallbackPrefix + std::to_string(in.programNo);
 }
 
+static std::string sanitizeFilename_(std::string name)
+{
+    for (char &c : name)
+    {
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 0x20)
+            c = '_';
+    }
+    return name;
+}
+
 static std::string resolveItemName_(const Item &item, const char *fallback)
 {
-    return item.isNameValid() ? item.getName().cstr() : fallback;
+    return sanitizeFilename_(item.isNameValid() ? item.getName().cstr() : fallback);
 }
 
 static bool writeFileBytes_(const sead::SafeString &path, const std::vector<u8> &data)
@@ -811,7 +821,7 @@ static void addBankToModel_(ExportModel &model,
                     if (!pcm.isValid())
                     {
                         sampleCache[wave] = CachedSampleIndices();
-                        PopupMgr::instance()->addPopup({"A wave file could not be decoded for SF2 export", nullptr});
+                        PopupMgr::instance()->addPopup({"A wave file could not be decoded for export", nullptr});
                         continue;
                     }
 
@@ -830,8 +840,8 @@ static void addBankToModel_(ExportModel &model,
                         }
 
                         es.sampleRate = pcm.sampleRate ? pcm.sampleRate : 22050;
-                        es.loopStart = wave->getIsLoop() ? (s32)wave->getOriginalLoopStartFrame() : -1;
-                        es.loopEnd = (s32)pcm.sampleCount;
+                        es.loopStart = wave->getIsLoop() ? (s32) wave->getOriginalLoopStartFrame() : -1;
+                        es.loopEnd = wave->getIsLoop() ? (s32) wave->getOriginalLoopEndFrame() : (s32) pcm.sampleCount;
                         es.rootKey = vr->getRootKey();
                         es.name = wave->isNameValid() ? wave->getName().cstr() : "WAVE_" + std::to_string(wave->getId());
                         es.stereoSide = stereoSide;

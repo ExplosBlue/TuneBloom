@@ -6224,7 +6224,16 @@ static std::string EscapeJsonString_(const std::string &s)
             out += "\\t";
             break;
         default:
-            out += c;
+            if ((unsigned char)c < 0x20)
+            {
+                char buf[8];
+                std::snprintf(buf, sizeof(buf), "\\u%04x", (unsigned char)c);
+                out += buf;
+            }
+            else
+            {
+                out += c;
+            }
             break;
         }
     }
@@ -6252,8 +6261,9 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
 
     std::string content;
     content.resize(fileSize);
-    fread(&content[0], 1, fileSize, f);
+    size_t bytesRead = fread(&content[0], 1, fileSize, f);
     fclose(f);
+    content.resize(bytesRead);
 
     size_t pos = 0;
 

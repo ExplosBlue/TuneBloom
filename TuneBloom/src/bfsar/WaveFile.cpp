@@ -867,6 +867,7 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
     }
 
     out->endian = sead::Endian::eLittle; // RIFF wave files are always little endian... or they should
+    u32 actualFileSize = device->getFileSize(&handle);
 
     sead::FileDeviceReadStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(out->endian);
@@ -905,13 +906,20 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
         char chunkId[4];
         stream.readMemBlock(chunkId, 4);
         u32 chunkSize = stream.readU32();
+        u64 chunkPos = handle.getCurrentSeekPos();
+
+        if (chunkPos + (u64)chunkSize > (u64)actualFileSize)
+        {
+            PopupMgr::instance()->addPopup({"Corrupt chunk size in .wav file"});
+            return false;
+        }
 
         if (sead::MemUtil::compare(chunkId, "fmt ", 4) == 0)
         {
             fmtChunkSize = chunkSize;
             break;
         }
-        
+
         stream.skip(chunkSize + (chunkSize & 1));
     }
 
@@ -951,17 +959,29 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
         return false;
     }
 
+    {
+        u32 fmtConsumed = 16;
+        u32 fmtRemaining = fmtChunkSize > fmtConsumed ? fmtChunkSize - fmtConsumed : 0;
+        stream.skip(fmtRemaining + (fmtChunkSize & 1));
+    }
+
     while (!stream.isEOF())
     {
         char block[4];
         stream.readMemBlock(block, 4);
         u32 blockSize = stream.readU32();
-        u32 chunkStart = handle.getCurrentSeekPos();
+        u64 chunkStart = handle.getCurrentSeekPos();
+
+        if (chunkStart + (u64)blockSize > (u64)actualFileSize)
+        {
+            PopupMgr::instance()->addPopup({"Corrupt chunk size in .wav file"});
+            return false;
+        }
 
         if (sead::MemUtil::compare(block, "data", 4) == 0)
         {
             out->sampleBytes = blockSize;
-            out->dataStart = chunkStart;
+            out->dataStart = (u32)chunkStart;
             stream.skip(blockSize + (blockSize & 1));
         }
         else if (sead::MemUtil::compare(block, "smpl", 4) == 0)
@@ -971,6 +991,8 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
                 stream.skip(28);
                 u32 numLoops = stream.readU32();
                 stream.skip(4);
+
+                u32 consumed = 36;
 
                 if (numLoops > 0)
                 {
@@ -984,10 +1006,13 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
                     out->loopEndFrame = loopEnd;
 
                     LOG_U32("smpl loopStart", loopStart);
-                    LOG_U32("smpl loopEnd",   loopEnd);
+                    LOG_U32("smpl loopEnd", loopEnd);
+
+                    consumed += 24;
                 }
-                else
-                    stream.skip(blockSize - 36);
+
+                u32 remaining = blockSize > consumed ? blockSize - consumed : 0;
+                stream.skip(remaining + (blockSize & 1));
             }
             else
                 stream.skip(blockSize + (blockSize & 1));
@@ -998,7 +1023,7 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out)
 
     if (out->sampleBytes == 0)
     {
-        PopupMgr::instance()->addPopup({ "No 'data' block found" });
+        PopupMgr::instance()->addPopup({"No 'data' block found"});
         return false;
     }
 

@@ -529,25 +529,26 @@ static TrackResult parseTrack(const u8* base, u32 dataSize, bool littleEndian,
 
 // ─── SMF file writer ──────────────────────────────────────────
 
-static bool writeSMF(const char* path,
-                     std::vector<MidiTrackBuilder>& tracks)
+static bool writeSMF(const char *path, std::vector<MidiTrackBuilder> &tracks)
 {
     std::vector<u8> file;
 
-    auto writeTag = [&](const char tag[4]) {
+    auto writeTag = [&](const char tag[4])
+    {
         for (int i = 0; i < 4; i++)
             file.push_back((u8)tag[i]);
     };
 
     // ── Header ──
     writeTag("MThd");
-    writeBE32(file, 6);          // chunk length
-    writeBE16(file, 1);          // format 1
+    writeBE32(file, 6); // chunk length
+    writeBE16(file, 1); // format 1
     writeBE16(file, (u16)tracks.size());
-    writeBE16(file, 480);        // ticks per quarter note
+    writeBE16(file, 480); // ticks per quarter note
 
     // ── Track chunks ──
-    for (auto& t : tracks) {
+    for (auto &t : tracks)
+    {
         std::vector<u8> td = t.finalize();
         writeTag("MTrk");
         writeBE32(file, (u32)td.size());
@@ -555,8 +556,11 @@ static bool writeSMF(const char* path,
     }
 
     // ── Write to disk ──
-    FILE* fp = std::fopen(path, "wb");
-    if (!fp) return false;
+    FILE *fp = std::fopen(path, "wb");
+
+    if (!fp)
+        return false;
+    
     bool ok = std::fwrite(file.data(), 1, file.size(), fp) == file.size();
     std::fclose(fp);
     return ok;
@@ -564,13 +568,25 @@ static bool writeSMF(const char* path,
 
 // ─── Public API ───────────────────────────────────────────────
 
-std::set<std::pair<u16, u16>> collectUsedPrograms(const SequenceFile& seqFile, u32 startOffset)
+static void sanitizeFilenameInPlace_(sead::BufferedSafeString *s)
+{
+    for (s32 i = 0; i < s->calcLength(); i++)
+    {
+        char &c = s->getBuffer()[i];
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 0x20)
+            c = '_';
+    }
+}
+
+std::set<std::pair<u16, u16>> collectUsedPrograms(const SequenceFile &seqFile, u32 startOffset)
 {
     std::set<std::pair<u16, u16>> used;
 
-    const u8* bytes = seqFile.getSeqBytes();
-    u32       sz    = seqFile.getSeqBytesSize();
-    if (!bytes || sz == 0) return used;
+    const u8 *bytes = seqFile.getSeqBytes();
+    u32 sz = seqFile.getSeqBytesSize();
+
+    if (!bytes || sz == 0)
+        return used;
 
     bool littleEndian = seqFile.getSeqParamEndian() == sead::Endian::eLittle;
     u32 startOff = startOffset < sz ? startOffset : 0;
@@ -585,18 +601,20 @@ std::set<std::pair<u16, u16>> collectUsedPrograms(const SequenceFile& seqFile, u
         pending.pop_back();
 
         auto subResult = parseTrack(bytes, sz, littleEndian, ot.offset, "", nextChannel++, &used);
-        for (auto& st : subResult.openedTracks)
+
+        for (auto &st : subResult.openedTracks)
             pending.push_back(st);
     }
 
     return used;
 }
 
-bool exportSeqToMidi(const sead::SafeString& path, const SequenceFile& seqFile, const char* trackName, u32 startOffset)
+bool exportSeqToMidi(const sead::SafeString &path, const SequenceFile &seqFile, const char *trackName, u32 startOffset)
 {
-    const u8* bytes = seqFile.getSeqBytes();
-    u32       sz    = seqFile.getSeqBytesSize();
-    if (!bytes || sz == 0) return false;
+    const u8 *bytes = seqFile.getSeqBytes();
+    u32 sz = seqFile.getSeqBytesSize();
+    if (!bytes || sz == 0)
+        return false;
 
     bool littleEndian = seqFile.getSeqParamEndian() == sead::Endian::eLittle;
     u32 startOff = startOffset < sz ? startOffset : 0;
@@ -605,16 +623,19 @@ bool exportSeqToMidi(const sead::SafeString& path, const SequenceFile& seqFile, 
     auto mainResult = parseTrack(bytes, sz, littleEndian, startOff, trackName, 0);
 
     // Collect all tracks (main + sub)
-    struct TrackEntry {
+    struct TrackEntry
+    {
         MidiTrackBuilder builder;
-        u32              tickCount;
+        u32 tickCount;
     };
+
     std::vector<TrackEntry> trackEntries;
     trackEntries.push_back({std::move(mainResult.track), mainResult.endTick});
 
     // Discover and parse sub-tracks (breadth-first)
     std::vector<OpenedTrack> pending = std::move(mainResult.openedTracks);
     u8 nextChannel = 1;
+
     while (!pending.empty() && nextChannel < 16)
     {
         OpenedTrack ot = pending.back();
@@ -623,7 +644,7 @@ bool exportSeqToMidi(const sead::SafeString& path, const SequenceFile& seqFile, 
         sead::FormatFixedSafeString<32> subName("%s_track%d", trackName, ot.trackNo);
         auto subResult = parseTrack(bytes, sz, littleEndian, ot.offset, subName.cstr(), nextChannel++);
 
-        for (auto& st : subResult.openedTracks)
+        for (auto &st : subResult.openedTracks)
             pending.push_back(st);
 
         trackEntries.push_back({std::move(subResult.track), subResult.endTick});
@@ -631,57 +652,68 @@ bool exportSeqToMidi(const sead::SafeString& path, const SequenceFile& seqFile, 
 
     // ── Write ──
     std::vector<MidiTrackBuilder> midiTracks;
-    for (auto& te : trackEntries)
+
+    for (auto &te : trackEntries)
         midiTracks.push_back(std::move(te.builder));
 
     return writeSMF(path.cstr(), midiTracks);
 }
 
-bool exportSeqToMidi(const sead::SafeString& path, const Sound& sound)
+bool exportSeqToMidi(const sead::SafeString &path, const Sound &sound)
 {
     if (sound.getSoundType() != Sound::SoundType::Seq)
         return false;
 
-    const Item* item = sound.getSequenceSoundInfo().getSequenceFileRef().getItem();
+    const Item *item = sound.getSequenceSoundInfo().getSequenceFileRef().getItem();
+    
     if (!item || item->getItemType() != Item::ItemType::SequenceFile)
         return false;
 
-    const SequenceFile* seqFile = static_cast<const SequenceFile*>(item);
+    const SequenceFile *seqFile = static_cast<const SequenceFile *>(item);
     sead::FixedSafeString<256> name(sound.getNameOrNull());
+
     if (name.isEmpty())
         name = "Sequence";
 
     u32 startOffset = sound.getSequenceSoundInfo().getStartOffset();
+
     return exportSeqToMidi(path, *seqFile, name.cstr(), startOffset);
 }
 
-bool exportSeqSoundSetToMidiDir(const sead::SafeString& dirPath, const SoundSet& soundSet)
+bool exportSeqSoundSetToMidiDir(const sead::SafeString &dirPath, const SoundSet &soundSet)
 {
     if (soundSet.getIsEmpty() || soundSet.getSoundSetType() != SoundSet::SoundSetType::Seq)
         return false;
 
     u32 startId = soundSet.getStartId();
-    u32 endId   = soundSet.getEndId();
+    u32 endId = soundSet.getEndId();
 
     // Access the BFSAR sound list
     extern Bfsar sBfsar;
-    auto& soundList = sBfsar.getSoundList();
 
+    auto &soundList = sBfsar.getSoundList();
     bool anyOk = false;
+
     for (auto it = soundList.begin(); it != soundList.end(); ++it)
     {
-        Sound* sound = static_cast<Sound*>(*it);
-        u32    id    = sound->getId();
+        Sound *sound = static_cast<Sound *>(*it);
+        u32 id = sound->getId();
+
         if (id < startId || id > endId)
             continue;
         if (sound->getSoundType() != Sound::SoundType::Seq)
+
             continue;
 
         sead::FixedSafeString<256> name(sound->getNameOrNull());
+
         if (name.isEmpty())
             name = "Sequence";
+        
+        sanitizeFilenameInPlace_(&name);
 
         sead::FormatFixedSafeString<512> midiPath("%s/%s.midi", dirPath.cstr(), name.cstr());
+        
         if (exportSeqToMidi(midiPath, *sound))
             anyOk = true;
     }

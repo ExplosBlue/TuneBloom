@@ -125,6 +125,7 @@ static BankFile::Instrument* sPendingExportInstrument = nullptr;
 static BankFile* sPendingImportInstrumentBank = nullptr;
 
 static u8* sIbnkFileData = nullptr;
+static u32 sIbnkFileSize = 0;
 static BankFile* sIbnkTargetBank = nullptr;
 static std::string sIbnkInstrumentName;
 static sead::FixedSafeString<256> sIbnkNameEdit;
@@ -154,6 +155,7 @@ static void CloseIbnkImport()
     }
 
     sIbnkFileData = nullptr;
+    sIbnkFileSize = 0;
     sIbnkTargetBank = nullptr;
     sIbnkInstrumentName.clear();
     sIbnkReplaceTarget = nullptr;
@@ -2093,6 +2095,16 @@ void DrawUI()
     DrawExportProgressPopup();
 }
 
+static void SanitizeFilenameInPlace(sead::BufferedSafeString *s)
+{
+    for (s32 i = 0; i < s->calcLength(); i++)
+    {
+        char &c = s->getBuffer()[i];
+        if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' || (unsigned char)c < 0x20)
+            c = '_';
+    }
+}
+
 static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Sound* sound, const char* ext)
 {
     const char* rawName = sound->getName().cstr();
@@ -2100,6 +2112,7 @@ static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Soun
     upperName.format("%s", rawName);
     for (s32 i = 0; i < upperName.calcLength(); i++)
         upperName.getBuffer()[i] = ::toupper((unsigned char)upperName.getBuffer()[i]);
+    SanitizeFilenameInPlace(&upperName);
 
     std::string cwd = std::filesystem::current_path().string();
     outPath->format("%s/%s.%s", cwd.c_str(), upperName.cstr(), ext);
@@ -2273,13 +2286,14 @@ static bool WriteWavCustom(const sead::SafeString& path, u32 sampleRate, const s
     return true;
 }
 
-static void BuildExportPathFromDir(sead::BufferedSafeString* outPath, const char* dir, const Sound* sound, const char* ext)
+static void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char *dir, const Sound *sound, const char *ext)
 {
-    const char* rawName = sound->getName().cstr();
+    const char *rawName = sound->getName().cstr();
     sead::FixedSafeString<256> upperName;
     upperName.format("%s", rawName);
     for (s32 i = 0; i < upperName.calcLength(); i++)
         upperName.getBuffer()[i] = ::toupper((unsigned char)upperName.getBuffer()[i]);
+    SanitizeFilenameInPlace(&upperName);
     outPath->format("%s/%s.%s", dir, upperName.cstr(), ext);
 }
 
@@ -3101,10 +3115,14 @@ static void DrawFileExportDialogs()
             sead::FixedSafeString<512> dirPath;
             if (SelectFolderDialog(&dirPath, "Select export directory"))
             {
-                for (SequenceFile* seq : sPendingExportSequenceFiles)
+                for (SequenceFile *seq : sPendingExportSequenceFiles)
                 {
+                    sead::FixedSafeString<256> safeName;
+                    safeName.format("%s", seq->getNameOrNull().cstr());
+                    SanitizeFilenameInPlace(&safeName);
+
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.%s", dirPath.cstr(), seq->getNameOrNull().cstr(), ext);
+                    filePath.format("%s/%s.%s", dirPath.cstr(), safeName.cstr(), ext);
                     if (device)
                         WriteSequenceFile(seq, device, filePath.cstr());
                 }
@@ -3152,10 +3170,14 @@ static void DrawFileExportDialogs()
             sead::FixedSafeString<512> dirPath;
             if (SelectFolderDialog(&dirPath, "Select export directory"))
             {
-                for (WaveFile* wave : sPendingExportWaveFiles)
+                for (WaveFile *wave : sPendingExportWaveFiles)
                 {
+                    sead::FixedSafeString<256> safeName;
+                    safeName.format("%s", wave->getNameOrNull().cstr());
+                    SanitizeFilenameInPlace(&safeName);
+
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.%s", dirPath.cstr(), wave->getNameOrNull().cstr(), ext);
+                    filePath.format("%s/%s.%s", dirPath.cstr(), safeName.cstr(), ext);
                     if (device)
                         WriteWaveFile(wave, device, filePath.cstr());
                 }
@@ -3205,8 +3227,12 @@ static void DrawFileExportDialogs()
             {
                 for (BankFile* bank : sPendingExportBankBundles)
                 {
+                    sead::FixedSafeString<256> safeName;
+                    safeName.format("%s", bank->getNameOrNull().cstr());
+                    SanitizeFilenameInPlace(&safeName);
+
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.%s", dirPath.cstr(), bank->getNameOrNull().cstr(), ext);
+                    filePath.format("%s/%s.%s", dirPath.cstr(), safeName.cstr(), ext);
                     // Use the single-bank export flow for each
                     if (device)
                     {
@@ -3274,8 +3300,12 @@ static void DrawFileExportDialogs()
             {
                 for (BankFile *bank : sPendingExportBankSf2)
                 {
+                    sead::FixedSafeString<256> safeName;
+                    safeName.format("%s", bank->getNameOrNull().cstr());
+                    SanitizeFilenameInPlace(&safeName);
+
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.sf2", dirPath.cstr(), bank->getNameOrNull().cstr());
+                    filePath.format("%s/%s.sf2", dirPath.cstr(), safeName.cstr());
                     exportBankToSf2(filePath, *bank);
                 }
                 sExportConfirmMessage.format("Exported %d banks as SF2 successfully.", bankCount);
@@ -3320,10 +3350,15 @@ static void DrawFileExportDialogs()
             {
                 for (BankFile *bank : sPendingExportBankDls)
                 {
+                    sead::FixedSafeString<256> safeName;
+                    safeName.format("%s", bank->getNameOrNull().cstr());
+                    SanitizeFilenameInPlace(&safeName);
+
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.dls", dirPath.cstr(), bank->getNameOrNull().cstr());
+                    filePath.format("%s/%s.dls", dirPath.cstr(), safeName.cstr());
                     exportBankToDls(filePath, *bank);
                 }
+
                 sExportConfirmMessage.format("Exported %d banks as DLS successfully.", bankCount);
                 sShowExportConfirm = true;
             }
@@ -3437,15 +3472,55 @@ static void DrawFileExportDialogs()
             {
                 sead::FileDevice::LoadArg loadArg;
                 loadArg.path = path;
-                u8* fileData = device->tryLoad(loadArg);
+                u8 *fileData = device->tryLoad(loadArg);
+
                 if (fileData)
                 {
                     u32 offset = 0;
-                    auto readU32 = [&]() -> u32 { u32 v; sead::MemUtil::copy(&v, fileData + offset, 4); offset += 4; return sead::Endian::toHostU32(sead::Endian::eBig, v); };
-                    auto readU16 = [&]() -> u16 { u16 v; sead::MemUtil::copy(&v, fileData + offset, 2); offset += 2; return sead::Endian::toHostU16(sead::Endian::eBig, v); };
-                    auto readString = [&]() -> std::string { u32 len = readU32(); std::string s; if (len > 0) s.assign(reinterpret_cast<const char*>(fileData + offset), len); offset += len; return s; };
+                    u32 fileSize = loadArg.read_size;
+                    bool oob = false;
+                    auto readU32 = [&]() -> u32
+                    {
+                        if (oob || offset + 4 > fileSize)
+                        {
+                            oob = true;
+                            return 0;
+                        }
+                        u32 v;
+                        sead::MemUtil::copy(&v, fileData + offset, 4);
+                        offset += 4;
+                        return sead::Endian::toHostU32(sead::Endian::eBig, v);
+                    };
+                    auto readU16 = [&]() -> u16
+                    {
+                        if (oob || offset + 2 > fileSize)
+                        {
+                            oob = true;
+                            return 0;
+                        }
+                        u16 v;
+                        sead::MemUtil::copy(&v, fileData + offset, 2);
+                        offset += 2;
+                        return sead::Endian::toHostU16(sead::Endian::eBig, v);
+                    };
+                    auto readString = [&]() -> std::string
+                    {
+                        u32 len = readU32();
+                        if (oob || len > fileSize - offset)
+                        {
+                            oob = true;
+                            return std::string();
+                        }
+                        std::string s;
+
+                        if (len > 0)
+                            s.assign(reinterpret_cast<const char *>(fileData + offset), len);
+                        offset += len;
+                        return s;
+                    };
 
                     u32 magic = readU32();
+
                     if (magic != 0x49424E44)
                     {
                         PopupMgr::instance()->pushCurrentItemError("Invalid instrument bundle file");
@@ -3454,6 +3529,7 @@ static void DrawFileExportDialogs()
                     }
 
                     u32 version = readU32();
+
                     if (version != 1)
                     {
                         PopupMgr::instance()->pushCurrentItemError("Unsupported instrument bundle version");
@@ -3461,15 +3537,26 @@ static void DrawFileExportDialogs()
                         return;
                     }
 
+                    std::string instrumentName = readString();
+                    s16 programNo = (s16)readU16();
+                    u32 waveCount = readU32();
+
+                    if (oob)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Instrument bundle file is truncated or corrupt");
+                        device->unload(fileData);
+                        return;
+                    }
+
                     sIbnkFileData = fileData;
+                    sIbnkFileSize = fileSize;
                     sIbnkTargetBank = targetBank;
-                    sIbnkInstrumentName = readString();
-                    sIbnkProgramNo = (s16)readU16();
-                    sIbnkWaveCount = readU32();
+                    sIbnkInstrumentName = instrumentName;
+                    sIbnkProgramNo = programNo;
+                    sIbnkWaveCount = waveCount;
                     sIbnkDataOffset = offset;
 
-                    sIbnkNameEdit = !sIbnkInstrumentName.empty() ? sIbnkInstrumentName.c_str()
-                                  : (sIbnkReplaceTarget ? sIbnkReplaceTarget->getName().cstr() : "Instrument");
+                    sIbnkNameEdit = !sIbnkInstrumentName.empty() ? sIbnkInstrumentName.c_str() : (sIbnkReplaceTarget ? sIbnkReplaceTarget->getName().cstr() : "Instrument");
 
                     ImGui::OpenPopup(sIbnkReplaceTarget ? "Replace Instrument" : "Import Instrument");
                 }
@@ -3478,6 +3565,7 @@ static void DrawFileExportDialogs()
     }
 
     const char *popupName = sIbnkReplaceTarget ? "Replace Instrument" : "Import Instrument";
+
     if (sIbnkFileData && ImGui::BeginPopupModal(popupName, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         if (sIbnkReplaceTarget)
@@ -3492,6 +3580,7 @@ static void DrawFileExportDialogs()
 
         s16 progStep = 1;
         s16 progStepFast = 10;
+
         ImGui::SetNextItemWidth(120.0f);
         ImGui::InputScalar("Program Number", ImGuiDataType_S16, &sIbnkProgramNo, &progStep, &progStepFast);
 
@@ -3517,36 +3606,109 @@ static void DrawFileExportDialogs()
         if (ImGui::Button("Import", ImVec2(bw, 0.0f)))
         {
             u32 offset = sIbnkDataOffset;
+            u32 fileSize = sIbnkFileSize;
             u8 *fileData = sIbnkFileData;
 
+            bool oob = false;
             auto readU32 = [&]() -> u32
-            { u32 v; sead::MemUtil::copy(&v, fileData + offset, 4); offset += 4; return sead::Endian::toHostU32(sead::Endian::eBig, v); };
+            {
+                if (oob || offset + 4 > fileSize)
+                {
+                    oob = true;
+                    return 0;
+                }
+
+                u32 v;
+                sead::MemUtil::copy(&v, fileData + offset, 4);
+                offset += 4;
+                return sead::Endian::toHostU32(sead::Endian::eBig, v);
+            };
+
             auto readU16 = [&]() -> u16
-            { u16 v; sead::MemUtil::copy(&v, fileData + offset, 2); offset += 2; return sead::Endian::toHostU16(sead::Endian::eBig, v); };
+            {
+                if (oob || offset + 2 > fileSize)
+                {
+                    oob = true;
+                    return 0;
+                }
+
+                u16 v;
+                sead::MemUtil::copy(&v, fileData + offset, 2);
+                offset += 2;
+                return sead::Endian::toHostU16(sead::Endian::eBig, v);
+            };
+
             auto readU8 = [&]() -> u8
-            { return fileData[offset++]; };
+            {
+                if (oob || offset + 1 > fileSize)
+                {
+                    oob = true;
+                    return 0;
+                }
+
+                return fileData[offset++];
+            };
+
             auto readF32 = [&]() -> f32
-            { u32 v; sead::MemUtil::copy(&v, fileData + offset, 4); offset += 4; v = sead::Endian::toHostU32(sead::Endian::eBig, v); f32 r; sead::MemUtil::copy(&r, &v, 4); return r; };
+            {
+                if (oob || offset + 4 > fileSize)
+                {
+                    oob = true;
+                    return 0.0f;
+                }
+
+                u32 v;
+                sead::MemUtil::copy(&v, fileData + offset, 4);
+                offset += 4;
+                v = sead::Endian::toHostU32(sead::Endian::eBig, v);
+                f32 r;
+                sead::MemUtil::copy(&r, &v, 4);
+                return r;
+            };
+
             auto readString = [&]() -> std::string
-            { u32 len = readU32(); std::string s; if (len > 0) s.assign(reinterpret_cast<const char*>(fileData + offset), len); offset += len; return s; };
+            {
+                u32 len = readU32();
+                
+                if (oob || len > fileSize - offset)
+                {
+                    oob = true;
+                    return std::string();
+                }
+
+                std::string s;
+
+                if (len > 0)
+                    s.assign(reinterpret_cast<const char *>(fileData + offset), len);
+                
+                    offset += len;
+                return s;
+            };
 
             auto findWaveByName = [](const char *name) -> WaveFile *
             {
                 for (const auto &node : sBfsar.getWaveFileList())
                     if (node->getName() == name)
                         return static_cast<WaveFile *>(node);
-                
+
                 return nullptr;
             };
 
             std::unordered_map<std::string, WaveFile *> waveMap;
 
-            for (u32 i = 0; i < sIbnkWaveCount; i++)
+            for (u32 i = 0; !oob && i < sIbnkWaveCount; i++)
             {
                 std::string waveName = readString();
                 u32 waveSize = readU32();
-                if (waveSize == 0)
+
+                if (oob || waveSize == 0)
                     continue;
+
+                if (waveSize < 12 || waveSize > fileSize - offset)
+                {
+                    oob = true;
+                    continue;
+                }
 
                 if (WaveFile *existing = findWaveByName(waveName.c_str()))
                 {
@@ -3561,6 +3723,7 @@ static void DrawFileExportDialogs()
                     sead::MemUtil::copy(&bom, fileData + offset + 4, 2);
                     bool le = *reinterpret_cast<u8 *>(&bom) == 0xFF;
                     u32 ver = sBfsar.getVersionForBfwav();
+
                     if (le)
                     {
                         fileData[offset + 8] = (ver >> 0) & 0xFF;
@@ -3575,7 +3738,9 @@ static void DrawFileExportDialogs()
                         fileData[offset + 10] = (ver >> 8) & 0xFF;
                         fileData[offset + 11] = (ver >> 0) & 0xFF;
                     }
+
                     const char* wantSig = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
+
                     hdr->signature[0] = wantSig[0];
                     hdr->signature[1] = wantSig[1];
                     hdr->signature[2] = wantSig[2];
@@ -3583,8 +3748,10 @@ static void DrawFileExportDialogs()
                 }
 
                 WaveFile* newWave = new WaveFile();
+
                 newWave->setEnableName(true);
                 newWave->getName() = waveName.c_str();
+
                 if (newWave->read(fileData + offset))
                 {
                     newWave->setFormat(sBfsar.getFormat());
@@ -3603,39 +3770,23 @@ static void DrawFileExportDialogs()
                 offset += waveSize;
             }
 
-            BankFile::Instrument *instr;
-            if (sIbnkReplaceTarget)
-            {
-                DeselectVelocity();
-                instr = sIbnkReplaceTarget;
-                instr->getKeyRegionList().clear();
-                
-                if (!sIbnkNameEdit.isEmpty())
-                {
-                    instr->setEnableName(true);
-                    instr->getName() = sIbnkNameEdit.cstr();
-                }
+            BankFile::Instrument *instr = new BankFile::Instrument();
 
-                instr->setProgramNo(sIbnkProgramNo);
-            }
-            else
-            {
-                instr = new BankFile::Instrument();
-                instr->setEnableName(true);
-                instr->getName() = sIbnkNameEdit.isEmpty() ? "Instrument" : sIbnkNameEdit.cstr();
-                instr->setProgramNo(sIbnkProgramNo);
-            }
+            instr->setEnableName(true);
+            instr->getName() = sIbnkNameEdit.isEmpty() ? "Instrument" : sIbnkNameEdit.cstr();
+            instr->setProgramNo(sIbnkProgramNo);
 
             u16 krCount = readU16();
-            for (u16 k = 0; k < krCount; k++)
+            
+            for (u16 k = 0; !oob && k < krCount; k++)
             {
                 u8 keyMin = readU8();
                 u8 keyMax = readU8();
                 u16 vrCount = readU16();
 
-                BankFile::KeyRegion* kr = new BankFile::KeyRegion(keyMin, keyMax);
+                BankFile::KeyRegion *kr = new BankFile::KeyRegion(keyMin, keyMax);
 
-                for (u16 v = 0; v < vrCount; v++)
+                for (u16 v = 0; !oob && v < vrCount; v++)
                 {
                     std::string refWaveName = readString();
                     u8 velMin = readU8();
@@ -3672,6 +3823,7 @@ static void DrawFileExportDialogs()
 
                     WaveFile* foundWave = nullptr;
                     auto waveIt = waveMap.find(refWaveName.c_str());
+
                     if (waveIt != waveMap.end())
                     {
                         foundWave = waveIt->second;
@@ -3687,6 +3839,7 @@ static void DrawFileExportDialogs()
                             }
                         }
                     }
+
                     if (foundWave)
                         vr->getWaveFileRef().attach(foundWave);
 
@@ -3696,11 +3849,41 @@ static void DrawFileExportDialogs()
                 instr->getKeyRegionList().pushBack(kr);
             }
 
-            if (!sIbnkReplaceTarget)
-                sIbnkTargetBank->getInstrumentList().pushBack(instr);
+            if (oob)
+            {
+                PopupMgr::instance()->pushCurrentItemError("Instrument bundle file is truncated or corrupt");
+                delete instr;
+            }
+            else if (sIbnkReplaceTarget)
+            {
+                DeselectVelocity();
+                sIbnkReplaceTarget->getKeyRegionList().clear();
 
-            sBfsar.updateList(sIbnkTargetBank->getInstrumentList());
-            SetUnsavedChanges(true);
+                auto &src = instr->getKeyRegionList();
+                auto &dst = sIbnkReplaceTarget->getKeyRegionList();
+
+                for (auto it = src.robustBegin(); it != src.robustEnd(); ++it)
+                    dst.pushBack(&(*it));
+
+                if (!sIbnkNameEdit.isEmpty())
+                {
+                    sIbnkReplaceTarget->setEnableName(true);
+                    sIbnkReplaceTarget->getName() = sIbnkNameEdit.cstr();
+                }
+
+                sIbnkReplaceTarget->setProgramNo(sIbnkProgramNo);
+
+                delete instr;
+
+                sBfsar.updateList(sIbnkTargetBank->getInstrumentList());
+                SetUnsavedChanges(true);
+            }
+            else
+            {
+                sIbnkTargetBank->getInstrumentList().pushBack(instr);
+                sBfsar.updateList(sIbnkTargetBank->getInstrumentList());
+                SetUnsavedChanges(true);
+            }
 
             CloseIbnkImport();
             ImGui::CloseCurrentPopup();
@@ -3733,6 +3916,7 @@ static void DrawFileExportDialogs()
         sead::FixedSafeString<32> filterPattern;
         filterPattern.format("*.%s", ext);
         const u32 filterCount = 1;
+
         FileFilter filters[filterCount] = {
             { filterName.cstr(), filterPattern.cstr() }
         };
@@ -3745,11 +3929,13 @@ static void DrawFileExportDialogs()
                 sead::FileDevice::LoadArg arg;
                 arg.path = path;
                 u8* fileData = device->tryLoad(arg);
+
                 if (fileData)
                 {
                     sead::FixedSafeString<256> fileName;
                     sead::Path::getFileName(&fileName, path);
                     s32 dotPos = fileName.rfindIndex(".");
+
                     if (dotPos != -1)
                         fileName.trim(dotPos);
 
@@ -3758,14 +3944,17 @@ static void DrawFileExportDialogs()
                     newSeq->getName() = fileName;
                     newSeq->setFormat(sBfsar.getFormat());
                     newSeq->setVersion(sBfsar.getVersionForBfseq());
+
                     if (newSeq->read(fileData))
                     {
                         newSeq->setFormat(sBfsar.getFormat());
                         Item* insertAfter = GetInsertAfterItem();
+
                         if (insertAfter)
                             insertAfter->insertBack(newSeq);
                         else
                             sBfsar.getSequenceFileList().pushBack(newSeq);
+                        
                         ClearInsertAfterItem();
                         sBfsar.updateList(sBfsar.getSequenceFileList());
                         SetUnsavedChanges(true);
@@ -3794,6 +3983,7 @@ static void DrawFileExportDialogs()
         sead::FixedSafeString<32> filterPattern;
         filterPattern.format("*.%s", ext);
         const u32 filterCount = 1;
+
         FileFilter filters[filterCount] = {
             { filterName.cstr(), filterPattern.cstr() }
         };
@@ -3805,13 +3995,22 @@ static void DrawFileExportDialogs()
             {
                 sead::FileDevice::LoadArg loadArg;
                 loadArg.path = path;
-                u8* fileData = device->tryLoad(loadArg);
+                u8 *fileData = device->tryLoad(loadArg);
+
                 if (fileData)
                 {
                     u32 offset = 0;
+                    u32 fileSize = loadArg.read_size;
+                    bool oob = false;
 
                     auto readU32 = [&]() -> u32
                     {
+                        if (oob || offset + 4 > fileSize)
+                        {
+                            oob = true;
+                            return 0;
+                        }
+
                         u32 val;
                         sead::MemUtil::copy(&val, fileData + offset, 4);
                         offset += 4;
@@ -3820,6 +4019,12 @@ static void DrawFileExportDialogs()
 
                     auto readU16 = [&]() -> u16
                     {
+                        if (oob || offset + 2 > fileSize)
+                        {
+                            oob = true;
+                            return 0;
+                        }
+
                         u16 val;
                         sead::MemUtil::copy(&val, fileData + offset, 2);
                         offset += 2;
@@ -3828,26 +4033,46 @@ static void DrawFileExportDialogs()
 
                     auto readU8 = [&]() -> u8
                     {
+                        if (oob || offset + 1 > fileSize)
+                        {
+                            oob = true;
+                            return 0;
+                        }
+
                         return fileData[offset++];
                     };
 
                     auto readF32 = [&]() -> f32
                     {
+                        if (oob || offset + 4 > fileSize)
+                        {
+                            oob = true;
+                            return 0.0f;
+                        }
+
                         u32 val;
                         sead::MemUtil::copy(&val, fileData + offset, 4);
                         offset += 4;
                         val = sead::Endian::toHostU32(sead::Endian::eBig, val);
                         f32 result;
                         sead::MemUtil::copy(&result, &val, 4);
+
                         return result;
                     };
 
                     auto readString = [&]() -> std::string
                     {
                         u32 len = readU32();
+                        if (oob || len > fileSize - offset)
+                        {
+                            oob = true;
+                            return std::string();
+                        }
+
                         std::string s;
+
                         if (len > 0)
-                            s.assign(reinterpret_cast<const char*>(fileData + offset), len);
+                            s.assign(reinterpret_cast<const char *>(fileData + offset), len);
                         offset += len;
                         return s;
                     };
@@ -3875,19 +4100,25 @@ static void DrawFileExportDialogs()
 
                     // Read waves
                     u32 waveCount = readU32();
-                    std::unordered_map<std::string, WaveFile*> waveMap;
+                    std::unordered_map<std::string, WaveFile *> waveMap;
 
-                    for (u32 i = 0; i < waveCount; i++)
+                    for (u32 i = 0; !oob && i < waveCount; i++)
                     {
                         std::string waveName = readString();
                         u32 waveSize = readU32();
 
-                        if (waveSize == 0)
+                        if (oob || waveSize == 0)
                             continue;
+
+                        if (waveSize < 12 || waveSize > fileSize - offset)
+                        {
+                            oob = true;
+                            continue;
+                        }
 
                         // Version-patch the wave binary to match current archive
                         {
-                            nw::ut::BinaryFileHeader* hdr = reinterpret_cast<nw::ut::BinaryFileHeader*>(fileData + offset);
+                            nw::ut::BinaryFileHeader *hdr = reinterpret_cast<nw::ut::BinaryFileHeader *>(fileData + offset);
                             u16 bom;
                             sead::MemUtil::copy(&bom, fileData + offset + 4, 2);
                             bool le = *reinterpret_cast<u8*>(&bom) == 0xFF;
@@ -3954,7 +4185,7 @@ static void DrawFileExportDialogs()
                     }
 
                     // Read instruments
-                    if (offset >= loadArg.read_size)
+                    if (oob || offset >= fileSize)
                     {
                         PopupMgr::instance()->pushCurrentItemError("Truncated bank bundle");
                         device->unload(fileData);
@@ -3962,35 +4193,35 @@ static void DrawFileExportDialogs()
                     }
 
                     u32 instrumentCount = readU32();
-                    if (instrumentCount == 0)
+                    if (oob || instrumentCount == 0)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Bank bundle has no instruments");
+                        PopupMgr::instance()->pushCurrentItemError(oob ? "Bank bundle is truncated or corrupt" : "Bank bundle has no instruments");
                         device->unload(fileData);
                         return;
                     }
 
-                    BankFile* newBank = new BankFile();
+                    BankFile *newBank = new BankFile();
                     newBank->setEnableName(true);
                     newBank->getName() = bankName.c_str();
                     newBank->setup(sBfsar.getEndian(), sBfsar.getFormat());
 
-                    for (u32 i = 0; i < instrumentCount; i++)
+                    for (u32 i = 0; !oob && i < instrumentCount; i++)
                     {
                         s16 programNo = readU16();
                         u16 krCount = readU16();
 
-                        BankFile::Instrument* instr = new BankFile::Instrument();
+                        BankFile::Instrument *instr = new BankFile::Instrument();
                         instr->setProgramNo(programNo);
 
-                        for (u16 k = 0; k < krCount; k++)
+                        for (u16 k = 0; !oob && k < krCount; k++)
                         {
                             u8 keyMin = readU8();
                             u8 keyMax = readU8();
                             u16 vrCount = readU16();
 
-                            BankFile::KeyRegion* kr = new BankFile::KeyRegion(keyMin, keyMax);
+                            BankFile::KeyRegion *kr = new BankFile::KeyRegion(keyMin, keyMax);
 
-                            for (u16 v = 0; v < vrCount; v++)
+                            for (u16 v = 0; !oob && v < vrCount; v++)
                             {
                                 std::string refWaveName = readString();
                                 u8 velMin = readU8();
@@ -4057,6 +4288,14 @@ static void DrawFileExportDialogs()
                         newBank->getInstrumentList().pushBack(instr);
                     }
 
+                    if (oob)
+                    {
+                        PopupMgr::instance()->pushCurrentItemError("Bank bundle is truncated or corrupt");
+                        delete newBank;
+                        device->unload(fileData);
+                        return;
+                    }
+
                     sBfsar.getBankFileList().pushBack(newBank);
                     sBfsar.updateList(sBfsar.getBankFileList());
                     SetUnsavedChanges(true);
@@ -4077,20 +4316,24 @@ static void DrawFileExportDialogs()
             sead::FixedSafeString<512> dirPath;
             if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
             {
-                for (WaveFile* wave : sPendingExportWaveToWavs)
+                for (WaveFile *wave : sPendingExportWaveToWavs)
                 {
+                    sead::FixedSafeString<256> safeName;
+                    safeName.format("%s", wave->getNameOrNull().cstr());
+                    SanitizeFilenameInPlace(&safeName);
+
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.wav", dirPath.cstr(), wave->getNameOrNull().cstr());
+                    filePath.format("%s/%s.wav", dirPath.cstr(), safeName.cstr());
                     if (!wave->writeWavFile(filePath))
                     {
-                        PopupMgr::instance()->addPopup({ "Failed to write WAV file", nullptr });
+                        PopupMgr::instance()->addPopup({"Failed to write WAV file", nullptr});
                     }
                 }
             }
         }
         else
         {
-            WaveFile* wave = sPendingExportWaveToWavs[0];
+            WaveFile *wave = sPendingExportWaveToWavs[0];
 
             sead::FixedSafeString<512> defaultPath;
             {
@@ -4203,21 +4446,9 @@ static void DrawFileExportDialogs()
         SoundSet *soundSet = sPendingExportMidiSoundSet;
         if (soundSet)
         {
-            sead::FixedSafeString<512> dirPath;
-            if (SaveFileDialog(&dirPath, "Select directory for MIDI export"))
+            sead::FixedSafeString<512> exportDir;
+            if (SelectFolderDialog(&exportDir, "Select directory for MIDI export"))
             {
-                const char *p = dirPath.cstr();
-                const char *lastSlash = nullptr;
-                for (const char *c = p; *c; c++)
-                    if (*c == '/' || *c == '\\')
-                        lastSlash = c;
-
-                sead::FixedSafeString<512> exportDir;
-                if (lastSlash)
-                    exportDir.format("%.*s", (s32)(lastSlash - p), p);
-                else
-                    exportDir = ".";
-
                 exportSeqSoundSetToMidiDir(exportDir, *soundSet);
                 if (sMidiExportWantSf2)
                     exportSeqSoundSetToSf2Dir(exportDir, *soundSet);

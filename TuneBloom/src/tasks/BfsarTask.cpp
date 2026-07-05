@@ -21,6 +21,7 @@
 
 #include "icons/IconsLucide.h"
 #include "ui/UI.h"
+#include "ui/OutputMeter.h"
 #include "ui/PopupMgr.h"
 
 #include <Utilll.h>
@@ -157,6 +158,8 @@ void BfsarTask::prepare()
 
         heap->adjust();
     }
+
+    OutputMeter::instance().install();
 
     LoadAudioConfig();
     ApplyAudioConfig();
@@ -327,6 +330,7 @@ void BfsarTask::exit()
     CloseFile();
 
     snd::SoundSystem::finalize();
+    OutputMeter::instance().uninstall();
 }
 
 void BfsarTask::calc()
@@ -334,6 +338,8 @@ void BfsarTask::calc()
     sead::CurrentHeapSetter chs(sead::HeapMgr::getUnboundHeap());
 
     PopupMgr::instance()->update();
+
+    OutputMeter::instance().update(ImGui::GetIO().DeltaTime);
 
     DrawMenuBar();
     DrawUI();

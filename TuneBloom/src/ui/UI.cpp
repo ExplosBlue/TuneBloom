@@ -1,6 +1,7 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/UI.h>
 
+#include <ui/OutputMeter.h>
 #include <ui/PopupMgr.h>
 
 #include <theme/SystemTheme.h>
@@ -277,8 +278,10 @@ static void DockBuilder(ImGuiID dockspaceId, const ImVec2& dockspaceSize)
     ImGuiID dock1 = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Left, 0.20f, nullptr, &mainDockId);
     ImGuiID dock2 = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Right, 0.50f, nullptr, &mainDockId);
     ImGuiID dockDownMain = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Down, 0.35f, nullptr, &mainDockId);
+    ImGuiID dock1Bottom = ImGui::DockBuilderSplitNode(dock1, ImGuiDir_Down, 0.50f, nullptr, &dock1);
 
     ImGui::DockBuilderDockWindow("###ProjectWindow", dock1);
+    ImGui::DockBuilderDockWindow("###OutputMeterWindow", dock1Bottom);
     ImGui::DockBuilderDockWindow("###InfoWindow", mainDockId);
     ImGui::DockBuilderDockWindow("###SubInfoWindow", dockDownMain);
     ImGui::DockBuilderDockWindow("###PropertiesWindow", dock2);
@@ -669,120 +672,131 @@ static void DrawAdvancedOptions()
     PrefSectionTitle(ICON_LC_CPU " Advanced");
     ImGui::Indent(10.0f);
     ImGui::Checkbox("Show system window", &sShowSystemWindow);
-    ImGui::Checkbox("Save external archive metadata", &sSaveMetadataDefault);
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::TextUnformatted("When enabled, a metadata json is created during\n"
-                               "saving to track instrument and wave file names.\n"
-                               "If one already exists, it is updated regardless.");
-        ImGui::EndTooltip();
-    }
-
-    if (ImGui::IsItemDeactivatedAfterEdit())
-        SaveMetadataConfig();
 
     ImGui::Unindent(10.0f);
 }
 
 static void DrawFileOptions()
 {
-    struct BackupPreset
-    {
-        const char *label;
-        bool enabled;
-        s32 minutes;
-    };
-
-    static const BackupPreset kPresets[] = {
-        {"Never", false, 0},
-        {"Rarely (every 15 minutes)", true, 15},
-        {"Occasionally (every 10 minutes)", true, 10},
-        {"Regularly (every 5 minutes)", true, 5},
-        {"Frequently (every minute)", true, 1},
-    };
-
-    const int presetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
-
-    int cur = 0;
-    if (sAutoBackupEnabled)
-    {
-        cur = 3;
-        for (int i = 1; i < presetCount; i++)
-            if (kPresets[i].minutes == sAutoBackupIntervalMinutes)
-            {
-                cur = i;
-                break;
-            }
-    }
-
-    PrefSectionTitle(ICON_LC_FILE " File");
-    ImGui::Indent(10.0f);
-
-    PrefLabel("Automatic backup");
-    if (ImGui::BeginCombo("##autobackup", kPresets[cur].label))
-    {
-        for (int i = 0; i < presetCount; i++)
+    { // Backup options
+        struct BackupPreset
         {
-            bool sel = (i == cur);
-            if (ImGui::Selectable(kPresets[i].label, sel))
+            const char *label;
+            bool enabled;
+            s32 minutes;
+        };
+
+        static const BackupPreset kPresets[] = {
+            {"Never", false, 0},
+            {"Rarely (every 15 minutes)", true, 15},
+            {"Occasionally (every 10 minutes)", true, 10},
+            {"Regularly (every 5 minutes)", true, 5},
+            {"Frequently (every minute)", true, 1},
+        };
+
+        const int presetCount = (int)(sizeof(kPresets) / sizeof(kPresets[0]));
+
+        int cur = 0;
+        if (sAutoBackupEnabled)
+        {
+            cur = 3;
+            for (int i = 1; i < presetCount; i++)
+                if (kPresets[i].minutes == sAutoBackupIntervalMinutes)
+                {
+                    cur = i;
+                    break;
+                }
+        }
+
+        PrefSectionTitle(ICON_LC_FILE " File");
+        ImGui::Indent(10.0f);
+
+        PrefLabel("Automatic backup");
+        if (ImGui::BeginCombo("##autobackup", kPresets[cur].label))
+        {
+            for (int i = 0; i < presetCount; i++)
             {
-                sAutoBackupEnabled = kPresets[i].enabled;
-                if (kPresets[i].enabled)
-                    sAutoBackupIntervalMinutes = kPresets[i].minutes;
+                bool sel = (i == cur);
+                if (ImGui::Selectable(kPresets[i].label, sel))
+                {
+                    sAutoBackupEnabled = kPresets[i].enabled;
+                    if (kPresets[i].enabled)
+                        sAutoBackupIntervalMinutes = kPresets[i].minutes;
+                    SaveBackupConfig();
+                }
+                if (sel)
+                    ImGui::SetItemDefaultFocus();
+            }
+            ImGui::EndCombo();
+        }
+
+        if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
+        {
+            int delta = -(int)ImGui::GetIO().MouseWheel;
+            int newIdx = cur + delta;
+
+            if (newIdx < 0)
+                newIdx = 0;
+            
+            if (newIdx >= presetCount)
+                newIdx = presetCount - 1;
+            
+            if (newIdx != cur)
+            {
+                sAutoBackupEnabled = kPresets[newIdx].enabled;
+
+                if (kPresets[newIdx].enabled)
+                    sAutoBackupIntervalMinutes = kPresets[newIdx].minutes;
+                
                 SaveBackupConfig();
             }
-            if (sel)
-                ImGui::SetItemDefaultFocus();
+
+            ImGui::GetIO().MouseWheel = 0.0f;
         }
-        ImGui::EndCombo();
-    }
 
-    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
-    {
-        int delta = -(int)ImGui::GetIO().MouseWheel;
-        int newIdx = cur + delta;
-
-        if (newIdx < 0)
-            newIdx = 0;
-        
-        if (newIdx >= presetCount)
-            newIdx = presetCount - 1;
-        
-        if (newIdx != cur)
+        if (ImGui::BeginItemTooltip())
         {
-            sAutoBackupEnabled = kPresets[newIdx].enabled;
+            ImGui::TextUnformatted("Controls how frequently backups are created. They are created\n"
+                                "in a 'tunebloom_backup' folder next to the open file when unsaved\n"
+                                "changes are present. Only manual saves affect the original file.");
+            ImGui::EndTooltip();
+        }
 
-            if (kPresets[newIdx].enabled)
-                sAutoBackupIntervalMinutes = kPresets[newIdx].minutes;
-            
+        if (!sAutoBackupEnabled)
+            ImGui::BeginDisabled();
+
+        PrefLabel("Maximum backups");
+        ImGui::SliderInt("##maxbackups", &sAutoBackupMaxBackups, 1, 100, "%d");
+        if (ImGui::IsItemDeactivatedAfterEdit())
+        {
+            if (sAutoBackupMaxBackups < 1)
+                sAutoBackupMaxBackups = 1;
             SaveBackupConfig();
         }
 
-        ImGui::GetIO().MouseWheel = 0.0f;
+        if (!sAutoBackupEnabled)
+            ImGui::EndDisabled();
     }
 
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::TextUnformatted("Controls how frequently backups are created. They are created\n"
-                               "in a 'tunebloom_backup' folder next to the open file when unsaved\n"
-                               "changes are present. Only manual saves affect the original file.");
-        ImGui::EndTooltip();
+    // idk this doesnt look that great here
+    // ImGui::Separator();
+
+    { // External archive metadata
+        ImGui::Checkbox("Save external archive metadata", &sSaveMetadataDefault);
+
+        if (ImGui::BeginItemTooltip())
+        {
+            ImGui::TextUnformatted(
+                "When enabled, a metadata json is created during\n"
+                "saving to track instrument and wave file names.\n"
+                "If one already exists, it is updated regardless."
+            );
+            ImGui::EndTooltip();
+        }
+
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            SaveMetadataConfig();
     }
-
-    if (!sAutoBackupEnabled)
-        ImGui::BeginDisabled();
-
-    PrefLabel("Maximum backups");
-    ImGui::SliderInt("##maxbackups", &sAutoBackupMaxBackups, 1, 100, "%d");
-    if (ImGui::IsItemDeactivatedAfterEdit())
-    {
-        if (sAutoBackupMaxBackups < 1)
-            sAutoBackupMaxBackups = 1;
-        SaveBackupConfig();
-    }
-
-    if (!sAutoBackupEnabled)
-        ImGui::EndDisabled();
 
     ImGui::Unindent(10.0f);
 }
@@ -1807,6 +1821,7 @@ void DrawUI()
     DrawFileUI(dockspaceId);
     DrawPropertiesUI();
     DrawPlayerUI();
+    DrawOutputMeterWindow();
 
     DrawPreferencesWindow();
 

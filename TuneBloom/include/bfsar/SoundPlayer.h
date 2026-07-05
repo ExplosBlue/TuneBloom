@@ -230,4 +230,5 @@ private:
     SeqCapture mSeqCapture;
     bool mSeqCaptureRegistered = false;
     sead::FixedSafeString<512> mSeqExportPath;
+    bool mSeqExportLoopDetected = false;
 };

@@ -174,6 +174,8 @@ static int sExportProgressTotal = 0;
 static bool sExportCancelled = false;
 static bool sExportProcessingStarted = false;
 static sead::FixedSafeString<512> sExportDirPath;
+static u32 sExportDurationSecs = 120;
+static u32 sExportSampleRate = 0;
 
 static void NormalizePathSlashes(sead::BufferedSafeString* path)
 {
@@ -2397,6 +2399,7 @@ void DrawExportDialog()
 
     s32 count = (s32)sPendingExportSounds.size();
     s32 seqCount = 0, strmCount = 0, waveCount = 0;
+
     for (Sound* s : sPendingExportSounds)
     {
         Sound::SoundType t = s->getSoundType();
@@ -2404,47 +2407,100 @@ void DrawExportDialog()
         else if (t == Sound::SoundType::Strm) strmCount++;
         else if (t == Sound::SoundType::Wave) waveCount++;
     }
+
     bool mixed = (seqCount > 0 && strmCount > 0) ||
                  (seqCount > 0 && count != seqCount) ||
                  (strmCount > 0 && count != strmCount);
 
     if (!mixed && sPendingExportType == Sound::SoundType::Seq)
     {
-        ImGui::OpenPopup("Export Sequence Duration");
+        ImGui::OpenPopup("Export Sequence");
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Export Sequence Duration", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        bool popupOpen = true;
+        if (ImGui::BeginPopupModal("Export Sequence", &popupOpen, ImGuiWindowFlags_AlwaysAutoResize))
         {
+            const f32 cContentWidth = 340.0f;
+            const f32 cLabelColumnWidth = ImMax(ImGui::CalcTextSize("Duration").x, ImGui::CalcTextSize("Sample rate").x) + 12.0f;
+            const f32 cFieldWidth = 90.0f;
+
+            const f32 cControlColumnWidth = 200.0f;
+            const s32 cDurationStep = 1;
+            const s32 cDurationStepFast = 5;
+
+            ImGui::Dummy(ImVec2(cContentWidth, 0.0f));
+
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cContentWidth);
+
             if (count > 1)
-                ImGui::Text("Exporting %d sequence sounds", seqCount > 0 ? seqCount : count);
-            else
-                ImGui::Text("Set maximum duration for sequence export:");
-            ImGui::Text("The export will stop after 2 loops or this duration, whichever comes first.");
-            ImGui::Separator();
-
-            ImGui::SetNextItemWidth(100);
-            ImGui::InputInt("min", &sPendingExportDurationMin, 1, 5);
-            ImGui::SameLine();
-            ImGui::SetNextItemWidth(100);
-            ImGui::InputInt("sec", &sPendingExportDurationSec, 1, 15);
-            if (sPendingExportDurationMin < 0) sPendingExportDurationMin = 0;
-            if (sPendingExportDurationMin > 60) sPendingExportDurationMin = 60;
-            if (sPendingExportDurationSec < 0) sPendingExportDurationSec = 0;
-            if (sPendingExportDurationSec > 59) sPendingExportDurationSec = 59;
-
-            ImGui::Separator();
-            ImGui::SetNextItemWidth(140);
-            ComboScroll("Sample rate", &sSeqSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
-            ImGui::Separator();
-
-            if (ImGui::Button("Export", ImVec2(120, 0)))
             {
-                u32 totalSecs = (u32)(sPendingExportDurationMin * 60 + sPendingExportDurationSec);
-                if (totalSecs == 0) totalSecs = 1;
+                ImGui::Text("Exporting %d sequence sounds", seqCount > 0 ? seqCount : count);
+                ImGui::Spacing();
+            }
 
-                u32 targetRate = sSampleRateValues[sSeqSampleRateIdx];
+            ImGui::PopTextWrapPos();
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Duration");
+            ImGui::SameLine(cLabelColumnWidth);
+            ImGui::SetNextItemWidth(cFieldWidth);
+            ImGui::InputScalar("##min", ImGuiDataType_S32, &sPendingExportDurationMin, &cDurationStep, &cDurationStepFast, "%d");
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::TextUnformatted("min");
+            ImGui::SameLine(0.0f, 8.0f);
+            ImGui::SetNextItemWidth(cFieldWidth);
+            ImGui::InputScalar("##sec", ImGuiDataType_S32, &sPendingExportDurationSec, &cDurationStep, &cDurationStepFast, "%02d");
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::TextUnformatted("sec");
+
+            sPendingExportDurationMin = ImClamp(sPendingExportDurationMin, 0, 60);
+            sPendingExportDurationSec = ImClamp(sPendingExportDurationSec, 0, 59);
+
+            u32 totalSecs = (u32)(sPendingExportDurationMin * 60 + sPendingExportDurationSec);
+            bool durationInvalid = (totalSecs == 0);
+
+            ImGui::Spacing();
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cContentWidth);
+            ImGui::TextDisabled("Duration only applies to sequences that loop indefinitely.");
+            ImGui::PopTextWrapPos();
+
+            ImGui::Spacing();
+
+            if (durationInvalid)
+                ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.2f, 1.0f), "Duration must be at least 1 second.");
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted("Sample rate");
+            ImGui::SameLine(cLabelColumnWidth);
+            ImGui::SetNextItemWidth(cControlColumnWidth);
+            ComboScroll("##samplerate", &sSeqSampleRateIdx, sSampleRateItems, IM_ARRAYSIZE(sSampleRateItems));
+
+            IM_ASSERT(sSeqSampleRateIdx >= 0 && sSeqSampleRateIdx < IM_ARRAYSIZE(sSampleRateValues));
+            sSeqSampleRateIdx = ImClamp(sSeqSampleRateIdx, 0, IM_ARRAYSIZE(sSampleRateValues) - 1);
+            u32 targetRate = sSampleRateValues[sSeqSampleRateIdx];
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            const f32 cButtonSpacing = ImGui::GetStyle().ItemSpacing.x;
+            const f32 cButtonWidth = (cContentWidth - cButtonSpacing) / 2.0f;
+            const ImVec2 cButtonSize(cButtonWidth, 0);
+
+            ImGui::BeginDisabled(durationInvalid);
+            bool doExport = ImGui::Button("Export", cButtonSize);
+            ImGui::SetItemDefaultFocus();
+            ImGui::EndDisabled();
+
+            ImGui::SameLine();
+            bool doCancel = ImGui::Button("Cancel", cButtonSize);
+
+            if (doExport)
+            {
+                sExportDurationSecs = totalSecs;
+                sExportSampleRate = targetRate;
 
                 if (count > 1)
                 {
@@ -2461,13 +2517,14 @@ void DrawExportDialog()
                         sSoundPlayer.stopAllVoices();
                         sExportInProgress = true;
                         sPendingExport = false;
+                        sPendingExportSounds.clear();
                         ImGui::CloseCurrentPopup();
                     }
                 }
                 else
                 {
                     const u32 filterCount = 1;
-                    FileFilter filters[filterCount] = { { "Wave (*.wav)", "*.wav" } };
+                    FileFilter filters[filterCount] = {{"Wave (*.wav)", "*.wav"}};
 
                     sead::FixedSafeString<512> defaultPath;
                     BuildDefaultExportPath(&defaultPath, sPendingExportSounds[0], "wav");
@@ -2483,10 +2540,8 @@ void DrawExportDialog()
                     }
                 }
             }
-            
-            ImGui::SameLine();
 
-            if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            if (doCancel)
             {
                 sPendingExport = false;
                 sPendingExportSounds.clear();
@@ -2494,6 +2549,11 @@ void DrawExportDialog()
             }
 
             ImGui::EndPopup();
+        }
+        else if (sPendingExport)
+        {
+            sPendingExport = false;
+            sPendingExportSounds.clear();
         }
     }
     else if (!mixed && sPendingExportType == Sound::SoundType::Strm)
@@ -2652,7 +2712,7 @@ void DrawExportDialog()
             if (seqCount > 0)
             {
                 ImGui::Text("Sequence duration:");
-                ImGui::Text("The export will stop after 2 loops or this duration, whichever comes first.");
+                ImGui::Text("Duration only applies to sequences that loop indefinitely.");
                 ImGui::SetNextItemWidth(100);
                 ImGui::InputInt("##seqmin", &sPendingExportDurationMin, 1, 5);
                 ImGui::SameLine();
@@ -4551,10 +4611,7 @@ static void ProcessExportNextItem()
     Sound::SoundType t = sound->getSoundType();
     if (t == Sound::SoundType::Seq)
     {
-        u32 totalSecs = (u32)(sPendingExportDurationMin * 60 + sPendingExportDurationSec);
-        if (totalSecs == 0) totalSecs = 1;
-        u32 targetRate = sSampleRateValues[sSeqSampleRateIdx];
-        sSoundPlayer.exportSeqToWav(filePath, sound, totalSecs, targetRate);
+        sSoundPlayer.exportSeqToWav(filePath, sound, sExportDurationSecs, sExportSampleRate);
     }
     else if (t == Sound::SoundType::Strm)
     {

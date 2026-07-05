@@ -14,6 +14,9 @@
 
 #include <imgui/imgui.h>
 
+#include <algorithm>
+#include <cmath>
+
 void SoundPlayer::update()
 {
     if (mPlayingSound && !isActive())
@@ -27,9 +30,10 @@ void SoundPlayer::update()
 
         writeSeqWavFile(mSeqExportPath, mSeqCapture.mSamplesLeft, mSeqCapture.mSamplesRight);
 
-        PopupMgr::instance()->addPopup({
-            sead::FormatFixedSafeString<256>("Exported sequence to %s", mSeqExportPath.cstr()), nullptr
-        });
+        PopupMgr::instance()->addPopup({mSeqExportLoopDetected
+                                            ? sead::FormatFixedSafeString<256>("Exported sequence to %s (loop detected, stopped at duration limit)", mSeqExportPath.cstr())
+                                            : sead::FormatFixedSafeString<256>("Exported sequence to %s", mSeqExportPath.cstr()),
+                                        nullptr});
     }
 }
 
@@ -157,18 +161,18 @@ void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* soun
 
     snd::internal::driver::SoundThread* soundThread = snd::internal::driver::SoundThread::instance();
 
-    const u32 cMaxLoops = 2;
     const u32 cMaxFrames = maxDurationSecs * snd::internal::driver::HardwareMgr::cSampleRate / snd::internal::driver::HardwareMgr::cSamplePerFrame;
     u32 frameCount = 0;
-    u32 minTrackLoopCount = 0;
 
-    struct {
-        const u8* prevAddr;
-        s32 prevLoopRemaining;
-        u32 loopCount;
+    struct
+    {
+        const u8 *prevAddr;
+        u8 prevDepth;
     } trackState[SequenceSoundPlayer::cTrackNumPerPlayer] = {};
 
-    while (isActive() && minTrackLoopCount < cMaxLoops && frameCount < cMaxFrames)
+    bool sequenceIsInfinite = false;
+
+    while (isActive() && frameCount < cMaxFrames)
     {
         soundThread->frameProcess(snd::UpdateType::AudioFrame);
         frameCount++;
@@ -194,45 +198,52 @@ void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* soun
             const u8* curAddr = param.currentAddr;
 
             if (trackState[i].prevAddr && curAddr < trackState[i].prevAddr)
-                trackState[i].loopCount++;
+            {
+                bool depthUnchanged = param.callStackDepth == trackState[i].prevDepth;
+                bool isCountedLoopStep = param.callStackDepth > 0 &&
+                                         param.callStack[param.callStackDepth - 1].loopFlag &&
+                                         param.callStack[param.callStackDepth - 1].loopCount != 0;
+
+                if (depthUnchanged && !isCountedLoopStep)
+                    sequenceIsInfinite = true;
+            }
             trackState[i].prevAddr = curAddr;
-
-            s32 currentRemaining = 0;
-            for (s32 j = 0; j < param.callStackDepth; j++)
-                if (param.callStack[j].loopFlag)
-                    currentRemaining += param.callStack[j].loopCount;
-            if (trackState[i].prevLoopRemaining >= 0 && currentRemaining < trackState[i].prevLoopRemaining)
-                trackState[i].loopCount += trackState[i].prevLoopRemaining - currentRemaining;
-            trackState[i].prevLoopRemaining = currentRemaining;
+            trackState[i].prevDepth = param.callStackDepth;
         }
-
-        minTrackLoopCount = UINT32_MAX;
-        for (u32 i = 0; i < SequenceSoundPlayer::cTrackNumPerPlayer; i++)
-        {
-            const SequenceTrack* track = mSequencePlayer.getPlayerTrack(i);
-            if (track && track->isOpened() && trackState[i].loopCount < minTrackLoopCount)
-                minTrackLoopCount = trackState[i].loopCount;
-        }
-        if (minTrackLoopCount == UINT32_MAX)
-            minTrackLoopCount = 0;
     }
 
-    mSequencePlayer.finishPlayer(false);
+    bool hitSafetyCap = isActive();
+    if (hitSafetyCap)
+        mSequencePlayer.finishPlayer(false);
 
-    for (u32 i = 0; i < 300; i++)
+    mSeqExportLoopDetected = sequenceIsInfinite && hitSafetyCap;
+
+    const f32 cSilenceThreshold = 0.001f * 32767.0f;
+    const u32 cSilenceHoldFrames = 100;
+    const u32 cMaxTailFrames = 1000;
+
+    u32 quietFrameCount = 0;
+    for (u32 i = 0; i < cMaxTailFrames && quietFrameCount < cSilenceHoldFrames; i++)
     {
         soundThread->frameProcess(snd::UpdateType::AudioFrame);
 
-        f32* dataBuffers[2] = {
+        f32 *dataBuffers[2] = {
             snd::internal::driver::HardwareMgr::sLeftDataBuffer,
-            snd::internal::driver::HardwareMgr::sRightDataBuffer
-        };
+            snd::internal::driver::HardwareMgr::sRightDataBuffer};
         snd::internal::driver::HardwareMgr::resetFinalMixCallbackData();
         snd::internal::driver::HardwareMgr::processFinalMixCallback(
             dataBuffers,
             snd::internal::driver::HardwareMgr::cSamplePerFrame,
-            snd::internal::driver::HardwareMgr::cChannelCount
-        );
+            snd::internal::driver::HardwareMgr::cChannelCount);
+
+        f32 peak = 0.0f;
+        for (u32 s = 0; s < snd::internal::driver::HardwareMgr::cSamplePerFrame; s++)
+        {
+            peak = std::max(peak, std::fabs(dataBuffers[0][s]));
+            peak = std::max(peak, std::fabs(dataBuffers[1][s]));
+        }
+
+        quietFrameCount = (peak < cSilenceThreshold) ? quietFrameCount + 1 : 0;
     }
 
     mSeqCapture.finish();

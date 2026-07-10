@@ -547,6 +547,15 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
 
     u32 allocTracks = seqFile.getLabelAllocTracks(startLabel);
 
+    {
+        s32 scanOrigSeqOffset = seqFile.getLabelOffset(startLabel, false);
+
+        if (scanOrigSeqOffset == static_cast<s32>(startOffset))
+            scanOrigSeqOffset = -1;
+        
+        computeSeqDuration_(seqFile, startOffset, allocTracks, scanOrigSeqOffset);
+    }
+
     const BankFile* banks[nw::snd::SoundArchive::SEQ_BANK_MAX];
     for (u32 i = 0; i < nw::snd::SoundArchive::SEQ_BANK_MAX; i++)
     {
@@ -610,6 +619,79 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
     }
 
     return true;
+}
+
+void SoundPlayer::computeSeqDuration_(const SequenceFile &seqFile, u32 startOffset, u32 allocTracks, s32 origSeqOffset)
+{
+    mSeqTotalTicks = 0;
+    mSeqTotalMsec = 0.0f;
+    mSeqHasFiniteTotal = false;
+
+    snd::internal::driver::SoundThreadLock lock;
+
+    const BankFile *noBanks[nw::snd::SoundArchive::SEQ_BANK_MAX] = {};
+
+    mSeqScanPlayer.init();
+    mSeqScanPlayer.setup(allocTracks, &mSequenceNoteOnCallback2);
+    mSeqScanPlayer.prepare(seqFile, startOffset, noBanks, origSeqOffset);
+
+    struct
+    {
+        const u8 *prevAddr;
+        u8 prevDepth;
+    }
+    
+    trackState[SequenceSoundPlayer::cTrackNumPerPlayer] = {};
+
+    const u32 cMaxScanTicks = 4000000;
+    bool infinite = false;
+    u32 ticks = 0;
+
+    while (ticks < cMaxScanTicks)
+    {
+        f32 tickPerMsec = mSeqScanPlayer.calcTickPerMsec();
+
+        if (tickPerMsec > 0.0f)
+            mSeqTotalMsec += 1.0f / tickPerMsec;
+
+        s32 result = mSeqScanPlayer.parseNextTick(false);
+        ticks++;
+
+        if (result != 0)
+        {
+            mSeqHasFiniteTotal = true;
+            break;
+        }
+
+        for (u32 i = 0; i < SequenceSoundPlayer::cTrackNumPerPlayer; i++)
+        {
+            const SequenceTrack *track = mSeqScanPlayer.getPlayerTrack(i);
+
+            if (!track || !track->isOpened())
+                continue;
+
+            const auto &param = track->getParserTrackParam();
+            const u8 *curAddr = param.currentAddr;
+
+            if (trackState[i].prevAddr && curAddr < trackState[i].prevAddr)
+            {
+                bool depthUnchanged = param.callStackDepth == trackState[i].prevDepth;
+                bool isCountedLoopStep = param.callStackDepth > 0 &&  param.callStack[param.callStackDepth - 1].loopFlag && param.callStack[param.callStackDepth - 1].loopCount != 0;
+
+                if (depthUnchanged && !isCountedLoopStep)
+                    infinite = true;
+            }
+            trackState[i].prevAddr = curAddr;
+            trackState[i].prevDepth = param.callStackDepth;
+        }
+
+        if (infinite)
+            break;
+    }
+
+    mSeqTotalTicks = ticks;
+
+    mSeqScanPlayer.finishPlayer(true);
 }
 
 bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* sound, u32 startOffsetSample, bool updateSelection)
@@ -891,6 +973,31 @@ bool SoundPlayer::seek(f32 progress)
     {
         snd::internal::driver::SoundThreadLock lock;
         mStreamPlayer.seek(mSampleCount * progress);
+    }
+
+    if (mCurrentPlayer == &mSequencePlayer && mSequencePlayer.isActive() && mSeqHasFiniteTotal && mSeqTotalTicks > 0)
+    {
+        u32 target = static_cast<u32>(mSeqTotalTicks * progress);
+        if (target >= mSeqTotalTicks)
+            target = mSeqTotalTicks - 1;
+
+        u32 cur = mSequencePlayer.getTickCounter();
+
+        if (target < cur)
+        {
+            const Sound *seqSound = mLastPlayedSound;
+            if (seqSound)
+            {
+                playSound(seqSound);
+                cur = 0;
+            }
+        }
+
+        if (target > cur)
+        {
+            snd::internal::driver::SoundThreadLock lock;
+            mSequencePlayer.requestSkip(target - cur);
+        }
     }
 
     sSelectedItem = selectedItem;

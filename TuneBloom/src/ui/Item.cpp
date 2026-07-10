@@ -12,6 +12,152 @@ static std::vector<Item*> sDeleteItems;
 static Item* sDuplicateItem = nullptr;
 static std::vector<Item*> sDuplicateItems;
 
+static Sound* CloneSound(Sound* src)
+{
+    Sound* dup = new Sound();
+
+    dup->setEnableName(src->isEnableName());
+    {
+        u32 copyNum = 1;
+        sead::FixedSafeString<256> newName;
+        do {
+            newName = src->getName();
+            newName.appendWithFormat("_%u", copyNum);
+            copyNum++;
+        } while (!sBfsar.validateName(newName));
+        dup->getName() = newName;
+    }
+
+    if (src->getPlayerRef().isAttached())
+        dup->getPlayerRef().attach(src->getPlayerRef().getItem());
+
+    dup->setVolume(src->getVolume());
+    dup->setRemoteFilter(src->getRemoteFilter());
+    dup->setSoundType(src->getSoundType());
+
+    dup->setEnablePanParam(src->isEnablePanParam());
+    dup->setPanMode(src->getPanMode());
+    dup->setPanCurve(src->getPanCurve());
+
+    dup->setEnablePlayerParam(src->isEnablePlayerParam());
+    dup->setPlayerPriority(src->getPlayerPriority());
+    dup->setActorPlayerId(src->getActorPlayerId());
+
+    for (u32 i = 0; i < 4; i++)
+    {
+        dup->setEnableUserParam(i, src->isEnableUserParam(i));
+        dup->setUserParam(i, src->getUserParam(i));
+    }
+
+    dup->setEnableIsFrontBypass(src->isEnableIsFrontBypass());
+    dup->setIsFrontBypass(src->getIsFrontBypass());
+
+    dup->setEnableSound3DInfo(src->isEnableSound3DInfo());
+    {
+        Sound::Sound3DInfo& dst3D = dup->getSound3DInfo();
+        const Sound::Sound3DInfo& src3D = src->getSound3DInfo();
+        dst3D.setFlags(src3D.getFlags());
+        dst3D.setDecayRatio(src3D.getDecayRatio());
+        dst3D.setDecayCurve(src3D.getDecayCurve());
+        dst3D.setDopplerFactor(src3D.getDopplerFactor());
+    }
+
+    {
+        Sound::SequenceSoundInfo& dstSeq = dup->getSequenceSoundInfo();
+        Sound::SequenceSoundInfo& srcSeq = src->getSequenceSoundInfo();
+
+        if (srcSeq.getSequenceFileRef().isAttached())
+            dstSeq.getSequenceFileRef().attach(srcSeq.getSequenceFileRef().getItem());
+
+        for (u32 i = 0; i < 4; i++)
+        {
+            if (srcSeq.getBankRef(i).isAttached())
+                dstSeq.getBankRef(i).attach(srcSeq.getBankRef(i).getItem());
+        }
+
+        dstSeq.setEnableStartOffset(srcSeq.isEnableStartOffset());
+        dstSeq.getStartLabel() = srcSeq.getStartLabel();
+        dstSeq.setEnablePriority(srcSeq.isEnablePriority());
+        dstSeq.setIsReleasePriorityFix(srcSeq.getIsReleasePriorityFix());
+    }
+
+    {
+        Sound::StreamSoundInfo& dstStrm = dup->getStreamSoundInfo();
+        Sound::StreamSoundInfo& srcStrm = src->getStreamSoundInfo();
+
+        dstStrm.getPath() = srcStrm.getPath();
+        dstStrm.setPitch(srcStrm.getPitch());
+        dstStrm.setMainSend(srcStrm.getMainSend());
+        for (u32 i = 0; i < 3; i++)
+            dstStrm.setFxSend(i, srcStrm.getFxSend(i));
+        dstStrm.setEnableStreamSoundExtension(srcStrm.isEnableStreamSoundExtension());
+        dstStrm.setStreamType(srcStrm.getStreamType());
+        dstStrm.setIsLoop(srcStrm.getIsLoop());
+        dstStrm.setLoopStartFrame(srcStrm.getLoopStartFrame());
+        dstStrm.setLoopEndFrame(srcStrm.getLoopEndFrame());
+
+        if (srcStrm.getPrefetchFileRef().isAttached())
+            dstStrm.getPrefetchFileRef().attach(srcStrm.getPrefetchFileRef().getItem());
+
+        u32 trackIdx = 0;
+        for (auto it = srcStrm.getTrackList().begin(); it != srcStrm.getTrackList().end(); ++it, ++trackIdx)
+        {
+            Sound::StreamSoundInfo::Track* srcTrack = static_cast<Sound::StreamSoundInfo::Track*>(*it);
+            Sound::StreamSoundInfo::Track* dstTrack = new Sound::StreamSoundInfo::Track();
+
+            if (srcTrack->getWaveFileRef().isAttached())
+                dstTrack->getWaveFileRef().attach(srcTrack->getWaveFileRef().getItem());
+
+            dstTrack->setId(trackIdx);
+            dstTrack->setEnableName(srcTrack->isEnableName());
+            dstTrack->getName() = srcTrack->getName();
+
+            dstTrack->setVolume(srcTrack->getVolume());
+            dstTrack->setPan(srcTrack->getPan());
+            dstTrack->setSPan(srcTrack->getSPan());
+            dstTrack->setFlags(srcTrack->getFlags());
+            dstTrack->setMainSend(srcTrack->getMainSend());
+            dstTrack->setLpfFreq(srcTrack->getLpfFreq());
+            dstTrack->setBiquadType(srcTrack->getBiquadType());
+            dstTrack->setBiquadValue(srcTrack->getBiquadValue());
+            for (u32 i = 0; i < 3; i++)
+                dstTrack->setFxSend(i, srcTrack->getFxSend(i));
+
+            dstStrm.getTrackList().pushBack(dstTrack);
+        }
+    }
+
+    {
+        Sound::WaveSoundInfo& dstWave = dup->getWaveSoundInfo();
+        Sound::WaveSoundInfo& srcWave = src->getWaveSoundInfo();
+
+        if (srcWave.getWaveFileRef().isAttached())
+            dstWave.getWaveFileRef().attach(srcWave.getWaveFileRef().getItem());
+
+        dstWave.setAllocateTrackCount(srcWave.getAllocateTrackCount());
+        dstWave.setEnablePriority(srcWave.isEnablePriority());
+        dstWave.setChannelPriority(srcWave.getChannelPriority());
+        dstWave.setIsReleasePriorityFix(srcWave.getIsReleasePriorityFix());
+        dstWave.setEnablePan(srcWave.isEnablePan());
+        dstWave.setPan(srcWave.getPan());
+        dstWave.setSurroundPan(srcWave.getSurroundPan());
+        dstWave.setEnablePitch(srcWave.isEnablePitch());
+        dstWave.setPitch(srcWave.getPitch());
+        dstWave.setEnableSend(srcWave.isEnableSend());
+        dstWave.setMainSend(srcWave.getMainSend());
+        for (u32 i = 0; i < 3; i++)
+            dstWave.setFxSend(i, srcWave.getFxSend(i));
+        dstWave.setEnableEnvelope(srcWave.isEnableEnvelope());
+        dstWave.setAdshrCurve(srcWave.getAdshrCurve());
+        dstWave.setEnableFilter(srcWave.isEnableFilter());
+        dstWave.setLpfFreq(srcWave.getLpfFreq());
+        dstWave.setBiquadType(srcWave.getBiquadType());
+        dstWave.setBiquadValue(srcWave.getBiquadValue());
+    }
+
+    return dup;
+}
+
 bool Item::validateName(sead::BufferedSafeString& error) const
 {
     if (!sBfsar.validName(getName()))
@@ -275,7 +421,7 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
 
 static Item *sScrollItem = nullptr;
 
-void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback, int sortMode, bool sortAscending)
+void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback, int sortMode, bool sortAscending, ItemInsertCallback onInsert, ItemRemoveCallback onRemove)
 {
     const bool cUseChild = true;
 
@@ -862,7 +1008,12 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 if (it != multi.end())
                     multi.erase(it);
             }
-            delete itemToDelete;
+
+            if (onRemove)
+                onRemove(itemToDelete);
+            else
+                delete itemToDelete;
+
             selectedItem = nullptr;
         };
 
@@ -925,7 +1076,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
         }
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
         const bool resizableAdd = (strcmp(listName, "Wave File") == 0);
         ImGuiWindowFlags addFlags = resizableAdd ? ImGuiWindowFlags_None : ImGuiWindowFlags_AlwaysAutoResize;
@@ -975,18 +1126,23 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                             sSelectedItemIsSubWindow = true;
                         }
 
-                        Item* insertAfter = sInsertAfterItem;
-                        if (insertAfter)
+                        Item *insertAfter = sInsertAfterItem;
+                        sInsertAfterItem = nullptr;
+
+                        if (onInsert)
                         {
-                            insertAfter->insertBack(addedItem);
-                            sInsertAfterItem = nullptr;
+                            onInsert(insertAfter, addedItem);
                         }
                         else
                         {
-                            list.pushBack(addedItem);
+                            if (insertAfter)
+                                insertAfter->insertBack(addedItem);
+                            else
+                                list.pushBack(addedItem);
+
+                            sBfsar.updateList(list);
                         }
 
-                        sBfsar.updateList(list);
                         SetUnsavedChanges(true);
 
                         ImGui::CloseCurrentPopup();
@@ -1086,149 +1242,15 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
         if (sDuplicateItem)
         {
             Sound* src = static_cast<Sound*>(sDuplicateItem);
-            Sound* dup = new Sound();
+            Sound* dup = CloneSound(src);
 
-            dup->setEnableName(src->isEnableName());
+            if (onInsert)
+                onInsert(src, dup);
+            else
             {
-                u32 copyNum = 1;
-                sead::FixedSafeString<256> newName;
-                do {
-                    newName = src->getName();
-                    newName.appendWithFormat("_%u", copyNum);
-                    copyNum++;
-                } while (!sBfsar.validateName(newName));
-                dup->getName() = newName;
+                src->insertBack(dup);
+                sBfsar.updateList(list);
             }
-
-            if (src->getPlayerRef().isAttached())
-                dup->getPlayerRef().attach(src->getPlayerRef().getItem());
-
-            dup->setVolume(src->getVolume());
-            dup->setRemoteFilter(src->getRemoteFilter());
-            dup->setSoundType(src->getSoundType());
-
-            dup->setEnablePanParam(src->isEnablePanParam());
-            dup->setPanMode(src->getPanMode());
-            dup->setPanCurve(src->getPanCurve());
-
-            dup->setEnablePlayerParam(src->isEnablePlayerParam());
-            dup->setPlayerPriority(src->getPlayerPriority());
-            dup->setActorPlayerId(src->getActorPlayerId());
-
-            for (u32 i = 0; i < 4; i++)
-            {
-                dup->setEnableUserParam(i, src->isEnableUserParam(i));
-                dup->setUserParam(i, src->getUserParam(i));
-            }
-
-            dup->setEnableIsFrontBypass(src->isEnableIsFrontBypass());
-            dup->setIsFrontBypass(src->getIsFrontBypass());
-
-            dup->setEnableSound3DInfo(src->isEnableSound3DInfo());
-            {
-                Sound::Sound3DInfo& dst3D = dup->getSound3DInfo();
-                const Sound::Sound3DInfo& src3D = src->getSound3DInfo();
-                dst3D.setFlags(src3D.getFlags());
-                dst3D.setDecayRatio(src3D.getDecayRatio());
-                dst3D.setDecayCurve(src3D.getDecayCurve());
-                dst3D.setDopplerFactor(src3D.getDopplerFactor());
-            }
-
-            {
-                Sound::SequenceSoundInfo& dstSeq = dup->getSequenceSoundInfo();
-                Sound::SequenceSoundInfo& srcSeq = src->getSequenceSoundInfo();
-
-                if (srcSeq.getSequenceFileRef().isAttached())
-                    dstSeq.getSequenceFileRef().attach(srcSeq.getSequenceFileRef().getItem());
-
-                for (u32 i = 0; i < 4; i++)
-                {
-                    if (srcSeq.getBankRef(i).isAttached())
-                        dstSeq.getBankRef(i).attach(srcSeq.getBankRef(i).getItem());
-                }
-
-                dstSeq.setEnableStartOffset(srcSeq.isEnableStartOffset());
-                dstSeq.getStartLabel() = srcSeq.getStartLabel();
-                dstSeq.setEnablePriority(srcSeq.isEnablePriority());
-                dstSeq.setIsReleasePriorityFix(srcSeq.getIsReleasePriorityFix());
-            }
-
-            {
-                Sound::StreamSoundInfo& dstStrm = dup->getStreamSoundInfo();
-                Sound::StreamSoundInfo& srcStrm = src->getStreamSoundInfo();
-
-                dstStrm.getPath() = srcStrm.getPath();
-                dstStrm.setPitch(srcStrm.getPitch());
-                dstStrm.setMainSend(srcStrm.getMainSend());
-                for (u32 i = 0; i < 3; i++)
-                    dstStrm.setFxSend(i, srcStrm.getFxSend(i));
-                dstStrm.setEnableStreamSoundExtension(srcStrm.isEnableStreamSoundExtension());
-                dstStrm.setStreamType(srcStrm.getStreamType());
-                dstStrm.setIsLoop(srcStrm.getIsLoop());
-                dstStrm.setLoopStartFrame(srcStrm.getLoopStartFrame());
-                dstStrm.setLoopEndFrame(srcStrm.getLoopEndFrame());
-
-                if (srcStrm.getPrefetchFileRef().isAttached())
-                    dstStrm.getPrefetchFileRef().attach(srcStrm.getPrefetchFileRef().getItem());
-
-                u32 trackIdx = 0;
-                for (auto it = srcStrm.getTrackList().begin(); it != srcStrm.getTrackList().end(); ++it, ++trackIdx)
-                {
-                    Sound::StreamSoundInfo::Track* srcTrack = static_cast<Sound::StreamSoundInfo::Track*>(*it);
-                    Sound::StreamSoundInfo::Track* dstTrack = new Sound::StreamSoundInfo::Track();
-
-                    if (srcTrack->getWaveFileRef().isAttached())
-                        dstTrack->getWaveFileRef().attach(srcTrack->getWaveFileRef().getItem());
-
-                    dstTrack->setId(trackIdx);
-                    dstTrack->setEnableName(srcTrack->isEnableName());
-                    dstTrack->getName() = srcTrack->getName();
-
-                    dstTrack->setVolume(srcTrack->getVolume());
-                    dstTrack->setPan(srcTrack->getPan());
-                    dstTrack->setSPan(srcTrack->getSPan());
-                    dstTrack->setFlags(srcTrack->getFlags());
-                    dstTrack->setMainSend(srcTrack->getMainSend());
-                    dstTrack->setLpfFreq(srcTrack->getLpfFreq());
-                    dstTrack->setBiquadType(srcTrack->getBiquadType());
-                    dstTrack->setBiquadValue(srcTrack->getBiquadValue());
-                    for (u32 i = 0; i < 3; i++)
-                        dstTrack->setFxSend(i, srcTrack->getFxSend(i));
-
-                    dstStrm.getTrackList().pushBack(dstTrack);
-                }
-            }
-
-            {
-                Sound::WaveSoundInfo& dstWave = dup->getWaveSoundInfo();
-                Sound::WaveSoundInfo& srcWave = src->getWaveSoundInfo();
-
-                if (srcWave.getWaveFileRef().isAttached())
-                    dstWave.getWaveFileRef().attach(srcWave.getWaveFileRef().getItem());
-
-                dstWave.setAllocateTrackCount(srcWave.getAllocateTrackCount());
-                dstWave.setEnablePriority(srcWave.isEnablePriority());
-                dstWave.setChannelPriority(srcWave.getChannelPriority());
-                dstWave.setIsReleasePriorityFix(srcWave.getIsReleasePriorityFix());
-                dstWave.setEnablePan(srcWave.isEnablePan());
-                dstWave.setPan(srcWave.getPan());
-                dstWave.setSurroundPan(srcWave.getSurroundPan());
-                dstWave.setEnablePitch(srcWave.isEnablePitch());
-                dstWave.setPitch(srcWave.getPitch());
-                dstWave.setEnableSend(srcWave.isEnableSend());
-                dstWave.setMainSend(srcWave.getMainSend());
-                for (u32 i = 0; i < 3; i++)
-                    dstWave.setFxSend(i, srcWave.getFxSend(i));
-                dstWave.setEnableEnvelope(srcWave.isEnableEnvelope());
-                dstWave.setAdshrCurve(srcWave.getAdshrCurve());
-                dstWave.setEnableFilter(srcWave.isEnableFilter());
-                dstWave.setLpfFreq(srcWave.getLpfFreq());
-                dstWave.setBiquadType(srcWave.getBiquadType());
-                dstWave.setBiquadValue(srcWave.getBiquadValue());
-            }
-
-            src->insertBack(dup);
-            sBfsar.updateList(list);
             SetUnsavedChanges(true);
 
             selectedItem = dup;
@@ -1257,150 +1279,6 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                     orderedSrcs.push_back(static_cast<Sound*>(cur));
             }
 
-            auto makeDup = [](Sound* src) -> Sound*
-            {
-                Sound* dup = new Sound();
-                dup->setEnableName(src->isEnableName());
-                {
-                    u32 copyNum = 1;
-                    sead::FixedSafeString<256> newName;
-                    do {
-                        newName = src->getName();
-                        newName.appendWithFormat("_%u", copyNum);
-                        copyNum++;
-                    } while (!sBfsar.validateName(newName));
-                    dup->getName() = newName;
-                }
-
-                if (src->getPlayerRef().isAttached())
-                    dup->getPlayerRef().attach(src->getPlayerRef().getItem());
-
-                dup->setVolume(src->getVolume());
-                dup->setRemoteFilter(src->getRemoteFilter());
-                dup->setSoundType(src->getSoundType());
-
-                dup->setEnablePanParam(src->isEnablePanParam());
-                dup->setPanMode(src->getPanMode());
-                dup->setPanCurve(src->getPanCurve());
-
-                dup->setEnablePlayerParam(src->isEnablePlayerParam());
-                dup->setPlayerPriority(src->getPlayerPriority());
-                dup->setActorPlayerId(src->getActorPlayerId());
-
-                for (u32 i = 0; i < 4; i++)
-                {
-                    dup->setEnableUserParam(i, src->isEnableUserParam(i));
-                    dup->setUserParam(i, src->getUserParam(i));
-                }
-
-                dup->setEnableIsFrontBypass(src->isEnableIsFrontBypass());
-                dup->setIsFrontBypass(src->getIsFrontBypass());
-
-                dup->setEnableSound3DInfo(src->isEnableSound3DInfo());
-                {
-                    Sound::Sound3DInfo& dst3D = dup->getSound3DInfo();
-                    const Sound::Sound3DInfo& src3D = src->getSound3DInfo();
-                    dst3D.setFlags(src3D.getFlags());
-                    dst3D.setDecayRatio(src3D.getDecayRatio());
-                    dst3D.setDecayCurve(src3D.getDecayCurve());
-                    dst3D.setDopplerFactor(src3D.getDopplerFactor());
-                }
-
-                {
-                    Sound::SequenceSoundInfo& dstSeq = dup->getSequenceSoundInfo();
-                    Sound::SequenceSoundInfo& srcSeq = src->getSequenceSoundInfo();
-
-                    if (srcSeq.getSequenceFileRef().isAttached())
-                        dstSeq.getSequenceFileRef().attach(srcSeq.getSequenceFileRef().getItem());
-
-                    for (u32 i = 0; i < 4; i++)
-                    {
-                        if (srcSeq.getBankRef(i).isAttached())
-                            dstSeq.getBankRef(i).attach(srcSeq.getBankRef(i).getItem());
-                    }
-
-                    dstSeq.setEnableStartOffset(srcSeq.isEnableStartOffset());
-                    dstSeq.getStartLabel() = srcSeq.getStartLabel();
-                    dstSeq.setEnablePriority(srcSeq.isEnablePriority());
-                    dstSeq.setIsReleasePriorityFix(srcSeq.getIsReleasePriorityFix());
-                }
-
-                {
-                    Sound::StreamSoundInfo& dstStrm = dup->getStreamSoundInfo();
-                    Sound::StreamSoundInfo& srcStrm = src->getStreamSoundInfo();
-
-                    dstStrm.getPath() = srcStrm.getPath();
-                    dstStrm.setPitch(srcStrm.getPitch());
-                    dstStrm.setMainSend(srcStrm.getMainSend());
-                    for (u32 i = 0; i < 3; i++)
-                        dstStrm.setFxSend(i, srcStrm.getFxSend(i));
-                    dstStrm.setEnableStreamSoundExtension(srcStrm.isEnableStreamSoundExtension());
-                    dstStrm.setStreamType(srcStrm.getStreamType());
-                    dstStrm.setIsLoop(srcStrm.getIsLoop());
-                    dstStrm.setLoopStartFrame(srcStrm.getLoopStartFrame());
-                    dstStrm.setLoopEndFrame(srcStrm.getLoopEndFrame());
-
-                    if (srcStrm.getPrefetchFileRef().isAttached())
-                        dstStrm.getPrefetchFileRef().attach(srcStrm.getPrefetchFileRef().getItem());
-
-                    u32 trackIdx = 0;
-                    for (auto it = srcStrm.getTrackList().begin(); it != srcStrm.getTrackList().end(); ++it, ++trackIdx)
-                    {
-                        Sound::StreamSoundInfo::Track* srcTrack = static_cast<Sound::StreamSoundInfo::Track*>(*it);
-                        Sound::StreamSoundInfo::Track* dstTrack = new Sound::StreamSoundInfo::Track();
-
-                        if (srcTrack->getWaveFileRef().isAttached())
-                            dstTrack->getWaveFileRef().attach(srcTrack->getWaveFileRef().getItem());
-
-                        dstTrack->setId(trackIdx);
-                        dstTrack->setEnableName(srcTrack->isEnableName());
-                        dstTrack->getName() = srcTrack->getName();
-
-                        dstTrack->setVolume(srcTrack->getVolume());
-                        dstTrack->setPan(srcTrack->getPan());
-                        dstTrack->setSPan(srcTrack->getSPan());
-                        dstTrack->setFlags(srcTrack->getFlags());
-                        dstTrack->setMainSend(srcTrack->getMainSend());
-                        dstTrack->setLpfFreq(srcTrack->getLpfFreq());
-                        dstTrack->setBiquadType(srcTrack->getBiquadType());
-                        dstTrack->setBiquadValue(srcTrack->getBiquadValue());
-                        for (u32 i = 0; i < 3; i++)
-                            dstTrack->setFxSend(i, srcTrack->getFxSend(i));
-
-                        dstStrm.getTrackList().pushBack(dstTrack);
-                    }
-                }
-
-                {
-                    Sound::WaveSoundInfo& dstWave = dup->getWaveSoundInfo();
-                    Sound::WaveSoundInfo& srcWave = src->getWaveSoundInfo();
-
-                    if (srcWave.getWaveFileRef().isAttached())
-                        dstWave.getWaveFileRef().attach(srcWave.getWaveFileRef().getItem());
-
-                    dstWave.setAllocateTrackCount(srcWave.getAllocateTrackCount());
-                    dstWave.setEnablePriority(srcWave.isEnablePriority());
-                    dstWave.setChannelPriority(srcWave.getChannelPriority());
-                    dstWave.setIsReleasePriorityFix(srcWave.getIsReleasePriorityFix());
-                    dstWave.setEnablePan(srcWave.isEnablePan());
-                    dstWave.setPan(srcWave.getPan());
-                    dstWave.setSurroundPan(srcWave.getSurroundPan());
-                    dstWave.setEnablePitch(srcWave.isEnablePitch());
-                    dstWave.setPitch(srcWave.getPitch());
-                    dstWave.setEnableSend(srcWave.isEnableSend());
-                    dstWave.setMainSend(srcWave.getMainSend());
-                    for (u32 i = 0; i < 3; i++)
-                        dstWave.setFxSend(i, srcWave.getFxSend(i));
-                    dstWave.setEnableEnvelope(srcWave.isEnableEnvelope());
-                    dstWave.setAdshrCurve(srcWave.getAdshrCurve());
-                    dstWave.setEnableFilter(srcWave.isEnableFilter());
-                    dstWave.setLpfFreq(srcWave.getLpfFreq());
-                    dstWave.setBiquadType(srcWave.getBiquadType());
-                    dstWave.setBiquadValue(srcWave.getBiquadValue());
-                }
-                return dup;
-            };
-
             // Walk through ordered sources, grouping into contiguous blocks
             std::vector<Item*> newDups;
             size_t i = 0;
@@ -1418,11 +1296,16 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
 
                 // Block from i to blockEnd inclusive is contiguous
-                Item* insertPoint = orderedSrcs[blockEnd];
+                Item *insertPoint = orderedSrcs[blockEnd];
                 for (size_t j = i; j <= blockEnd; ++j)
                 {
-                    Sound* dup = makeDup(orderedSrcs[j]);
-                    insertPoint->insertBack(dup);
+                    Sound *dup = CloneSound(orderedSrcs[j]);
+
+                    if (onInsert)
+                        onInsert(insertPoint, dup);
+                    else
+                        insertPoint->insertBack(dup);
+                    
                     insertPoint = dup;
                     newDups.push_back(dup);
                 }

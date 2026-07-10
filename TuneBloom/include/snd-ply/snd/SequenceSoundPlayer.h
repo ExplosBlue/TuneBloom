@@ -105,6 +105,8 @@ public:
 
     u32 getTickCounter() const { return mTickCounter; }
 
+    void requestSkip(u32 ticks) { mSkipTickCounter += static_cast<s32>(ticks); }
+
     snd::UpdateType getUpdateType() const
     {
         return mUpdateType;

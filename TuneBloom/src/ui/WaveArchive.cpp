@@ -12,9 +12,30 @@ const Item* WaveArchive::validate(sead::BufferedSafeString& error) const
     return nullptr;
 }
 
+static void WaveArchiveCreatePropertiesCallback(bool clear, Item *item, bool *validate)
+{
+    static bool sIsLoadIndividual = false;
+
+    if (clear)
+    {
+        sIsLoadIndividual = false;
+        return;
+    }
+
+    if (!item && !validate)
+    {
+        ImGui::Checkbox("Load Individually", &sIsLoadIndividual);
+    }
+    else if (item && !validate)
+    {
+        WaveArchive *warc = static_cast<WaveArchive *>(item);
+        warc->setIsLoadIndividual(sIsLoadIndividual);
+    }
+}
+
 InstanciateItemCallback CreateWaveArchiveFunc(bool clear)
 {
-    return CreateItemFunc(clear, []() -> Item* { return new WaveArchive(); }, nullptr);
+    return CreateItemFunc(clear, []() -> Item* { return new WaveArchive(); }, &WaveArchiveCreatePropertiesCallback);
 }
 
 void DrawWaveArchivesUI()

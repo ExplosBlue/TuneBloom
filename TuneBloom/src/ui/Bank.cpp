@@ -37,9 +37,67 @@ const Item* Bank::validate(sead::BufferedSafeString& error) const
     return nullptr;
 }
 
+static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
+{
+    static WaveArchiveType sWarcType = WaveArchiveType::AutomaticShared;
+    static Item *sWarcItem = nullptr;
+    static int sBankFileMode = 0;
+    static Item *sBankFileItem = nullptr;
+
+    if (clear)
+    {
+        sWarcType = WaveArchiveType::AutomaticShared;
+        sWarcItem = nullptr;
+        sBankFileMode = 0;
+        sBankFileItem = nullptr;
+        return;
+    }
+
+    if (!item && !validate)
+    {
+        WaveArchiveSelector("Wave Archive", &sWarcType, &sWarcItem, sBfsar.getWaveArchiveList());
+
+        ImGui::SeparatorText("Bank File");
+
+        ImGui::RadioButton("Create New", &sBankFileMode, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton("Select Existing", &sBankFileMode, 1);
+
+        if (sBankFileMode == 0)
+            ImGui::BeginDisabled();
+
+        ItemSelector("Bank File", sBfsar.getBankFileList(), &sBankFileItem, true);
+
+        if (sBankFileMode == 0)
+            ImGui::EndDisabled();
+    }
+    else if (item && !validate)
+    {
+        Bank *bank = static_cast<Bank *>(item);
+        bank->getWaveArchiveRef().attach(sWarcItem);
+        bank->setWaveArchiveType(sWarcType);
+
+        if (sBankFileMode == 0)
+        {
+            BankFile *bankFile = new BankFile();
+            bankFile->setEnableName(true);
+            bankFile->getName().format("GUESS_%s", bank->getName().cstr());
+
+            sBfsar.getBankFileList().pushBack(bankFile);
+            sBfsar.updateList(sBfsar.getBankFileList());
+
+            bank->getFileRef().attach(bankFile);
+        }
+        else
+        {
+            bank->getFileRef().attach(sBankFileItem);
+        }
+    }
+}
+
 InstanciateItemCallback CreateBankFunc(bool clear)
 {
-    return CreateItemFunc(clear, []() -> Item* { return new Bank(); }, nullptr);
+    return CreateItemFunc(clear, []() -> Item* { return new Bank(); }, &BankCreatePropertiesCallback);
 }
 
 const char* BankNamePrefixFunc(Item* item)
@@ -73,7 +131,7 @@ void DrawBanksUI()
     DrawSortToolbar(sSortState);
 
     DrawAllItemsUI("Bank", sBfsar.getBankList(),
-                   &CreateBankFunc, &BankNamePrefixFunc, nullptr, GetItemFilterCallback(),
+                   &CreateBankFunc, &BankNamePrefixFunc, &BankContextMenuFunc, GetItemFilterCallback(),
                    false, nullptr, sSortState.mode, sSortState.ascending);
 }
 

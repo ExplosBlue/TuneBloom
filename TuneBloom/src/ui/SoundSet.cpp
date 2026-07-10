@@ -270,6 +270,168 @@ static void CascadeOffsetBefore(const SoundSet* current, u32 newStartId, Item::L
     }
 }
 
+void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
+{
+    Item::List &soundList = sBfsar.getSoundList();
+    Item::List &soundSetList = sBfsar.getSoundSetList();
+
+    Item *insertAfterItem = afterItem;
+
+    if (targetSet->getIsEmpty())
+    {
+        SEAD_ASSERT_MSG(!afterItem, "Cannot insert after a specific sound in an empty set as there isn't one");
+
+        for (Item::ListNode *node = soundSetList.prev(targetSet); node; node = soundSetList.prev(node->val()))
+        {
+            SoundSet *earlierSet = static_cast<SoundSet *>(node->val());
+            if (!earlierSet->getIsEmpty())
+            {
+                insertAfterItem = sBfsar.getItem(earlierSet->getEndId(), soundList);
+                break;
+            }
+        }
+
+        if (insertAfterItem)
+            insertAfterItem->insertBack(newSound);
+        else
+            soundList.pushFront(newSound);
+
+        sBfsar.updateList(soundList);
+
+        targetSet->setIsEmpty(false);
+        targetSet->setStartId(newSound->getId());
+        targetSet->setEndId(newSound->getId());
+    }
+    else
+    {
+        if (!insertAfterItem)
+        {
+            u32 endId = targetSet->getEndId();
+            Item::ListNode *lastNode = nullptr;
+
+            for (Item::ListNode *node = sBfsar.getItem(targetSet->getStartId(), soundList); node && node->val()->getId() <= endId; node = soundList.next(node))
+                lastNode = node;
+
+            SEAD_ASSERT(lastNode);
+            insertAfterItem = lastNode->val();
+        }
+
+        SEAD_ASSERT_MSG(
+            insertAfterItem->getId() >= targetSet->getStartId() && insertAfterItem->getId() <= targetSet->getEndId(), 
+            "InsertSoundIntoSet: afterItem must be inside targetSet's range"
+        );
+
+        insertAfterItem->insertBack(newSound);
+        sBfsar.updateList(soundList);
+
+        targetSet->setEndId(targetSet->getEndId() + 1);
+    }
+
+    u32 soundCount = static_cast<u32>(soundList.size());
+
+    if (CanOffsetAfter(targetSet, +1, soundSetList, soundCount))
+        ApplyOffsetAfter(targetSet, +1, soundSetList);
+    else
+        SEAD_ASSERT_MSG(false, "Cascade offset after insert should always be in-bounds");
+
+    SetUnsavedChanges(true);
+    sBfsar.validate_(false);
+}
+
+static SoundSet *FindContainingSet(u32 soundId, const Item::List &soundSetList)
+{
+    for (auto it = soundSetList.robustBegin(); it != soundSetList.robustEnd(); ++it)
+    {
+        SoundSet *set = static_cast<SoundSet *>(it->val());
+        if (!set->getIsEmpty() && soundId >= set->getStartId() && soundId <= set->getEndId())
+            return set;
+    }
+
+    return nullptr;
+}
+
+static void ShiftSetsAtOrAfter(u32 thresholdId, s32 delta, Item::List &soundSetList, u32 soundCount)
+{
+    if (delta == 0)
+        return;
+
+    for (auto it = soundSetList.robustBegin(); it != soundSetList.robustEnd(); ++it)
+    {
+        SoundSet *set = static_cast<SoundSet *>(it->val());
+
+        if (set->getIsEmpty() || set->getStartId() < thresholdId)
+            continue;
+
+        s32 newStart = static_cast<s32>(set->getStartId()) + delta;
+        s32 newEnd = static_cast<s32>(set->getEndId()) + delta;
+
+        SEAD_ASSERT_MSG(
+            newStart >= 0 && newEnd < static_cast<s32>(soundCount) && newStart <= newEnd,
+            "Set shift after structural sound edit went out of bounds");
+
+        set->setStartId(static_cast<u32>(newStart));
+        set->setEndId(static_cast<u32>(newEnd));
+
+        SetUnsavedChanges(true);
+    }
+}
+
+void InsertSoundAt(Item *afterItem, Sound *newSound)
+{
+    Item::List &soundList = sBfsar.getSoundList();
+    Item::List &soundSetList = sBfsar.getSoundSetList();
+
+    SoundSet *containingSet = afterItem ? FindContainingSet(afterItem->getId(), soundSetList) : nullptr;
+
+    if (afterItem)
+        afterItem->insertBack(newSound);
+    else
+        soundList.pushBack(newSound);
+
+    sBfsar.updateList(soundList);
+
+    if (containingSet)
+        containingSet->setEndId(containingSet->getEndId() + 1);
+
+    u32 soundCount = static_cast<u32>(soundList.size());
+    ShiftSetsAtOrAfter(newSound->getId(), +1, soundSetList, soundCount);
+
+    SetUnsavedChanges(true);
+    sBfsar.validate_(false);
+}
+
+void InsertSoundAtHook(Item *afterItem, Item *newItem)
+{
+    InsertSoundAt(afterItem, static_cast<Sound *>(newItem));
+}
+
+void RemoveSoundWithCascade(Item *item)
+{
+    Sound *sound = static_cast<Sound *>(item);
+    Item::List &soundList = sBfsar.getSoundList();
+    Item::List &soundSetList = sBfsar.getSoundSetList();
+
+    u32 removedId = sound->getId();
+    SoundSet *containingSet = FindContainingSet(removedId, soundSetList);
+
+    delete sound;
+    sBfsar.updateList(soundList);
+
+    if (containingSet)
+    {
+        if (containingSet->getStartId() == containingSet->getEndId())
+            containingSet->setIsEmpty(true);
+        else
+            containingSet->setEndId(containingSet->getEndId() - 1);
+    }
+
+    u32 soundCount = static_cast<u32>(soundList.size());
+    ShiftSetsAtOrAfter(removedId + 1, -1, soundSetList, soundCount);
+
+    SetUnsavedChanges(true);
+    sBfsar.validate_(false);
+}
+
 void DrawSoundSetPropertiesUI()
 {
     SoundSet* soundSet = static_cast<SoundSet*>(sSelectedItem);
@@ -533,63 +695,4 @@ void DrawSoundSetPropertiesUI()
             ImGui::EndDisabled();
         }
     }
-
-    if (ImGui::BeginChild("ChildSounds", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border))
-    {
-        for (Item::ListNode* itemNode = sBfsar.getItem(soundSet->getStartId(), sBfsar.getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = sBfsar.getSoundList().next(itemNode))
-        {
-            SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
-            Sound* sound = static_cast<Sound*>(itemNode->val());
-
-            if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", sound->getId()).cstr()))
-            {
-                sSoundPlayer.playSound(sound);
-                sSelectedItem = soundSet;
-            }
-
-            ImGui::SameLine();
-
-            bool isError =
-                (sound->getSoundType() == Sound::SoundType::Seq  && soundSet->getSoundSetType() != SoundSet::SoundSetType::Seq) ||
-                (sound->getSoundType() == Sound::SoundType::Wave && soundSet->getSoundSetType() != SoundSet::SoundSetType::Wave) ||
-                (sound->getSoundType() == Sound::SoundType::Strm);
-
-            sead::FixedSafeString<516> name(sound->getFormattedName().cstr());
-            if (isError)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-                name.format("%s (?)", sound->getFormattedName().cstr());
-            }
-
-            if (ImGui::Selectable(name.cstr()))
-            {
-            }
-
-            if (isError)
-            {
-                ImGui::PopStyleColor();
-                if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-                {
-                    ImGui::SetTooltip(
-                        "The type of this Sound does not match the Sound Set type.\n"
-                        "The tool allows this case, except for Wave Sounds.\n"
-                        "However, please note that if your game tries to explicitly\n"
-                        "load this Sound Set, then all following Sounds will NOT load,\n"
-                        "including this one !"
-                    );
-                }
-            }
-
-            if (ImGui::BeginPopupContextItem())
-            {
-                if (ImGui::MenuItem(ICON_LC_EXTERNAL_LINK " Go To"))
-                {
-                    SelectItem(sound);
-                }
-
-                ImGui::End();
-            }
-        }
-    }
-    ImGui::EndChild();
 }

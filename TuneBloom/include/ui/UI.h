@@ -218,6 +218,8 @@ using CreateItemCallback = InstanciateItemCallback (*)(bool clear);
 using ItemNamePrefixCallback = const char* (*)(Item* item);
 using ContextMenuCallback = void (*)(Item* item, bool afterDelete);
 using ItemFilterCallback = bool (*)(const Item* item);
+using ItemInsertCallback = void (*)(Item* afterItem, Item* newItem);
+using ItemRemoveCallback = void (*)(Item* item);
 
 void CloseFilter();
 bool ItemMatchesFilter(const Item* item);
@@ -243,9 +245,10 @@ struct SortState
 
 bool DrawSortToolbar(SortState &state, bool showFileSize = false, bool trailingDivider = false);
 bool DrawIncludeStreamWavesCheckbox(bool* value);
+bool DrawIncludeSoundsInSetCheckbox(bool* value);
 
 InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback instanciateItemCallback, ItemPropertiesCallback itemPropertiesCallback);
-void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback = nullptr, ItemNamePrefixCallback nameCallback = nullptr, ContextMenuCallback menuCallback = nullptr, ItemFilterCallback filterCallback = nullptr, bool disableAddWindow = false, ContextMenuCallback beforeDeleteCallback = nullptr, int sortMode = -1, bool sortAscending = true);
+void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback = nullptr, ItemNamePrefixCallback nameCallback = nullptr, ContextMenuCallback menuCallback = nullptr, ItemFilterCallback filterCallback = nullptr, bool disableAddWindow = false, ContextMenuCallback beforeDeleteCallback = nullptr, int sortMode = -1, bool sortAscending = true, ItemInsertCallback onInsert = nullptr, ItemRemoveCallback onRemove = nullptr);
 void DrawItemPropertiesUI();
 void ApplyRenameShortcut();
 bool ItemSelector(const char* name, const Item::List& list, Item** item, bool allowNone = false);
@@ -254,7 +257,12 @@ void ItemIdTable(const char* name, IdTable& table, const Item::List& itemList);
 
 void DrawSoundPropertiesUI();
 void DrawSoundSetPropertiesUI();
+void InsertSoundIntoSet(SoundSet* targetSet, Sound* newSound, Item* afterItem);
+void InsertSoundAt(Item *afterItem, Sound *newSound);
+void InsertSoundAtHook(Item *afterItem, Item *newItem);
+void RemoveSoundWithCascade(Item *item);
 void DrawBankPropertiesUI();
+void BankContextMenuFunc(Item *item, bool afterDelete);
 void DrawWaveArchivePropertiesUI();
 void DrawGroupPropertiesUI();
 void DrawPlayerPropertiesUI();

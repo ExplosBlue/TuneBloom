@@ -57,9 +57,35 @@ const Item* Group::validate(sead::BufferedSafeString& error) const
     return nullptr;
 }
 
+static void GroupCreatePropertiesCallback(bool clear, Item *item, bool *validate)
+{
+    static u32 sOutputType = 0;
+
+    if (clear)
+    {
+        sOutputType = 0;
+        return;
+    }
+
+    if (!item && !validate)
+    {
+        static const char *sOutputTypes[] = {
+            "Embed",
+            "Link",
+            "External"};
+
+        ComboScroll("Output Type", (s32 *)&sOutputType, sOutputTypes, IM_ARRAYSIZE(sOutputTypes));
+    }
+    else if (item && !validate)
+    {
+        Group *group = static_cast<Group *>(item);
+        group->setOutputType(static_cast<Group::OutputType>(sOutputType));
+    }
+}
+
 InstanciateItemCallback CreateGroupFunc(bool clear)
 {
-    return CreateItemFunc(clear, []() -> Item * { return new Group(); }, nullptr);
+    return CreateItemFunc(clear, []() -> Item * { return new Group(); }, &GroupCreatePropertiesCallback);
 }
 
 void DrawGroupsUI()

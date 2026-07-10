@@ -101,6 +101,11 @@ public:
     u32 getSampleCount() const { return mSampleCount; }
     s32 getPlaySamplePosition(bool isOriginalSamplePosition) const;
 
+    u32 getSeqCurrentTick() const { return mSequencePlayer.getTickCounter(); }
+    u32 getSeqTotalTicks() const { return mSeqTotalTicks; }
+    f32 getSeqTotalSeconds() const { return mSeqTotalMsec / 1000.0f; }
+    bool seqHasFiniteTotal() const { return mSeqHasFiniteTotal; }
+
     bool isCurrentPlayer() const { return mCurrentPlayer != nullptr; }
     bool isCurrentPlayerSequence() const { return mCurrentPlayer == &mSequencePlayer; }
     bool isCurrentPlayerStream() const { return mCurrentPlayer == &mStreamPlayer; }
@@ -133,6 +138,8 @@ private:
     void initPlayerParam_();
     void initPlayerTrack_();
     void initSeqVars_();
+
+    void computeSeqDuration_(const SequenceFile& seqFile, u32 startOffset, u32 allocTracks, s32 origSeqOffset);
 
     void applyBankExpression_(snd::internal::driver::Channel* channel);
     s32 allocBankVoice_();
@@ -213,6 +220,11 @@ private:
     SequenceSoundPlayer mSequencePlayer;
     StreamSoundPlayer mStreamPlayer;
     WaveSoundPlayer mWavePlayer;
+    
+    SequenceSoundPlayer mSeqScanPlayer;
+    u32 mSeqTotalTicks = 0;
+    f32 mSeqTotalMsec = 0.0f;
+    bool mSeqHasFiniteTotal = false;
 
     WaveSoundPlayer mBankVoices[cMaxBankVoices];
     s32 mBankVoiceKey[cMaxBankVoices];

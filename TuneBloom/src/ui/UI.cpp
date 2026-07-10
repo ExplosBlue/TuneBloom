@@ -134,6 +134,12 @@ static u32 sIbnkWaveCount;
 static u32 sIbnkDataOffset;
 static BankFile::Instrument* sIbnkReplaceTarget = nullptr;
 
+static u8* sBbnkFileData = nullptr;
+static u32 sBbnkFileSize = 0;
+static sead::FixedSafeString<256> sBbnkNameEdit;
+static u32 sBbnkWaveCount;
+static u32 sBbnkDataOffset;
+
 void RequestExportInstrument(Item* instrument)
 {
     sPendingExportInstrument = static_cast<BankFile::Instrument*>(instrument);
@@ -155,10 +161,21 @@ static void CloseIbnkImport()
     }
 
     sIbnkFileData = nullptr;
-    sIbnkFileSize = 0;
-    sIbnkTargetBank = nullptr;
-    sIbnkInstrumentName.clear();
-    sIbnkReplaceTarget = nullptr;
+}
+
+static void CloseBbnkImport()
+{
+    if (sBbnkFileData)
+    {
+        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+        if (device)
+            device->unload(sBbnkFileData);
+    }
+
+    sBbnkFileData = nullptr;
+    sBbnkFileSize = 0;
+    sBbnkWaveCount = 0;
+    sBbnkDataOffset = 0;
 }
 
 void RequestReplaceInstrument(Item* instrument, Item* bank)
@@ -4077,49 +4094,6 @@ static void DrawFileExportDialogs()
                         return sead::Endian::toHostU32(sead::Endian::eBig, val);
                     };
 
-                    auto readU16 = [&]() -> u16
-                    {
-                        if (oob || offset + 2 > fileSize)
-                        {
-                            oob = true;
-                            return 0;
-                        }
-
-                        u16 val;
-                        sead::MemUtil::copy(&val, fileData + offset, 2);
-                        offset += 2;
-                        return sead::Endian::toHostU16(sead::Endian::eBig, val);
-                    };
-
-                    auto readU8 = [&]() -> u8
-                    {
-                        if (oob || offset + 1 > fileSize)
-                        {
-                            oob = true;
-                            return 0;
-                        }
-
-                        return fileData[offset++];
-                    };
-
-                    auto readF32 = [&]() -> f32
-                    {
-                        if (oob || offset + 4 > fileSize)
-                        {
-                            oob = true;
-                            return 0.0f;
-                        }
-
-                        u32 val;
-                        sead::MemUtil::copy(&val, fileData + offset, 4);
-                        offset += 4;
-                        val = sead::Endian::toHostU32(sead::Endian::eBig, val);
-                        f32 result;
-                        sead::MemUtil::copy(&result, &val, 4);
-
-                        return result;
-                    };
-
                     auto readString = [&]() -> std::string
                     {
                         u32 len = readU32();
@@ -4137,8 +4111,8 @@ static void DrawFileExportDialogs()
                         return s;
                     };
 
-                    // Verify magic
                     u32 magic = readU32();
+
                     if (magic != 0x42424E44)
                     {
                         PopupMgr::instance()->pushCurrentItemError("Invalid bank bundle file");
@@ -4146,8 +4120,8 @@ static void DrawFileExportDialogs()
                         return;
                     }
 
-                    // Version
                     u32 version = readU32();
+
                     if (version != 1)
                     {
                         PopupMgr::instance()->pushCurrentItemError("Unsupported bank bundle version");
@@ -4155,216 +4129,339 @@ static void DrawFileExportDialogs()
                         return;
                     }
 
-                    // Bank name
                     std::string bankName = readString();
-
-                    // Read waves
                     u32 waveCount = readU32();
-                    std::unordered_map<std::string, WaveFile *> waveMap;
-
-                    for (u32 i = 0; !oob && i < waveCount; i++)
-                    {
-                        std::string waveName = readString();
-                        u32 waveSize = readU32();
-
-                        if (oob || waveSize == 0)
-                            continue;
-
-                        if (waveSize < 12 || waveSize > fileSize - offset)
-                        {
-                            oob = true;
-                            continue;
-                        }
-
-                        // Version-patch the wave binary to match current archive
-                        {
-                            nw::ut::BinaryFileHeader *hdr = reinterpret_cast<nw::ut::BinaryFileHeader *>(fileData + offset);
-                            u16 bom;
-                            sead::MemUtil::copy(&bom, fileData + offset + 4, 2);
-                            bool le = *reinterpret_cast<u8*>(&bom) == 0xFF;
-                            u32 ver = sBfsar.getVersionForBfwav();
-                            if (le)
-                            {
-                                fileData[offset + 8] = (ver >> 0) & 0xFF;
-                                fileData[offset + 9] = (ver >> 8) & 0xFF;
-                                fileData[offset + 10] = (ver >> 16) & 0xFF;
-                                fileData[offset + 11] = (ver >> 24) & 0xFF;
-                            }
-                            else
-                            {
-                                fileData[offset + 8] = (ver >> 24) & 0xFF;
-                                fileData[offset + 9] = (ver >> 16) & 0xFF;
-                                fileData[offset + 10] = (ver >> 8) & 0xFF;
-                                fileData[offset + 11] = (ver >> 0) & 0xFF;
-                            }
-                            // Fix signature
-                            const char* wantSig = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
-                            hdr->signature[0] = wantSig[0];
-                            hdr->signature[1] = wantSig[1];
-                            hdr->signature[2] = wantSig[2];
-                            hdr->signature[3] = wantSig[3];
-                        }
-
-                        // Check if a wave with this name already exists
-                        WaveFile* existingWave = nullptr;
-                        for (const auto& node : sBfsar.getWaveFileList())
-                        {
-                            if (node->getName() == waveName.c_str())
-                            {
-                                existingWave = static_cast<WaveFile*>(node);
-                                break;
-                            }
-                        }
-
-                        if (existingWave)
-                        {
-                            waveMap[waveName.c_str()] = existingWave;
-                            offset += waveSize;
-                            continue;
-                        }
-
-                        WaveFile* newWave = new WaveFile();
-                        newWave->setEnableName(true);
-                        newWave->getName() = waveName.c_str();
-                        if (newWave->read(fileData + offset))
-                        {
-                            newWave->setFormat(sBfsar.getFormat());
-                            newWave->setVersion(sBfsar.getVersionForBfwav());
-                            sBfsar.getWaveFileList().pushBack(newWave);
-                            sBfsar.updateList(sBfsar.getWaveFileList());
-                            SetUnsavedChanges(true);
-                            waveMap[waveName.c_str()] = newWave;
-                        }
-                        else
-                        {
-                            delete newWave;
-                            PopupMgr::instance()->pushCurrentItemError("Failed to read bundled wave file");
-                        }
-
-                        offset += waveSize;
-                    }
-
-                    // Read instruments
-                    if (oob || offset >= fileSize)
-                    {
-                        PopupMgr::instance()->pushCurrentItemError("Truncated bank bundle");
-                        device->unload(fileData);
-                        return;
-                    }
-
-                    u32 instrumentCount = readU32();
-                    if (oob || instrumentCount == 0)
-                    {
-                        PopupMgr::instance()->pushCurrentItemError(oob ? "Bank bundle is truncated or corrupt" : "Bank bundle has no instruments");
-                        device->unload(fileData);
-                        return;
-                    }
-
-                    BankFile *newBank = new BankFile();
-                    newBank->setEnableName(true);
-                    newBank->getName() = bankName.c_str();
-                    newBank->setup(sBfsar.getEndian(), sBfsar.getFormat());
-
-                    for (u32 i = 0; !oob && i < instrumentCount; i++)
-                    {
-                        s16 programNo = readU16();
-                        u16 krCount = readU16();
-
-                        BankFile::Instrument *instr = new BankFile::Instrument();
-                        instr->setProgramNo(programNo);
-
-                        for (u16 k = 0; !oob && k < krCount; k++)
-                        {
-                            u8 keyMin = readU8();
-                            u8 keyMax = readU8();
-                            u16 vrCount = readU16();
-
-                            BankFile::KeyRegion *kr = new BankFile::KeyRegion(keyMin, keyMax);
-
-                            for (u16 v = 0; !oob && v < vrCount; v++)
-                            {
-                                std::string refWaveName = readString();
-                                u8 velMin = readU8();
-                                u8 velMax = readU8();
-                                u8 rootKey = readU8();
-                                u8 volume = readU8();
-                                u8 pan = readU8();
-                                f32 pitch = readF32();
-                                bool ignoreNoteOff = readU8() != 0;
-                                u8 keyGroup = readU8();
-                                u8 interpolationType = readU8();
-                                u8 attack = readU8();
-                                u8 decay = readU8();
-                                u8 sustain = readU8();
-                                u8 hold = readU8();
-                                u8 release = readU8();
-
-                                BankFile::VelocityRegion* vr = new BankFile::VelocityRegion(velMin, velMax);
-                                vr->setRootKey(rootKey);
-                                vr->setVolume(volume);
-                                vr->setPan(pan);
-                                vr->setPitch(pitch);
-                                vr->setIsIgnoreNoteOff(ignoreNoteOff);
-                                vr->setKeyGroup(keyGroup);
-                                vr->setInterpolationType(interpolationType);
-
-                                snd::AdshrCurve adsr;
-                                adsr.attack = attack;
-                                adsr.decay = decay;
-                                adsr.sustain = sustain;
-                                adsr.hold = hold;
-                                adsr.release = release;
-                                vr->setAdshrCurve(adsr);
-
-                                // Attach wave reference
-                                WaveFile* foundWave = nullptr;
-                                auto waveIt = waveMap.find(refWaveName.c_str());
-                                if (waveIt != waveMap.end())
-                                {
-                                    foundWave = waveIt->second;
-                                }
-                                else if (!refWaveName.empty())
-                                {
-                                    for (const auto& node : sBfsar.getWaveFileList())
-                                    {
-                                        if (node->getName() == refWaveName.c_str())
-                                        {
-                                            foundWave = static_cast<WaveFile*>(node);
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (foundWave)
-                                {
-                                    vr->getWaveFileRef().attach(foundWave);
-                                }
-
-                                kr->getVelocityRegionList().pushBack(vr);
-                            }
-
-                            instr->getKeyRegionList().pushBack(kr);
-                        }
-
-                        newBank->getInstrumentList().pushBack(instr);
-                    }
 
                     if (oob)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Bank bundle is truncated or corrupt");
-                        delete newBank;
+                        PopupMgr::instance()->pushCurrentItemError("Bank bundle file is truncated or corrupt");
                         device->unload(fileData);
                         return;
                     }
 
-                    sBfsar.getBankFileList().pushBack(newBank);
-                    sBfsar.updateList(sBfsar.getBankFileList());
-                    SetUnsavedChanges(true);
-                    SelectItem(newBank);
+                    sBbnkFileData = fileData;
+                    sBbnkFileSize = fileSize;
+                    sBbnkWaveCount = waveCount;
+                    sBbnkDataOffset = offset;
 
-                    device->unload(fileData);
+                    sBbnkNameEdit = !bankName.empty() ? bankName.c_str() : "Bank";
+
+                    ImGui::OpenPopup("Import Bank Bundle");
                 }
             }
         }
+    }
+
+    if (sBbnkFileData && ImGui::BeginPopupModal("Import Bank Bundle", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::SetNextItemWidth(240.0f);
+        ImGui::InputText("Name", sBbnkNameEdit.getBuffer(), sBbnkNameEdit.getBufferSize());
+
+        ImGui::Text("Waves to import: %u", sBbnkWaveCount);
+
+        ImGui::Separator();
+
+        const float bw = 120.0f;
+
+        if (ImGui::Button("Import", ImVec2(bw, 0.0f)))
+        {
+            u32 offset = sBbnkDataOffset;
+            u32 fileSize = sBbnkFileSize;
+            u8 *fileData = sBbnkFileData;
+
+            bool oob = false;
+
+            auto readU32 = [&]() -> u32
+            {
+                if (oob || offset + 4 > fileSize)
+                {
+                    oob = true;
+                    return 0;
+                }
+
+                u32 val;
+                sead::MemUtil::copy(&val, fileData + offset, 4);
+                offset += 4;
+                return sead::Endian::toHostU32(sead::Endian::eBig, val);
+            };
+
+            auto readU16 = [&]() -> u16
+            {
+                if (oob || offset + 2 > fileSize)
+                {
+                    oob = true;
+                    return 0;
+                }
+
+                u16 val;
+                sead::MemUtil::copy(&val, fileData + offset, 2);
+                offset += 2;
+                return sead::Endian::toHostU16(sead::Endian::eBig, val);
+            };
+
+            auto readU8 = [&]() -> u8
+            {
+                if (oob || offset + 1 > fileSize)
+                {
+                    oob = true;
+                    return 0;
+                }
+
+                return fileData[offset++];
+            };
+
+            auto readF32 = [&]() -> f32
+            {
+                if (oob || offset + 4 > fileSize)
+                {
+                    oob = true;
+                    return 0.0f;
+                }
+
+                u32 val;
+                sead::MemUtil::copy(&val, fileData + offset, 4);
+                offset += 4;
+                val = sead::Endian::toHostU32(sead::Endian::eBig, val);
+                f32 result;
+                sead::MemUtil::copy(&result, &val, 4);
+
+                return result;
+            };
+
+            auto readString = [&]() -> std::string
+            {
+                u32 len = readU32();
+                if (oob || len > fileSize - offset)
+                {
+                    oob = true;
+                    return std::string();
+                }
+
+                std::string s;
+
+                if (len > 0)
+                    s.assign(reinterpret_cast<const char *>(fileData + offset), len);
+                offset += len;
+                return s;
+            };
+
+            std::unordered_map<std::string, WaveFile *> waveMap;
+
+            for (u32 i = 0; !oob && i < sBbnkWaveCount; i++)
+            {
+                std::string waveName = readString();
+                u32 waveSize = readU32();
+
+                if (oob || waveSize == 0)
+                    continue;
+
+                if (waveSize < 12 || waveSize > fileSize - offset)
+                {
+                    oob = true;
+                    continue;
+                }
+
+                {
+                    nw::ut::BinaryFileHeader *hdr = reinterpret_cast<nw::ut::BinaryFileHeader *>(fileData + offset);
+                    u16 bom;
+                    sead::MemUtil::copy(&bom, fileData + offset + 4, 2);
+                    bool le = *reinterpret_cast<u8*>(&bom) == 0xFF;
+                    u32 ver = sBfsar.getVersionForBfwav();
+                    if (le)
+                    {
+                        fileData[offset + 8] = (ver >> 0) & 0xFF;
+                        fileData[offset + 9] = (ver >> 8) & 0xFF;
+                        fileData[offset + 10] = (ver >> 16) & 0xFF;
+                        fileData[offset + 11] = (ver >> 24) & 0xFF;
+                    }
+                    else
+                    {
+                        fileData[offset + 8] = (ver >> 24) & 0xFF;
+                        fileData[offset + 9] = (ver >> 16) & 0xFF;
+                        fileData[offset + 10] = (ver >> 8) & 0xFF;
+                        fileData[offset + 11] = (ver >> 0) & 0xFF;
+                    }
+                    const char* wantSig = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
+                    hdr->signature[0] = wantSig[0];
+                    hdr->signature[1] = wantSig[1];
+                    hdr->signature[2] = wantSig[2];
+                    hdr->signature[3] = wantSig[3];
+                }
+
+                WaveFile* existingWave = nullptr;
+                for (const auto& node : sBfsar.getWaveFileList())
+                {
+                    if (node->getName() == waveName.c_str())
+                    {
+                        existingWave = static_cast<WaveFile*>(node);
+                        break;
+                    }
+                }
+
+                if (existingWave)
+                {
+                    waveMap[waveName.c_str()] = existingWave;
+                    offset += waveSize;
+                    continue;
+                }
+
+                WaveFile* newWave = new WaveFile();
+                newWave->setEnableName(true);
+                newWave->getName() = waveName.c_str();
+                if (newWave->read(fileData + offset))
+                {
+                    newWave->setFormat(sBfsar.getFormat());
+                    newWave->setVersion(sBfsar.getVersionForBfwav());
+                    sBfsar.getWaveFileList().pushBack(newWave);
+                    sBfsar.updateList(sBfsar.getWaveFileList());
+                    SetUnsavedChanges(true);
+                    waveMap[waveName.c_str()] = newWave;
+                }
+                else
+                {
+                    delete newWave;
+                    PopupMgr::instance()->pushCurrentItemError("Failed to read bundled wave file");
+                }
+
+                offset += waveSize;
+            }
+
+            if (oob || offset >= fileSize)
+            {
+                PopupMgr::instance()->pushCurrentItemError("Truncated bank bundle");
+                CloseBbnkImport();
+                ImGui::CloseCurrentPopup();
+                return;
+            }
+
+            u32 instrumentCount = readU32();
+            if (oob || instrumentCount == 0)
+            {
+                PopupMgr::instance()->pushCurrentItemError(oob ? "Bank bundle is truncated or corrupt" : "Bank bundle has no instruments");
+                CloseBbnkImport();
+                ImGui::CloseCurrentPopup();
+                return;
+            }
+
+            BankFile *newBank = new BankFile();
+            newBank->setEnableName(true);
+            newBank->getName() = sBbnkNameEdit.isEmpty() ? "Bank" : sBbnkNameEdit.cstr();
+            newBank->setup(sBfsar.getEndian(), sBfsar.getFormat());
+
+            for (u32 i = 0; !oob && i < instrumentCount; i++)
+            {
+                s16 programNo = readU16();
+                u16 krCount = readU16();
+
+                BankFile::Instrument *instr = new BankFile::Instrument();
+                instr->setProgramNo(programNo);
+
+                for (u16 k = 0; !oob && k < krCount; k++)
+                {
+                    u8 keyMin = readU8();
+                    u8 keyMax = readU8();
+                    u16 vrCount = readU16();
+
+                    BankFile::KeyRegion *kr = new BankFile::KeyRegion(keyMin, keyMax);
+
+                    for (u16 v = 0; !oob && v < vrCount; v++)
+                    {
+                        std::string refWaveName = readString();
+                        u8 velMin = readU8();
+                        u8 velMax = readU8();
+                        u8 rootKey = readU8();
+                        u8 volume = readU8();
+                        u8 pan = readU8();
+                        f32 pitch = readF32();
+                        bool ignoreNoteOff = readU8() != 0;
+                        u8 keyGroup = readU8();
+                        u8 interpolationType = readU8();
+                        u8 attack = readU8();
+                        u8 decay = readU8();
+                        u8 sustain = readU8();
+                        u8 hold = readU8();
+                        u8 release = readU8();
+
+                        BankFile::VelocityRegion* vr = new BankFile::VelocityRegion(velMin, velMax);
+                        vr->setRootKey(rootKey);
+                        vr->setVolume(volume);
+                        vr->setPan(pan);
+                        vr->setPitch(pitch);
+                        vr->setIsIgnoreNoteOff(ignoreNoteOff);
+                        vr->setKeyGroup(keyGroup);
+                        vr->setInterpolationType(interpolationType);
+
+                        snd::AdshrCurve adsr;
+                        adsr.attack = attack;
+                        adsr.decay = decay;
+                        adsr.sustain = sustain;
+                        adsr.hold = hold;
+                        adsr.release = release;
+                        vr->setAdshrCurve(adsr);
+
+                        WaveFile* foundWave = nullptr;
+                        auto waveIt = waveMap.find(refWaveName.c_str());
+                        if (waveIt != waveMap.end())
+                        {
+                            foundWave = waveIt->second;
+                        }
+                        else if (!refWaveName.empty())
+                        {
+                            for (const auto& node : sBfsar.getWaveFileList())
+                            {
+                                if (node->getName() == refWaveName.c_str())
+                                {
+                                    foundWave = static_cast<WaveFile*>(node);
+                                    break;
+                                }
+                            }
+                        }
+                        if (foundWave)
+                        {
+                            vr->getWaveFileRef().attach(foundWave);
+                        }
+
+                        kr->getVelocityRegionList().pushBack(vr);
+                    }
+
+                    instr->getKeyRegionList().pushBack(kr);
+                }
+
+                newBank->getInstrumentList().pushBack(instr);
+            }
+
+            if (oob)
+            {
+                PopupMgr::instance()->pushCurrentItemError("Bank bundle is truncated or corrupt");
+                delete newBank;
+                CloseBbnkImport();
+                ImGui::CloseCurrentPopup();
+                
+                return;
+            }
+
+            sBfsar.getBankFileList().pushBack(newBank);
+            sBfsar.updateList(sBfsar.getBankFileList());
+            SetUnsavedChanges(true);
+            SelectItem(newBank);
+
+            CloseBbnkImport();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(bw, 0.0f)))
+        {
+            CloseBbnkImport();
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+    else if (sBbnkFileData && !ImGui::IsPopupOpen("Import Bank Bundle"))
+    {
+        CloseBbnkImport();
     }
 
     if (!sPendingExportWaveToWavs.empty())
@@ -6352,35 +6449,63 @@ void DrawStreamSoundsUI()
     );
 }
 
+static bool SoundIsInAnySet(const Sound *sound)
+{
+    u32 id = sound->getId();
+    for (auto it = sBfsar.getSoundSetList().robustBegin(); it != sBfsar.getSoundSetList().robustEnd(); ++it)
+    {
+        const SoundSet *set = static_cast<const SoundSet *>(it->val());
+        if (set->getIsEmpty())
+            continue;
+
+        if (id >= set->getStartId() && id <= set->getEndId())
+            return true;
+    }
+
+    return false;
+}
+
 void DrawWaveSoundsUI()
 {
     static SortState sSortState;
+    static bool sIncludeInSet = true;
 
-    DrawSortToolbar(sSortState);
+    DrawSortToolbar(sSortState, false, true);
+    DrawIncludeSoundsInSetCheckbox(&sIncludeInSet);
 
     DrawAllItemsUI("Wave Sound", sBfsar.getSoundList(), &CreateWaveSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
-            return sound->getSoundType() == Sound::SoundType::Wave && ItemMatchesFilter(sound);
+
+            if (sound->getSoundType() != Sound::SoundType::Wave || !ItemMatchesFilter(sound))
+                return false;
+
+            return sIncludeInSet || !SoundIsInAnySet(sound);
         },
-        false, nullptr, sSortState.mode, sSortState.ascending
+        false, nullptr, sSortState.mode, sSortState.ascending, &InsertSoundAtHook, &RemoveSoundWithCascade
     );
 }
 
 void DrawSequenceSoundsUI()
 {
     static SortState sSortState;
+    static bool sIncludeInSet = true;
 
-    DrawSortToolbar(sSortState);
+    DrawSortToolbar(sSortState, false, true);
+    DrawIncludeSoundsInSetCheckbox(&sIncludeInSet);
 
     DrawAllItemsUI("Sequence Sound", sBfsar.getSoundList(), &CreateSequenceSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
-            return sound->getSoundType() == Sound::SoundType::Seq && ItemMatchesFilter(sound);
+            
+            if (sound->getSoundType() != Sound::SoundType::Seq || !ItemMatchesFilter(sound))
+                return false;
+
+            return sIncludeInSet || !SoundIsInAnySet(sound);
         },
-        false, nullptr, sSortState.mode, sSortState.ascending
+        false, nullptr, sSortState.mode, sSortState.ascending, &InsertSoundAtHook, &RemoveSoundWithCascade
     );
 }
 
@@ -6405,30 +6530,29 @@ const char* SoundSetNamePrefixFunc(Item* item)
 
 InstanciateItemCallback CreateSoundSetFunc(bool clear)
 {
-    auto innerFunc = [](bool clear, Item* item, bool* validate)
+    auto innerFunc = [](bool clear, Item *item, bool *validate)
     {
-        static SoundSet::SoundSetType sSoundSetType = SoundSet::SoundSetType::Wave;
+        static int sSoundSetType = 0;
 
         if (clear)
         {
-            sSoundSetType = SoundSet::SoundSetType::Wave;
+            sSoundSetType = 0;
         }
 
         if (!item && !validate)
         {
-            ImGui::Separator();
-
-            static const char* sSoundSetTypes[] = { "Wave", "Sequence" };
-            ComboScroll("Sound Type", (s32*)&sSoundSetType, sSoundSetTypes, IM_ARRAYSIZE(sSoundSetTypes));
+            ImGui::RadioButton("Wave", &sSoundSetType, 0);
+            ImGui::SameLine();
+            ImGui::RadioButton("Sequence", &sSoundSetType, 1);
         }
         else if (validate)
         {
         }
         else
         {
-            SoundSet* soundSet = static_cast<SoundSet*>(item);
+            SoundSet *soundSet = static_cast<SoundSet *>(item);
 
-            soundSet->setSoundSetType(sSoundSetType);
+            soundSet->setSoundSetType(static_cast<SoundSet::SoundSetType>(sSoundSetType));
         }
     };
 
@@ -6631,81 +6755,159 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
     }
 }
 
-void DrawAllSoundSetsUI()
+static SoundSet* sScopedSoundsViewedSet = nullptr;
+
+static bool SoundInScopedSetFilter(const Item* item)
 {
-    static SortState sSortState;
+    if (!sScopedSoundsViewedSet)
+        return false;
 
-    const f32 cVisHeight = 32.0f;
-    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
+    const Sound* sound = static_cast<const Sound*>(item);
+    u32 id = sound->getId();
+    return id >= sScopedSoundsViewedSet->getStartId() && id <= sScopedSoundsViewedSet->getEndId() && ItemMatchesFilter(sound);
+}
 
-    DrawSortToolbar(sSortState);
-    ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
-    DrawAllItemsUI("Sound Set", sBfsar.getSoundSetList(),
-        &CreateSoundSetFunc, &SoundSetNamePrefixFunc, nullptr, GetItemFilterCallback(),
-        false, nullptr, sSortState.mode, sSortState.ascending
-    );
-    ImGui::EndChild();
+static void ScopedSoundInsertHook(Item* afterItem, Item* newItem)
+{
+    InsertSoundIntoSet(sScopedSoundsViewedSet, static_cast<Sound*>(newItem), afterItem);
+}
+
+static bool ValidateViewedSet(SoundSet** viewedSet)
+{
+    if (!*viewedSet)
+        return false;
+
+    for (auto it = sBfsar.getSoundSetList().robustBegin(); it != sBfsar.getSoundSetList().robustEnd(); ++it)
+    {
+        if (it->val() == *viewedSet)
+            return true;
+    }
+
+    *viewedSet = nullptr;
+    return false;
+}
+
+static void DrawViewedSetLabel(SoundSet* viewedSet)
+{
+    ImVec4 accent = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
+    ImGui::TextColored(accent, "%s%s", SoundSetNamePrefixFunc(viewedSet), viewedSet->getFormattedName().cstr());
+}
+
+static void DrawSoundSetScopedSoundsUI(SoundSet* viewedSet, SortState& sortState)
+{
+    if (!viewedSet)
+    {
+        ImGui::TextDisabled("Select a set to view its sounds.");
+        return;
+    }
+
+    DrawViewedSetLabel(viewedSet);
 
     ImGui::Separator();
-    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
 
-    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), false, SoundSet::SoundSetType::Wave);
+    sScopedSoundsViewedSet = viewedSet;
+
+    InstanciateItemCallback (*create)(bool) = viewedSet->getSoundSetType() == SoundSet::SoundSetType::Seq ? &CreateSequenceSoundFunc : &CreateWaveSoundFunc;
+
+    DrawAllItemsUI("Sound", sBfsar.getSoundList(), create, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
+        &SoundInScopedSetFilter,
+        false, nullptr, sortState.mode, sortState.ascending, &ScopedSoundInsertHook, &RemoveSoundWithCascade
+    );
+}
+
+static bool WaveSoundSetListFilter(const Item* item)
+{
+    const SoundSet* set = static_cast<const SoundSet*>(item);
+    return set->getSoundSetType() == SoundSet::SoundSetType::Wave && ItemMatchesFilter(set);
+}
+
+static bool SeqSoundSetListFilter(const Item* item)
+{
+    const SoundSet* set = static_cast<const SoundSet*>(item);
+    return set->getSoundSetType() == SoundSet::SoundSetType::Seq && ItemMatchesFilter(set);
+}
+
+static void DrawSoundSetSplitView(
+    const char* listName, 
+    CreateItemCallback createFunc,
+    ItemNamePrefixCallback namePrefix, 
+    ContextMenuCallback contextMenu, 
+    ItemFilterCallback listFilter,
+    bool filterByType, 
+    SoundSet::SoundSetType type,
+    SortState& setSort, 
+    SortState& soundSort, 
+    SoundSet*& viewedSet
+)
+{
+    const f32 cVisHeight = 32.0f;
+    f32 barHeight = ImGui::GetStyle().ItemSpacing.y + cVisHeight;
+
+    DrawSortToolbar(setSort, false, true);
+    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip("Start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
+
+    ValidateViewedSet(&viewedSet);
+
+    auto adoptSelection = [&]()
+    {
+        if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::SoundSet)
+        {
+            SoundSet* sel = static_cast<SoundSet*>(sSelectedItem);
+            if (!filterByType || sel->getSoundSetType() == type)
+                viewedSet = sel;
+        }
+    };
+
+    adoptSelection();
+
+    ImGui::Separator();
+
+    f32 listWidth = ImGui::GetContentRegionAvail().x * 0.4f;
+
+    ImGui::BeginChild("SoundSetList", ImVec2(listWidth, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
+    DrawAllItemsUI(listName, sBfsar.getSoundSetList(), createFunc, namePrefix, contextMenu, listFilter,
+        false, nullptr, setSort.mode, setSort.ascending);
+    ImGui::EndChild();
+
+    adoptSelection();
+
+    ImGui::SameLine();
+
+    ImGui::BeginChild("SoundSetSounds", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Border);
+    DrawSoundSetScopedSoundsUI(viewedSet, soundSort);
+    ImGui::EndChild();
+
+    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), filterByType, type);
 }
 
 void DrawWaveSoundSetsUI()
 {
-    static SortState sSortState;
+    static SortState sSetSort, sSoundSort;
+    static SoundSet* sViewedSet = nullptr;
 
-    const f32 cVisHeight = 32.0f;
-    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
-
-    DrawSortToolbar(sSortState);
-    ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
-    DrawAllItemsUI("Wave Sound Set", sBfsar.getSoundSetList(), &CreateWaveSoundSetFunc, nullptr, nullptr,
-        [](const Item* item)
-        {
-            const SoundSet* soundSet = static_cast<const SoundSet*>(item);
-            return soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave && ItemMatchesFilter(soundSet);
-        },
-        false, nullptr, sSortState.mode, sSortState.ascending
-    );
-    ImGui::EndChild();
-
-    ImGui::Separator();
-    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
-
-    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), true, SoundSet::SoundSetType::Wave);
+    DrawSoundSetSplitView("Wave Sound Set", &CreateWaveSoundSetFunc, nullptr, nullptr, &WaveSoundSetListFilter,
+        true, SoundSet::SoundSetType::Wave, sSetSort, sSoundSort, sViewedSet);
 }
 
 void DrawSequenceSoundSetsUI()
 {
-    static SortState sSortState;
+    static SortState sSetSort, sSoundSort;
+    static SoundSet* sViewedSet = nullptr;
 
-    const f32 cVisHeight = 32.0f;
-    f32 barHeight = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y * 3.0f + cVisHeight;
+    DrawSoundSetSplitView("Sequence Sound Set", &CreateSequenceSoundSetFunc, nullptr, &SequenceSoundSetContextMenuFunc, &SeqSoundSetListFilter,
+        true, SoundSet::SoundSetType::Seq, sSetSort, sSoundSort, sViewedSet);
+}
 
-    DrawSortToolbar(sSortState);
-    ImGui::BeginChild("SoundSetList", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
-    DrawAllItemsUI("Sequence Sound Set", sBfsar.getSoundSetList(), &CreateSequenceSoundSetFunc, nullptr, &SequenceSoundSetContextMenuFunc,
-        [](const Item* item)
-        {
-            const SoundSet* soundSet = static_cast<const SoundSet*>(item);
-            return soundSet->getSoundSetType() == SoundSet::SoundSetType::Seq && ItemMatchesFilter(soundSet);
-        },
-        false, nullptr, sSortState.mode, sSortState.ascending
-    );
-    ImGui::EndChild();
+void DrawAllSoundSetsUI()
+{
+    static SortState sSetSort, sSoundSort;
+    static SoundSet* sViewedSet = nullptr;
 
-    ImGui::Separator();
-    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Sticky Edit: start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
-
-    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), true, SoundSet::SoundSetType::Seq);
+    DrawSoundSetSplitView("Sound Set", &CreateSoundSetFunc, &SoundSetNamePrefixFunc, nullptr, GetItemFilterCallback(),
+        false, SoundSet::SoundSetType::Wave, sSetSort, sSoundSort, sViewedSet);
 }
 
 void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
@@ -6714,6 +6916,7 @@ void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
         return;
 
     SoundSet* soundSet = static_cast<SoundSet*>(item);
+
     if (!soundSet || soundSet->getIsEmpty() || soundSet->getSoundSetType() != SoundSet::SoundSetType::Seq)
         return;
 
@@ -6721,6 +6924,7 @@ void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
     u32 endId = soundSet->getEndId();
 
     bool hasSeq = false;
+    
     for (auto it = sBfsar.getSoundList().begin(); it != sBfsar.getSoundList().end(); ++it)
     {
         Sound* s = static_cast<Sound*>(*it);
@@ -7894,6 +8098,87 @@ void BankFileContextMenuFunc(Item* item, bool afterDelete)
     }
 }
 
+static std::vector<BankFile *> CollectBankFilesFromBanks(Item *item)
+{
+    Bank *bank = item ? static_cast<Bank *>(item) : nullptr;
+
+    if (bank && !sMultiSelectedItems.empty() && std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), bank) != sMultiSelectedItems.end())
+    {
+        std::vector<BankFile *> result;
+
+        for (Item *sel : sMultiSelectedItems)
+        {
+            BankFile *bankFile = static_cast<BankFile *>(static_cast<Bank *>(sel)->getFileRef().getItem());
+
+            if (bankFile)
+                result.push_back(bankFile);
+        }
+        return result;
+    }
+
+    if (bank)
+    {
+        BankFile *bankFile = static_cast<BankFile *>(bank->getFileRef().getItem());
+
+        if (bankFile)
+            return {bankFile};
+    }
+
+    return {};
+}
+
+void BankContextMenuFunc(Item *item, bool afterDelete)
+{
+    Bank *bank = nullptr;
+
+    if (item)
+        bank = static_cast<Bank *>(item);
+
+    if (afterDelete)
+        return;
+
+    ImGui::Separator();
+
+    if (ImGui::MenuItem("Import Bank Bundle"))
+        sPendingImportBankBundle = true;
+
+    {
+        bool disabled = bank == nullptr || !bank->getFileRef().isAttached();
+
+        if (disabled)
+            ImGui::BeginDisabled();
+
+        if (ImGui::MenuItem("Export Bank Bundle"))
+        {
+            auto banks = CollectBankFilesFromBanks(item);
+
+            if (!banks.empty())
+                sPendingExportBankBundles = std::move(banks);
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Export as SF2"))
+        {
+            auto banks = CollectBankFilesFromBanks(item);
+
+            if (!banks.empty())
+                sPendingExportBankSf2 = std::move(banks);
+        }
+
+        if (ImGui::MenuItem("Export as DLS"))
+        {
+            auto banks = CollectBankFilesFromBanks(item);
+
+            if (!banks.empty())
+                sPendingExportBankDls = std::move(banks);
+        }
+
+        if (disabled)
+            ImGui::EndDisabled();
+    }
+}
+
 static bool sWaveFilesIncludeStream = true;
 
 static bool WaveFilesFilter(const Item* item)
@@ -8452,13 +8737,23 @@ bool DrawSortToolbar(SortState &state, bool showFileSize, bool trailingDivider)
     return changed;
 }
 
+bool DrawIncludeSoundsInSetCheckbox(bool *value)
+{
+    bool changed = ImGui::Checkbox("Include Sounds in a Set", value);
+
+    if (ImGui::IsItemHovered())
+        ImGui::SetTooltip("When enabled, the list will include sounds that belong to a sound set.");
+
+    return changed;
+}
+
 bool DrawIncludeStreamWavesCheckbox(bool *value)
 {
     bool changed = ImGui::Checkbox("Include Stream Waves", value);
-    
+
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("When enabled, includes wave files derived from stream sound data.");
-    
+        ImGui::SetTooltip("When enabled, the list will include wave files derived from stream sound data.");
+
     return changed;
 }
 

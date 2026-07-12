@@ -27,10 +27,6 @@ TuneBloom is an extremely fast & stable editor for editing NintendoWare audio fo
   <img width="400" alt="TuneBloom_RAFJUbpqfn" src="https://github.com/user-attachments/assets/c9932b4c-2c53-4769-8a66-488c4e628928" />
 </div>
 
-## Future Goals
-- `BCSAR` support (3DS)
-- `BFSAR` support (Switch)
-
 ## Limitations
 - Edited `BFSAR` files
   - Sound archives which have been re-saved by imperfect tools (such as Citric Composer) are very likely to have been corrupted in ways that will result in failure to load into TuneBloom.

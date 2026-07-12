@@ -44,9 +44,12 @@ public:
         mUpdateWriteInfo = updateWriteInfo;
     }
 
-    static bool isFilterSupportedVersion(u32 version)
+    static bool isFilterSupportedVersion(u32 version, ArchiveFormat format)
     {
-        return version >= makeVersion(1, 0, 1);
+        if (format == ArchiveFormat::BCSAR)
+            return version >= makeVersion(1, 0, 1);
+
+        return version >= makeVersion(0, 1, 1);
     }
 
     static u32 getAuxBusCount(ArchiveFormat format)

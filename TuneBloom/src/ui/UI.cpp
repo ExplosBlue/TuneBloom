@@ -374,6 +374,20 @@ void SetUnsavedChanges(bool dirty)
     }
 }
 
+static u32 DefaultArchiveVersionForPlatform(ArchivePlatform platform)
+{
+    switch (platform)
+    {
+    case ArchivePlatform::NX:
+        return 0x00020400; // BFSAR 2.4.0
+    case ArchivePlatform::CTR:
+        return 0x02000000; // BCSAR 2.0.0
+    case ArchivePlatform::CAFE:
+    default:
+        return 0x00010000; // BFSAR 1.0.0
+    }
+}
+
 static bool sWantsNew = false;
 static bool sWantsOpen = false;
 static bool sWantsClose = false;
@@ -1801,6 +1815,19 @@ static void CheckAutoBackup()
     sAccumSeconds = 0.0f;
 }
 
+static std::vector<WaveFile*> sPendingUnusedWaves;
+
+static void ProceedDirectSave()
+{
+    if (ShouldWarnAboutMissingMetadata())
+    {
+        sPendingFileAction = nullptr;
+        ImGui::OpenPopup("###MetadataWarning");
+    }
+    else
+        SaveFile();
+}
+
 void DrawUI()
 {
     if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
@@ -1976,15 +2003,12 @@ void DrawUI()
     if (sWantsSaveDirect)
     {
         sWantsSaveDirect = false;
-        if (ShouldWarnAboutMissingMetadata())
-        {
-            sPendingFileAction = nullptr;
-            ImGui::OpenPopup("###MetadataWarning");
-        }
+        sPendingUnusedWaves = sBfsar.findUnusedWaveFiles();
+
+        if (!sPendingUnusedWaves.empty())
+            ImGui::OpenPopup("###RemoveUnusedFiles");
         else
-        {
-            SaveFile();
-        }
+            ProceedDirectSave();
     }
 
     {
@@ -2032,6 +2056,66 @@ void DrawUI()
         }
     }
 
+    {
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(480.0f, 420.0f), ImGuiCond_Appearing);
+
+        if (ImGui::BeginPopupModal("Remove Unused Files?###RemoveUnusedFiles", nullptr, ImGuiWindowFlags_NoResize))
+        {
+            ImGui::Text("There are %zu wave file(s) with no references.", sPendingUnusedWaves.size());
+
+            ImGui::Separator();
+            ImGui::BeginChild("UnusedList", ImVec2(0.0f, -ImGui::GetFrameHeightWithSpacing() - ImGui::GetStyle().ItemSpacing.y), true);
+
+            const ImVec4 removeColor(0.90f, 0.45f, 0.45f, 1.0f);
+            for (WaveFile *wave : sPendingUnusedWaves)
+                ImGui::TextColored(removeColor, "[%u] %s", wave->getId(), wave->getNameOrNull().cstr());
+
+            ImGui::EndChild();
+
+            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
+
+            if (ImGui::Button("Remove All And Save", buttonSize))
+            {
+                sSoundPlayer.reset();
+
+                auto isDeletedWave = [](Item* it)
+                {
+                    return it && std::find(sPendingUnusedWaves.begin(), sPendingUnusedWaves.end(), it) != sPendingUnusedWaves.end();
+                };
+
+                for (size_t t = 0; t <= (size_t)UIType::Max; t++)
+                {
+                    if (isDeletedWave(sSelectedItemArr[t]))      sSelectedItemArr[t] = nullptr;
+                    if (isDeletedWave(sSubSelectedItemArr[t]))   sSubSelectedItemArr[t] = nullptr;
+                    if (isDeletedWave(sMultiSelectAnchorArr[t])) sMultiSelectAnchorArr[t] = nullptr;
+
+                    std::vector<Item*>& ms = sMultiSelectedItemsArr[t];
+                    ms.erase(std::remove_if(ms.begin(), ms.end(), isDeletedWave), ms.end());
+                }
+
+                if (sBfsar.removeUnusedWaveFiles(sPendingUnusedWaves) > 0)
+                    SetUnsavedChanges(true);
+
+                sPendingUnusedWaves.clear();
+                ImGui::CloseCurrentPopup();
+                ProceedDirectSave();
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Save Anyway", buttonSize))
+            {
+                sPendingUnusedWaves.clear();
+                ImGui::CloseCurrentPopup();
+                ProceedDirectSave();
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+
     if (sNeedsNewFileFormat)
     {
         ImGui::OpenPopup("###NewFileFormat");
@@ -2044,22 +2128,57 @@ void DrawUI()
 
         if (ImGui::BeginPopupModal("New Archive###NewFileFormat", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::Text("Select the archive format:");
-            ImGui::Separator();
-
-            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 3.0f) / 2.0f, 0.0f);
-
-            if (ImGui::Button("BFSAR", buttonSize))
+            struct NewArchiveTarget
             {
-                NewFile(ArchiveFormat::BFSAR);
-                ImGui::CloseCurrentPopup();
+                const char* label;
+                ArchiveFormat format;
+                ArchivePlatform platform;
+            };
+
+            static const NewArchiveTarget kTargets[] = {
+                { "BFSAR (Wii U)",  ArchiveFormat::BFSAR, ArchivePlatform::CAFE },
+                { "BFSAR (Switch)", ArchiveFormat::BFSAR, ArchivePlatform::NX },
+                { "BCSAR (3DS)",    ArchiveFormat::BCSAR, ArchivePlatform::CTR},
+            };
+
+            static int sSelected = 0;
+            static u32 sVersion = 0;
+            static bool sIncludeStringTable = true;
+
+            if (ImGui::IsWindowAppearing())
+            {
+                sSelected = 0;
+                sVersion = DefaultArchiveVersionForPlatform(kTargets[sSelected].platform);
+                sIncludeStringTable = true;
             }
 
+            const char* labels[IM_ARRAYSIZE(kTargets)];
+            for (int i = 0; i < IM_ARRAYSIZE(kTargets); i++)
+                labels[i] = kTargets[i].label;
+
+            ImGui::SetNextItemWidth(240.0f);
+            if (ComboScroll("Platform", &sSelected, labels, IM_ARRAYSIZE(kTargets)))
+                sVersion = DefaultArchiveVersionForPlatform(kTargets[sSelected].platform);
+
+            DrawVersionUI(&sVersion, kTargets[sSelected].format);
+
+            ImGui::Checkbox("Include String Table", &sIncludeStringTable);
+            ImGui::Separator();
+
+            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
+
+            bool create = ImGui::Button("Create", buttonSize);
             ImGui::SameLine();
 
-            if (ImGui::Button("BCSAR", buttonSize))
+            if (ImGui::Button("Cancel", buttonSize))
+                ImGui::CloseCurrentPopup();
+
+            if (create)
             {
-                NewFile(ArchiveFormat::BCSAR);
+                NewFile(kTargets[sSelected].format, kTargets[sSelected].platform);
+                sBfsar.setVersion(sVersion);
+                sBfsar.setIncludeStringTable(sIncludeStringTable);
+                SetUnsavedChanges(true);
                 ImGui::CloseCurrentPopup();
             }
 
@@ -6053,24 +6172,33 @@ void DrawProjectInfoUI()
     const ImU32 stepU32 = 1;
 
     {
-        static const char* sEndianTypes[] = {
-            "Big Endian",
-            "Little Endian"
+        static const char* sPlatformTypes[] = {
+            "BFSAR (Wii U)",
+            "BCSAR (3DS)",
+            "BFSAR (Switch)"
         };
 
-        sead::Endian::Types endian = sBfsar.getEndian();
-        if (ComboScroll("Byte Order", (s32*)&endian, sEndianTypes, IM_ARRAYSIZE(sEndianTypes)))
+        static u32 sVersionForPlatform[3] = {
+            DefaultArchiveVersionForPlatform(ArchivePlatform::CAFE),
+            DefaultArchiveVersionForPlatform(ArchivePlatform::CTR),
+            DefaultArchiveVersionForPlatform(ArchivePlatform::NX),
+        };
+
+        ArchivePlatform platform = sBfsar.getPlatform();
+        sVersionForPlatform[(s32)platform] = sBfsar.getVersion();
+
+        if (ComboScroll("Platform", (s32*)&platform, sPlatformTypes, IM_ARRAYSIZE(sPlatformTypes)))
         {
-            sBfsar.setEndian(endian);
+            sBfsar.setPlatform(platform);
+            sBfsar.setEndian(sBfsar.isLittleEndian() ? sead::Endian::eLittle : sead::Endian::eBig);
+            sBfsar.setVersion(sVersionForPlatform[(s32)platform]);
             SetUnsavedChanges(true);
         }
     }
 
     {
-        CenteredTextX("Version");
-
         u32 version = sBfsar.getVersion();
-        if (DrawVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3))
+        if (DrawVersionUI(&version, sBfsar.getFormat()))
         {
             sBfsar.setVersion(version);
             SetUnsavedChanges(true);
@@ -6147,7 +6275,7 @@ void DrawProjectInfoUI()
             if (!enable)
             {
                 ImGui::SameLine();
-                HelpMarker("Need version to be >= 0.2.2.0");
+                HelpMarker("Need version to be at least 2.2.0");
             }
         }
 
@@ -9060,34 +9188,118 @@ void DrawFileStatisticsUI()
         SelectItem(clickedBlock->wave);
 }
 
-bool DrawVersionUI(u32* versionPtr, u32 versionByteNum)
+static const char* ArchiveVersionRangeStr(bool isBcsar)
+{
+    return isBcsar ? "2.0.0 - 2.3.2" : "1.0.0 - 2.x";
+}
+
+static bool VersionField(u8* value, u8 maxValue)
+{
+    bool changed = false;
+
+    const float padX = 8.0f;
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, ImGui::GetStyle().FramePadding.y));
+    ImGui::SetNextItemWidth(ImGui::CalcTextSize("0").x + padX * 2.0f);
+
+    if (ImGui::InputScalar("", ImGuiDataType_U8, value, nullptr))
+        changed = true;
+
+    if (ImGui::IsItemHovered())
+    {
+        const float wheel = ImGui::GetIO().MouseWheel;
+        if (wheel != 0.0f)
+        {
+            *value = (u8)sead::MathCalcCommon<s32>::clamp2(0, (s32)*value + (wheel > 0.0f ? 1 : -1), maxValue);
+            changed = true;
+        }
+        ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
+    }
+
+    ImGui::PopStyleVar();
+
+    if (*value > maxValue)
+    {
+        *value = maxValue;
+        changed = true;
+    }
+
+    return changed;
+}
+
+bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format)
+{
+    const bool isBcsar = (format == ArchiveFormat::BCSAR);
+    const u32 shift[3] = {isBcsar ? 24u : 16u, isBcsar ? 16u : 8u, 0u};
+
+    const u32 version = *versionPtr;
+    u8 field[3] = {
+        (u8)((version >> shift[0]) & 0xFF),
+        (u8)((version >> shift[1]) & 0xFF),
+        (u8)((version >> shift[2]) & 0xFF),
+    };
+
+    bool updated = false;
+
+    for (int i = 0; i < 3; i++)
+    {
+        if (i > 0)
+        {
+            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled(".");
+            ImGui::SameLine(0.0f, 6.0f);
+        }
+
+        ImGui::PushID(i);
+
+        if (VersionField(&field[i], 9))
+            updated = true;
+
+        ImGui::PopID();
+    }
+
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Version");
+
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::Text("Valid range: %s", ArchiveVersionRangeStr(isBcsar));
+        ImGui::TextDisabled("Scroll to adjust, click to type");
+        ImGui::EndTooltip();
+    }
+
+    if (updated)
+        *versionPtr = ((u32)field[0] << shift[0]) | ((u32)field[1] << shift[1]) | ((u32)field[2] << shift[2]);
+
+    return updated;
+}
+
+bool DrawInnerVersionUI(u32 *versionPtr, u32 versionByteNum)
 {
     const ImU8 stepU8 = 1;
-
-    //ImGui::Text("0x%08X", *versionPtr);
 
     bool updated = false;
     for (u32 i = 0; i < versionByteNum; i++)
     {
         ImGui::PushID(i);
-        ImGui::PushItemWidth(ImGui::GetWindowContentRegionMax().x / static_cast<f32>(versionByteNum) - 7.0f);
+        ImGui::SetNextItemWidth(80.0f);
 
         u32 version = *versionPtr;
         u32 versionByteOffset = ((versionByteNum - 1) - i) * 0x8;
 
+        const char *label = (i + 1 == versionByteNum) ? "Version" : "";
+
         u8 versionByte = (version >> versionByteOffset) & 0xFF;
-        if (ImGui::InputScalar("", ImGuiDataType_U8, &versionByte, &stepU8))
+        if (ImGui::InputScalar(label, ImGuiDataType_U8, &versionByte, &stepU8))
         {
             *versionPtr = (version & ~(0xFF << versionByteOffset)) | (versionByte << versionByteOffset);
             updated = true;
         }
 
         if (i + 1 < versionByteNum)
-        {
             ImGui::SameLine();
-        }
 
-        ImGui::PopItemWidth();
         ImGui::PopID();
     }
 

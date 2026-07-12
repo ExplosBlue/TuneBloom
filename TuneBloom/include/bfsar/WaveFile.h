@@ -318,6 +318,7 @@ public:
         , mUseOriginalData(false)
         , mOriginalData(nullptr)
         , mOriginalDataSize(0)
+        , mOriginalDmaAlignOffset(0)
     {
         mChannels.allocBuffer(2);
 
@@ -531,6 +532,15 @@ private:
     bool mUseOriginalData;
     u8* mOriginalData;
     u32 mOriginalDataSize;
+
+public:
+    u32 getOriginalDmaAlignOffset() const
+    {
+        return mOriginalDmaAlignOffset;
+    }
+
+private:
+    u32 mOriginalDmaAlignOffset;
 
     std::string mMd5Hash;
     u32 mWaveArchiveId = UINT32_MAX;

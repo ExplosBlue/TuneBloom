@@ -1591,8 +1591,13 @@ struct LabelObj
     {
         SEAD_ASSERT(mOffset <= 0xFFFFFF);
 
-        // 24-bit offsets are always big-endian in Nintendo formats (FSEQ and CSEQ)
-        return { (u8)(mOffset >> 16), (u8)(mOffset >> 8), (u8)mOffset };
+        // 24-bit offsets use sequence data endian
+        // (big endian for Wii U and 3DS, little endian for Switch)
+
+        if (MmlParser::sSeqParamEndian == sead::Endian::eLittle)
+            return {(u8)mOffset, (u8)(mOffset >> 8), (u8)(mOffset >> 16)};
+
+        return {(u8)(mOffset >> 16), (u8)(mOffset >> 8), (u8)mOffset};
     }
 
     u32 mOffset;

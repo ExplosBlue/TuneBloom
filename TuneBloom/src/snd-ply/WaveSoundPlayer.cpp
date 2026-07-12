@@ -268,7 +268,7 @@ bool WaveSoundPlayer::startChannel(const nw::snd::internal::WaveInfo* waveInfoPt
                 mWaveSoundInfo.fxSend[i] = waveSoundInfo.getFxSend(i);
             }
 
-            if (BfwsdFile::isFilterSupportedVersion(sBfsar.getVersionForBfwsd()))
+            if (BfwsdFile::isFilterSupportedVersion(sBfsar.getVersionForBfwsd(), sBfsar.getFormat()))
             {
                 mWaveSoundInfo.lpfFreq = waveSoundInfo.getLpfFreq();
                 mWaveSoundInfo.biquadType = waveSoundInfo.getBiquadType();

@@ -41,7 +41,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         }
         else
         {
-            if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00020000))
+            if (!(0x00010000 <= (u32)header->version && (u32)header->version < 0x00030000))
             {
                 sead::FormatFixedSafeString<64> msg("FSEQ version not supported (0x%08X)", (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);

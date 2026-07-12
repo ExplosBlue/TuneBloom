@@ -151,7 +151,7 @@ void InnerFile::drawUI()
         CenteredTextX("Version");
 
         u32 version = mVersion;
-        if (DrawVersionUI(&version, mFormat == ArchiveFormat::BCSAR ? 4 : 3))
+        if (DrawInnerVersionUI(&version, mFormat == ArchiveFormat::BCSAR ? 4 : 3))
         {
             mVersion = version;
             SetUnsavedChanges(true);
@@ -192,10 +192,10 @@ bool ValidBFSARHeader(const void* file)
     //? Only check version for FSAR (BFSAR) files
     if (isFSAR)
     {
-        if (!(0x00010000 <= header.version && header.version <= 0x00020200))
+        if (!(header.version >= 0x00010000 && header.version < 0x00030000))
         {
             sead::FormatFixedSafeString<64> msg("BFSAR version not supported (0x%08X)", (u32)header.version);
-            PopupMgr::instance()->addPopup({ msg, nullptr });
+            PopupMgr::instance()->addPopup({msg, nullptr});
             return false;
         }
     }
@@ -225,13 +225,36 @@ bool ValidBCSARHeader(const void* file)
 
 bool NewFile(ArchiveFormat format)
 {
+    return NewFile(format, getDefaultPlatformForFormat(format));
+}
+
+bool NewFile(ArchiveFormat format, ArchivePlatform platform)
+{
     CloseFile();
 
-    sBfsar.create(format);
+    sBfsar.create(format, platform);
 
-    const char* fmtName = format == ArchiveFormat::BCSAR ? "BCSAR" : "BFSAR";
+    const char *ext;
+    const char *fmtName;
+
+    switch (platform)
+    {
+    case ArchivePlatform::CTR:
+        fmtName = "BCSAR";
+        ext = "bcsar";
+        break;
+    case ArchivePlatform::NX:
+        fmtName = "BFSAR (Switch)";
+        ext = "bfsar";
+        break;
+    default:
+        fmtName = "BFSAR";
+        ext = "bfsar";
+        break;
+    }
+
     LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", fmtName).cstr());
-    util::updateTitle(sead::FormatFixedSafeString<64>("New.%s", format == ArchiveFormat::BCSAR ? "bcsar" : "bfsar").cstr(), true);
+    util::updateTitle(sead::FormatFixedSafeString<64>("New.%s", ext).cstr(), true);
 
     SetUnsavedChanges(true);
 
@@ -241,7 +264,7 @@ bool NewFile(ArchiveFormat format)
 
 bool NewFile()
 {
-    return NewFile(sBfsar.getFormat());
+    return NewFile(sBfsar.getFormat(), sBfsar.getPlatform());
 }
 
 bool OpenFile(const char* path)
@@ -337,51 +360,61 @@ bool SaveFile()
 bool SaveFileAs()
 {
     if (!sBfsar.isOpen())
+        return false;
+
+    if (!sBfsar.validate_())
+        return false;
+
+    const ArchiveFormatInfo* info = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
+
+    if (!info)
     {
+        LOG_STR("SaveFileAs: invalid archive format info");
         return false;
     }
 
-    if (!sBfsar.validate_())
+    sead::FixedSafeString<64> filterPattern;
+    filterPattern.format("*.%s", info->extension);
+
+    sead::FixedSafeString<128> filterName;
+    filterName.format("%s (%s)", info->label, filterPattern.cstr());
+
+    FileFilter filters[] = { { filterName.cstr(), filterPattern.cstr() } };
+    sead::FixedSafeString<512> defaultPath;
+
+    if (sBfsar.getFilePath().isEmpty())
     {
-        return false;
+        std::error_code ec;
+        std::filesystem::path cwd = std::filesystem::current_path(ec);
+
+        if (ec)
+            defaultPath.format("Untitled.%s", info->extension);
+        else
+            defaultPath = (cwd / ("Untitled." + std::string(info->extension))).string().c_str();
     }
+    else
+        defaultPath = sBfsar.getFilePath();
 
     sead::FixedSafeString<512> path;
 
-    bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
-    const u32 filterCount = 1;
-    FileFilter filters[filterCount] = {
-        { isBcsar ? "CTR Sound Archive (*.bcsar)" : "Cafe Sound Archive (*.bfsar)", isBcsar ? "*.bcsar" : "*.bfsar" }
-    };
+    if (!SaveFileDialog(&path, nullptr, std::size(filters), filters, info->extension, defaultPath.cstr()))
+        return false;
 
-    sead::FixedSafeString<512> defaultPath;
-    if (sBfsar.getFilePath().isEmpty())
+    LOG_STR(path.cstr());
+
+    if (!sBfsar.saveAs(path))
     {
-        std::string cwd = std::filesystem::current_path().string();
-        defaultPath.format("%s/%s", cwd.c_str(), isBcsar ? "Untitled.bcsar" : "Untitled.bfsar");
-    }
-    else
-    {
-        defaultPath = sBfsar.getFilePath();
+        LOG_STR("SaveFileAs failed to write archive");
+        return false;
     }
 
-    if (SaveFileDialog(&path, nullptr, filterCount, filters, isBcsar ? "bcsar" : "bfsar", defaultPath.cstr()))
-    {
-        LOG_STR(path.cstr());
-        if (sBfsar.saveAs(path))
-        {
-            SetUnsavedChanges(false);
+    SetUnsavedChanges(false);
 
-            sead::FixedSafeString<512> fileName;
-            sead::Path::getFileName(&fileName, path);
+    sead::FixedSafeString<512> fileName;
+    sead::Path::getFileName(&fileName, path);
+    util::updateTitle(fileName.cstr(), false);
 
-            util::updateTitle(fileName.cstr(), false);
-
-            return true;
-        }
-    }
-
-    return false;
+    return true;
 }
 
 bool CloseFile()

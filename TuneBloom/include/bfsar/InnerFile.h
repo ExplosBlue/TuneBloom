@@ -8,6 +8,41 @@ enum class ArchiveFormat
     BCSAR
 };
 
+enum class ArchivePlatform
+{
+    CAFE,
+    CTR,
+    NX
+};
+
+struct ArchiveFormatInfo
+{
+    ArchiveFormat format;
+    ArchivePlatform platform;
+    const char* extension;
+    const char* label;
+};
+
+inline constexpr ArchiveFormatInfo kFormatTable[] = {
+    { ArchiveFormat::BFSAR, ArchivePlatform::CAFE, "bfsar", "Cafe Sound Archive" },
+    { ArchiveFormat::BCSAR, ArchivePlatform::CTR,  "bcsar", "CTR Sound Archive" },
+    { ArchiveFormat::BFSAR, ArchivePlatform::NX,   "bfsar", "Cafe Sound Archive" },
+};
+
+inline const ArchiveFormatInfo *getFormatInfo(ArchiveFormat format, ArchivePlatform platform)
+{
+    for (const auto &info : kFormatTable)
+    {
+        if (info.format != format)
+            continue;
+
+        if (info.platform == platform)
+            return &info;
+    }
+
+    return nullptr;
+}
+
 static constexpr u32 makeVersion(u32 major, u32 minor, u32 patch)
 {
     return (major << 24) | (minor << 16) | (patch << 8);
@@ -85,6 +120,21 @@ public:
         return mFormat;
     }
 
+    ArchivePlatform getPlatform() const
+    {
+        return mPlatform;
+    }
+
+    void setPlatform(ArchivePlatform platform) const
+    {
+        mPlatform = platform;
+    }
+
+    bool isLittleEndian() const
+    {
+        return mPlatform == ArchivePlatform::CTR || mPlatform == ArchivePlatform::NX;
+    }
+
     sead::Endian::Types getEndian() const
     {
         return mEndian;
@@ -141,6 +191,7 @@ protected:
     mutable sead::Endian::Types mEndian;
     mutable u32 mVersion;
     mutable ArchiveFormat mFormat{ArchiveFormat::BFSAR};
+    mutable ArchivePlatform mPlatform{ArchivePlatform::CAFE};
 
     mutable u32 mWritePos;
     mutable u32 mWriteSize;

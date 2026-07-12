@@ -1159,7 +1159,7 @@ void DrawSoundPropertiesUI()
             }
 
             {
-                bool filterVersionEnable = BfwsdFile::isFilterSupportedVersion(sBfsar.getVersionForBfwsd());
+                bool filterVersionEnable = BfwsdFile::isFilterSupportedVersion(sBfsar.getVersionForBfwsd(), sBfsar.getFormat());
                 if (!filterVersionEnable)
                     ImGui::BeginDisabled();
 

@@ -7,6 +7,9 @@
 
 #include <container/seadObjList.h>
 
+#include <utility>
+#include <vector>
+
 class SoundSet;
 
 class Sound : public Item
@@ -1261,6 +1264,12 @@ public:
         return mWaveSoundInfo;
     }
 
+    // SoundInfo option bits that the tool does not model currently
+    const std::vector<std::pair<u32, u32>>& getExtraSoundInfoOptions() const
+    {
+        return mExtraSoundInfoOptions;
+    }
+
 private:
     ItemReference mPlayerRef;
     u8 mVolume;
@@ -1278,6 +1287,7 @@ private:
     bool mIsFrontBypass;
     bool mEnableSound3DInfo;
     Sound3DInfo mSound3DInfo;
+    std::vector<std::pair<u32, u32>> mExtraSoundInfoOptions;
 
     SequenceSoundInfo mSequenceSoundInfo;
 

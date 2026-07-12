@@ -183,7 +183,7 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                             envelopeParamOffset += 4;
                         }
 
-                        if (isFilterSupportedVersion(mVersion))
+                        if (isFilterSupportedVersion(mVersion, mFormat))
                         {
                             if (waveSoundInfo.isEnableFilter())
                             {

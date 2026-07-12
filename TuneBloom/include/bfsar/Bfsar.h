@@ -36,6 +36,8 @@ struct SoundArchivePlayerInfo
     u32 options;
 };
 
+ArchivePlatform getDefaultPlatformForFormat(ArchiveFormat format);
+
 class Bfsar
 {
 public:
@@ -52,9 +54,25 @@ public:
         mFormat = format;
     }
 
+    ArchivePlatform getPlatform() const
+    {
+        return mPlatform;
+    }
+
+    void setPlatform(ArchivePlatform platform)
+    {
+        mPlatform = platform;
+    }
+
+    bool isLittleEndian() const
+    {
+        return mPlatform == ArchivePlatform::CTR || mPlatform == ArchivePlatform::NX;
+    }
+
     void setCliMode(bool cliMode) { mCliMode = cliMode; }
 
     void create(ArchiveFormat format = ArchiveFormat::BFSAR);
+    void create(ArchiveFormat format, ArchivePlatform platform);
     bool open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath, sead::Heap* heap);
     bool save();
     bool saveAs(const sead::SafeString& filePath);
@@ -312,6 +330,9 @@ public:
     std::vector<WaveDuplicateGroup> findDuplicateWaves();
     WaveMergeResult mergeDuplicateWaves(const std::vector<WaveDuplicateGroup>& groups);
 
+    std::vector<WaveFile*> findUnusedWaveFiles();
+    u32 removeUnusedWaveFiles(const std::vector<WaveFile*>& unused);
+
     u32 getVersionForBfwsd() const
     {
         if (mFormat == ArchiveFormat::BCSAR)
@@ -323,7 +344,7 @@ public:
         }
 
         if (isVersionOrLater(2, 1, 0))
-            return makeVersion(1, 0, 0);
+            return makeVersion(0, 1, 1);
 
         return makeVersion(0, 1, 0);
     }
@@ -342,7 +363,7 @@ public:
             return makeVersion(1, 0, 0);
 
         if (isVersionOrLater(2, 1, 0))
-            return makeVersion(1, 0, 0);
+            return makeVersion(0, 1, 0);
 
         return makeVersion(0, 1, 0);
     }
@@ -353,7 +374,7 @@ public:
             return makeVersion(1, 1, 0);
 
         if (isVersionOrLater(2, 1, 0))
-            return makeVersion(1, 1, 0);
+            return makeVersion(0, 1, 0);
 
         return makeVersion(0, 1, 0);
     }
@@ -476,6 +497,7 @@ private:
 private:
     bool mOpen;
     ArchiveFormat mFormat;
+    ArchivePlatform mPlatform;
     sead::HeapSafeString* mFilePath;
 
     sead::Endian::Types mEndian;
@@ -483,6 +505,9 @@ private:
     bool mIncludeStringTable;
     bool mSaveMetadata;
     SoundArchivePlayerInfo mSoundArchivePlayerInfo;
+
+    std::vector<std::vector<u32>> mFileAttachedGroups;
+    std::vector<bool> mFileOriginalIncludeInBfsar;
 
     Sound::List mSoundList;
 

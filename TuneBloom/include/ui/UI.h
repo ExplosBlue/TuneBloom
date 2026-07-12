@@ -190,6 +190,7 @@ void SetUnsavedChanges(bool dirty);
 
 bool NewFile();
 bool NewFile(ArchiveFormat format);
+bool NewFile(ArchiveFormat format, ArchivePlatform platform);
 bool OpenFile();
 bool OpenFile(const char* path);
 bool SaveFile();
@@ -267,7 +268,8 @@ void DrawWaveArchivePropertiesUI();
 void DrawGroupPropertiesUI();
 void DrawPlayerPropertiesUI();
 
-bool DrawVersionUI(u32* versionPtr, u32 versionByteNum = 3);
+bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format);
+bool DrawInnerVersionUI(u32 *versionPtr, u32 versionByteNum = 3);
 
 void CenteredText(const char* text, const ImVec2& sizeArg = ImGui::GetWindowSize());
 

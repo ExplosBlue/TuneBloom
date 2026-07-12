@@ -362,7 +362,7 @@ void WaveFile::drawUI()
     CenteredTextX("Version (For Stream)");
 
     u32 version = sBfsar.getVersionForBfstm();
-    DrawVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3);
+    DrawInnerVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3);
     ImGui::EndDisabled();
 
     bool enableName = isEnableName();
@@ -596,15 +596,24 @@ bool WaveFile::doRead(const void* fileAddr)
 
     mSampleCount = mLoopEndFrame;
 
-    LOG_U32("originalDataSize", reader.mHeader->GetDataBlock()->header.size - 0x20);
+    const s32 ch0DataOffset = (s32)reader.mInfoBlockBody->GetChannelInfo(0).referToSamples.offset;
+    const void *dataBlockBodySrc = sead::PtrUtil::addOffset(waveInfo.channelParam[0].dataAddress, -ch0DataOffset);
+
+    LOG_U32("originalDataSize", reader.mHeader->GetDataBlock()->header.size - 0x8);
     LOG_U32("channelCount", mChannels.size());
 
     mUseOriginalData = true;
-    mOriginalDataSize = reader.mHeader->GetDataBlock()->header.size - 0x20;
-    mOriginalData = new u8[mOriginalDataSize];
-    sead::MemUtil::copy(mOriginalData, waveInfo.channelParam[0].dataAddress, mOriginalDataSize);
+    mOriginalDataSize = reader.mHeader->GetDataBlock()->header.size - 0x8; // full DATA block body
 
-    const void* dataBlockBody = sead::PtrUtil::addOffset(mOriginalData, -0x18);
+    if (mEncoding == Encoding::DspAdpcm)
+        mOriginalDmaAlignOffset = (u32)((const u8 *)reader.mHeader->GetDataBlock() - (const u8 *)reader.mHeader);
+    else
+        mOriginalDmaAlignOffset = (u32)((const u8 *)waveInfo.channelParam[0].dataAddress - (const u8 *)reader.mHeader);
+
+    mOriginalData = new u8[mOriginalDataSize];
+    sead::MemUtil::copy(mOriginalData, dataBlockBodySrc, mOriginalDataSize);
+
+    const void *dataBlockBody = mOriginalData;
 
     for (s32 i = 0; i < waveInfo.channelCount; i++)
     {
@@ -759,7 +768,6 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         writer.openBlock(nw::snd::internal::ElementType_WaveFile_DataBlock, "DATA");
 
         u32 dataBlockBodyPos = writer.getPosition();
-        writer.align(0x20);
 
         if (mUseOriginalData)
         {
@@ -773,7 +781,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
                 writer.closeReference(
                     sead::FormatFixedSafeString<16>("Samples%u", i),
                     nw::snd::internal::ElementType_General_ByteStream,
-                    channel->mOriginalDataOffset
+                    (s32)channel->mOriginalDataOffset
                 );
             }
 
@@ -781,6 +789,8 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
         }
         else
         {
+            writer.align(0x20);
+
             LOG_STR("encoding new data for write");
             u32 sampleBytes = mChannels.front()->mDataSizeMin;
             LOG_U32("sampleBytes", sampleBytes);

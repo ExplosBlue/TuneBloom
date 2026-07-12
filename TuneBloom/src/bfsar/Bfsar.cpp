@@ -5102,7 +5102,7 @@ void Bfsar::save_(sead::FileHandle& handle, const sead::SafeString* metadataPath
                                 stream.writeU16(strmInfo.getAllocateTrackFlags());
                                 stream.writeU16(strmInfo.getAllocateChannelCount());
 
-                                if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+                                if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary && BfstmFile::IsTrackInfoAvailable(getVersionForBfstm(), mFormat))
                                 {
                                     stream.writeU32(0);
                                 }

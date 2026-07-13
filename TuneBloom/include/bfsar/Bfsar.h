@@ -16,6 +16,7 @@
 
 #include <snd/snd_MemorySoundArchive.h>
 
+#include <string>
 #include <vector>
 
 struct SoundArchivePlayerInfo
@@ -74,9 +75,22 @@ public:
     void create(ArchiveFormat format = ArchiveFormat::BFSAR);
     void create(ArchiveFormat format, ArchivePlatform platform);
     bool open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath, sead::Heap* heap);
+
+    struct StreamSaveJob
+    {
+        const Sound *sound = nullptr;
+        std::string savePath;
+        std::string srcPath;
+        u64 signature = 0;
+        bool copyOnly = false;
+    };
+
     bool save();
-    bool saveAs(const sead::SafeString& filePath);
-    bool saveBackup(const sead::SafeString& path);
+    bool saveAs(const sead::SafeString &filePath);
+    bool saveBackup(const sead::SafeString &path);
+
+    void planStreamSaves(std::vector<StreamSaveJob> &out) const;
+    void executeStreamSave(const StreamSaveJob &job) const;
     void close();
 
     bool isOpen() const
@@ -487,7 +501,7 @@ public:
 
 private:
     bool open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize, sead::Heap* heap);
-    void save_(sead::FileHandle& handle, const sead::SafeString* metadataPathOverride = nullptr);
+    void save_(sead::FileHandle& handle, const sead::SafeString* metadataPathOverride = nullptr, bool writeStreams = true);
     void close_();
 
     bool validateName_(const sead::SafeString& name, const Item::List& list, const Item* ignoreItem = nullptr) const;
@@ -498,7 +512,8 @@ private:
     bool mOpen;
     ArchiveFormat mFormat;
     ArchivePlatform mPlatform;
-    sead::HeapSafeString* mFilePath;
+    sead::HeapSafeString *mFilePath;
+    sead::HeapSafeString *mLoadedArchivePath{nullptr};
 
     sead::Endian::Types mEndian;
     u32 mVersion;

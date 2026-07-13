@@ -1295,7 +1295,10 @@ private:
 
     WaveSoundInfo mWaveSoundInfo;
 
-    mutable const SoundSet* mOwnerSet; //? Used for validation
+    mutable const SoundSet *mOwnerSet; //? Used for validation
+
+    mutable u64 mStreamFileSignature{0};
+    mutable bool mHasStreamFileBaseline{false};
 
     friend class Bfsar;
     friend class SoundSet;

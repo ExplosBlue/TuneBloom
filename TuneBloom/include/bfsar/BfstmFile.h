@@ -25,5 +25,6 @@ public:
         return version >= 0x00040000;           // FSTM
     }
 
-    static bool WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format = ArchiveFormat::BFSAR);
+    static bool WriteBfstmFile(sead::FileHandle &handle, const Sound::StreamSoundInfo &soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format = ArchiveFormat::BFSAR);
+    static u64 ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format);
 };

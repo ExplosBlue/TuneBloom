@@ -354,7 +354,7 @@ void WaveFile::drawUI()
     mVersion = sBfsar.getVersionForBfwav();
     mEndian = sBfsar.getEndian();
 
-    HelpMarker("Those are derived from the BFSAR");
+    HelpMarker("Information derived from the archive");
 
     ImGui::BeginDisabled();
     InnerFile::drawUI();

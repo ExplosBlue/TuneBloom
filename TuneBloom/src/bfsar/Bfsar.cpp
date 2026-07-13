@@ -161,6 +161,7 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
 
     mPlatform = getDefaultPlatformForFormat(mFormat);
     mFilePath = new(heap) sead::HeapSafeString(heap, filePath);
+    mLoadedArchivePath = new (heap) sead::HeapSafeString(heap, filePath);
 
     bool success;
     {
@@ -281,6 +282,9 @@ bool Bfsar::saveAs(const sead::SafeString& filePath)
 
     save_(handle);
 
+    delete mLoadedArchivePath;
+    mLoadedArchivePath = new sead::HeapSafeString(nullptr, filePath);
+
     return true;
 }
 
@@ -305,8 +309,8 @@ bool Bfsar::saveBackup(const sead::SafeString &path)
 
     sead::FixedSafeString<520> backupMetadataPath;
     getMetadataPath_(&backupMetadataPath, path);
-
-    save_(handle, &backupMetadataPath);
+    
+    save_(handle, &backupMetadataPath, false);
 
     return true;
 }
@@ -323,6 +327,12 @@ void Bfsar::close()
     {
         delete mFilePath;
         mFilePath = nullptr;
+    }
+
+    if (mLoadedArchivePath)
+    {
+        delete mLoadedArchivePath;
+        mLoadedArchivePath = nullptr;
     }
 
     mOpen = false;
@@ -2595,6 +2605,9 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 }
 
                 ReadStreamWaves(sound, strmFile, srcStream);
+
+                sound->mStreamFileSignature = BfstmFile::ComputeContentSignature(sound->mStreamSoundInfo, getVersionForBfstm(), mEndian, mFormat);
+                sound->mHasStreamFileBaseline = true;
             }
 
             if (strmFile)
@@ -3518,7 +3531,137 @@ struct pair_equal
 };
 
 static std::string EscapeJsonString_(const std::string& s);
-void Bfsar::save_(sead::FileHandle& handle, const sead::SafeString* metadataPathOverride)
+
+static bool CopyStreamFileRaw_(const sead::SafeString &srcPath, const sead::SafeString &destPath)
+{
+    std::error_code ec;
+    std::filesystem::copy_file(srcPath.cstr(), destPath.cstr(), std::filesystem::copy_options::overwrite_existing, ec);
+
+    return !ec;
+}
+
+static bool ReplaceStreamFileAtomic_(const sead::SafeString &tempPath, const sead::SafeString &destPath)
+{
+    std::error_code ec;
+    std::filesystem::rename(tempPath.cstr(), destPath.cstr(), ec);
+
+    if (!ec)
+        return true;
+
+    std::filesystem::remove(destPath.cstr(), ec);
+    ec.clear();
+
+    std::filesystem::rename(tempPath.cstr(), destPath.cstr(), ec);
+    return !ec;
+}
+
+void Bfsar::planStreamSaves(std::vector<StreamSaveJob> &out) const
+{
+    sead::FixedSafeString<512> archiveDir;
+
+    if (!sead::Path::getDirectoryName(&archiveDir, getFilePath()))
+        return;
+
+    const bool inPlace = mLoadedArchivePath && getFilePath() == *mLoadedArchivePath;
+    sead::FixedSafeString<512> sourceDir;
+
+    if (!inPlace && mLoadedArchivePath)
+        sead::Path::getDirectoryName(&sourceDir, *mLoadedArchivePath);
+
+    std::unordered_set<std::string> seen;
+
+    for (const Item *item : mSoundList)
+    {
+        const Sound *sound = static_cast<const Sound *>(item);
+
+        if (sound->getSoundType() != Sound::SoundType::Strm)
+            continue;
+
+        const Sound::StreamSoundInfo &strmSoundInfo = sound->getStreamSoundInfo();
+
+        if (strmSoundInfo.getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+            continue;
+
+        SEAD_ASSERT(!strmSoundInfo.getPath().isEmpty());
+        const char *path = strmSoundInfo.getPath().cstr();
+
+        if (seen.contains(path))
+            continue;
+
+        seen.emplace(path);
+
+        u64 sig = BfstmFile::ComputeContentSignature(strmSoundInfo, getVersionForBfstm(), mEndian, mFormat);
+        const bool dirty = !sound->mHasStreamFileBaseline || sig != sound->mStreamFileSignature;
+
+        StreamSaveJob job;
+        job.sound = sound;
+        job.signature = sig;
+        job.savePath = std::string(archiveDir.cstr()) + "/" + path;
+
+        if (!dirty)
+        {
+            if (inPlace)
+                continue;
+
+            job.srcPath = std::string(sourceDir.cstr()) + "/" + path;
+            job.copyOnly = true;
+        }
+
+        out.push_back(std::move(job));
+    }
+}
+
+void Bfsar::executeStreamSave(const StreamSaveJob &job) const
+{
+    extern bool CreateDirectoryRecursively(const std::string &directory);
+
+    {
+        std::filesystem::path dest(job.savePath);
+        std::string dir = dest.parent_path().string();
+
+        if (!dir.empty() && !CreateDirectoryRecursively(dir))
+            SEAD_ASSERT_MSG(false, "Could not create stream path directory (%s)", dir.c_str());
+    }
+
+    if (job.copyOnly)
+    {
+        if (CopyStreamFileRaw_(job.srcPath.c_str(), job.savePath.c_str()))
+        {
+            job.sound->mStreamFileSignature = job.signature;
+            job.sound->mHasStreamFileBaseline = true;
+
+            return;
+        }
+    }
+
+    sead::FileDevice *device = sead::FileDeviceMgr::instance()->findDevice("native");
+    SEAD_ASSERT(device);
+
+    std::string tempPath = job.savePath + ".tmp";
+
+    {
+        sead::FileHandle strmHandle;
+        device->tryOpen(&strmHandle, tempPath.c_str(), sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
+
+        if (!strmHandle.getDevice())
+        {
+            device->tryOpen(&strmHandle, tempPath.c_str(), sead::FileDevice::FileOpenFlag::eCreate, 0);
+
+            if (!strmHandle.getDevice())
+                SEAD_ASSERT_MSG(false, "Error opening stream file (%s)", tempPath.c_str());
+        }
+
+        BfstmFile::WriteBfstmFile(strmHandle, job.sound->getStreamSoundInfo(), getVersionForBfstm(), mEndian, mFormat);
+    }
+
+    if (!ReplaceStreamFileAtomic_(tempPath.c_str(), job.savePath.c_str()))
+        SEAD_ASSERT_MSG(false, "Could not replace stream file (%s)", job.savePath.c_str());
+
+    job.sound->mStreamFileSignature = job.signature;
+    job.sound->mHasStreamFileBaseline = true;
+}
+
+void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPathOverride, bool writeStreams)
 {
     LOG_FUNC();
     LOG_U32("mVersion", mVersion);
@@ -4797,7 +4940,7 @@ void Bfsar::save_(sead::FileHandle& handle, const sead::SafeString* metadataPath
         }
     }
 
-    //? Add strings because even if the BFSAR don't include the String Block, items still have a string id...
+    //? Add strings because even if the archive doesn't include the String Block, items still have a string id...
     {
         auto addListNames = [&](const Item::List& list)
         {
@@ -5898,71 +6041,15 @@ void Bfsar::save_(sead::FileHandle& handle, const sead::SafeString* metadataPath
     updateList(mWaveArchiveList);
 
     //? Stream Files
+    if (writeStreams)
     {
-        extern bool CreateDirectoryRecursively(const std::string& directory);
+        std::vector<StreamSaveJob> jobs;
+        planStreamSaves(jobs);
 
-        std::unordered_set<std::string> writenFiles;
+        for (const StreamSaveJob &job : jobs)
+            executeStreamSave(job);
 
-        for (const Item* item : mSoundList)
-        {
-            const Sound* sound = static_cast<const Sound*>(item);
-            if (sound->getSoundType() != Sound::SoundType::Strm)
-            {
-                continue;
-            }
-
-            const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
-            if (strmSoundInfo.getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
-            {
-                continue;
-            }
-
-            SEAD_ASSERT(!strmSoundInfo.getPath().isEmpty());
-            const char* path = strmSoundInfo.getPath().cstr();
-
-            if (writenFiles.contains(path))
-            {
-                continue;
-            }
-
-            sead::FixedSafeString<512> dir;
-            bool b = sead::Path::getDirectoryName(&dir, getFilePath());
-            SEAD_ASSERT(b);
-
-            // sead::FormatFixedSafeString<512> savePath("%s/%s.save.bfstm", dir.cstr(), path); //? Debug
-            sead::FormatFixedSafeString<512> savePath("%s/%s", dir.cstr(), path);
-            //SEAD_PRINT("%s\n", savePath.cstr());
-
-            b = sead::Path::getDirectoryName(&dir, savePath);
-            SEAD_ASSERT(b);
-
-            if (!CreateDirectoryRecursively(dir.cstr()))
-            {
-                SEAD_ASSERT_MSG(false, "Could not create stream path directory (%s)", dir.cstr());
-            }
-
-            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-            SEAD_ASSERT(device);
-
-            sead::FileHandle strmHandle;
-            device->tryOpen(&strmHandle, savePath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
-
-            if (!strmHandle.getDevice())
-            {
-                device->tryOpen(&strmHandle, savePath, sead::FileDevice::FileOpenFlag::eCreate, 0);
-
-                if (!strmHandle.getDevice())
-                {
-                    SEAD_ASSERT_MSG(false, "Error opening stream file (%s)", savePath.cstr());
-                }
-            }
-
-            BfstmFile::WriteBfstmFile(strmHandle, strmSoundInfo, getVersionForBfstm(), mEndian, mFormat);
-
-            writenFiles.emplace(path);
-        }
-
-        LOG_FMT("Stream files written: %d", (s32)writenFiles.size());
+        LOG_FMT("Stream files written: %d", (s32)jobs.size());
     }
 
     // Write metadata names file

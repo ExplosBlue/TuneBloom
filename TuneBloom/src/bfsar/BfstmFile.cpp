@@ -17,6 +17,82 @@
 
 #include <Debug.h>
 
+u64 BfstmFile::ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format)
+{
+    u64 h = 0xCBF29CE484222325ULL; // FNV-1a 64
+
+    auto mix = [&](const void *p, size_t n)
+    {
+        const u8 *b = static_cast<const u8 *>(p);
+        for (size_t i = 0; i < n; i++)
+        {
+            h ^= b[i];
+            h *= 0x100000001B3ULL;
+        }
+    };
+
+    auto mixU32 = [&](u32 v)
+    { mix(&v, sizeof(v)); };
+
+    mixU32(version);
+    mixU32(static_cast<u32>(endian));
+    mixU32(static_cast<u32>(format));
+
+    const Sound::StreamSoundInfo::Track::List &trackList = soundInfo.getTrackList();
+
+    mixU32(trackList.size());
+
+    for (u32 i = 0; i < trackList.size(); i++)
+    {
+        const Sound::StreamSoundInfo::Track *track = static_cast<const Sound::StreamSoundInfo::Track *>(trackList.nth(i)->val());
+
+        mixU32(track->getVolume());
+        mixU32(track->getPan());
+        mixU32(track->getSPan());
+        mixU32(track->getFlags());
+        mixU32(track->getChannelCount());
+        mixU32(track->getWaveFileRef().getItemId());
+
+        if (!track->getWaveFileRef().isAttached())
+            continue;
+
+        const WaveFile &wave = *static_cast<const WaveFile *>(track->getWaveFileRef().getItem());
+
+        mixU32(static_cast<u32>(wave.getEncoding()));
+        mixU32(wave.getSampleRate());
+        mixU32(wave.getIsLoop() ? 1u : 0u);
+        mixU32(wave.getLoopStartFrame(true));
+        mixU32(wave.getLoopEndFrame(true));
+        mixU32(wave.getOriginalLoopStartFrame());
+        mixU32(wave.getOriginalLoopEndFrame());
+        mixU32(wave.getSampleCount());
+        mixU32(static_cast<u32>(wave.getDataEndian()));
+
+        const sead::ObjList<WaveFile::Channel> &channels = wave.getChannels();
+
+        mixU32(channels.size());
+
+        for (s32 ch = 0; ch < channels.size(); ch++)
+        {
+            const WaveFile::Channel &channel = *channels.nth(ch);
+            u32 dataSize = channel.getDataSize();
+
+            mixU32(dataSize);
+
+            const u8 *data = static_cast<const u8 *>(channel.getData());
+
+            if (data && dataSize)
+            {
+                u32 sample = dataSize < 128 ? dataSize : 128;
+                mix(data, sample);
+                mix(data + dataSize - sample, sample);
+            }
+        }
+    }
+
+    return h;
+}
+
 bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format)
 {
     LOG_FUNC();

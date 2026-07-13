@@ -688,7 +688,7 @@ bool exportSeqSoundSetToMidiDir(const sead::SafeString &dirPath, const SoundSet 
     u32 startId = soundSet.getStartId();
     u32 endId = soundSet.getEndId();
 
-    // Access the BFSAR sound list
+    // Access the archive sound list
     extern Bfsar sBfsar;
 
     auto &soundList = sBfsar.getSoundList();

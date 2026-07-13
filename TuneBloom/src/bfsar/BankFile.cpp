@@ -949,7 +949,7 @@ void BankFile::drawUI()
     mEndian = sBfsar.getEndian();
     mFormat = sBfsar.getFormat();
 
-    HelpMarker("Those are derived from the BFSAR");
+    HelpMarker("Information derived from the archive");
 
     ImGui::BeginDisabled();
     InnerFile::drawUI();

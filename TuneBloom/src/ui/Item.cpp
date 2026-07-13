@@ -421,11 +421,11 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
 
 static Item *sScrollItem = nullptr;
 
-void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback, int sortMode, bool sortAscending, ItemInsertCallback onInsert, ItemRemoveCallback onRemove)
+void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback, int sortMode, bool sortAscending, ItemInsertCallback onInsert, ItemRemoveCallback onRemove, bool forceSubWindow, Item *highlightItem)
 {
     const bool cUseChild = true;
 
-    bool isSubWindow = false;
+    bool isSubWindow = forceSubWindow;
     bool hasItem = false;
 
     std::vector<Item *> displayItems;
@@ -726,8 +726,17 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
 
         sead::FixedSafeString<256> name = item->getFormattedName();
 
+        bool highlightOnly = highlightItem && item == highlightItem && selectedItem != item;
         bool popColor = false;
-        if (!isSubWindow && sSelectedItemIsSubWindow)
+
+        if (highlightOnly)
+        {
+            ImVec4 h = ImGui::GetStyleColorVec4(ImGuiCol_Header);
+            h.w *= 0.55f;
+            ImGui::PushStyleColor(ImGuiCol_Header, h);
+            popColor = true;
+        }
+        else if (!isSubWindow && sSelectedItemIsSubWindow)
         {
             ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(140.0f / 255.0f, 140.0f / 255.0f, 140.0f / 255.0f, 1.0f));
             popColor = true;
@@ -769,8 +778,10 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
 
         bool isSingleSelected = selectedItem == item;
         bool isMultiSelected = std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item) != sMultiSelectedItems.end();
-        bool selected = isSingleSelected || isMultiSelected;
+        bool selected = isSingleSelected || isMultiSelected || highlightOnly;
+        
         sead::FormatFixedSafeString<512> selName("%s%s%s###%p", namePrefix, name.cstr(), postFix, item);
+        
         if (ImGui::Selectable(selName.cstr(), selected, tableOpen ? ImGuiSelectableFlags_SpanAllColumns : ImGuiSelectableFlags_None))
         {
             bool ctrl = ImGui::GetIO().KeyCtrl;

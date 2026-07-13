@@ -207,7 +207,6 @@ bool CheckBlockCorruptError(const char* fileName, const char* blockName, const v
 void DrawProjectInfoUI();
 void DrawBanksUI();
 void DrawWaveArchivesUI();
-void DrawGroupsUI();
 void DrawPlayersUI();
 
 void DrawPlayerUI();
@@ -249,7 +248,7 @@ bool DrawIncludeStreamWavesCheckbox(bool* value);
 bool DrawIncludeSoundsInSetCheckbox(bool* value);
 
 InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback instanciateItemCallback, ItemPropertiesCallback itemPropertiesCallback);
-void DrawAllItemsUI(const char* listName, Item::List& list, CreateItemCallback createCallback = nullptr, ItemNamePrefixCallback nameCallback = nullptr, ContextMenuCallback menuCallback = nullptr, ItemFilterCallback filterCallback = nullptr, bool disableAddWindow = false, ContextMenuCallback beforeDeleteCallback = nullptr, int sortMode = -1, bool sortAscending = true, ItemInsertCallback onInsert = nullptr, ItemRemoveCallback onRemove = nullptr);
+void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback createCallback = nullptr, ItemNamePrefixCallback nameCallback = nullptr, ContextMenuCallback menuCallback = nullptr, ItemFilterCallback filterCallback = nullptr, bool disableAddWindow = false, ContextMenuCallback beforeDeleteCallback = nullptr, int sortMode = -1, bool sortAscending = true, ItemInsertCallback onInsert = nullptr, ItemRemoveCallback onRemove = nullptr, bool forceSubWindow = false, Item *highlightItem = nullptr);
 void DrawItemPropertiesUI();
 void ApplyRenameShortcut();
 bool ItemSelector(const char* name, const Item::List& list, Item** item, bool allowNone = false);

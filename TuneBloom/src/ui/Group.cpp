@@ -88,17 +88,6 @@ InstanciateItemCallback CreateGroupFunc(bool clear)
     return CreateItemFunc(clear, []() -> Item * { return new Group(); }, &GroupCreatePropertiesCallback);
 }
 
-void DrawGroupsUI()
-{
-    static SortState sSortState;
-
-    DrawSortToolbar(sSortState);
-
-    DrawAllItemsUI("Group", sBfsar.getGroupList(),
-                   &CreateGroupFunc, nullptr, nullptr, GetItemFilterCallback(),
-                   false, nullptr, sSortState.mode, sSortState.ascending);
-}
-
 void DrawGroupPropertiesUI()
 {
     Group* group = static_cast<Group*>(sSelectedItem);

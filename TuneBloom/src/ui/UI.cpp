@@ -265,6 +265,10 @@ void DrawInfoUI();
 void DrawSubInfoUI();
 void DrawFileUI(ImGuiID dockspaceId);
 void DrawPropertiesUI();
+static void DrawGroupsUI();
+static const char *GetItemIcon(const Item *item);
+static void DrawSplitViewTitle(const char *prefix, const char *name);
+InstanciateItemCallback CreateGroupFunc(bool clear);
 void DrawExportDialog();
 static void DrawFileExportDialogs();
 void DrawExportConfirmPopup();
@@ -5573,10 +5577,6 @@ void DrawSubInfoUI()
             name.append("Tracks");
             break;
 
-        case UIType::Groups:
-            name.append("Items");
-            break;
-
         default:
             return;
     }
@@ -5617,14 +5617,6 @@ void DrawSubInfoUI()
                     }
                     break;
                 }
-
-                case Item::ItemType::Group:
-                {
-                    Group* group = static_cast<Group*>(sSelectedItem);
-
-                    DrawAllItemsUI("Item", group->getItemInfoList(), &CreateGroupItemFunc, &GroupItemPrefixFunc);
-                    break;
-                }
             }
         }
         else
@@ -5634,6 +5626,59 @@ void DrawSubInfoUI()
     }
 
     ImGui::End();
+}
+
+template <typename TopFn, typename ListFn, typename DetailFn>
+static void DrawSplitView(const char *id, f32 bottomReserve, TopFn top, ListFn list, DetailFn detail)
+{
+    top();
+    ImGui::Separator();
+
+    f32 listWidth = ImGui::GetContentRegionAvail().x * 0.4f;
+
+    ImGui::PushID(id);
+    ImGui::BeginChild("List", ImVec2(listWidth, -bottomReserve), ImGuiChildFlags_AlwaysUseWindowPadding);
+    list();
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    ImGui::BeginChild("Detail", ImVec2(0, -bottomReserve), ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Border);
+    detail();
+    ImGui::EndChild();
+    ImGui::PopID();
+}
+
+static void DrawGroupsUI()
+{
+    static SortState sSortState;
+
+    DrawSplitView(
+        "Groups", 0.0f,
+        [&]()
+        {
+            DrawSortToolbar(sSortState);
+        },
+        [&]()
+        {
+            DrawAllItemsUI("Group", sBfsar.getGroupList(), &CreateGroupFunc, nullptr, nullptr, GetItemFilterCallback(), false, nullptr, sSortState.mode, sSortState.ascending);
+        },
+        []()
+        {
+            if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::Group)
+            {
+                Group *group = static_cast<Group *>(sSelectedItem);
+
+                DrawSplitViewTitle(GetItemIcon(group), group->getFormattedName().cstr());
+                ImGui::Separator();
+
+                DrawAllItemsUI("Item", group->getItemInfoList(), &CreateGroupItemFunc, &GroupItemPrefixFunc, nullptr, nullptr, false, nullptr, -1, true, nullptr, nullptr, true);
+            }
+            else
+            {
+                CenteredText("No Group Selected");
+            }
+        });
 }
 
 static const char* GetItemIcon(const Item* item)
@@ -6915,17 +6960,22 @@ static bool ValidateViewedSet(SoundSet** viewedSet)
     return false;
 }
 
-static void DrawViewedSetLabel(SoundSet* viewedSet)
+static void DrawSplitViewTitle(const char *prefix, const char *name)
 {
     ImVec4 accent = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
-    ImGui::TextColored(accent, "%s%s", SoundSetNamePrefixFunc(viewedSet), viewedSet->getFormattedName().cstr());
+    ImGui::TextColored(accent, "%s%s", prefix ? prefix : "", name ? name : "");
+}
+
+static void DrawViewedSetLabel(SoundSet *viewedSet)
+{
+    DrawSplitViewTitle(SoundSetNamePrefixFunc(viewedSet), viewedSet->getFormattedName().cstr());
 }
 
 static void DrawSoundSetScopedSoundsUI(SoundSet* viewedSet, SortState& sortState)
 {
     if (!viewedSet)
     {
-        ImGui::TextDisabled("Select a set to view its sounds.");
+        CenteredText("No Set Selected");
         return;
     }
 
@@ -6971,14 +7021,6 @@ static void DrawSoundSetSplitView(
     const f32 cVisHeight = 32.0f;
     f32 barHeight = ImGui::GetStyle().ItemSpacing.y + cVisHeight;
 
-    DrawSortToolbar(setSort, false, true);
-    ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
-
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("Start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
-
-    ValidateViewedSet(&viewedSet);
-
     auto adoptSelection = [&]()
     {
         if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::SoundSet)
@@ -6989,24 +7031,30 @@ static void DrawSoundSetSplitView(
         }
     };
 
-    adoptSelection();
+    DrawSplitView(
+        listName, barHeight,
+        [&]()
+        {
+            DrawSortToolbar(setSort, false, true);
+            ImGui::Checkbox("Sticky Edit", &sSoundSetStickyEdit);
 
-    ImGui::Separator();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                ImGui::SetTooltip("Start/end IDs stick to adjacent sound sets.\nEditing shifts neighbors on the touching side.");
 
-    f32 listWidth = ImGui::GetContentRegionAvail().x * 0.4f;
+            ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
 
-    ImGui::BeginChild("SoundSetList", ImVec2(listWidth, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding);
-    DrawAllItemsUI(listName, sBfsar.getSoundSetList(), createFunc, namePrefix, contextMenu, listFilter,
-        false, nullptr, setSort.mode, setSort.ascending);
-    ImGui::EndChild();
-
-    adoptSelection();
-
-    ImGui::SameLine();
-
-    ImGui::BeginChild("SoundSetSounds", ImVec2(0, -barHeight), ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_Border);
-    DrawSoundSetScopedSoundsUI(viewedSet, soundSort);
-    ImGui::EndChild();
+            ValidateViewedSet(&viewedSet);
+            adoptSelection();
+        },
+        [&]()
+        {
+            DrawAllItemsUI(listName, sBfsar.getSoundSetList(), createFunc, namePrefix, contextMenu, listFilter, false, nullptr, setSort.mode, setSort.ascending, nullptr, nullptr, false, /*highlightItem*/ viewedSet);
+            adoptSelection();
+        },
+        [&]()
+        {
+            DrawSoundSetScopedSoundsUI(viewedSet, soundSort);
+        });
 
     DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), filterByType, type);
 }

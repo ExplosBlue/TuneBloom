@@ -857,6 +857,7 @@ void BankFile::Instrument::drawUI()
             if (name.isEmpty())
             {
                 setEnableName(false);
+                getName().clear();
             }
             else
             {
@@ -2514,6 +2515,24 @@ static void InstrumentBeforeDeleteMenuFunc(Item *item, bool)
     }
 }
 
+static const WaveFile *GetInstrumentFirstWave_(const BankFile::Instrument *instr)
+{
+    if (!instr || instr->getKeyRegionList().size() == 0)
+        return nullptr;
+
+    const auto *kr = static_cast<const BankFile::KeyRegion *>(instr->getKeyRegionList().front()->val());
+
+    if (kr->getVelocityRegionList().size() == 0)
+        return nullptr;
+
+    const auto *vr = static_cast<const BankFile::VelocityRegion *>(kr->getVelocityRegionList().front()->val());
+
+    if (!vr->getWaveFileRef().isAttached())
+        return nullptr;
+
+    return static_cast<const WaveFile *>(vr->getWaveFileRef().getItem());
+}
+
 static void InstrumentContextMenuFunc(Item *item, bool afterDelete)
 {
     if (afterDelete)
@@ -2521,10 +2540,67 @@ static void InstrumentContextMenuFunc(Item *item, bool afterDelete)
 
     {
         bool disabled = (item == nullptr);
+
         if (disabled)
             ImGui::BeginDisabled();
+
         if (ImGui::MenuItem("Replace"))
             RequestReplaceInstrument(item, sCurrentEditBank);
+
+        if (disabled)
+            ImGui::EndDisabled();
+    }
+
+    {
+        bool multiActive = item && !sMultiSelectedItems.empty() && std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item) != sMultiSelectedItems.end();
+        bool anyResolvable = false;
+
+        if (multiActive)
+        {
+            for (Item *sel : sMultiSelectedItems)
+            {
+                const WaveFile *w = GetInstrumentFirstWave_(static_cast<const BankFile::Instrument *>(sel));
+
+                if (w && !w->getName().isEmpty())
+                {
+                    anyResolvable = true;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            const WaveFile *w = item ? GetInstrumentFirstWave_(static_cast<const BankFile::Instrument *>(item)) : nullptr;
+            anyResolvable = w && !w->getName().isEmpty();
+        }
+
+        bool disabled = !anyResolvable;
+
+        if (disabled)
+            ImGui::BeginDisabled();
+
+        if (ImGui::MenuItem("Auto-name"))
+        {
+            std::vector<Item *> targets = multiActive ? sMultiSelectedItems : std::vector<Item *>{item};
+
+            for (Item *sel : targets)
+            {
+                BankFile::Instrument *instr = static_cast<BankFile::Instrument *>(sel);
+                const WaveFile *w = GetInstrumentFirstWave_(instr);
+
+                if (!w || w->getName().isEmpty())
+                    continue;
+
+                instr->getName() = w->getName();
+                instr->setEnableName(true);
+            }
+
+            SetUnsavedChanges(true);
+        }
+
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Renames instrument based on first available wave file.");
+
         if (disabled)
             ImGui::EndDisabled();
     }
@@ -2533,34 +2609,45 @@ static void InstrumentContextMenuFunc(Item *item, bool afterDelete)
 
     {
         bool disabled = (item == nullptr);
+
         if (disabled)
             ImGui::BeginDisabled();
+
         if (ImGui::MenuItem("Export"))
             RequestExportInstrument(item);
+
         if (disabled)
             ImGui::EndDisabled();
     }
 
     {
         bool disabled = (sCurrentEditBank == nullptr);
+
         if (disabled)
             ImGui::BeginDisabled();
+
         if (ImGui::MenuItem("Sort by number"))
         {
             auto &list = sCurrentEditBank->getInstrumentList();
             std::vector<BankFile::Instrument *> instruments;
+
             for (Item *it : list)
                 instruments.push_back(static_cast<BankFile::Instrument *>(it));
+
             std::sort(instruments.begin(), instruments.end(),
                       [](const BankFile::Instrument *a, const BankFile::Instrument *b)
                       { return a->getProgramNo() < b->getProgramNo(); });
+
             for (BankFile::Instrument *instr : instruments)
                 static_cast<Item *>(instr)->erase();
+
             for (BankFile::Instrument *instr : instruments)
                 list.pushBack(instr);
+
             sBfsar.updateList(list);
             SetUnsavedChanges(true);
         }
+
         if (disabled)
             ImGui::EndDisabled();
     }

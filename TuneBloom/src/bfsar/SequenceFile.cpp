@@ -1,6 +1,8 @@
 #include <bfsar/SequenceFile.h>
 
 #include <bfsar/SeqCommand.h>
+#include <bfsar/Bank.h>
+#include <bfsar/Sound.h>
 
 #include <snd/snd_SequenceSoundFileReader.h>
 #include <snd/DisposeCallbackMgr.h>
@@ -10,11 +12,18 @@
 #include <imgui/imgui_custom.h>
 #include <TextEditor.h>
 
+#include <filedevice/seadFileDeviceMgr.h>
+
+#include <md5/md5.h>
+
 #include <Debug.h>
 
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include <algorithm>
+#include <cstdlib>
+#include <cctype>
 
 extern bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u32, u32>* offsetToLine, const void* seqFile);
 
@@ -60,6 +69,43 @@ void SequenceFile::onOpenFileWindow()
     if (mSeqText)
     {
         mTextEditor->SetText(mSeqText->cstr());
+    }
+
+    bool anyBankSet = false;
+
+    for (u32 i = 0; i < 4; i++)
+    {
+        if (mBankRefs[i]->isAttached())
+        {
+            anyBankSet = true;
+            break;
+        }
+    }
+
+    if (!anyBankSet)
+    {
+        for (const Item *soundItem : sBfsar.getSoundList())
+        {
+            const Sound *sound = static_cast<const Sound *>(soundItem);
+
+            if (sound->getSoundType() != Sound::SoundType::Seq)
+                continue;
+
+            const Sound::SequenceSoundInfo &seqInfo = sound->getSequenceSoundInfo();
+
+            if (seqInfo.getSequenceFileRef().getItem() != this)
+                continue;
+
+            for (u32 i = 0; i < 4; i++)
+            {
+                const Item *bank = seqInfo.getBankRef(i).getItem();
+
+                if (bank)
+                    mBankRefs[i]->attach(const_cast<Item *>(bank));
+            }
+
+            break;
+        }
     }
 }
 
@@ -115,6 +161,46 @@ void SequenceFile::drawUI()
     ImGui::BeginDisabled();
     InnerFile::drawUI();
     ImGui::EndDisabled();
+
+    bool enableName = isEnableName();
+
+    if (ImGui::Checkbox("Enable Name", &enableName))
+    {
+        setEnableName(enableName);
+
+        if (!enableName)
+            getName().clear();
+
+        SetUnsavedChanges(true);
+    }
+
+    if (!isEnableName())
+        ImGui::BeginDisabled();
+
+    sead::FixedSafeString<256> name(getName());
+    ApplyRenameShortcut();
+
+    if (ImGui::InputText("Name", name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
+    {
+        if (name != getName())
+        {
+            if (name.isEmpty())
+            {
+                setEnableName(false);
+                getName().clear();
+            }
+            else
+            {
+                getName() = name;
+                setEnableName(true);
+            }
+
+            SetUnsavedChanges(true);
+        }
+    }
+
+    if (!isEnableName())
+        ImGui::EndDisabled();
 }
 
 void SequenceFile::drawFileUI()
@@ -1239,7 +1325,63 @@ void SequenceFile::compile_(bool setCursorPos)
 
     mIsValid = true;
     mIsDirty = false;
+
+    refreshSerializedHash();
+
     LOG_FMT("%s: compiled OK, %u bytes", getNameOrNull().cstr(), mSeqBytesSize);
+}
+
+void SequenceFile::refreshSerializedHash()
+{
+    sead::FileDevice *device = sead::FileDeviceMgr::instance()->findDevice("native");
+
+    if (!device)
+        return;
+
+    const char *tmpDir = std::getenv("TEMP");
+
+    if (!tmpDir)
+        tmpDir = std::getenv("TMP");
+
+    if (!tmpDir)
+        tmpDir = ".";
+
+    char tempPath[700];
+    snprintf(tempPath, sizeof(tempPath), "%s/tunebloom_seqhash_%p.bin", tmpDir, static_cast<const void *>(this));
+
+    sead::FileHandle handle;
+    device->tryOpen(&handle, tempPath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
+
+    if (!handle.getDevice())
+    {
+        device->tryOpen(&handle, tempPath, sead::FileDevice::FileOpenFlag::eCreate, 0);
+
+        if (!handle.getDevice())
+            return;
+    }
+
+    {
+        sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+        mEndian = sBfsar.getEndian();
+        mVersion = sBfsar.getVersionForBfseq();
+        setFormat(sBfsar.getFormat());
+
+        write(&handle, &stream, sBfsar.getEndian(), true);
+    }
+
+    handle.close();
+
+    sead::FileDevice::LoadArg loadArg;
+    loadArg.path = tempPath;
+    u8 *buf = device->tryLoad(loadArg);
+
+    if (buf)
+    {
+        mMd5Hash = md5(buf, loadArg.read_size);
+        device->unload(buf);
+    }
+
+    ::remove(tempPath);
 }
 
 template <typename T>

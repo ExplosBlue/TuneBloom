@@ -471,6 +471,8 @@ public:
         return mMd5Hash;
     }
 
+    void refreshSerializedHash();
+
     u32 getFileSize() const
     {
         if (mUseOriginalData && mOriginalData)

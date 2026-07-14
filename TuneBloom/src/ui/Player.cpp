@@ -78,6 +78,7 @@ void DrawPlayersUI()
     static SortState sSortState;
 
     DrawSortToolbar(sSortState);
+    DrawTabFilterBar();
 
     DrawAllItemsUI("Player", sBfsar.getPlayerList(),
                    &CreatePlayerFunc, nullptr, nullptr, GetItemFilterCallback(),

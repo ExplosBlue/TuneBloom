@@ -3956,6 +3956,7 @@ static void DrawFileExportDialogs()
                 {
                     newWave->setFormat(sBfsar.getFormat());
                     newWave->setVersion(sBfsar.getVersionForBfwav());
+                    newWave->refreshSerializedHash();
                     sBfsar.getWaveFileList().pushBack(newWave);
                     sBfsar.updateList(sBfsar.getWaveFileList());
                     SetUnsavedChanges(true);
@@ -4435,6 +4436,7 @@ static void DrawFileExportDialogs()
                 {
                     newWave->setFormat(sBfsar.getFormat());
                     newWave->setVersion(sBfsar.getVersionForBfwav());
+                    newWave->refreshSerializedHash();
                     sBfsar.getWaveFileList().pushBack(newWave);
                     sBfsar.updateList(sBfsar.getWaveFileList());
                     SetUnsavedChanges(true);
@@ -5117,23 +5119,43 @@ struct TabFilterState
     bool caseSensitive = false;
 };
 
-static TabFilterState sTabFilterState[(size_t)UIType::Max + 1];
+static TabFilterState sTabFilterState[(size_t)UIType::Max + 1][2];
 
-static TabFilterState& GetCurrentTabFilter()
+static TabFilterState &GetTabFilter(int pane)
 {
-    return sTabFilterState[(size_t)sSelectedUIType];
+    return sTabFilterState[(size_t)sSelectedUIType][pane];
 }
 
-void CloseFilter()
+static TabFilterState &GetCurrentTabFilter()
 {
-    TabFilterState& state = GetCurrentTabFilter();
+    return GetTabFilter(0);
+}
+
+static TabFilterState &GetCurrentDetailTabFilter()
+{
+    return GetTabFilter(1);
+}
+
+static void CloseFilterPane_(int pane)
+{
+    TabFilterState &state = GetTabFilter(pane);
     state.filter.clear();
     state.active = false;
 }
 
-bool ItemMatchesFilter(const Item* item)
+void CloseFilter()
 {
-    TabFilterState& state = GetCurrentTabFilter();
+    CloseFilterPane_(0);
+}
+
+void CloseDetailFilter()
+{
+    CloseFilterPane_(1);
+}
+
+static bool ItemMatchesFilterPane_(const Item *item, int pane)
+{
+    TabFilterState &state = GetTabFilter(pane);
 
     if (state.filter.isEmpty())
     {
@@ -5159,10 +5181,100 @@ bool ItemMatchesFilter(const Item* item)
     return name.find(filter) != std::string::npos;
 }
 
+bool ItemMatchesFilter(const Item* item)
+{
+    return ItemMatchesFilterPane_(item, 0);
+}
+
+bool ItemMatchesDetailFilter(const Item* item)
+{
+    return ItemMatchesFilterPane_(item, 1);
+}
+
 ItemFilterCallback GetItemFilterCallback()
 {
     TabFilterState& state = GetCurrentTabFilter();
     return !state.filter.isEmpty() ? &ItemMatchesFilter : nullptr;
+}
+
+ItemFilterCallback GetDetailFilterCallback()
+{
+    TabFilterState& state = GetCurrentDetailTabFilter();
+    return !state.filter.isEmpty() ? &ItemMatchesDetailFilter : nullptr;
+}
+
+static void DrawTabFilterBarPane_(int pane)
+{
+    TabFilterState& tabFilter = GetTabFilter(pane);
+
+    bool setFocus = false;
+    
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyDown(ImGuiKey_F))
+    {
+        tabFilter.active = true;
+        setFocus = true;
+    }
+
+    if (!tabFilter.active)
+        return;
+
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        CloseFilterPane_(pane);
+        return;
+    }
+
+    if (ImGui::BeginChild(pane == 0 ? "##Filter" : "##FilterDetail", ImVec2(0, 0), ImGuiChildFlags_AlwaysAutoResize | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Border))
+    {
+        if (setFocus)
+        {
+            ImGui::SetKeyboardFocusHere();
+        }
+
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("   ").x * 2.0f - ImGui::GetStyle().ItemSpacing.x * 2.0f);
+        ImGui::InputTextWithHint(pane == 0 ? "##Search" : "##SearchDetail", "Search...", tabFilter.filter.getBuffer(), tabFilter.filter.getBufferSize(), ImGuiInputTextFlags_CharsNoBlank);
+
+        ImGui::SameLine();
+
+        bool popColor = false;
+        if (!tabFilter.caseSensitive)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+            popColor = true;
+        }
+
+        if (ImGui::Button(pane == 0 ? ICON_LC_CASE_SENSITIVE "##CaseSensitive" : ICON_LC_CASE_SENSITIVE "##CaseSensitiveDetail"))
+        {
+            tabFilter.caseSensitive = !tabFilter.caseSensitive;
+        }
+
+        if (popColor)
+        {
+            ImGui::PopStyleColor();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button(pane == 0 ? ICON_LC_X "##CloseFilter" : ICON_LC_X "##CloseFilterDetail"))
+        {
+            CloseFilterPane_(pane);
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
+}
+
+void DrawTabFilterBar()
+{
+    DrawTabFilterBarPane_(0);
+}
+
+void DrawDetailTabFilterBar()
+{
+    DrawTabFilterBarPane_(1);
 }
 
 void DrawInfoUI()
@@ -5188,56 +5300,6 @@ void DrawInfoUI()
 
             ImGui::End();
             return;
-        }
-
-        TabFilterState& tabFilter = GetCurrentTabFilter();
-
-        bool setFocus = false;
-        if (notProjUI && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyDown(ImGuiKey_F))
-        {
-            tabFilter.active = true;
-            setFocus = true;
-        }
-
-        if (notProjUI && tabFilter.active)
-        {
-            if (ImGui::BeginChild("##Filter", ImVec2(0, 0), ImGuiChildFlags_AlwaysAutoResize | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Border))
-            {
-                if (setFocus)
-                {
-                    ImGui::SetKeyboardFocusHere();
-                }
-
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize("   ").x * 2.0f - ImGui::GetStyle().ItemSpacing.x * 2.0f);
-                ImGui::InputTextWithHint("##Search", "Search...", tabFilter.filter.getBuffer(), tabFilter.filter.getBufferSize(), ImGuiInputTextFlags_CharsNoBlank);
-
-                ImGui::SameLine();
-
-                bool popColor = false;
-                if (!tabFilter.caseSensitive)
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
-                    popColor = true;
-                }
-
-                if (ImGui::Button(ICON_LC_CASE_SENSITIVE "##CaseSensitive"))
-                {
-                    tabFilter.caseSensitive = !tabFilter.caseSensitive;
-                }
-
-                if (popColor)
-                {
-                    ImGui::PopStyleColor();
-                }
-
-                ImGui::SameLine();
-
-                if (ImGui::Button(ICON_LC_X "##CloseFilter"))
-                {
-                    CloseFilter();
-                }
-            }
-            ImGui::EndChild();
         }
 
         switch (sSelectedUIType)
@@ -5661,10 +5723,13 @@ static void DrawGroupsUI()
         },
         [&]()
         {
+            DrawTabFilterBar();
             DrawAllItemsUI("Group", sBfsar.getGroupList(), &CreateGroupFunc, nullptr, nullptr, GetItemFilterCallback(), false, nullptr, sSortState.mode, sSortState.ascending);
         },
         []()
         {
+            DrawDetailTabFilterBar();
+
             if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::Group)
             {
                 Group *group = static_cast<Group *>(sSelectedItem);
@@ -5672,7 +5737,7 @@ static void DrawGroupsUI()
                 DrawSplitViewTitle(GetItemIcon(group), group->getFormattedName().cstr());
                 ImGui::Separator();
 
-                DrawAllItemsUI("Item", group->getItemInfoList(), &CreateGroupItemFunc, &GroupItemPrefixFunc, nullptr, nullptr, false, nullptr, -1, true, nullptr, nullptr, true);
+                DrawAllItemsUI("Item", group->getItemInfoList(), &CreateGroupItemFunc, &GroupItemPrefixFunc, nullptr, GetDetailFilterCallback(), false, nullptr, -1, true, nullptr, nullptr, true);
             }
             else
             {
@@ -6579,6 +6644,7 @@ void DrawAllSoundsUI()
     static SortState sSortState;
 
     DrawSortToolbar(sSortState);
+    DrawTabFilterBar();
 
     DrawAllItemsUI("Sound", sBfsar.getSoundList(),
         &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback(),
@@ -6611,6 +6677,7 @@ void DrawStreamSoundsUI()
     static SortState sSortState;
 
     DrawSortToolbar(sSortState);
+    DrawTabFilterBar();
 
     DrawAllItemsUI("Stream Sound", sBfsar.getSoundList(), &CreateStreamSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
@@ -6645,6 +6712,9 @@ void DrawWaveSoundsUI()
 
     DrawSortToolbar(sSortState, false, true);
     DrawIncludeSoundsInSetCheckbox(&sIncludeInSet);
+    DrawTabFilterBar();
+
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
 
     DrawAllItemsUI("Wave Sound", sBfsar.getSoundList(), &CreateWaveSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
@@ -6667,6 +6737,9 @@ void DrawSequenceSoundsUI()
 
     DrawSortToolbar(sSortState, false, true);
     DrawIncludeSoundsInSetCheckbox(&sIncludeInSet);
+    DrawTabFilterBar();
+
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
 
     DrawAllItemsUI("Sequence Sound", sBfsar.getSoundList(), &CreateSequenceSoundFunc, &SoundNamePrefixFunc2, &SoundContextMenuFunc,
         [](const Item* item)
@@ -6937,7 +7010,7 @@ static bool SoundInScopedSetFilter(const Item* item)
 
     const Sound* sound = static_cast<const Sound*>(item);
     u32 id = sound->getId();
-    return id >= sScopedSoundsViewedSet->getStartId() && id <= sScopedSoundsViewedSet->getEndId() && ItemMatchesFilter(sound);
+    return id >= sScopedSoundsViewedSet->getStartId() && id <= sScopedSoundsViewedSet->getEndId() && ItemMatchesDetailFilter(sound);
 }
 
 static void ScopedSoundInsertHook(Item* afterItem, Item* newItem)
@@ -6973,6 +7046,8 @@ static void DrawViewedSetLabel(SoundSet *viewedSet)
 
 static void DrawSoundSetScopedSoundsUI(SoundSet* viewedSet, SortState& sortState)
 {
+    DrawDetailTabFilterBar();
+
     if (!viewedSet)
     {
         CenteredText("No Set Selected");
@@ -7048,6 +7123,7 @@ static void DrawSoundSetSplitView(
         },
         [&]()
         {
+            DrawTabFilterBar();
             DrawAllItemsUI(listName, sBfsar.getSoundSetList(), createFunc, namePrefix, contextMenu, listFilter, false, nullptr, setSort.mode, setSort.ascending, nullptr, nullptr, false, /*highlightItem*/ viewedSet);
             adoptSelection();
         },
@@ -7937,13 +8013,16 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
                         {
                             newWave->setFormat(sBfsar.getFormat());
                             newWave->setVersion(sBfsar.getVersionForBfwav());
+                            newWave->refreshSerializedHash();
                             device->unload(fileData);
 
-                            Item* insertAfter = GetInsertAfterItem();
+                            Item *insertAfter = GetInsertAfterItem();
+
                             if (insertAfter)
                                 insertAfter->insertBack(newWave);
                             else
                                 sBfsar.getWaveFileList().pushBack(newWave);
+
                             ClearInsertAfterItem();
                             sBfsar.updateList(sBfsar.getWaveFileList());
                             SetUnsavedChanges(true);
@@ -8500,6 +8579,8 @@ void DrawWaveFilesUI()
         }
     }
 
+    DrawTabFilterBar();
+
     ImGui::Dummy(ImVec2(0.0f, ImGui::GetStyle().ItemSpacing.y));
 
     DrawAllItemsUI("Wave File", sBfsar.getWaveFileList(),
@@ -8729,6 +8810,7 @@ void DrawSequenceFilesUI()
     static SortState sSortState;
 
     DrawSortToolbar(sSortState);
+    DrawTabFilterBar();
 
     DrawAllItemsUI("Sequence File", sBfsar.getSequenceFileList(),
         &CreateSequenceFileFunc, &SequenceFileNamePrefixFunc, &SequenceFileContextMenuFunc, GetItemFilterCallback(), true, nullptr, sSortState.mode, sSortState.ascending
@@ -8768,8 +8850,9 @@ void DrawBankFilesUI()
     static SortState sSortState;
 
     DrawSortToolbar(sSortState);
+    DrawTabFilterBar();
     DrawAllItemsUI(
-        "Bank File", 
+        "Bank File",
         sBfsar.getBankFileList(), 
         &CreateBankFileFunc, 
         &BankFileNamePrefixFunc, 

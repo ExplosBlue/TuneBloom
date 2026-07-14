@@ -124,6 +124,13 @@ public:
         return mSeqTextInfo;
     }
 
+    const std::string &getMd5Hash() const
+    {
+        return mMd5Hash;
+    }
+
+    void refreshSerializedHash();
+
 private:
     void invalidatePlayer_() const;
 
@@ -143,7 +150,9 @@ private:
     std::vector<std::string> mLabels;
     std::unordered_map<u32, u32> mOffsetToLine;
 
-    //? For player in file window
     ItemReference* mBankRefs[4];
     sead::FixedSafeString<128> mStartLabel;
+    std::string mMd5Hash;
+
+    friend class Bfsar;
 };

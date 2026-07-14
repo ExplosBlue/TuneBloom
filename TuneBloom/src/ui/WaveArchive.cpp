@@ -43,6 +43,7 @@ void DrawWaveArchivesUI()
     static SortState sSortState;
     
     DrawSortToolbar(sSortState);
+    DrawTabFilterBar();
     DrawAllItemsUI("Wave Archive", sBfsar.getWaveArchiveList(),
         &CreateWaveArchiveFunc, nullptr, nullptr, GetItemFilterCallback(),
         false, nullptr, sSortState.mode, sSortState.ascending

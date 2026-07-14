@@ -129,6 +129,7 @@ void DrawBanksUI()
 {
     static SortState sSortState;
     DrawSortToolbar(sSortState);
+    DrawTabFilterBar();
 
     DrawAllItemsUI("Bank", sBfsar.getBankList(),
                    &CreateBankFunc, &BankNamePrefixFunc, &BankContextMenuFunc, GetItemFilterCallback(),

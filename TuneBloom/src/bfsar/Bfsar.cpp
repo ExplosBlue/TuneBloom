@@ -443,7 +443,7 @@ static std::string WaveContentKey_(const WaveFile *wave)
     u32 loopS = wave->getOriginalLoopStartFrame();
     u32 loopE = wave->getOriginalLoopEndFrame();
     u32 chN = wave->getChannels().size();
-    
+
     put(&enc, 4);
     put(&rate, 4);
     put(&count, 4);
@@ -1151,8 +1151,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         {
         }
 
+        sequence->mMd5Hash = md5(seqFile, seqFileSize);
         mSequenceFileList.pushBack(sequence);
-
         seqFileIdxMap.try_emplace(i, globalId);
     }
     LOG_FMT("SequenceFiles: %d", mSequenceFileList.size());
@@ -3615,6 +3615,13 @@ void Bfsar::executeStreamSave(const StreamSaveJob &job) const
 {
     extern bool CreateDirectoryRecursively(const std::string &directory);
 
+    if (!job.copyOnly && job.sound->getStreamSoundInfo().getTrackList().size() == 0)
+    {
+        sead::FormatFixedSafeString<512> msg("Stream Sound '%s' has no tracks and cannot be saved, skipping...", job.sound->getFormattedName().cstr());
+        PopupMgr::instance()->addPopup({msg, const_cast<Sound *>(job.sound)});
+        return;
+    }
+
     {
         std::filesystem::path dest(job.savePath);
         std::string dir = dest.parent_path().string();
@@ -5828,7 +5835,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
         // Build set of file IDs that are embedded in groups (embed only, not link)
         std::unordered_set<u32> embeddedFileIds;
-        for (const auto& [group, fileIds] : groupItemFiles)
+        for (const auto &[group, fileIds] : groupItemFiles)
         {
             if (group->getOutputType() != Group::OutputType::Embed)
             {
@@ -5842,15 +5849,17 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
         // Build reverse map: embedded file ID -> group file ID
         std::unordered_map<u32, u32> embeddedFileToGroupFile;
-        for (const auto& [group, fileIds] : groupItemFiles)
+        for (const auto &[group, fileIds] : groupItemFiles)
         {
             if (group->getOutputType() != Group::OutputType::Embed)
             {
                 continue;
             }
-            const auto& it = itemFileIds.find(static_cast<const Item*>(group));
+
+            const auto &it = itemFileIds.find(static_cast<const Item *>(group));
             SEAD_ASSERT(it != itemFileIds.end());
             u32 groupFileId = it->second.id;
+
             for (u32 fileId : fileIds)
             {
                 embeddedFileToGroupFile[fileId] = groupFileId;
@@ -5862,10 +5871,11 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             u32 startPos;
             std::unordered_map<u32, BfgrpFile::EmbeddedFileInfo> embeddedInfos;
         };
+
         std::unordered_map<u32, GroupFileInfo> groupFileInfos;
 
         // First pass: write all non-embedded files (including group files)
-        for (const File& file : files)
+        for (const File &file : files)
         {
             if (file.external || !getOrigIncludeInBfsar(file) || !file.innerFile)
                 continue;
@@ -5875,82 +5885,82 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
             writer.align(0x20);
 
-            const InnerFile* innerFile = file.innerFile;
+            const InnerFile *innerFile = file.innerFile;
 
             bool isGroup = false;
 
             {
-                const BfwsdFile* bfwsdFile = sead::DynamicCast<const BfwsdFile>(innerFile);
+                const BfwsdFile *bfwsdFile = sead::DynamicCast<const BfwsdFile>(innerFile);
                 if (bfwsdFile)
                 {
-                    const VectorSet<const Item *>& fileItems = filesItems[file.id];
+                    const VectorSet<const Item *> &fileItems = filesItems[file.id];
                     SEAD_ASSERT(fileItems.size() == 1);
 
-                    const Item* item = fileItems.front();
+                    const Item *item = fileItems.front();
                     SEAD_ASSERT(item->getItemType() == Item::ItemType::SoundSet);
 
-                    const SoundSet* soundSet = static_cast<const SoundSet*>(item);
+                    const SoundSet *soundSet = static_cast<const SoundSet *>(item);
                     SEAD_ASSERT(soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave);
 
-                    const auto& itWarcs = waveSoundSetsWarcs.find(soundSet);
+                    const auto &itWarcs = waveSoundSetsWarcs.find(soundSet);
                     SEAD_ASSERT(itWarcs != waveSoundSetsWarcs.end());
 
-                    const VectorMap<const Group*, const WaveArchive*>& warcMap = itWarcs->second;
+                    const VectorMap<const Group *, const WaveArchive *> &warcMap = itWarcs->second;
                     SEAD_ASSERT(warcMap.size() > 0);
 
-                    const auto& itWarc = warcMap.find(nullptr);
+                    const auto &itWarc = warcMap.find(nullptr);
                     SEAD_ASSERT(warcMap.isInMap(itWarc));
 
-                    const WaveArchive* warc = itWarc->second;
+                    const WaveArchive *warc = itWarc->second;
                     SEAD_ASSERT(warc);
 
                     bfwsdFile->prepare(soundSet, warc, warcWaveFilesIndexes, true);
                 }
 
-                const BankFile* bankFile = sead::DynamicCast<const BankFile>(innerFile);
+                const BankFile *bankFile = sead::DynamicCast<const BankFile>(innerFile);
                 if (bankFile)
                 {
-                    const VectorSet<const Item *>& fileItems = filesItems[file.id];
+                    const VectorSet<const Item *> &fileItems = filesItems[file.id];
                     SEAD_ASSERT(fileItems.size() == 1);
 
-                    const Item* item = fileItems.front();
+                    const Item *item = fileItems.front();
                     SEAD_ASSERT(item->getItemType() == Item::ItemType::Bank);
 
-                    const Bank* bank = static_cast<const Bank*>(item);
+                    const Bank *bank = static_cast<const Bank *>(item);
 
-                    const auto& itWarcs = banksWarcs.find(bank);
+                    const auto &itWarcs = banksWarcs.find(bank);
                     SEAD_ASSERT(itWarcs != banksWarcs.end());
 
-                    const VectorMap<const Group*, const WaveArchive*>& warcMap = itWarcs->second;
+                    const VectorMap<const Group *, const WaveArchive *> &warcMap = itWarcs->second;
                     SEAD_ASSERT(warcMap.size() > 0);
 
-                    const auto& itWarc = warcMap.find(nullptr);
+                    const auto &itWarc = warcMap.find(nullptr);
                     SEAD_ASSERT(warcMap.isInMap(itWarc));
 
-                    const WaveArchive* warc = itWarc->second;
+                    const WaveArchive *warc = itWarc->second;
                     SEAD_ASSERT(warc);
 
                     bankFile->prepare(bank, warc, warcWaveFilesIndexes, true);
                 }
 
-                const BfwarFile* bfwarFile = sead::DynamicCast<const BfwarFile>(innerFile);
+                const BfwarFile *bfwarFile = sead::DynamicCast<const BfwarFile>(innerFile);
                 if (bfwarFile)
                 {
                     bfwarFile->prepare(true);
                 }
 
-                const BfgrpFile* bfgrpFile = sead::DynamicCast<const BfgrpFile>(innerFile);
+                const BfgrpFile *bfgrpFile = sead::DynamicCast<const BfgrpFile>(innerFile);
                 if (bfgrpFile)
                 {
                     isGroup = true;
 
-                    const VectorSet<const Item *>& fileItems = filesItems[file.id];
+                    const VectorSet<const Item *> &fileItems = filesItems[file.id];
                     SEAD_ASSERT(fileItems.size() == 1);
 
-                    const Item* item = fileItems.front();
+                    const Item *item = fileItems.front();
                     SEAD_ASSERT(item->getItemType() == Item::ItemType::Group);
 
-                    const Group* group = static_cast<const Group*>(item);
+                    const Group *group = static_cast<const Group *>(item);
 
                     bfgrpFile->prepare(
                         group,
@@ -5960,8 +5970,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                         waveSoundSetsWarcs,
                         banksWarcs,
                         warcWaveFilesIndexes,
-                        groupTargetWarcs
-                    );
+                        groupTargetWarcs);
                 }
             }
 
@@ -5976,15 +5985,14 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                 sead::FormatFixedSafeString<32>("File%u", file.id),
                 isGroup ? 0 : nw::snd::internal::ElementType_General_ByteStream,
                 startPos - fileBlockPos - sizeof(nw::ut::BinaryBlockHeader),
-                size
-            );
+                size);
 
             // If this is a group file, store its info for embedded file references
             if (isGroup)
             {
-                const BfgrpFile* bfgrpFile = sead::DynamicCast<const BfgrpFile>(innerFile);
+                const BfgrpFile *bfgrpFile = sead::DynamicCast<const BfgrpFile>(innerFile);
                 SEAD_ASSERT(bfgrpFile);
-                GroupFileInfo& info = groupFileInfos[file.id];
+                GroupFileInfo &info = groupFileInfos[file.id];
                 info.startPos = startPos;
                 info.embeddedInfos = bfgrpFile->getEmbeddedFileInfos();
             }
@@ -5993,7 +6001,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
         }
 
         // Second pass: write embedded files (just close sized refs, no data write)
-        for (const File& file : files)
+        for (const File &file : files)
         {
             if (!embeddedFileIds.count(file.id))
                 continue;
@@ -6007,18 +6015,17 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
             auto groupIt = groupFileInfos.find(groupFileId);
             SEAD_ASSERT(groupIt != groupFileInfos.end());
-            const GroupFileInfo& groupInfo = groupIt->second;
+            const GroupFileInfo &groupInfo = groupIt->second;
 
             auto embeddedIt = groupInfo.embeddedInfos.find(file.id);
             SEAD_ASSERT(embeddedIt != groupInfo.embeddedInfos.end());
-            const BfgrpFile::EmbeddedFileInfo& embeddedInfo = embeddedIt->second;
+            const BfgrpFile::EmbeddedFileInfo &embeddedInfo = embeddedIt->second;
 
             writer.closeSizedReference(
                 sead::FormatFixedSafeString<32>("File%u", file.id),
                 nw::snd::internal::ElementType_General_ByteStream,
                 (groupInfo.startPos - fileBlockPos - sizeof(nw::ut::BinaryBlockHeader)) + embeddedInfo.offset,
-                embeddedInfo.size
-            );
+                embeddedInfo.size);
 
             file.innerFile->clearWriteInfo();
         }
@@ -6028,12 +6035,12 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
     writer.closeFile();
 
-    for (InnerFile* innerFile : generatedInnerFiles)
+    for (InnerFile *innerFile : generatedInnerFiles)
     {
         delete innerFile;
     }
 
-    for (const WaveArchive* warc : generatedWarcs)
+    for (const WaveArchive *warc : generatedWarcs)
     {
         delete warc;
     }
@@ -6053,24 +6060,28 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
     }
 
     // Write metadata names file
+
     if (mSaveMetadata)
     {
         sead::FixedSafeString<520> metadataPath;
-        
+
         if (metadataPathOverride)
             metadataPath = *metadataPathOverride;
         else
             getMetadataPath_(&metadataPath, *mFilePath);
 
         FILE *f = fopen(metadataPath.cstr(), "wb");
+
         if (f)
         {
             std::string json;
             json += "{\n";
 
             // Banks -> instruments
+
             json += "  \"banks\": {\n";
             bool firstBank = true;
+
             for (Item *bfItem : mBankFileList)
             {
                 BankFile *bf = static_cast<BankFile *>(bfItem);
@@ -6091,6 +6102,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                         {
                             bankSection += ",\n";
                         }
+
                         bankSection += "          \"" + std::to_string(inst->getProgramNo()) + "\": \"" + EscapeJsonString_(inst->getName().cstr()) + "\"";
                     }
                 }
@@ -6098,20 +6110,26 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                 if (!firstInst)
                 {
                     bankSection += "\n        }";
+
                     if (!firstBank)
                         json += ",\n";
                     json += "    \"" + std::to_string(bf->getId()) + "\": {\n";
+
                     json += bankSection + "\n      }";
                     firstBank = false;
                 }
             }
+
             if (firstBank)
                 json += "    ";
+
             json += "\n  },\n";
 
             // WaveArchives -> waves
+
             json += "  \"waveArchives\": {\n";
             bool firstWarc = true;
+
             for (const auto &warcPair : warcWaveFiles)
             {
                 const WaveArchive *warc = warcPair.first;
@@ -6119,6 +6137,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
                 bool firstWave = true;
                 std::string warcSection;
+
                 for (const WaveFile *wf : waveFiles)
                 {
                     if (wf->isNameValid())
@@ -6132,6 +6151,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                         {
                             warcSection += ",\n";
                         }
+
                         warcSection += "          \"" + wf->mMd5Hash + "\": \"" + EscapeJsonString_(wf->getName().cstr()) + "\"";
                     }
                 }
@@ -6139,18 +6159,47 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                 if (!firstWave)
                 {
                     warcSection += "\n        }";
+
                     if (!firstWarc)
                         json += ",\n";
                     json += "    \"" + std::to_string(warc->getId()) + "\": {\n";
+
                     json += warcSection + "\n      }";
                     firstWarc = false;
                 }
             }
+
             if (firstWarc)
                 json += "    ";
+
+            json += "\n  },\n";
+
+            // Sequence Files
+
+            json += "  \"sequenceFiles\": {\n";
+            bool firstSeq = true;
+
+            for (Item *seqItem : mSequenceFileList)
+            {
+                SequenceFile *seq = static_cast<SequenceFile *>(seqItem);
+
+                if (seq->isNameValid())
+                {
+                    if (!firstSeq)
+                        json += ",\n";
+                    
+                    json += "    \"" + seq->getMd5Hash() + "\": \"" + EscapeJsonString_(seq->getName().cstr()) + "\"";
+                    firstSeq = false;
+                }
+            }
+
+            if (firstSeq)
+                json += "    ";
+
             json += "\n  }\n}\n";
 
             fwrite(json.data(), 1, json.size(), f);
+
             fclose(f);
         }
     }
@@ -6900,6 +6949,69 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
 
             next_warc:;
                 skipWS();
+                if (pos < content.size() && content[pos] == ',')
+                    pos++;
+            }
+
+            if (pos < content.size() && content[pos] == '}')
+                pos++;
+        }
+        else if (key == "sequenceFiles")
+        {
+            if (pos >= content.size() || content[pos] != '{')
+            {
+                skipValue();
+                goto next_member;
+            }
+
+            pos++;
+
+            while (pos < content.size())
+            {
+                skipWS();
+
+                if (pos >= content.size() || content[pos] == '}')
+                    break;
+
+                std::string md5Hash = parseString();
+
+                if (md5Hash.empty())
+                {
+                    skipWS();
+
+                    if (pos < content.size() && content[pos] == ',')
+                    {
+                        pos++;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                skipWS();
+
+                if (pos >= content.size() || content[pos] != ':')
+                    break;
+
+                pos++;
+                skipWS();
+
+                std::string seqName = parseString();
+
+                for (Item *seqItem : mSequenceFileList)
+                {
+                    SequenceFile *seq = static_cast<SequenceFile *>(seqItem);
+
+                    if (seq->getMd5Hash() == md5Hash)
+                    {
+                        seq->getName() = seqName.c_str();
+                        seq->setEnableName(true);
+                        break;
+                    }
+                }
+
+                skipWS();
+
                 if (pos < content.size() && content[pos] == ',')
                     pos++;
             }

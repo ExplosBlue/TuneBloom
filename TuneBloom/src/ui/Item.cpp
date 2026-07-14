@@ -519,7 +519,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
 
     //if (false)
     {
-        if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && selectedItem && &list == selectedItem->list())
+        if (!ImGui::GetIO().WantTextInput && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && selectedItem && &list == selectedItem->list())
         {
             if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
             {
@@ -738,7 +738,9 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
         }
         else if (!isSubWindow && sSelectedItemIsSubWindow)
         {
-            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(140.0f / 255.0f, 140.0f / 255.0f, 140.0f / 255.0f, 1.0f));
+            ImVec4 h = ImGui::GetStyleColorVec4(ImGuiCol_Header);
+            h.w *= 0.55f;
+            ImGui::PushStyleColor(ImGuiCol_Header, h);
             popColor = true;
         }
 

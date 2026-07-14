@@ -222,8 +222,14 @@ using ItemInsertCallback = void (*)(Item* afterItem, Item* newItem);
 using ItemRemoveCallback = void (*)(Item* item);
 
 void CloseFilter();
-bool ItemMatchesFilter(const Item* item);
+bool ItemMatchesFilter(const Item *item);
 ItemFilterCallback GetItemFilterCallback();
+void DrawTabFilterBar();
+
+void CloseDetailFilter();
+bool ItemMatchesDetailFilter(const Item *item);
+ItemFilterCallback GetDetailFilterCallback();
+void DrawDetailTabFilterBar();
 
 void WarningPopup(const char* name, const char* content);
 

@@ -13,6 +13,8 @@
 
 #include <filedevice/seadFileDeviceMgr.h>
 
+#include <md5/md5.h>
+
 #include <Debug.h>
 
 const char* WaveFile::sEncodingTypes[3] = {
@@ -386,6 +388,7 @@ void WaveFile::drawUI()
             if (name.isEmpty())
             {
                 setEnableName(false);
+                getName().clear();
             }
             else
             {
@@ -537,6 +540,7 @@ void WaveFile::drawUI()
             mIsStreamExtended = true;
 
             invalidateOriginalData_();
+            refreshSerializedHash();
 
             ImGui::CloseCurrentPopup();
         }
@@ -1212,7 +1216,60 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
     mIsLoopDirty = false;
     mIsStreamExtended = true;
 
+    refreshSerializedHash();
+
     return true;
+}
+
+void WaveFile::refreshSerializedHash()
+{
+    sead::FileDevice *device = sead::FileDeviceMgr::instance()->findDevice("native");
+
+    if (!device)
+        return;
+
+    const char *tmpDir = std::getenv("TEMP");
+
+    if (!tmpDir)
+        tmpDir = std::getenv("TMP");
+
+    if (!tmpDir)
+        tmpDir = ".";
+
+    char tempPath[700];
+    snprintf(tempPath, sizeof(tempPath), "%s/tunebloom_wavehash_%p.bin", tmpDir, static_cast<const void *>(this));
+
+    sead::FileHandle handle;
+    device->tryOpen(&handle, tempPath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
+
+    if (!handle.getDevice())
+    {
+        device->tryOpen(&handle, tempPath, sead::FileDevice::FileOpenFlag::eCreate, 0);
+        if (!handle.getDevice())
+            return;
+    }
+
+    {
+        sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
+        setup(sBfsar.getEndian());
+        setFormat(sBfsar.getFormat());
+
+        write(&handle, &stream, sBfsar.getEndian(), true);
+    }
+
+    handle.close();
+
+    sead::FileDevice::LoadArg loadArg;
+    loadArg.path = tempPath;
+    u8 *buf = device->tryLoad(loadArg);
+
+    if (buf)
+    {
+        mMd5Hash = md5(buf, loadArg.read_size);
+        device->unload(buf);
+    }
+
+    ::remove(tempPath);
 }
 
 bool WaveFile::writeWavFile(const sead::SafeString& path, s32 channelIdx)

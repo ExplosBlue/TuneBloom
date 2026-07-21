@@ -28,10 +28,9 @@ const Item* Group::validate(sead::BufferedSafeString& error) const
 
     sead::FixedSafeString<256> itemError;
 
-    std::unordered_set<const Item*> itemsTarget;
-    for (const Item* item : mItemInfoList)
+    for (const Item *item : mItemInfoList)
     {
-        const ItemInfo& itemInfo = *static_cast<const ItemInfo*>(item);
+        const ItemInfo &itemInfo = *static_cast<const ItemInfo *>(item);
 
         if (!itemInfo.getIsDisabled())
         {
@@ -40,15 +39,6 @@ const Item* Group::validate(sead::BufferedSafeString& error) const
                 error.format("'%s': %s", itemInfo.getFormattedName().cstr(), itemError.cstr());
                 return &itemInfo;
             }
-
-            const Item* target = itemInfo.getItemRef().getItem();
-            if (itemsTarget.count(target) > 0)
-            {
-                error.format("Item '%s' is already in this Group", itemInfo.getFormattedName().cstr());
-                return &itemInfo;
-            }
-
-            itemsTarget.insert(target);
         }
 
         itemError.clear();
@@ -605,13 +595,14 @@ const Item* Group::ItemInfo::validate(sead::BufferedSafeString& error) const
                     return this;
                 }
             }
-            else
+
+            if (!sBfsar.isV3Bfsar())
             {
                 error = "Sound must be a Sequence";
                 return this;
             }
 
-            break;
+            return nullptr;
         }
 
         case ItemType::SoundSet:

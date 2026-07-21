@@ -210,6 +210,18 @@ void DrawSoundPropertiesUI()
         }
     }
 
+    if (sBfsar.isV3Bfsar())
+    {
+        char tag[0x20];
+        sound->getV3Tag(tag, sizeof(tag));
+
+        if (ImGui::InputText("Tag", tag, sizeof(tag)))
+        {
+            sound->setV3Tag(tag);
+            SetUnsavedChanges(true);
+        }
+    }
+
     {
         bool enablePanParam = sound->isEnablePanParam();
         if (ImGui::Checkbox("Enable Pan Param", &enablePanParam))
@@ -600,29 +612,32 @@ void DrawSoundPropertiesUI()
                     ImGui::BeginDisabled();
 
                 {
-                    const char** labels = nullptr;
+                    static const char *cStartOfFileLabel = "(Start of File)";
+
+                    const char **labels = nullptr;
                     u32 labelCount = 0;
 
-                    Item* seqFile = seqSoundInfo.getSequenceFileRef().getItem();
+                    Item *seqFile = seqSoundInfo.getSequenceFileRef().getItem();
                     if (seqFile)
                     {
-                        SequenceFile* seq = static_cast<SequenceFile*>(seqFile);
-                        const std::vector<std::string>& labelsVec = seq->getLabels();
+                        SequenceFile *seq = static_cast<SequenceFile *>(seqFile);
+                        const std::vector<std::string> &labelsVec = seq->getLabels();
 
-                        labelCount = labelsVec.size();
-                        if (labelCount > 0)
+                        labelCount = labelsVec.size() + 1;
+                        labels = new const char *[labelCount];
+                        labels[0] = cStartOfFileLabel;
+                        for (u32 i = 0; i < labelsVec.size(); i++)
                         {
-                            labels = new const char*[labelCount];
-                            for (u32 i = 0; i < labelCount; i++)
-                            {
-                                labels[i] = labelsVec[i].c_str();
-                            }
+                            labels[i + 1] = labelsVec[i].c_str();
                         }
                     }
 
                     sead::FixedSafeString<128> startLabel = enableStartOffset ? seqSoundInfo.getStartLabel() : sead::FixedSafeString<128>();
                     if (ImGui::InputTextCombo("Start Label", startLabel.getBuffer(), startLabel.getBufferSize(), labels, labelCount))
                     {
+                        if (startLabel == cStartOfFileLabel)
+                            startLabel.clear();
+
                         seqSoundInfo.getStartLabel() = startLabel;
                         SetUnsavedChanges(true);
                     }
@@ -846,10 +861,12 @@ void DrawSoundPropertiesUI()
 
                     {
                         const char *streamFmt = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
-                        const char *streamTypeLabels[] = {streamFmt, "ADTS (AAC)"};
+                        const char *streamTypeLabels[] = {streamFmt, "ADTS (AAC)", "Opus"};
 
                         u32 streamType = (enableSend ? strmSoundInfo.getStreamType() : Sound::StreamSoundInfo::StreamType::NwStreamBinary) - 1;
-                        if (ComboScroll("Stream Type", (s32 *)&streamType, streamTypeLabels, IM_ARRAYSIZE(streamTypeLabels)))
+                        u32 streamTypeCount = sBfsar.isV3Bfsar() || streamType + 1 == Sound::StreamSoundInfo::StreamType::Opus ? IM_ARRAYSIZE(streamTypeLabels) : IM_ARRAYSIZE(streamTypeLabels) - 1;
+
+                        if (ComboScroll("Stream Type", (s32 *)&streamType, streamTypeLabels, streamTypeCount))
                         {
                             strmSoundInfo.setStreamType(static_cast<Sound::StreamSoundInfo::StreamType>(streamType + 1));
                             SetUnsavedChanges(true);
@@ -902,6 +919,17 @@ void DrawSoundPropertiesUI()
                         if (ImGui::InputScalar("Loop End Sample", ImGuiDataType_U32, &loopEndFrame, &cStepU32))
                         {
                             strmSoundInfo.setLoopEndFrame(loopEndFrame);
+                            SetUnsavedChanges(true);
+                        }
+                    }
+
+                    if (sBfsar.isV3Bfsar())
+                    {
+                        u16 typeInfoUpper = enableSend ? strmSoundInfo.getStreamTypeInfoUpper() : (u16)0;
+
+                        if (ImGui::InputScalar("Unknown (Type Info)", ImGuiDataType_U16, &typeInfoUpper, nullptr, nullptr, "%04X", ImGuiInputTextFlags_CharsHexadecimal))
+                        {
+                            strmSoundInfo.setStreamTypeInfoUpper(typeInfoUpper);
                             SetUnsavedChanges(true);
                         }
                     }
@@ -1122,25 +1150,25 @@ void DrawSoundPropertiesUI()
                     static const ImU8 cAdsrMax = 127;
 
                     bool edited = false;
-                    // if (ImGui::InputScalar("Attack", ImGuiDataType_U8, &adshrCurve.attack, &cStepU8))
-                    // {
-                    //     edited = true;
-                    // }
+                    if (ImGui::SliderScalar("Attack", ImGuiDataType_U8, &adshrCurve.attack, &cAdsrMin, &cAdsrMax))
+                    {
+                        edited = true;
+                    }
 
-                    // if (ImGui::InputScalar("Decay", ImGuiDataType_U8, &adshrCurve.decay, &cStepU8))
-                    // {
-                    //     edited = true;
-                    // }
+                    if (ImGui::SliderScalar("Decay", ImGuiDataType_U8, &adshrCurve.decay, &cAdsrMin, &cAdsrMax))
+                    {
+                        edited = true;
+                    }
 
-                    // if (ImGui::InputScalar("Sustain", ImGuiDataType_U8, &adshrCurve.sustain, &cStepU8))
-                    // {
-                    //     edited = true;
-                    // }
+                    if (ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &adshrCurve.sustain, &cAdsrMin, &cAdsrMax))
+                    {
+                        edited = true;
+                    }
 
-                    // if (ImGui::InputScalar("Hold", ImGuiDataType_U8, &adshrCurve.hold, &cStepU8))
-                    // {
-                    //     edited = true;
-                    // }
+                    if (ImGui::SliderScalar("Hold", ImGuiDataType_U8, &adshrCurve.hold, &cAdsrMin, &cAdsrMax))
+                    {
+                        edited = true;
+                    }
 
                     if (ImGui::SliderScalar("Release", ImGuiDataType_U8, &adshrCurve.release, &cAdsrMin, &cAdsrMax))
                     {
@@ -1205,6 +1233,25 @@ void DrawSoundPropertiesUI()
 
                 if (!filterVersionEnable)
                     ImGui::EndDisabled();
+            }
+
+            {
+                std::vector<std::pair<u32, u32>> &extraOptions = waveSoundInfo.getExtraOptions();
+
+                if (!extraOptions.empty() && ImGui::CollapsingHeader("Unknown Options"))
+                {
+                    for (std::pair<u32, u32> &option : extraOptions)
+                    {
+                        u32 value = option.second;
+                        if (ImGui::InputScalar(sead::FormatFixedSafeString<64>("Option Bit %u", option.first).cstr(), ImGuiDataType_U32, &value, nullptr, nullptr, "%08X", ImGuiInputTextFlags_CharsHexadecimal))
+                        {
+                            option.second = value;
+                            SetUnsavedChanges(true);
+                        }
+                    }
+
+                    ImGui::Separator();
+                }
             }
 
             ImGui::EndTabItem();

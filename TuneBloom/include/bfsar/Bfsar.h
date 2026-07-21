@@ -17,6 +17,8 @@
 #include <snd/snd_MemorySoundArchive.h>
 
 #include <string>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 struct SoundArchivePlayerInfo
@@ -65,12 +67,8 @@ public:
         mPlatform = platform;
     }
 
-    bool isLittleEndian() const
-    {
-        return mPlatform == ArchivePlatform::CTR || mPlatform == ArchivePlatform::NX;
-    }
-
     void setCliMode(bool cliMode) { mCliMode = cliMode; }
+    bool getCliMode() const { return mCliMode; }
 
     void create(ArchiveFormat format = ArchiveFormat::BFSAR);
     void create(ArchiveFormat format, ArchivePlatform platform);
@@ -106,6 +104,14 @@ public:
         return sead::SafeString::cEmptyString;
     }
 
+    const sead::SafeString &getLoadedArchivePath() const
+    {
+        if (mLoadedArchivePath)
+            return *mLoadedArchivePath;
+
+        return getFilePath();
+    }
+
     sead::Endian::Types getEndian() const
     {
         return mEndian;
@@ -126,24 +132,34 @@ public:
         mVersion = version;
     }
 
-    // BFSAR: version = (0 << 24) | (major << 16) | (minor << 8) | sub
-    // BCSAR: version = (major << 24) | (minor << 16) | (0 << 8) | sub
+    // BFSAR:        version = (0 << 24) | (major << 16) | (minor << 8) | sub
+    // BFSAR 3.0.0+: version = (major << 24) | (minor << 16) | (micro << 8) | sub
+    // BCSAR:        version = (major << 24) | (minor << 16) | (0 << 8) | sub
+    bool packsMajorInHighByte() const
+    {
+        return mFormat == ArchiveFormat::BCSAR || nw::snd::internal::Util::IsHighByteMajorVersion(mVersion);
+    }
+
+    bool isV3Bfsar() const
+    {
+        return mFormat == ArchiveFormat::BFSAR && getDecodedMajor() >= 3;
+    }
+
     u32 getDecodedMajor() const
     {
-        if (mFormat == ArchiveFormat::BCSAR)
-            return (mVersion >> 24) & 0xFF;
-        return (mVersion >> 16) & 0xFF;
+        return packsMajorInHighByte() ? (mVersion >> 24) & 0xFF : (mVersion >> 16) & 0xFF;
     }
 
     u32 getDecodedMinor() const
     {
-        if (mFormat == ArchiveFormat::BCSAR)
-            return (mVersion >> 16) & 0xFF;
-        return (mVersion >> 8) & 0xFF;
+        return packsMajorInHighByte() ? (mVersion >> 16) & 0xFF : (mVersion >> 8) & 0xFF;
     }
 
     u32 getDecodedPatch() const
     {
+        if (mFormat != ArchiveFormat::BCSAR && nw::snd::internal::Util::IsHighByteMajorVersion(mVersion))
+            return (mVersion >> 8) & 0xFF;
+
         return mVersion & 0xFF;
     }
 
@@ -349,6 +365,9 @@ public:
 
     u32 getVersionForBfwsd() const
     {
+        if (isV3Bfsar())
+            return makeVersion(2, 1, 0);
+
         if (mFormat == ArchiveFormat::BCSAR)
         {
             if (isVersionOrLater(2, 3, 0))
@@ -365,6 +384,9 @@ public:
 
     u32 getVersionForBfbnk() const
     {
+        if (isV3Bfsar())
+            return makeVersion(2, 0, 0);
+
         if (mFormat == ArchiveFormat::BCSAR)
             return makeVersion(1, 0, 1);
 
@@ -373,6 +395,9 @@ public:
 
     u32 getVersionForBfwar() const
     {
+        if (isV3Bfsar())
+            return makeVersion(2, 0, 0);
+
         if (mFormat == ArchiveFormat::BCSAR)
             return makeVersion(1, 0, 0);
 
@@ -384,6 +409,9 @@ public:
 
     u32 getVersionForBfgrp() const
     {
+        if (isV3Bfsar())
+            return makeVersion(2, 0, 0);
+
         if (mFormat == ArchiveFormat::BCSAR)
             return makeVersion(1, 1, 0);
 
@@ -395,6 +423,9 @@ public:
 
     u32 getVersionForBfseq() const
     {
+        if (isV3Bfsar())
+            return makeVersion(2, 0, 0);
+
         if (mFormat == ArchiveFormat::BCSAR)
         {
             if (isVersionOrLater(2, 3, 0))
@@ -413,6 +444,9 @@ public:
 
     u32 getVersionForBfwav() const
     {
+        if (isV3Bfsar())
+            return makeVersion(2, 0, 0);
+
         if (mFormat == ArchiveFormat::BCSAR)
         {
             if (getDecodedMajor() >= 2)
@@ -433,6 +467,9 @@ public:
 
     u32 getVersionForBfstm() const
     {
+        if (isV3Bfsar())
+            return makeVersion(2, 0, 1);
+
         if (mFormat == ArchiveFormat::BCSAR)
         {
             if (isVersionOrLater(2, 3, 2))
@@ -499,14 +536,31 @@ public:
         return mFormat == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
     }
 
+public:
+    void setCmpbinPreferZstd(bool v) { mCmpbinPreferZstd = v; }
+    bool getCmpbinPreferZstd() const { return mCmpbinPreferZstd; }
+
 private:
-    bool open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize, sead::Heap* heap);
-    void save_(sead::FileHandle& handle, const sead::SafeString* metadataPathOverride = nullptr, bool writeStreams = true);
+    bool open_(const nw::snd::MemorySoundArchive &soundArchive, u32 bfsarSize, sead::Heap *heap);
+    void save_(sead::FileHandle &handle, const sead::SafeString *metadataPathOverride = nullptr, bool writeStreams = true);
+    bool saveArchiveFile_(const sead::SafeString &path);
+    void planNonStreamBinarySave_(const Sound *sound, const sead::SafeString &archiveDir, const sead::SafeString &sourceDir, bool inPlace, std::unordered_set<std::string> &seen, std::vector<StreamSaveJob> &out) const;
     void close_();
 
-    bool validateName_(const sead::SafeString& name, const Item::List& list, const Item* ignoreItem = nullptr) const;
+    bool validateName_(const sead::SafeString &name, const Item::List &list, const Item *ignoreItem = nullptr) const;
 
-    void readNamesFromMetadata_(const sead::SafeString& filePath);
+    u32 getItemOrigFileId_(const Item *item) const
+    {
+        for (const auto &[mapItem, origFileId] : mItemOrigFileIds)
+        {
+            if (mapItem == item)
+                return origFileId;
+        }
+
+        return nw::snd::SoundArchive::INVALID_ID;
+    }
+
+    void readNamesFromMetadata_(const sead::SafeString &filePath);
 
 private:
     bool mOpen;
@@ -514,6 +568,7 @@ private:
     ArchivePlatform mPlatform;
     sead::HeapSafeString *mFilePath;
     sead::HeapSafeString *mLoadedArchivePath{nullptr};
+    bool mCmpbinPreferZstd{false};
 
     sead::Endian::Types mEndian;
     u32 mVersion;
@@ -523,6 +578,7 @@ private:
 
     std::vector<std::vector<u32>> mFileAttachedGroups;
     std::vector<bool> mFileOriginalIncludeInBfsar;
+    std::vector<std::pair<const Item *, u32>> mItemOrigFileIds;
 
     Sound::List mSoundList;
 

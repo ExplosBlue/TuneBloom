@@ -15,6 +15,11 @@
 class Sound;
 struct DecodedPcm;
 
+namespace opusstream
+{
+    bool AttachStreamWaves(Sound *sound);
+}
+
 void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam);
 void FillAdpcmParam(snd::DspAdpcmParam* param, snd::internal::DspAdpcmLoopParam* loopParam, const ADPCMINFO& adpcmInfo);
 void FillAdpcmParam(snd::AdpcmParam* param, const ADPCMINFO& adpcmInfo);
@@ -234,6 +239,7 @@ public:
         friend class WaveFile;
 
         friend bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound);
+        friend bool opusstream::AttachStreamWaves(Sound *sound);
     };
 
     struct RiffWaveInfo
@@ -388,7 +394,8 @@ public:
     {
         u32 loopFrames = getLoopFrames();
         u32 endFrame = getLoopStartFrame(forStream) + loopFrames;
-        if (forStream && cStreamMinimumLoopFrames > loopFrames && loopFrames != 0)
+
+        if (forStream && getIsLoop() && cStreamMinimumLoopFrames > loopFrames && loopFrames != 0)
             endFrame += loopFrames * (cStreamMinimumLoopFrames / loopFrames);
 
         return endFrame;
@@ -398,9 +405,10 @@ public:
     {
         u32 loopFrames = getSampleCount() - getOriginalLoopStartFrame();
         u32 endFrame = getLoopStartFrame(forStream) + loopFrames;
-        if (forStream && cStreamMinimumLoopFrames > loopFrames && loopFrames != 0)
+
+        if (forStream && getIsLoop() && cStreamMinimumLoopFrames > loopFrames && loopFrames != 0)
             endFrame += loopFrames * (cStreamMinimumLoopFrames / loopFrames);
-    
+
         return endFrame;
     }
 
@@ -551,4 +559,5 @@ private:
     friend class BfwarFile;
 
     friend bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound);
+    friend bool opusstream::AttachStreamWaves(Sound *sound);
 };

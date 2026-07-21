@@ -61,7 +61,7 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
                 }
                 else
                 {
-                    if (!(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010200))
+                    if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010200))
                     {
                         sead::FormatFixedSafeString<64> msg("BFWAV version not supported (0x%08X)", (u32)header->version);
                         PopupMgr::instance()->pushCurrentItemError(msg);

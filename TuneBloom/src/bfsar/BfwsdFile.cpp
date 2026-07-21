@@ -207,6 +207,24 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
                             flags[nw::snd::internal::WAVE_SOUND_INFO_ENVELOPE] = 0;
                         }
 
+                        for (const std::pair<u32, u32> &opt : waveSoundInfo.getExtraOptions())
+                        {
+                            if (flags.find(opt.first) != flags.end())
+                                continue;
+
+                            flags[opt.first] = opt.second;
+
+                            if (opt.first < nw::snd::internal::WAVE_SOUND_INFO_SEND)
+                            {
+                                sendParamOffset += 4;
+                                envelopeParamOffset += 4;
+                            }
+                            else if (opt.first < nw::snd::internal::WAVE_SOUND_INFO_ENVELOPE)
+                            {
+                                envelopeParamOffset += 4;
+                            }
+                        }
+
                         FlagParameters params(flags);
                         params.write(writer);
 

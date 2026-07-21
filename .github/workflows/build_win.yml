@@ -41,11 +41,13 @@ jobs:
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} /p:Platform=${{env.BUILD_PLATFORM}} ${{env.SOLUTION_FILE_PATH}}
 
-    - name: Copy exe to workdir
+    - name: Copy exe and licenses to workdir
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/workdir"
         Copy-Item -Path "${{ github.workspace }}/TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom.exe" `
+          -Destination "${{ github.workspace }}/workdir/"
+        Copy-Item -Path "${{ github.workspace }}/THIRD_PARTY_LICENSES.txt" `
           -Destination "${{ github.workspace }}/workdir/"
 
     - name: Zip workdir contents

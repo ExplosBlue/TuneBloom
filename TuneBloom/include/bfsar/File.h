@@ -36,7 +36,8 @@ struct File
     }
 
     u32 id;
-    const InnerFile* innerFile;
+    u32 origId = nw::snd::SoundArchive::INVALID_ID;
+    const InnerFile *innerFile;
     bool includeInBfsar;
     bool external;
     std::string externalPath;

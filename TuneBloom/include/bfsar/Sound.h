@@ -11,6 +11,12 @@
 #include <vector>
 
 class SoundSet;
+class Sound;
+
+namespace opusstream
+{
+    bool AttachStreamWaves(Sound *sound);
+}
 
 class Sound : public Item
 {
@@ -274,7 +280,8 @@ public:
             Invalid = 0,
 
             NwStreamBinary,
-            Adts
+            Adts,
+            Opus
         };
 
         class Track : public Item
@@ -663,6 +670,16 @@ public:
             return mPrefetchFileRef;
         }
 
+        u16 getStreamTypeInfoUpper() const
+        {
+            return mStreamTypeInfoUpper;
+        }
+
+        void setStreamTypeInfoUpper(u16 streamTypeInfoUpper)
+        {
+            mStreamTypeInfoUpper = streamTypeInfoUpper;
+        }
+
     private:
         sead::FixedSafeString<512> mPath; //? Temp solution, will probably not leave like this
 
@@ -676,6 +693,7 @@ public:
         bool mEnableStreamSoundExtension;
         StreamType mStreamType;
         bool mIsLoop;
+        u16 mStreamTypeInfoUpper = 0;
         u32 mLoopStartFrame;
         u32 mLoopEndFrame;
 
@@ -975,6 +993,16 @@ public:
             mBiquadValue = biquadValue;
         }
 
+        const std::vector<std::pair<u32, u32>> &getExtraOptions() const
+        {
+            return mExtraOptions;
+        }
+
+        std::vector<std::pair<u32, u32>> &getExtraOptions()
+        {
+            return mExtraOptions;
+        }
+
     private:
         ItemReference mWaveFileRef;
 
@@ -999,6 +1027,7 @@ public:
         u8 mLpfFreq;
         u8 mBiquadType;
         u8 mBiquadValue;
+        std::vector<std::pair<u32, u32>> mExtraOptions;
 
         friend class Bfsar;
     };
@@ -1270,6 +1299,31 @@ public:
         return mExtraSoundInfoOptions;
     }
 
+    const std::vector<u8> &getV3NameField() const
+    {
+        return mV3NameField;
+    }
+
+    void getV3Tag(char *out, u32 outSize) const
+    {
+        u32 n = 0;
+        while (n < mV3NameField.size() && n + 1 < outSize && mV3NameField[n] != 0)
+        {
+            out[n] = static_cast<char>(mV3NameField[n]);
+            n++;
+        }
+        out[n] = '\0';
+    }
+
+    void setV3Tag(const char *tag)
+    {
+        mV3NameField.assign(0x20, 0);
+        for (u32 i = 0; i < 0x1F && tag[i] != '\0'; i++)
+        {
+            mV3NameField[i] = static_cast<u8>(tag[i]);
+        }
+    }
+
 private:
     ItemReference mPlayerRef;
     u8 mVolume;
@@ -1288,6 +1342,7 @@ private:
     bool mEnableSound3DInfo;
     Sound3DInfo mSound3DInfo;
     std::vector<std::pair<u32, u32>> mExtraSoundInfoOptions;
+    std::vector<u8> mV3NameField;
 
     SequenceSoundInfo mSequenceSoundInfo;
 
@@ -1302,4 +1357,5 @@ private:
 
     friend class Bfsar;
     friend class SoundSet;
+    friend bool opusstream::AttachStreamWaves(Sound *sound);
 };

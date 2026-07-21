@@ -241,7 +241,10 @@ void MultiVoiceMgr::appendVoiceList(MultiVoice* voice)
         ++itr;
     }
 
-    mPrioVoiceList.insertBefore(&(*itr), voice);
+    if (itr == mPrioVoiceList.reverseEnd())
+        mPrioVoiceList.pushFront(voice);
+    else
+        mPrioVoiceList.insertAfter(&(*itr), voice);
 }
 
 void MultiVoiceMgr::removeVoiceList(MultiVoice* voice)

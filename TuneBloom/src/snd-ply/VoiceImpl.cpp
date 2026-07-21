@@ -985,82 +985,98 @@ void VoiceImpl::synthesize(VoiceSynthesizeBuffer* buffer, f32* workBuffer, u32 s
             srcType = SrcType_4_4;
         }
 
-        const s16* srcCoef = cSrcCoef[srcType];
+        const s16 *srcCoef = cSrcCoef[srcType];
 
         u32 acc = mCurrentAddressFraction;
-        u32 pitch = static_cast<u32>(0x00010000 * srcRatio);
-        u32 totalNewSamples = (acc + pitch * samples) >> 16;
+        const u32 pitch = static_cast<u32>(0x00010000 * srcRatio);
+        u16 vol = mVe.vol;
+        u32 produced = 0;
 
-        if (totalNewSamples > cDecodeWaveSamples)
+        while (produced < samples)
         {
-            pitch = ((cDecodeWaveSamples << 16) - acc) / samples;
-            totalNewSamples = (acc + pitch * samples) >> 16;
-        }
+            u32 chunk = samples - produced;
 
-        // Decode
-        {
-            s16* dest = sDecodeWaveBuffer;
+            if (((static_cast<u64>(acc) + static_cast<u64>(pitch) * chunk) >> 16) > cDecodeWaveSamples)
+            {
+                chunk = static_cast<u32>(((static_cast<u64>(cDecodeWaveSamples) << 16) - acc) / pitch);
+
+                if (chunk == 0)
+                {
+                    for (u32 i = produced; i < samples; i++)
+                        workBuffer[i] = 0.0f;
+
+                    break;
+                }
+            }
+
+            const u32 totalNewSamples = static_cast<u32>((static_cast<u64>(acc) + static_cast<u64>(pitch) * chunk) >> 16);
+
+            // Decode
+            {
+                s16* dest = sDecodeWaveBuffer;
+
+                for (s32 i = 0; i < cHistoryWaveSamples; i++)
+                {
+                    *(dest++) = mLastSamples[i];
+                }
+
+                switch (mSampleFormat)
+                {
+                    case SampleFormat::DspAdpcm:
+                        this->decodeAdpcm(dest, totalNewSamples);
+                        break;
+
+                    case SampleFormat::PcmS16:
+                        this->decodePcm16(dest, totalNewSamples);
+                        break;
+
+                    case SampleFormat::PcmS8:
+                        this->decodePcm8(dest, totalNewSamples);
+                        break;
+
+                    default:
+                        return;
+                }
+            }
+
+            // Resampling
+            const s16* refpos = sDecodeWaveBuffer;
+
+            for (u32 i = 0; i < chunk; i++)
+            {
+                acc += pitch;
+                u32 news = acc >> 16;
+                acc &= 0xFFFF;
+
+                refpos += news;
+
+                const u32 phase = acc >> 9;
+                const s16* coef = &srcCoef[phase * 4];
+
+                s32 smp  = coef[0] * refpos[0];
+                smp += coef[1] * refpos[1];
+                smp += coef[2] * refpos[2];
+                smp += coef[3] * refpos[3];
+                smp >>= 15;
+
+                f32 smp_f32 = static_cast<f32>(smp);
+                smp_f32 *= vol;
+                smp_f32 /= 32768.0f;
+
+                workBuffer[produced + i] = smp_f32;
+
+                vol += mVe.volDelta;
+            }
 
             for (s32 i = 0; i < cHistoryWaveSamples; i++)
             {
-                *(dest++) = mLastSamples[i];
+                mLastSamples[i] = refpos[i];
             }
 
-            switch (mSampleFormat)
-            {
-                case SampleFormat::DspAdpcm:
-                    this->decodeAdpcm(dest, totalNewSamples);
-                    break;
-
-                case SampleFormat::PcmS16:
-                    this->decodePcm16(dest, totalNewSamples);
-                    break;
-
-                case SampleFormat::PcmS8:
-                    this->decodePcm8(dest, totalNewSamples);
-                    break;
-
-                default:
-                    return;
-            }
-        }
-
-        // Resampling
-        const s16* refpos = sDecodeWaveBuffer;
-        u16 vol = mVe.vol;
-
-        for (u32 i = 0; i < samples; i++)
-        {
-            acc += pitch;
-            u32 news = acc >> 16;
-            acc &= 0xFFFF;
-
-            refpos += news;
-
-            const u32 phase = acc >> 9;
-            const s16* coef = &srcCoef[phase * 4];
-
-            s32 smp  = coef[0] * refpos[0];
-            smp += coef[1] * refpos[1];
-            smp += coef[2] * refpos[2];
-            smp += coef[3] * refpos[3];
-            smp >>= 15;
-
-            f32 smp_f32 = static_cast<f32>(smp);
-            smp_f32 *= vol;
-            smp_f32 /= 32768.0f;
-
-            workBuffer[i] = smp_f32;
-
-            vol += mVe.volDelta;
+            produced += chunk;
         }
 
         mCurrentAddressFraction = acc;
-
-        for (s32 i = 0; i < cHistoryWaveSamples; i++)
-        {
-            mLastSamples[i] = refpos[i];
-        }
 
         auto doFilter = [&](FilterContext& context)
         {
@@ -1362,13 +1378,16 @@ void VoiceMgr::appendVoiceList(VoiceImpl* voice)
     VoiceList::reverseIterator itr = mVoiceList.reverseBegin();
     while (itr != mVoiceList.reverseEnd())
     {
-        if (itr->mPriority <= voice->mPriority)
+        if (itr->mPriority >= voice->mPriority)
             break;
 
         ++itr;
     }
 
-    mVoiceList.insertBefore(&(*itr), voice);
+    if (itr == mVoiceList.reverseEnd())
+        mVoiceList.pushFront(voice);
+    else
+        mVoiceList.insertAfter(&(*itr), voice);
 
     voice->mIsAppendedToList = true;
 }

@@ -19,14 +19,45 @@ struct ArchiveFormatInfo
 {
     ArchiveFormat format;
     ArchivePlatform platform;
+    sead::Endian::Types endian;
+    const u32 defaultVersion;
     const char* extension;
+    const char* fmtName;
     const char* label;
+    const char* systemName;
 };
 
 inline constexpr ArchiveFormatInfo kFormatTable[] = {
-    { ArchiveFormat::BFSAR, ArchivePlatform::CAFE, "bfsar", "Cafe Sound Archive" },
-    { ArchiveFormat::BCSAR, ArchivePlatform::CTR,  "bcsar", "CTR Sound Archive" },
-    { ArchiveFormat::BFSAR, ArchivePlatform::NX,   "bfsar", "Cafe Sound Archive" },
+    { 
+        ArchiveFormat::BFSAR,
+        ArchivePlatform::CAFE,
+        sead::Endian::eBig,
+        0x00020000,
+        "bfsar",
+        "BFSAR",
+        "Cafe Sound Archive",
+        "Wii U"
+    },
+    { 
+        ArchiveFormat::BCSAR,
+        ArchivePlatform::CTR,
+        sead::Endian::eLittle,
+        0x02000000,
+        "bcsar",
+        "BCSAR",
+        "CTR Sound Archive",
+        "3DS"
+    },
+    { 
+        ArchiveFormat::BFSAR,
+        ArchivePlatform::NX,
+        sead::Endian::eLittle,
+        0x00020400,
+        "bfsar",
+        "BFSAR",
+        "Cafe Sound Archive",
+        "Switch"
+    },
 };
 
 inline const ArchiveFormatInfo *getFormatInfo(ArchiveFormat format, ArchivePlatform platform)
@@ -128,11 +159,6 @@ public:
     void setPlatform(ArchivePlatform platform) const
     {
         mPlatform = platform;
-    }
-
-    bool isLittleEndian() const
-    {
-        return mPlatform == ArchivePlatform::CTR || mPlatform == ArchivePlatform::NX;
     }
 
     sead::Endian::Types getEndian() const

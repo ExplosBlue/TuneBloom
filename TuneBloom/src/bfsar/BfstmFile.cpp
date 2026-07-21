@@ -197,6 +197,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
 
     {
         u32 mainWaveSize = channels[0]->getDataSize();
+        u32 channelWriteBytes = cDefaultBytesPerBlock * (blockNum - 1) + lastBlockBytes;
 
         for (u32 i = 0; i < channelNum; i++)
         {
@@ -219,7 +220,8 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
 
             if (currentWave.getIsStreamExtended() &&
                 currentWave.getLoopStartFrame(true) == loopStartFrame &&
-                currentWave.getLoopEndFrame(true) == loopEndFrame)
+                currentWave.getLoopEndFrame(true) == loopEndFrame &&
+                channel.getDataSize() >= channelWriteBytes)
             {
                 channelInfo.buffer = new u8[mainWaveSize];
                 channelInfo.shouldDelete = true;

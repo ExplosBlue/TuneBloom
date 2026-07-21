@@ -12,6 +12,12 @@ namespace nw { namespace snd { namespace internal {
 class Util
 {
 public:
+    
+    static bool IsHighByteMajorVersion(u32 version)
+    {
+        return ((version >> 24) & 0xFF) != 0;
+    }
+
     static u32 GetSampleByByte(u32 byte, SampleFormat format)
     {
         u32 samples = 0;

@@ -1,5 +1,7 @@
 #include <bfsar/SoundPlayer.h>
 
+#include <bfsar/OpusStream.h>
+
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
@@ -344,14 +346,21 @@ bool SoundPlayer::writeSeqWavFile(const sead::SafeString& path, const std::vecto
 
 bool SoundPlayer::playStrmSound(const Sound* sound)
 {
-    if (sound->getStreamSoundInfo().getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+    Sound::StreamSoundInfo::StreamType streamType = sound->getStreamSoundInfo().getStreamType();
+
+    if (streamType == Sound::StreamSoundInfo::StreamType::Opus)
     {
-        const char* streamFmtP = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>("Only %s streams are supported", streamFmtP).cstr(), nullptr });
+        if (!opusstream::AttachStreamWaves(const_cast<Sound *>(sound)))
+            return false;
+    }
+    else if (streamType != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+    {
+        const char *streamFmtP = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+        PopupMgr::instance()->addPopup({sead::FormatFixedSafeString<64>("Only %s and Opus streams are supported", streamFmtP).cstr(), nullptr});
         return false;
     }
 
-    const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
+    const Sound::StreamSoundInfo &strmSoundInfo = sound->getStreamSoundInfo();
 
     if (strmSoundInfo.getTrackList().isEmpty())
     {

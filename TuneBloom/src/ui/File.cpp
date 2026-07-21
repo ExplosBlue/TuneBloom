@@ -16,8 +16,11 @@
 #include <string>
 #include <filesystem>
 #include <algorithm>
+#include <vector>
+#include <cstring>
 
 #include <bfsar/InnerFile.h>
+#include <bfsar/Cmpbin.h>
 
 #include <portable-file-dialogs.h>
 
@@ -192,7 +195,10 @@ bool ValidBFSARHeader(const void* file)
     //? Only check version for FSAR (BFSAR) files
     if (isFSAR)
     {
-        if (!(header.version >= 0x00010000 && header.version < 0x00030000))
+        bool inLegacyRange = header.version >= 0x00010000 && header.version < 0x00030000;
+        bool isV3 = header.version == 0x03000000;
+
+        if (!(inLegacyRange || isV3))
         {
             sead::FormatFixedSafeString<64> msg("BFSAR version not supported (0x%08X)", (u32)header.version);
             PopupMgr::instance()->addPopup({msg, nullptr});
@@ -234,27 +240,10 @@ bool NewFile(ArchiveFormat format, ArchivePlatform platform)
 
     sBfsar.create(format, platform);
 
-    const char *ext;
-    const char *fmtName;
+    const ArchiveFormatInfo* info = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
 
-    switch (platform)
-    {
-    case ArchivePlatform::CTR:
-        fmtName = "BCSAR";
-        ext = "bcsar";
-        break;
-    case ArchivePlatform::NX:
-        fmtName = "BFSAR (Switch)";
-        ext = "bfsar";
-        break;
-    default:
-        fmtName = "BFSAR";
-        ext = "bfsar";
-        break;
-    }
-
-    LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", fmtName).cstr());
-    util::updateTitle(sead::FormatFixedSafeString<64>("New.%s", ext).cstr(), true);
+    LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", info->fmtName).cstr());
+    util::updateTitle(sead::FormatFixedSafeString<64>("New.%s", info->extension).cstr(), true);
 
     SetUnsavedChanges(true);
 
@@ -291,7 +280,7 @@ bool OpenFile()
     {
         const u32 filterCount = 1;
         FileFilter filters[filterCount] = {
-            { "Sound Archive (*.bfsar, *.bcsar)", "*.bfsar *.bcsar" }
+            { "Sound Archive (*.bfsar, *.bcsar, *.cmpbin)", "*.bfsar *.bcsar *.cmpbin" }
         };
 
         if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
@@ -314,24 +303,52 @@ bool OpenFile()
         return false;
     }
 
+    u32 fileSize = static_cast<u32>(arg.read_size);
+
+    bool wasCmpbin = false;
+    cmpbin::Codec cmpbinCodec = cmpbin::Codec::Lz4Frame;
+
+    if (cmpbin::IsCompressed(bfsarFile, fileSize))
+    {
+        wasCmpbin = true;
+        cmpbinCodec = cmpbin::DetectCodec(bfsarFile, fileSize);
+
+        std::vector<u8> decompressed;
+        if (!cmpbin::Decompress(bfsarFile, fileSize, decompressed))
+        {
+            delete bfsarFile;
+            PopupMgr::instance()->addPopup({"Couldn't decompress the cmpbin file"});
+            return false;
+        }
+
+        delete bfsarFile;
+
+        u8 *buf = new u8[decompressed.size()];
+        std::memcpy(buf, decompressed.data(), decompressed.size());
+        bfsarFile = buf;
+        fileSize = static_cast<u32>(decompressed.size());
+    }
+
     if (!ValidBFSARHeader(bfsarFile))
     {
+        delete bfsarFile;
         return false;
     }
 
     CloseFile();
 
-    if (!sBfsar.open(bfsarFile, static_cast<u32>(arg.read_size), filePath, nullptr)) //? bfsarFile is freed here
+    if (!sBfsar.open(bfsarFile, fileSize, filePath, nullptr)) //? bfsarFile is freed here
     {
-        sead::FormatFixedSafeString<1024> msg(
-            "Your BFSAR file is corrupted beyond repair :(\n%s", PopupMgr::instance()->getCorruptInfo().cstr()
-        );
-        PopupMgr::instance()->addPopup({ msg, nullptr });
+        sead::FormatFixedSafeString<1024> msg("Your BFSAR file is corrupted beyond repair :(\n%s", PopupMgr::instance()->getCorruptInfo().cstr());
+        PopupMgr::instance()->addPopup({msg, nullptr});
         CloseFile();
         return false;
     }
 
-    //sSoundArchive = sBfsar.getSoundArchive();
+    // sSoundArchive = sBfsar.getSoundArchive();
+
+    if (wasCmpbin)
+        sBfsar.setCmpbinPreferZstd(cmpbinCodec == cmpbin::Codec::Zstd);
 
     sead::FixedSafeString<512> fileName;
     sead::Path::getFileName(&fileName, filePath);
@@ -379,7 +396,17 @@ bool SaveFileAs()
     sead::FixedSafeString<128> filterName;
     filterName.format("%s (%s)", info->label, filterPattern.cstr());
 
-    FileFilter filters[] = { { filterName.cstr(), filterPattern.cstr() } };
+    sead::FixedSafeString<128> cmpbinName;
+    FileFilter filters[2] = {{filterName.cstr(), filterPattern.cstr()}, {"", ""}};
+    u32 filterCount = 1;
+
+    if (sBfsar.isV3Bfsar())
+    {
+        cmpbinName.format("Compressed %s (*.cmpbin)", info->label);
+        filters[1] = {cmpbinName.cstr(), "*.cmpbin"};
+        filterCount = 2;
+    }
+
     sead::FixedSafeString<512> defaultPath;
 
     if (sBfsar.getFilePath().isEmpty())
@@ -397,7 +424,7 @@ bool SaveFileAs()
 
     sead::FixedSafeString<512> path;
 
-    if (!SaveFileDialog(&path, nullptr, std::size(filters), filters, info->extension, defaultPath.cstr()))
+    if (!SaveFileDialog(&path, nullptr, filterCount, filters, info->extension, defaultPath.cstr()))
         return false;
 
     LOG_STR(path.cstr());

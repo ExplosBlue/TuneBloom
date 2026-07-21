@@ -33,6 +33,7 @@
 #include <midi/InstBankExporter.h>
 #include <midi/MidiInput.h>
 #include <bfsar/BankFile.h>
+#include <snd/snd_Util.h>
 
 #include <bfsar/LoopAnalysis.h>
 #include <bfsar/LoopWaveformEditor.h>
@@ -378,19 +379,7 @@ void SetUnsavedChanges(bool dirty)
     }
 }
 
-static u32 DefaultArchiveVersionForPlatform(ArchivePlatform platform)
-{
-    switch (platform)
-    {
-    case ArchivePlatform::NX:
-        return 0x00020400; // BFSAR 2.4.0
-    case ArchivePlatform::CTR:
-        return 0x02000000; // BCSAR 2.0.0
-    case ArchivePlatform::CAFE:
-    default:
-        return 0x00010000; // BFSAR 1.0.0
-    }
-}
+
 
 static bool sWantsNew = false;
 static bool sWantsOpen = false;
@@ -2132,19 +2121,6 @@ void DrawUI()
 
         if (ImGui::BeginPopupModal("New Archive###NewFileFormat", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            struct NewArchiveTarget
-            {
-                const char* label;
-                ArchiveFormat format;
-                ArchivePlatform platform;
-            };
-
-            static const NewArchiveTarget kTargets[] = {
-                { "BFSAR (Wii U)",  ArchiveFormat::BFSAR, ArchivePlatform::CAFE },
-                { "BFSAR (Switch)", ArchiveFormat::BFSAR, ArchivePlatform::NX },
-                { "BCSAR (3DS)",    ArchiveFormat::BCSAR, ArchivePlatform::CTR},
-            };
-
             static int sSelected = 0;
             static u32 sVersion = 0;
             static bool sIncludeStringTable = true;
@@ -2152,19 +2128,26 @@ void DrawUI()
             if (ImGui::IsWindowAppearing())
             {
                 sSelected = 0;
-                sVersion = DefaultArchiveVersionForPlatform(kTargets[sSelected].platform);
+                sVersion = kFormatTable[sSelected].defaultVersion;
                 sIncludeStringTable = true;
             }
 
-            const char* labels[IM_ARRAYSIZE(kTargets)];
-            for (int i = 0; i < IM_ARRAYSIZE(kTargets); i++)
-                labels[i] = kTargets[i].label;
+            static char sLabels[IM_ARRAYSIZE(kFormatTable)][64];
+            const char *labels[IM_ARRAYSIZE(kFormatTable)];
+
+            for (int i = 0; i < IM_ARRAYSIZE(kFormatTable); i++)
+            {
+                snprintf(sLabels[i], sizeof(sLabels[i]), "%s (%s)", kFormatTable[i].fmtName, kFormatTable[i].systemName);
+                labels[i] = sLabels[i];
+            }
 
             ImGui::SetNextItemWidth(240.0f);
-            if (ComboScroll("Platform", &sSelected, labels, IM_ARRAYSIZE(kTargets)))
-                sVersion = DefaultArchiveVersionForPlatform(kTargets[sSelected].platform);
+            if (ComboScroll("Platform", &sSelected, labels, IM_ARRAYSIZE(kFormatTable)))
+                sVersion = kFormatTable[sSelected].defaultVersion;
 
-            DrawVersionUI(&sVersion, kTargets[sSelected].format);
+            const ArchiveFormatInfo &info = kFormatTable[sSelected];
+
+            DrawVersionUI(&sVersion, info.format);
 
             ImGui::Checkbox("Include String Table", &sIncludeStringTable);
             ImGui::Separator();
@@ -2179,7 +2162,7 @@ void DrawUI()
 
             if (create)
             {
-                NewFile(kTargets[sSelected].format, kTargets[sSelected].platform);
+                NewFile(info.format, info.platform);
                 sBfsar.setVersion(sVersion);
                 sBfsar.setIncludeStringTable(sIncludeStringTable);
                 SetUnsavedChanges(true);
@@ -6282,32 +6265,44 @@ void DrawProjectInfoUI()
     const ImU32 stepU32 = 1;
 
     {
-        static const char* sPlatformTypes[] = {
-            "BFSAR (Wii U)",
-            "BCSAR (3DS)",
-            "BFSAR (Switch)"
-        };
+        static char sLabels[IM_ARRAYSIZE(kFormatTable)][64];
+        static u32 sVersionForEntry[IM_ARRAYSIZE(kFormatTable)] = {};
+        const char *labels[IM_ARRAYSIZE(kFormatTable)];
 
-        static u32 sVersionForPlatform[3] = {
-            DefaultArchiveVersionForPlatform(ArchivePlatform::CAFE),
-            DefaultArchiveVersionForPlatform(ArchivePlatform::CTR),
-            DefaultArchiveVersionForPlatform(ArchivePlatform::NX),
-        };
-
-        ArchivePlatform platform = sBfsar.getPlatform();
-        sVersionForPlatform[(s32)platform] = sBfsar.getVersion();
-
-        if (ComboScroll("Platform", (s32*)&platform, sPlatformTypes, IM_ARRAYSIZE(sPlatformTypes)))
+        static const bool sInit = [&]
         {
-            sBfsar.setPlatform(platform);
-            sBfsar.setEndian(sBfsar.isLittleEndian() ? sead::Endian::eLittle : sead::Endian::eBig);
-            sBfsar.setVersion(sVersionForPlatform[(s32)platform]);
+            for (int i = 0; i < IM_ARRAYSIZE(kFormatTable); i++)
+            {
+                snprintf(sLabels[i], sizeof(sLabels[i]), "%s (%s)", kFormatTable[i].fmtName, kFormatTable[i].systemName);
+                sVersionForEntry[i] = kFormatTable[i].defaultVersion;
+            }
+            return true;
+        }();
+
+        for (int i = 0; i < IM_ARRAYSIZE(kFormatTable); i++)
+            labels[i] = sLabels[i];
+
+        const ArchiveFormatInfo *current = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
+
+        s32 selected = current ? (s32)(current - kFormatTable) : 0;
+        sVersionForEntry[selected] = sBfsar.getVersion();
+
+        if (ComboScroll("Platform", &selected, labels, IM_ARRAYSIZE(kFormatTable)))
+        {
+            const ArchiveFormatInfo &info = kFormatTable[selected];
+
+            sBfsar.setFormat(info.format);
+            sBfsar.setPlatform(info.platform);
+            sBfsar.setEndian(info.endian);
+            sBfsar.setVersion(sVersionForEntry[selected]);
+
             SetUnsavedChanges(true);
         }
     }
 
     {
         u32 version = sBfsar.getVersion();
+
         if (DrawVersionUI(&version, sBfsar.getFormat()))
         {
             sBfsar.setVersion(version);
@@ -9360,7 +9355,8 @@ static bool VersionField(u8* value, u8 maxValue)
 bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format)
 {
     const bool isBcsar = (format == ArchiveFormat::BCSAR);
-    const u32 shift[3] = {isBcsar ? 24u : 16u, isBcsar ? 16u : 8u, 0u};
+    const bool highByteMajor = isBcsar || nw::snd::internal::Util::IsHighByteMajorVersion(*versionPtr);
+    const u32 shift[3] = {highByteMajor ? 24u : 16u, highByteMajor ? 16u : 8u, highByteMajor && !isBcsar ? 8u : 0u};
 
     const u32 version = *versionPtr;
     u8 field[3] = {

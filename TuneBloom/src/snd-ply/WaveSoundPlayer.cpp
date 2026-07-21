@@ -306,6 +306,16 @@ bool WaveSoundPlayer::doStartChannel_(u32 startOffsetSample)
     if (!channel)
         return false;
 
+    channel->setReleasePriorityFix(mReleasePriorityFixFlag);
+    // lol why this commented out
+    // channel->setFrontBypass(isFrontBypass());
+    channel->setUpdateType(mUpdateType);
+
+    snd::internal::WaveInfo waveInfoS;
+    nw::snd::internal::ConvertWaveInfo(&waveInfoS, mWaveInfo);
+
+    channel->start(waveInfoS, -1, startOffsetSample);
+
     if (mSetAdshr)
     {
         channel->setAttack(mWaveSoundInfo.adshr.attack);
@@ -314,15 +324,6 @@ bool WaveSoundPlayer::doStartChannel_(u32 startOffsetSample)
         channel->setSustain(mWaveSoundInfo.adshr.sustain);
         channel->setRelease(mWaveSoundInfo.adshr.release);
     }
-
-    channel->setReleasePriorityFix(mReleasePriorityFixFlag);
-    //channel->setFrontBypass(isFrontBypass());
-    channel->setUpdateType(mUpdateType);
-
-    snd::internal::WaveInfo waveInfoS;
-    nw::snd::internal::ConvertWaveInfo(&waveInfoS, mWaveInfo);
-
-    channel->start(waveInfoS, -1, startOffsetSample);
 
     mChannel = channel;
 

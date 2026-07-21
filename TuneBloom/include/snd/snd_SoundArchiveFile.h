@@ -614,6 +614,12 @@ public:
     struct SequenceSoundInfo;
     struct Sound3DInfo;
 
+    static bool &UseV3SoundInfoLayout()
+    {
+        static bool sEnabled = false;
+        return sEnabled;
+    }
+
     struct SoundInfo
     {
         ut::ResU32 fileId;
@@ -624,9 +630,21 @@ public:
         Util::Reference toDetailSoundInfo;
         Util::BitFlag optionParameter;
 
+        const Util::Reference &GetDetailReference() const
+        {
+            u32 off = UseV3SoundInfoLayout() ? 0x2C : 0x0C;
+            return *reinterpret_cast<const Util::Reference *>(sead::PtrUtil::addOffset(this, off));
+        }
+
+        const Util::BitFlag &GetOptionParameter() const
+        {
+            u32 off = UseV3SoundInfoLayout() ? 0x34 : 0x14;
+            return *reinterpret_cast<const Util::BitFlag *>(sead::PtrUtil::addOffset(this, off));
+        }
+
         SoundArchive::SoundType GetSoundType() const
         {
-            switch (toDetailSoundInfo.typeId)
+            switch (GetDetailReference().typeId)
             {
                 case ElementType_SoundArchiveFile_StreamSoundInfo:
                     return SoundArchive::SOUND_TYPE_STRM;
@@ -639,39 +657,41 @@ public:
             }
         }
 
-        const StreamSoundInfo& GetStreamSoundInfo() const
+        const StreamSoundInfo &GetStreamSoundInfo() const
         {
-            SEAD_ASSERT(toDetailSoundInfo.typeId == ElementType_SoundArchiveFile_StreamSoundInfo);
+            SEAD_ASSERT(GetDetailReference().typeId == ElementType_SoundArchiveFile_StreamSoundInfo);
 
-            return *reinterpret_cast<const StreamSoundInfo*>(sead::PtrUtil::addOffset(this, toDetailSoundInfo.offset));
+            return *reinterpret_cast<const StreamSoundInfo *>(sead::PtrUtil::addOffset(this, GetDetailReference().offset));
         }
-        const WaveSoundInfo& GetWaveSoundInfo() const
+        const WaveSoundInfo &GetWaveSoundInfo() const
         {
-            SEAD_ASSERT(toDetailSoundInfo.typeId == ElementType_SoundArchiveFile_WaveSoundInfo);
+            SEAD_ASSERT(GetDetailReference().typeId == ElementType_SoundArchiveFile_WaveSoundInfo);
 
-            return *reinterpret_cast<const WaveSoundInfo*>(sead::PtrUtil::addOffset(this, toDetailSoundInfo.offset));
+            return *reinterpret_cast<const WaveSoundInfo *>(sead::PtrUtil::addOffset(this, GetDetailReference().offset));
         }
-        const SequenceSoundInfo& GetSequenceSoundInfo() const
+        const SequenceSoundInfo &GetSequenceSoundInfo() const
         {
-            SEAD_ASSERT(toDetailSoundInfo.typeId == ElementType_SoundArchiveFile_SequenceSoundInfo);
+            SEAD_ASSERT(GetDetailReference().typeId == ElementType_SoundArchiveFile_SequenceSoundInfo);
 
-            return *reinterpret_cast<const SequenceSoundInfo*>(sead::PtrUtil::addOffset(this, toDetailSoundInfo.offset));
+            return *reinterpret_cast<const SequenceSoundInfo *>(sead::PtrUtil::addOffset(this, GetDetailReference().offset));
         }
 
-        const Sound3DInfo* GetSound3DInfo() const
+        const Sound3DInfo *GetSound3DInfo() const
         {
             u32 offset;
-            bool result = optionParameter.GetValue(&offset, SOUND_INFO_OFFSET_TO_3D_PARAM);
+            bool result = GetOptionParameter().GetValue(&offset, SOUND_INFO_OFFSET_TO_3D_PARAM);
+
             if (!result)
                 return nullptr;
 
-            return reinterpret_cast<const Sound3DInfo*>(sead::PtrUtil::addOffset(this, offset));
+            return reinterpret_cast<const Sound3DInfo *>(sead::PtrUtil::addOffset(this, offset));
         }
 
         u32 GetStringId() const
         {
             u32 value;
-            bool result = optionParameter.GetValue(&value, SOUND_INFO_STRING_ID);
+            bool result = GetOptionParameter().GetValue(&value, SOUND_INFO_STRING_ID);
+
             if (!result)
                 return DEFAULT_STRING_ID;
 
@@ -681,17 +701,19 @@ public:
         PanMode GetPanMode() const
         {
             u32 value;
-            bool result = optionParameter.GetValue(&value, SOUND_INFO_PAN_PARAM);
+            bool result = GetOptionParameter().GetValue(&value, SOUND_INFO_PAN_PARAM);
+
             if (!result)
                 return DEFAULT_PAN_MODE;
 
             return static_cast<PanMode>(Util::DevideBy8bit(value, 0));
         }
-    
+
         PanCurve GetPanCurve() const
         {
             u32 value;
-            bool result = optionParameter.GetValue(&value, SOUND_INFO_PAN_PARAM);
+            bool result = GetOptionParameter().GetValue(&value, SOUND_INFO_PAN_PARAM);
+
             if (!result)
                 return DEFAULT_PAN_CURVE;
 
@@ -701,7 +723,8 @@ public:
         u8 GetPlayerPriority() const
         {
             u32 value;
-            bool result = optionParameter.GetValue(&value, SOUND_INFO_PLAYER_PARAM);
+            bool result = GetOptionParameter().GetValue(&value, SOUND_INFO_PLAYER_PARAM);
+
             if (!result)
                 return DEFAULT_PLAYER_PRIORITY;
 
@@ -711,7 +734,8 @@ public:
         u8 GetActorPlayerId() const
         {
             u32 value;
-            bool result = optionParameter.GetValue(&value, SOUND_INFO_PLAYER_PARAM);
+            bool result = GetOptionParameter().GetValue(&value, SOUND_INFO_PLAYER_PARAM);
+
             if (!result)
                 return DEFAULT_ACTOR_PLAYER_ID;
 
@@ -721,23 +745,25 @@ public:
         u32 GetUserParam() const
         {
             u32 value;
-            bool result = optionParameter.GetValue(&value, SOUND_INFO_USER_PARAM);
+            bool result = GetOptionParameter().GetValue(&value, SOUND_INFO_USER_PARAM);
+
             if (!result)
                 return DEFAULT_USER_PARAM;
 
             return value;
         }
 
-        bool ReadUserParam(s32 index, u32& value) const
+        bool ReadUserParam(s32 index, u32 &value) const
         {
             SEAD_ASSERT(0 <= index && index < USER_PARAM_COUNT);
-            return optionParameter.GetValue(&value, USER_PARAM_INDEX[index]);
+            return GetOptionParameter().GetValue(&value, USER_PARAM_INDEX[index]);
         }
 
         bool IsFrontBypass() const
         {
             u32 value;
-            bool result = optionParameter.GetValue(&value, SOUND_INFO_OFFSET_TO_CTR_PARAM);
+            bool result = GetOptionParameter().GetValue(&value, SOUND_INFO_OFFSET_TO_CTR_PARAM);
+            
             if (!result)
                 return DEFAULT_IS_FRONT_BYPASS;
 

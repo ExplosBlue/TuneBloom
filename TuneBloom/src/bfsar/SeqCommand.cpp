@@ -382,7 +382,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
             {
             case MmlCommand::MML_ALLOC_TRACK:
             {
-                u16 tracks = (MmlParser::ReadByte(&trackData) << 8) | MmlParser::ReadByte(&trackData);
+                u16 tracks = MmlParser::Read16(&trackData);
                 arg = new SeqArg16(tracks, false);
                 cmdInst = new MmlCommandAllocTrack(arg, conditional);
                 break;

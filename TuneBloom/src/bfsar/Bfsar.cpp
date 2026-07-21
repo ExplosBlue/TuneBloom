@@ -11,6 +11,10 @@
 #include <bfsar/BfwarFile.h>
 #include <bfsar/BfwsdFile.h>
 #include <bfsar/File.h>
+#include <bfsar/Cmpbin.h>
+#include <bfsar/OpusStream.h>
+
+#include <cstring>
 
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
@@ -89,13 +93,11 @@ Bfsar::~Bfsar()
 
 ArchivePlatform getDefaultPlatformForFormat(ArchiveFormat format)
 {
-    switch (format)
-    {
-    case ArchiveFormat::BCSAR:
-        return ArchivePlatform::CTR;
-    default:
-        return ArchivePlatform::CAFE;
-    }
+    for (const auto &info : kFormatTable)
+        if (info.format == format)
+            return info.platform;
+
+    return ArchivePlatform::CAFE;
 }
 
 void Bfsar::create(ArchiveFormat format)
@@ -113,21 +115,16 @@ void Bfsar::create(ArchiveFormat format, ArchivePlatform platform)
     mFormat = format;
     mPlatform = platform;
 
-    // TODO: Ask user for those defaults
-    mEndian = isLittleEndian() ? sead::Endian::eLittle : sead::Endian::eBig;
+    const ArchiveFormatInfo *info = getFormatInfo(mFormat, mPlatform);
 
-    switch (mPlatform)
+    if (!info)
     {
-    case ArchivePlatform::NX:
-        mVersion = 0x00020400;
-        break; // BFSAR 2.4.0
-    case ArchivePlatform::CTR:
-        mVersion = 0x02000000;
-        break; // BCSAR 2.0.0
-    default:
-        mVersion = 0x00010000;
-        break; // BFSAR 1.0.0
+        LOG("Bfsar::create: unsupported format/platform pair");
+        return;
     }
+
+    mEndian = info->endian;
+    mVersion = info->defaultVersion;
 
     mIncludeStringTable = true;
     mSaveMetadata = sSaveMetadataDefault;
@@ -149,6 +146,7 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
     LOG_FUNC();
     LOG_HEX("magic", bfsarFile, 4);
     LOG_STR(filePath.cstr());
+    
     close();
 
     // Detect format from magic
@@ -210,6 +208,9 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
     return success;
 }
 
+static bool ReplaceStreamFileAtomic_(const sead::SafeString &tempPath, const sead::SafeString &destPath);
+static bool FinalizeCmpbin_(const sead::SafeString &tmpPath, const sead::SafeString &destPath, bool preferZstd);
+
 bool Bfsar::save()
 {
     LOG_FUNC();
@@ -224,63 +225,120 @@ bool Bfsar::save()
     if (!validate_())
         return false;
 
-    // sead::FormatFixedSafeString<512> path("%s.save.bfsar", mFilePath->cstr()); //? Debug
-    sead::SafeString path = *mFilePath;
+    return saveArchiveFile_(*mFilePath);
+}
 
-    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
+{
+    sead::FileDevice *device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);
 
-    sead::FileHandle handle;
-    device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
+    const char *pathStr = path.cstr();
+    size_t pathLen = std::strlen(pathStr);
+    const char *cExt = ".cmpbin";
+    size_t extLen = std::strlen(cExt);
+    bool asCmpbin = pathLen >= extLen && std::memcmp(pathStr + pathLen - extLen, cExt, extLen) == 0;
 
-    if (!handle.getDevice())
+    sead::FixedSafeString<560> tmpPath;
+    tmpPath.format("%s.savetmp", pathStr);
+
     {
-        device->tryOpen(&handle, path, sead::FileDevice::FileOpenFlag::eCreate, 0);
+        sead::FileHandle handle;
+        device->tryOpen(&handle, tmpPath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
 
         if (!handle.getDevice())
         {
-            PopupMgr::instance()->addPopup({ "Coundn't open output file" });
-            return false;
+            device->tryOpen(&handle, tmpPath, sead::FileDevice::FileOpenFlag::eCreate, 0);
+
+            if (!handle.getDevice())
+            {
+                PopupMgr::instance()->addPopup({"Coundn't open output file"});
+                return false;
+            }
         }
+
+        save_(handle);
     }
 
-    save_(handle);
+    if (asCmpbin)
+        return FinalizeCmpbin_(tmpPath, path, mCmpbinPreferZstd);
+
+    if (!ReplaceStreamFileAtomic_(tmpPath, path))
+    {
+        PopupMgr::instance()->addPopup({"Couldn't finalize saved file, kept savetmp copy"});
+        return false;
+    }
 
     return true;
 }
 
-bool Bfsar::saveAs(const sead::SafeString& filePath)
+static bool FinalizeCmpbin_(const sead::SafeString &tmpPath, const sead::SafeString &destPath, bool preferZstd)
+{
+    std::error_code ec;
+
+    std::vector<u8> raw;
+    if (FILE *f = fopen(tmpPath.cstr(), "rb"))
+    {
+        fseek(f, 0, SEEK_END);
+        long sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if (sz > 0)
+        {
+            raw.resize((size_t)sz);
+            fread(raw.data(), 1, raw.size(), f);
+        }
+        fclose(f);
+    }
+    else
+    {
+        PopupMgr::instance()->addPopup({"Couldn't read temporary archive for compression"});
+        return false;
+    }
+
+    std::vector<u8> compressed;
+    cmpbin::Codec codec = preferZstd ? cmpbin::Codec::Zstd : cmpbin::Codec::Lz4Frame;
+
+    if (!cmpbin::Compress(raw.data(), raw.size(), codec, compressed))
+    {
+        PopupMgr::instance()->addPopup({"Failed to compress cmpbin output"});
+        std::filesystem::remove(tmpPath.cstr(), ec);
+        return false;
+    }
+
+    sead::FixedSafeString<560> cmpTmpPath;
+    cmpTmpPath.format("%s.cmptmp", destPath.cstr());
+
+    if (FILE *f = fopen(cmpTmpPath.cstr(), "wb"))
+    {
+        fwrite(compressed.data(), 1, compressed.size(), f);
+        fclose(f);
+    }
+    else
+    {
+        PopupMgr::instance()->addPopup({"Couldn't open cmpbin output for writing"});
+        std::filesystem::remove(tmpPath.cstr(), ec);
+        return false;
+    }
+
+    ReplaceStreamFileAtomic_(cmpTmpPath, destPath);
+
+    std::filesystem::remove(tmpPath.cstr(), ec);
+    return true;
+}
+
+bool Bfsar::saveAs(const sead::SafeString &filePath)
 {
     LOG_FUNC();
     LOG_STR(filePath.cstr());
+
     if (!mOpen)
         return false;
-
-    //? Should already be called even before dialog appears
-    // if (!validate_())
-    //     return false;
-
-    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-    SEAD_ASSERT(device);
-
-    sead::FileHandle handle;
-    device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eWriteOnly, 0);
-
-    if (!handle.getDevice())
-    {
-        device->tryOpen(&handle, filePath, sead::FileDevice::FileOpenFlag::eCreate, 0);
-
-        if (!handle.getDevice())
-        {
-            PopupMgr::instance()->addPopup({ "Coundn't open output file" });
-            return false;
-        }
-    }
 
     delete mFilePath;
     mFilePath = new sead::HeapSafeString(nullptr, filePath);
 
-    save_(handle);
+    if (!saveArchiveFile_(filePath))
+        return false;
 
     delete mLoadedArchivePath;
     mLoadedArchivePath = new sead::HeapSafeString(nullptr, filePath);
@@ -665,6 +723,22 @@ u32 Bfsar::removeUnusedWaveFiles(const std::vector<WaveFile*>& unused)
     return (u32)unused.size();
 }
 
+template <typename IsModeledFn>
+static void CollectUnmodeledOptionBits_(const nw::snd::internal::Util::BitFlag &flags, IsModeledFn isModeled, std::vector<std::pair<u32, u32>> &out)
+{
+    const u32 bits = flags.bitFlag;
+
+    for (u32 bit = 0; bit <= (u32)nw::snd::internal::Util::BitFlag::BIT_NUMBER_MAX; bit++)
+    {
+        if (!(bits & (1u << bit)) || isModeled(bit))
+            continue;
+
+        u32 value = 0;
+        flags.GetValue(&value, bit);
+        out.push_back({bit, value});
+    }
+}
+
 bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize, sead::Heap* heap)
 {
     LOG_FUNC();
@@ -678,6 +752,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         mPlatform = mEndian == sead::Endian::eLittle ? ArchivePlatform::NX : ArchivePlatform::CAFE;
 
     mVersion = soundArchive.mHeader.version;
+
+    nw::snd::internal::SoundArchiveFile::UseV3SoundInfoLayout() = mFormat == ArchiveFormat::BFSAR && getDecodedMajor() >= 3;
 
     mIncludeStringTable = soundArchive.mStringBlockBody != nullptr;
 
@@ -2234,7 +2310,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         sound->mId = i;
         PopupMgr::instance()->setCurrentProcessItem(sound);
 
-        sound->mEnableName = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_INFO_STRING_ID) != 0;
+        sound->mEnableName = soundInfo->GetOptionParameter().GetTrueCount(nw::snd::internal::SOUND_INFO_STRING_ID) != 0;
         if (mIncludeStringTable && soundInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
             sound->mName = soundArchive.GetString(soundInfo->GetStringId());
@@ -2254,14 +2330,22 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         sound->mRemoteFilter = soundInfo->remoteFilter;
         sound->mSoundType = static_cast<Sound::SoundType>(soundInfo->GetSoundType());
 
-        sound->mEnablePanParam = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_INFO_PAN_PARAM) != 0;
+        if (nw::snd::internal::SoundArchiveFile::UseV3SoundInfoLayout())
+        {
+            const u8 *namePtr = reinterpret_cast<const u8 *>(soundInfo) + 0x0C;
+            sound->mV3NameField.assign(namePtr, namePtr + 0x20);
+        }
+
+        sound->mEnablePanParam = soundInfo->GetOptionParameter().GetTrueCount(nw::snd::internal::SOUND_INFO_PAN_PARAM) != 0;
+        
         if (sound->mEnablePanParam)
         {
             sound->mPanMode = static_cast<snd::PanMode>(soundInfo->GetPanMode());
             sound->mPanCurve = static_cast<snd::PanCurve>(soundInfo->GetPanCurve());
         }
 
-        sound->mEnablePlayerParam = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_INFO_PLAYER_PARAM) != 0;
+        sound->mEnablePlayerParam = soundInfo->GetOptionParameter().GetTrueCount(nw::snd::internal::SOUND_INFO_PLAYER_PARAM) != 0;
+        
         if (sound->mEnablePlayerParam)
         {
             sound->mPlayerPriority = soundInfo->GetPlayerPriority();
@@ -2270,20 +2354,22 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
         for (u32 j = 0; j < nw::snd::internal::USER_PARAM_COUNT; j++)
         {
-            sound->mEnableUserParam[j] = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::USER_PARAM_INDEX[j]) != 0;
+            sound->mEnableUserParam[j] = soundInfo->GetOptionParameter().GetTrueCount(nw::snd::internal::USER_PARAM_INDEX[j]) != 0;
 
             if (sound->mEnableUserParam[j])
                 soundInfo->ReadUserParam(j, sound->mUserParam[j]);
         }
 
-        sound->mEnableIsFrontBypass = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_INFO_OFFSET_TO_CTR_PARAM) != 0;
+        sound->mEnableIsFrontBypass = soundInfo->GetOptionParameter().GetTrueCount(nw::snd::internal::SOUND_INFO_OFFSET_TO_CTR_PARAM) != 0;
+        
         if (sound->mEnableIsFrontBypass)
             sound->mIsFrontBypass = soundInfo->IsFrontBypass();
 
-        sound->mEnableSound3DInfo = soundInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_INFO_OFFSET_TO_3D_PARAM) != 0;
+        sound->mEnableSound3DInfo = soundInfo->GetOptionParameter().GetTrueCount(nw::snd::internal::SOUND_INFO_OFFSET_TO_3D_PARAM) != 0;
+        
         if (sound->mEnableSound3DInfo)
         {
-            const nw::snd::internal::SoundArchiveFile::Sound3DInfo* sound3DInfo = soundInfo->GetSound3DInfo();
+            const nw::snd::internal::SoundArchiveFile::Sound3DInfo *sound3DInfo = soundInfo->GetSound3DInfo();
 
             sound->mSound3DInfo.mFlags = sound3DInfo->flags;
             sound->mSound3DInfo.mDecayRatio = sound3DInfo->decayRatio;
@@ -2309,17 +2395,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 return false;
             };
 
-            const u32 bits = soundInfo->optionParameter.bitFlag;
-
-            for (u32 bit = 0; bit <= (u32)nw::snd::internal::Util::BitFlag::BIT_NUMBER_MAX; bit++)
-            {
-                if (!(bits & (1u << bit)) || isModeledOption(bit))
-                    continue;
-
-                u32 value = 0;
-                soundInfo->optionParameter.GetValue(&value, bit);
-                sound->mExtraSoundInfoOptions.push_back({bit, value});
-            }
+            CollectUnmodeledOptionBits_(soundInfo->GetOptionParameter(), isModeledOption, sound->mExtraSoundInfoOptions);
         }
 
         if (sound->mSoundType == Sound::SoundType::Seq)
@@ -2400,6 +2476,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
             u8* strmFile = nullptr;
             bool validStrmFile = false;
+            bool strmFileIsOpus = false;
             if (validPath && device)
             {
                 sead::FixedSafeString<512> dir;
@@ -2420,6 +2497,10 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                         sead::FormatFixedSafeString<1024> msg("Couldn't load '%s'\nThis should be relative to your .bfsar file", filePath);
                         PopupMgr::instance()->pushCurrentItemError(msg);
                     }
+                    else
+                    {
+                        strmFileIsOpus = opusstream::IsOpusStream(strmFile, static_cast<u32>(loadArg.read_size));
+                    }
                 }
                 else
                 {
@@ -2428,7 +2509,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 }
             }
 
-            if (strmFile)
+            if (strmFile && !strmFileIsOpus)
             {
                 nw::snd::internal::StreamSoundFileReader reader;
                 reader.Initialize(strmFile);
@@ -2577,6 +2658,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
                         sound->mStreamSoundInfo.mStreamType = static_cast<Sound::StreamSoundInfo::StreamType>(soundExt->GetStreamFileType());
                         sound->mStreamSoundInfo.mIsLoop = soundExt->IsLoop();
+                        sound->mStreamSoundInfo.mStreamTypeInfoUpper = static_cast<u16>((soundExt->streamTypeInfo >> 16) & 0xFFFF);
                         sound->mStreamSoundInfo.mLoopStartFrame = soundExt->loopStartFrame;
                         sound->mStreamSoundInfo.mLoopEndFrame = soundExt->loopEndFrame;
 
@@ -2720,7 +2802,9 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                         u32 minor = (wsdVersion >> 16) & 0xFF;
                         wsdVersion = (major << 16) | (minor << 8);
                     }
-                    if (BfwsdFile::isFilterSupportedVersion(wsdVersion, mFormat))
+
+                    bool filterModeled = BfwsdFile::isFilterSupportedVersion(wsdVersion, mFormat);
+                    if (filterModeled)
                     {
                         sound->mWaveSoundInfo.mEnableFilter = innerWaveSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::WAVE_SOUND_INFO_FILTER) != 0;
                         if (sound->mWaveSoundInfo.mEnableFilter)
@@ -2729,6 +2813,26 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                             sound->mWaveSoundInfo.mBiquadType = innerWaveSoundInfo.GetBiquadType();
                             sound->mWaveSoundInfo.mBiquadValue = innerWaveSoundInfo.GetBiquadValue();
                         }
+                    }
+
+                    {
+                        auto isModeledBit = [&](u32 bit)
+                        {
+                            switch (bit)
+                            {
+                                case nw::snd::internal::WAVE_SOUND_INFO_PAN:
+                                case nw::snd::internal::WAVE_SOUND_INFO_PITCH:
+                                case nw::snd::internal::WAVE_SOUND_INFO_SEND:
+                                case nw::snd::internal::WAVE_SOUND_INFO_ENVELOPE:
+                                    return true;
+                                case nw::snd::internal::WAVE_SOUND_INFO_FILTER:
+                                    return filterModeled;
+                                default:
+                                    return false;
+                            }
+                        };
+
+                        CollectUnmodeledOptionBits_(innerWaveSoundInfo.optionParameter, isModeledBit, sound->mWaveSoundInfo.mExtraOptions);
                     }
                 }
                 else
@@ -3057,7 +3161,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                         SEAD_ASSERT(soundInfo);
                         if (soundInfo->GetSoundType() != nw::snd::SoundArchive::SOUND_TYPE_SEQ)
                         {
-                            if (assertSeq)
+                            if (assertSeq && soundInfo->GetSoundType() == nw::snd::SoundArchive::SOUND_TYPE_INVALID)
                             {
                                 sead::FormatFixedSafeString<1024> msg("Item %u is invalid", j);
                                 PopupMgr::instance()->pushCurrentItemError(msg);
@@ -3499,6 +3603,64 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         }
     }
 
+    {
+        mItemOrigFileIds.clear();
+
+        const u32 origFileCount = soundArchive.detail_GetFileCount();
+
+        auto addOrig = [&](const Item::ListNode *node, u32 fileId)
+        {
+            if (node && fileId < origFileCount)
+                mItemOrigFileIds.emplace_back(node->val(), fileId);
+        };
+
+        for (const auto &[origFileId, seqIdx] : seqFileIdxMap)
+        {
+            const Item::ListNode *node = mSequenceFileList.nth(seqIdx);
+            SEAD_ASSERT(node);
+            addOrig(node, origFileId);
+        }
+
+        for (u32 i = 0; i < soundArchive.GetSoundGroupCount(); i++)
+        {
+            const nw::snd::internal::SoundArchiveFile::SoundGroupInfo *soundSetInfo = soundArchive.detail_GetSoundGroupInfo(soundArchive.GetSoundGroupIdFromIndex(i));
+            const Item::ListNode *node = mSoundSetList.nth(i);
+
+            if (!soundSetInfo || !node || !soundSetInfo->GetWaveSoundGroupInfo())
+                continue;
+
+            const nw::snd::internal::Util::Table<nw::ut::ResU32> *fileIdTable = soundSetInfo->GetFileIdTable();
+
+            if (fileIdTable && fileIdTable->count > 0)
+                addOrig(node, fileIdTable->item[0]);
+        }
+
+        for (u32 i = 0; i < soundArchive.GetBankCount(); i++)
+        {
+            const nw::snd::internal::SoundArchiveFile::BankInfo *bankInfo = soundArchive.GetBankInfo(soundArchive.GetBankIdFromIndex(i));
+
+            if (bankInfo)
+                addOrig(mBankList.nth(i), bankInfo->fileId);
+        }
+
+        for (u32 i = 0; i < soundArchive.GetWaveArchiveCount(); i++)
+        {
+            const u32 warcId = soundArchive.GetWaveArchiveIdFromIndex(i);
+            const nw::snd::internal::SoundArchiveFile::WaveArchiveInfo *warcInfo = soundArchive.GetWaveArchiveInfo(warcId);
+
+            if (warcInfo)
+                addOrig(getItem(warcId, getWaveArchiveList()), warcInfo->fileId);
+        }
+
+        for (u32 i = 0; i < soundArchive.GetGroupCount(); i++)
+        {
+            const nw::snd::internal::SoundArchiveFile::GroupInfo *groupInfo = soundArchive.GetGroupInfo(soundArchive.GetGroupIdFromIndex(i));
+
+            if (groupInfo)
+                addOrig(mGroupList.nth(i), groupInfo->fileId);
+        }
+    }
+
     return true;
 }
 
@@ -3535,6 +3697,11 @@ static std::string EscapeJsonString_(const std::string& s);
 static bool CopyStreamFileRaw_(const sead::SafeString &srcPath, const sead::SafeString &destPath)
 {
     std::error_code ec;
+
+    if (std::filesystem::equivalent(srcPath.cstr(), destPath.cstr(), ec))
+        return true;
+
+    ec.clear();
     std::filesystem::copy_file(srcPath.cstr(), destPath.cstr(), std::filesystem::copy_options::overwrite_existing, ec);
 
     return !ec;
@@ -3553,6 +3720,74 @@ static bool ReplaceStreamFileAtomic_(const sead::SafeString &tempPath, const sea
 
     std::filesystem::rename(tempPath.cstr(), destPath.cstr(), ec);
     return !ec;
+}
+
+void Bfsar::planNonStreamBinarySave_(const Sound *sound, const sead::SafeString &archiveDir, const sead::SafeString &sourceDir, bool inPlace, std::unordered_set<std::string> &seen, std::vector<StreamSaveJob> &out) const
+{
+    const Sound::StreamSoundInfo &strmSoundInfo = sound->getStreamSoundInfo();
+
+    if (strmSoundInfo.getPath().isEmpty())
+        return;
+
+    const char *path = strmSoundInfo.getPath().cstr();
+
+    if (seen.contains(path))
+        return;
+
+    seen.emplace(path);
+
+    static const char *sReencodeOpus = std::getenv("TUNEBLOOM_REENCODE_OPUS");
+
+    if (sReencodeOpus && strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus && (std::strcmp(sReencodeOpus, "1") == 0 || std::strstr(path, sReencodeOpus) != nullptr))
+    {
+        if (opusstream::AttachStreamWaves(const_cast<Sound *>(sound)))
+            sound->mHasStreamFileBaseline = false;
+    }
+
+    if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus && !strmSoundInfo.getTrackList().isEmpty())
+    {
+        bool allAttached = true;
+        for (u32 i = 0; i < strmSoundInfo.getTrackList().size(); i++)
+        {
+            const Sound::StreamSoundInfo::Track &track = *static_cast<const Sound::StreamSoundInfo::Track *>(strmSoundInfo.getTrackList().nth(i)->val());
+
+            if (!track.getWaveFileRef().isAttached())
+            {
+                allAttached = false;
+
+                break;
+            }
+        }
+
+        if (allAttached)
+        {
+            u64 sig = opusstream::ComputeContentSignature(*sound);
+
+            if (!sound->mHasStreamFileBaseline || sig != sound->mStreamFileSignature)
+            {
+                StreamSaveJob job;
+                job.sound = sound;
+                job.signature = sig;
+                job.savePath = std::string(archiveDir.cstr()) + "/" + path;
+
+                out.push_back(std::move(job));
+
+                return;
+            }
+        }
+    }
+
+    if (inPlace || !mLoadedArchivePath)
+        return;
+
+    StreamSaveJob job;
+    job.sound = sound;
+    job.signature = 0;
+    job.savePath = std::string(archiveDir.cstr()) + "/" + path;
+    job.srcPath = std::string(sourceDir.cstr()) + "/" + path;
+    job.copyOnly = true;
+
+    out.push_back(std::move(job));
 }
 
 void Bfsar::planStreamSaves(std::vector<StreamSaveJob> &out) const
@@ -3580,7 +3815,10 @@ void Bfsar::planStreamSaves(std::vector<StreamSaveJob> &out) const
         const Sound::StreamSoundInfo &strmSoundInfo = sound->getStreamSoundInfo();
 
         if (strmSoundInfo.getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+        {
+            planNonStreamBinarySave_(sound, archiveDir, sourceDir, inPlace, seen, out);
             continue;
+        }
 
         SEAD_ASSERT(!strmSoundInfo.getPath().isEmpty());
         const char *path = strmSoundInfo.getPath().cstr();
@@ -3639,6 +3877,13 @@ void Bfsar::executeStreamSave(const StreamSaveJob &job) const
 
             return;
         }
+
+        if (job.sound->getStreamSoundInfo().getStreamType() != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
+        {
+            sead::FormatFixedSafeString<1024> msg("Couldn't copy stream file '%s'", job.srcPath.c_str());
+            PopupMgr::instance()->addPopup({msg, const_cast<Sound *>(job.sound)});
+            return;
+        }
     }
 
     sead::FileDevice *device = sead::FileDeviceMgr::instance()->findDevice("native");
@@ -3658,7 +3903,22 @@ void Bfsar::executeStreamSave(const StreamSaveJob &job) const
                 SEAD_ASSERT_MSG(false, "Error opening stream file (%s)", tempPath.c_str());
         }
 
-        BfstmFile::WriteBfstmFile(strmHandle, job.sound->getStreamSoundInfo(), getVersionForBfstm(), mEndian, mFormat);
+        if (job.sound->getStreamSoundInfo().getStreamType() == Sound::StreamSoundInfo::StreamType::Opus)
+        {
+            if (!opusstream::WriteStreamFile(strmHandle, job.sound))
+            {
+                strmHandle.close();
+
+                std::error_code ec;
+                std::filesystem::remove(tempPath.c_str(), ec);
+
+                return;
+            }
+        }
+        else
+        {
+            BfstmFile::WriteBfstmFile(strmHandle, job.sound->getStreamSoundInfo(), getVersionForBfstm(), mEndian, mFormat);
+        }
     }
 
     if (!ReplaceStreamFileAtomic_(tempPath.c_str(), job.savePath.c_str()))
@@ -3926,7 +4186,10 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             }
             else
             {
-                SEAD_ASSERT(false);
+                // TODO: this seems to be fine in v3 but this was set to a throw an error before
+                // it's worth checking again later on, but this is it for now
+
+                SEAD_ASSERT(isV3Bfsar());
             }
         };
 
@@ -4413,6 +4676,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                     {
                         seqFile->setFormat(mFormat);
                         File file(files.size(), seqFile, true);
+                        file.origId = getItemOrigFileId_(seqFile);
 
                         bfseqFiles.try_emplace(seqFile, file);
                         itemFileIds.try_emplace(sound, file);
@@ -4543,6 +4807,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             generatedInnerFiles.push_back(innerFile);
 
             File file(files.size(), innerFile, includeInBfsar);
+            file.origId = getItemOrigFileId_(soundSet);
 
             itemFileIds.try_emplace(soundSet, file);
             files.push_back(file);
@@ -4670,6 +4935,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             bankFile->setup(mEndian, mFormat);
 
             File file(files.size(), bankFile, includeInBfsar);
+            file.origId = getItemOrigFileId_(bank);
 
             itemFileIds.try_emplace(bank, file);
             files.push_back(file);
@@ -4692,6 +4958,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             generatedInnerFiles.push_back(innerFile);
 
             File file(files.size(), innerFile, !itemInEmbedGroup(warc));
+            file.origId = getItemOrigFileId_(warc);
 
             itemFileIds.try_emplace(warc, file);
             files.push_back(file);
@@ -4709,6 +4976,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             generatedInnerFiles.push_back(innerFile);
 
             File file(files.size(), innerFile, true);
+            file.origId = getItemOrigFileId_(group);
 
             itemFileIds.try_emplace(group, file);
             files.push_back(file);
@@ -4833,7 +5101,10 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             }
             else
             {
-                SEAD_ASSERT(false);
+                // TODO: this seems to be fine in v3 but this was set to a throw an error before
+                // it's worth checking again later on, but this is it for now
+
+                SEAD_ASSERT(isV3Bfsar());
             }
         };
 
@@ -4946,6 +5217,37 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             }
         }
     }
+
+    std::unordered_set<u32> embeddedFileIds;
+    std::unordered_map<u32, u32> embeddedFileToGroupFile;
+
+    for (const auto &[group, fileIds] : groupItemFiles)
+    {
+        if (group->getOutputType() != Group::OutputType::Embed)
+            continue;
+
+        const auto &it = itemFileIds.find(static_cast<const Item *>(group));
+        SEAD_ASSERT(it != itemFileIds.end());
+
+        u32 groupFileId = it->second.id;
+
+        for (u32 fileId : fileIds)
+        {
+            embeddedFileIds.insert(fileId);
+            embeddedFileToGroupFile[fileId] = groupFileId;
+        }
+    }
+
+    auto getOrigIncludeInBfsar = [&](const File &file) -> bool
+    {
+        if (!isV3Bfsar())
+            return (file.id < mFileOriginalIncludeInBfsar.size()) ? mFileOriginalIncludeInBfsar[file.id] : file.includeInBfsar;
+
+        if (file.origId < mFileOriginalIncludeInBfsar.size())
+            return mFileOriginalIncludeInBfsar[file.origId];
+
+        return file.includeInBfsar || embeddedFileIds.count(file.id) != 0;
+    };
 
     //? Add strings because even if the archive doesn't include the String Block, items still have a string id...
     {
@@ -5092,11 +5394,21 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
                     stream.writeU32(nw::snd::internal::Util::GetMaskedItemId(sound->getPlayerId(), nw::snd::internal::ItemType_Player));
                     stream.writeU8(sound->getVolume());
+
                     if (mFormat == ArchiveFormat::BCSAR)
                         stream.writeU8(0);
                     else
                         stream.writeU8(sound->getRemoteFilter());
+
                     stream.writeU16(0); // Padding1
+
+                    if (mFormat == ArchiveFormat::BFSAR && getDecodedMajor() >= 3)
+                    {
+                        const std::vector<u8> &nameField = sound->getV3NameField();
+
+                        for (u32 k = 0; k < 0x20; k++)
+                            stream.writeU8(k < nameField.size() ? nameField[k] : 0);
+                    }
 
                     writer.openReference("DetailSoundInfo");
 
@@ -5383,11 +5695,42 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                                             {
                                                 writer.closeReference("StreamSoundExtension", nw::snd::internal::ElementType_SoundArchiveFile_StreamSoundExtensionInfo);
 
-                                                u32 streamTypeInfo = strmInfo.getStreamType() | (strmInfo.getIsLoop() << 8);
-                                                stream.writeU32(streamTypeInfo);
+                                                bool extIsLoop = strmInfo.getIsLoop();
+                                                u32 extLoopStart = strmInfo.getLoopStartFrame();
+                                                u32 extLoopEnd = strmInfo.getLoopEndFrame();
 
-                                                stream.writeU32(strmInfo.getLoopStartFrame());
-                                                stream.writeU32(strmInfo.getLoopEndFrame());
+                                                if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus && !strmInfo.getTrackList().isEmpty())
+                                                {
+                                                    const Sound::StreamSoundInfo::Track &mainTrack = *static_cast<const Sound::StreamSoundInfo::Track *>(strmInfo.getTrackList().front()->val());
+
+                                                    if (mainTrack.getWaveFileRef().isAttached())
+                                                    {
+                                                        const WaveFile &mainWave = *static_cast<const WaveFile *>(mainTrack.getWaveFileRef().getItem());
+
+                                                        extIsLoop = mainWave.getIsLoop();
+
+                                                        if (extIsLoop)
+                                                        {
+                                                            extLoopStart = mainWave.getLoopStartFrame(false);
+                                                            extLoopEnd = mainWave.getLoopEndFrame(false);
+                                                        }
+                                                        else
+                                                        {
+                                                            extLoopStart = 0;
+                                                            extLoopEnd = mainWave.getSampleCount();
+                                                        }
+
+                                                        const_cast<Sound::StreamSoundInfo &>(strmInfo).setIsLoop(extIsLoop);
+                                                        const_cast<Sound::StreamSoundInfo &>(strmInfo).setLoopStartFrame(extLoopStart);
+                                                        const_cast<Sound::StreamSoundInfo &>(strmInfo).setLoopEndFrame(extLoopEnd);
+                                                    }
+                                                }
+
+                                                u32 streamTypeInfo = strmInfo.getStreamType() | (extIsLoop << 8) | (strmInfo.getStreamTypeInfoUpper() << 16);
+
+                                                stream.writeU32(streamTypeInfo);
+                                                stream.writeU32(extLoopStart);
+                                                stream.writeU32(extLoopEnd);
                                             }
                                             else
                                             {
@@ -5744,9 +6087,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                         }
                         else if (file.innerFile)
                         {
-                            bool origIncludeInBfsar = (file.id < mFileOriginalIncludeInBfsar.size()) ? mFileOriginalIncludeInBfsar[file.id] : file.includeInBfsar;
-
-                            if (origIncludeInBfsar)
+                            if (getOrigIncludeInBfsar(file))
                             {
                                 writer.closeReference("DetailFileInfo", nw::snd::internal::ElementType_SoundArchiveFile_InternalFileInfo);
                                 writer.openSizedReference(sead::FormatFixedSafeString<32>("File%u", file.id));
@@ -5758,8 +6099,23 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
                                     writer.openReference(gname);
                                     writer.closeReference(gname, nw::snd::internal::ElementType_Category_Tables);
 
-                                    const std::vector<u32> &ids =
-                                        (file.id < mFileAttachedGroups.size()) ? mFileAttachedGroups[file.id] : sEmptyGroups;
+                                    const std::vector<u32> *pIds = &sEmptyGroups;
+
+                                    if (!isV3Bfsar())
+                                    {
+                                        if (file.id < mFileAttachedGroups.size())
+                                            pIds = &mFileAttachedGroups[file.id];
+                                    }
+                                    else if (file.origId < mFileAttachedGroups.size())
+                                    {
+                                        pIds = &mFileAttachedGroups[file.origId];
+                                    }
+                                    else if (file.origId == nw::snd::SoundArchive::INVALID_ID && file.id < mFileAttachedGroups.size())
+                                    {
+                                        pIds = &mFileAttachedGroups[file.id];
+                                    }
+
+                                    const std::vector<u32> &ids = *pIds;
 
                                     stream.writeU32(static_cast<u32>(ids.size()));
 
@@ -5818,11 +6174,6 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
         u32 fileBlockPos = writer.getPosition() - sizeof(nw::ut::BinaryBlockHeader);
         writer.align(0x20);
 
-        auto getOrigIncludeInBfsar = [&](const File &file) -> bool
-        {
-            return file.id < mFileOriginalIncludeInBfsar.size() ? mFileOriginalIncludeInBfsar[file.id] : file.includeInBfsar;
-        };
-
         u32 lastFileId = nw::snd::SoundArchive::INVALID_ID;
         for (auto it = files.rbegin(); it != files.rend(); ++it)
         {
@@ -5830,39 +6181,6 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
             {
                 lastFileId = it->id;
                 break;
-            }
-        }
-
-        // Build set of file IDs that are embedded in groups (embed only, not link)
-        std::unordered_set<u32> embeddedFileIds;
-        for (const auto &[group, fileIds] : groupItemFiles)
-        {
-            if (group->getOutputType() != Group::OutputType::Embed)
-            {
-                continue;
-            }
-            for (u32 fileId : fileIds)
-            {
-                embeddedFileIds.insert(fileId);
-            }
-        }
-
-        // Build reverse map: embedded file ID -> group file ID
-        std::unordered_map<u32, u32> embeddedFileToGroupFile;
-        for (const auto &[group, fileIds] : groupItemFiles)
-        {
-            if (group->getOutputType() != Group::OutputType::Embed)
-            {
-                continue;
-            }
-
-            const auto &it = itemFileIds.find(static_cast<const Item *>(group));
-            SEAD_ASSERT(it != itemFileIds.end());
-            u32 groupFileId = it->second.id;
-
-            for (u32 fileId : fileIds)
-            {
-                embeddedFileToGroupFile[fileId] = groupFileId;
             }
         }
 
@@ -6256,6 +6574,7 @@ void Bfsar::close_()
     mSequenceFileList.clear();
     mBankFileList.clear();
     clearGenWaveArchiveList();
+    mItemOrigFileIds.clear();
 
     for (u8* buf : mExternalGroupBuffers)
         delete buf;

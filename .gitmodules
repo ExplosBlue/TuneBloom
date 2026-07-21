@@ -1,3 +1,12 @@
 [submodule "TuneBloom/vendor/sead"]
 	path = TuneBloom/vendor/sead
 	url = https://github.com/stupidestmodder/sead.git
+[submodule "TuneBloom/vendor/lz4"]
+	path = TuneBloom/vendor/lz4
+	url = https://github.com/lz4/lz4.git
+[submodule "TuneBloom/vendor/zstd"]
+	path = TuneBloom/vendor/zstd
+	url = https://github.com/facebook/zstd.git
+[submodule "TuneBloom/vendor/opus"]
+	path = TuneBloom/vendor/opus
+	url = https://github.com/xiph/opus.git

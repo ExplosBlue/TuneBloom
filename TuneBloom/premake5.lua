@@ -11,6 +11,11 @@ targetdir "bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/out"
 objdir "bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/int"
 debugdir "../workdir"
 
+local thirdPartyLicense = path.getabsolute(path.join(_SCRIPT_DIR, "../THIRD_PARTY_LICENSES.txt"))
+postbuildcommands {
+    '{COPYFILE} "' .. thirdPartyLicense .. '" "%{cfg.targetdir}"',
+}
+
 includedirs {
     path.join(_SCRIPT_DIR, "include"),
     path.join(_SCRIPT_DIR, "include/imgui"),
@@ -19,6 +24,10 @@ includedirs {
     path.join(_SCRIPT_DIR, "vendor/sead/include"),
     path.join(_SCRIPT_DIR, "vendor/sead/libs/glad/include"),
     path.join(_SCRIPT_DIR, "vendor/sead/libs/glfw/include"),
+
+    path.join(_SCRIPT_DIR, "vendor/lz4/lib"),
+    path.join(_SCRIPT_DIR, "vendor/zstd/lib"),
+    path.join(_SCRIPT_DIR, "vendor/opus/include"),
 }
 
 files {
@@ -31,6 +40,9 @@ removefiles {
 
 links {
     "sead",
+    "lz4",
+    "zstd",
+    "opus",
 }
 
 if os.getenv("COMMIT_SHA") then
@@ -121,4 +133,7 @@ linktimeoptimization "off" -- TODO: Fix LTO crashes
 
 group "Dependencies"
 include "vendor/sead"
+include "vendor/lz4-build"
+include "vendor/zstd-build"
+include "vendor/opus-build"
 group ""

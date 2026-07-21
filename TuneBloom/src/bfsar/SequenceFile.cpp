@@ -259,21 +259,23 @@ void SequenceFile::drawFileUI()
         }
     }
 
-    const char** labels = nullptr;
-    u32 labelCount = mLabels.size();
-    if (labelCount > 0)
+    static const char *cStartOfFileLabel = "(Start of File)";
+
+    u32 labelCount = mLabels.size() + 1;
+    const char **labels = new const char *[labelCount];
+    labels[0] = cStartOfFileLabel;
+    for (u32 i = 0; i < mLabels.size(); i++)
     {
-        labels = new const char*[labelCount];
-        for (u32 i = 0; i < labelCount; i++)
-        {
-            labels[i] = mLabels[i].c_str();
-        }
+        labels[i + 1] = mLabels[i].c_str();
     }
 
     {
         sead::FixedSafeString<128> startLabel = mStartLabel;
         if (ImGui::InputTextCombo("Start Label", startLabel.getBuffer(), startLabel.getBufferSize(), labels, labelCount))
         {
+            if (startLabel == cStartOfFileLabel)
+                startLabel.clear();
+
             mStartLabel = startLabel;
             SetUnsavedChanges(true);
         }
@@ -1067,13 +1069,17 @@ void SequenceFile::compile_(bool setCursorPos)
 
             if (label.starts_with('_'))
             {
-                if (currentGlobalLabel.empty())
-                {
-                    setError(i, "Local label found outside any global label scope");
-                    return;
-                }
+                // TODO: commented out for v3 bfsar to work, which seems to load and run fine ingame
+                // i believe kirby rtdl on wii also does this, so maybe it's fine
+                // worth rechecking later
+                //
+                // if (currentGlobalLabel.empty())
+                // {
+                //     setError(i, "Local label found outside any global label scope");
+                //     return;
+                // }
 
-                std::unordered_map<std::string, std::pair<u32, MmlCommandBase*>>& localLabels = scopedLocalLabels[currentGlobalLabel];
+                std::unordered_map<std::string, std::pair<u32, MmlCommandBase *>> &localLabels = scopedLocalLabels[currentGlobalLabel];
 
                 auto it = localLabels.find(label);
                 if (it != localLabels.end())

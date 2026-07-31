@@ -7338,7 +7338,7 @@ struct ImportPreviewCache
 };
 }
 
-static ImportPreviewCache sImportCache;
+static ImportPreviewCache& sImportCache = *new ImportPreviewCache;
 
 static std::string FinalizeImportInfoForCommit(WaveFile::RiffWaveInfo *info)
 {

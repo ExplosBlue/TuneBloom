@@ -3,6 +3,7 @@
 #include <string>
 #include <sys/stat.h>
 
+#include <basis/seadNew.h>
 #include <devenv/seadAssertConfig.h>
 #include <filedevice/seadFileDevice.h>
 #include <filedevice/seadFileDeviceMgr.h>
@@ -204,4 +205,6 @@ int main(int argc, char* argv[])
     framework->run(sead::HeapMgr::getRootHeap(0), rootArg, runArg);
 
     delete framework;
+
+    sead::system::NotifyProcessExiting();
 }

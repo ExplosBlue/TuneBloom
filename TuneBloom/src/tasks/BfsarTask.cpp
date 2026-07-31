@@ -345,8 +345,8 @@ void BfsarTask::exit()
 
     CloseFile();
 
-    snd::SoundSystem::finalize();
     OutputMeter::instance().uninstall();
+    snd::SoundSystem::finalize();
 }
 
 void BfsarTask::calc()

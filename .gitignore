@@ -33,6 +33,7 @@ compile_commands.json
 # Local files
 .vs
 .vscode
+.idea
 *.sln
 *.slnx
 *.vcxproj*

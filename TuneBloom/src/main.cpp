@@ -204,4 +204,7 @@ int main(int argc, char* argv[])
     framework->run(sead::HeapMgr::getRootHeap(0), rootArg, runArg);
 
     delete framework;
+
+    fflush(stdout);
+    _Exit(0);
 }

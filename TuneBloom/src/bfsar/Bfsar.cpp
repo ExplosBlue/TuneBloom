@@ -7037,6 +7037,9 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
                 pos++;
                 skipWS();
 
+                char *end = nullptr;
+                u32 bankId = static_cast<u32>(std::strtoul(bankIdStr.c_str(), &end, 10));
+
                 if (pos >= content.size() || content[pos] != '{')
                 {
                     skipValue();
@@ -7044,8 +7047,6 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
                 }
                 pos++;
 
-                char *end = nullptr;
-                u32 bankId = static_cast<u32>(std::strtoul(bankIdStr.c_str(), &end, 10));
                 if (end == bankIdStr.c_str() || *end != '\0')
                 {
                     goto next_bank;
@@ -7181,6 +7182,9 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
                 pos++;
                 skipWS();
 
+                char *end3 = nullptr;
+                u32 warcId_ = static_cast<u32>(std::strtoul(warcIdStr.c_str(), &end3, 10));
+
                 if (pos >= content.size() || content[pos] != '{')
                 {
                     skipValue();
@@ -7188,8 +7192,6 @@ void Bfsar::readNamesFromMetadata_(const sead::SafeString &filePath)
                 }
                 pos++;
 
-                char *end3 = nullptr;
-                u32 warcId_ = static_cast<u32>(std::strtoul(warcIdStr.c_str(), &end3, 10));
                 if (end3 == warcIdStr.c_str() || *end3 != '\0')
                 {
                     goto next_warc;

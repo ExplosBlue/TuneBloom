@@ -388,7 +388,7 @@ namespace
             char buf[8];
             ImVec2 ts = ImGui::CalcTextSize(formatDb(db, buf, sizeof(buf)));
             dl->AddLine(ImVec2(x, pos.y), ImVec2(x, pos.y + cTickLen), col, 1.0f);
-            dl->AddText(ImVec2(std::clamp(x - ts.x * 0.5f, x0, x1 - ts.x), pos.y + cTickLen + 1.0f), col, buf);
+            dl->AddText(ImVec2(std::clamp(x - ts.x * 0.5f, x0, std::max(x0, x1 - ts.x)), pos.y + cTickLen + 1.0f), col, buf);
             lastX = x;
         }
     }
@@ -410,7 +410,7 @@ namespace
             char buf[8];
             ImVec2 ts = ImGui::CalcTextSize(formatDb(db, buf, sizeof(buf)));
             dl->AddLine(ImVec2(pos.x, y), ImVec2(pos.x + cTickLen, y), col, 1.0f);
-            dl->AddText(ImVec2(pos.x + cTickLen + 2.0f, std::clamp(y - ts.y * 0.5f, y0, y1 - ts.y)), col, buf);
+            dl->AddText(ImVec2(pos.x + cTickLen + 2.0f, std::clamp(y - ts.y * 0.5f, y0, std::max(y0, y1 - ts.y))), col, buf);
             lastY = y;
         }
     }

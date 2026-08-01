@@ -7210,7 +7210,7 @@ struct ImportPreviewCache
     sead::FixedSafeString<512> cachedPath;
     DecodedPcm pcm;
     ImGui::LoopWaveformState waveformState;
-    WaveFile previewWave;
+    WaveFile* previewWave = nullptr;
     bool hasDecoded = false;
     bool previewBuilt = false;
     bool previewStale = false;
@@ -7569,7 +7569,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
     }
 
     float playheadSample = -1.0f;
-    if (sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == &sCache.previewWave)
+    if (sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == sCache.previewWave)
         playheadSample = static_cast<float>(sSoundPlayer.getPlaySamplePosition(true));
 
     bool changed = ImGui::LoopWaveformEditor("import", sCache.waveformState, mono, workingSampleRate,
@@ -7603,7 +7603,9 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
             }
         }
         previewPcm.sampleCount = previewPcm.channels.empty() ? 0u : static_cast<u32>(previewPcm.channels[0].size());
-        sCache.previewWave.setupPreviewPcm16(previewPcm, loopActiveNow, loopStart, loopEnd);
+        if (!sCache.previewWave)
+            sCache.previewWave = new WaveFile;
+        sCache.previewWave->setupPreviewPcm16(previewPcm, loopActiveNow, loopStart, loopEnd);
         sCache.previewBuilt = true;
         sCache.previewStale = false;
     };
@@ -7619,13 +7621,13 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
         sSoundPlayer.stopAllPlayers(true);
         rebuildPreview();
         const u32 off = (sCache.previewMode == ImportPreviewCache::PreviewMode::Loop) ? loopStart : 0u;
-        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, off, false);
+        sSoundPlayer.playWaveFile(*sCache.previewWave, -1, nullptr, off, false);
     };
 
     if (ImGui::Button(ICON_LC_PLAY " Preview"))
     {
         ensurePreviewFresh();
-        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, 0, false);
+        sSoundPlayer.playWaveFile(*sCache.previewWave, -1, nullptr, 0, false);
         sCache.previewMode = ImportPreviewCache::PreviewMode::Full;
     }
     ImGui::SameLine();
@@ -7633,7 +7635,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
     if (ImGui::Button(ICON_LC_REPEAT " Loop"))
     {
         ensurePreviewFresh();
-        sSoundPlayer.playWaveFile(sCache.previewWave, -1, nullptr, loopStart, false);
+        sSoundPlayer.playWaveFile(*sCache.previewWave, -1, nullptr, loopStart, false);
         sCache.previewMode = ImportPreviewCache::PreviewMode::Loop;
     }
     if (!loopActive) ImGui::EndDisabled();
@@ -7898,7 +7900,7 @@ void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* in
 
     {
         const bool previewPlaying = sSoundPlayer.isActive()
-            && sSoundPlayer.getPlayingWaveFile() == &sCache.previewWave;
+            && sSoundPlayer.getPlayingWaveFile() == sCache.previewWave;
         const bool dragging = ImGui::IsMouseDown(ImGuiMouseButton_Left)
             || ImGui::IsMouseDown(ImGuiMouseButton_Right);
         if (!sCache.previewBuilt)

@@ -26,6 +26,10 @@
 
 #include <portable-file-dialogs.h>
 
+#if defined(SEAD_PLATFORM_MACOSX)
+#include "macos/bundle.h"
+#endif
+
 extern Bfsar sBfsar;
 static bool sCliMode = false;
 
@@ -89,6 +93,10 @@ static void ensureDir(const char* path)
 
 int main(int argc, char* argv[])
 {
+#if defined(SEAD_PLATFORM_MACOSX)
+    macos::useBundleResources();
+#endif
+
     sead::Delegate1 deleg = sead::FunctionDelegateCreator<const char*>(&AssertException);
     sead::AssertConfig::registerFinalCallback(&deleg);
 

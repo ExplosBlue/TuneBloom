@@ -31,14 +31,16 @@ compile_commands.json
 **/bin/**
 
 # Local files
-.vs
-.vscode
-.idea
+workdir/imgui.ini
+**.make
+**/Makefile
+*.DS_Store
 *.sln
 *.slnx
-*.vcxproj*
 *.user
-*.DS_Store
-**/Makefile
-**.make
-workdir/imgui.ini
+*.vcxproj*
+*.xcodeproj/
+*.xcworkspace/
+.idea
+.vs
+.vscode

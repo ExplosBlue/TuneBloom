@@ -1,11 +1,17 @@
 -- premake5.lua
 workspace "TuneBloom"
-    platforms {
-        "GLFW_x86",
-        "GLFW_x86_64",
-        "GLFW_ARM32",
-        "GLFW_ARM64",
-    }
+    if _ACTION == "xcode4" then
+        platforms {
+            "GLFW_ARM64",
+        }
+    else
+        platforms {
+            "GLFW_x86",
+            "GLFW_x86_64",
+            "GLFW_ARM32",
+            "GLFW_ARM64",
+        }
+    end
 
     configurations {
         "Debug",
@@ -47,5 +53,11 @@ workspace "TuneBloom"
 
     filter "platforms:*_ARM64"
         architecture "ARM64"
+
+    filter "action:xcode4"
+        xcodebuildsettings {
+            ["ALWAYS_SEARCH_USER_PATHS"] = "YES",
+            ["GCC_WARN_64_TO_32_BIT_CONVERSION"] = "NO",
+        }
 
 include "TuneBloom"

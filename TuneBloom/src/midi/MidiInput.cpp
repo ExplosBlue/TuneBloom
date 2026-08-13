@@ -1,5 +1,6 @@
 #include <midi/MidiInput.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -270,13 +271,13 @@ bool MidiInput::start(Callback callback, void *userData, u32 deviceIndex)
     mQueueRead = 0;
     mQueueWrite = 0;
 
-    MIDIClientRef client = nullptr;
+    MIDIClientRef client = 0;
     OSStatus err = MIDIClientCreate(CFSTR("TuneBloom"), nullptr, nullptr, &client);
     if (err != noErr)
         return false;
-    mClient = client;
+    mClient = reinterpret_cast<void*>(static_cast<uintptr_t>(client));
 
-    MIDIPortRef port = nullptr;
+    MIDIPortRef port = 0;
     err = MIDIInputPortCreate(client, CFSTR("MIDI Input"), MidiReadProc, this, &port);
     if (err != noErr)
     {
@@ -284,7 +285,7 @@ bool MidiInput::start(Callback callback, void *userData, u32 deviceIndex)
         mClient = nullptr;
         return false;
     }
-    mPort = port;
+    mPort = reinterpret_cast<void*>(static_cast<uintptr_t>(port));
 
     if (deviceIndex < MIDIGetNumberOfSources())
     {
@@ -337,12 +338,12 @@ void MidiInput::stop()
 #elif defined(SEAD_PLATFORM_MACOSX)
     if (mPort)
     {
-        MIDIPortDispose(static_cast<MIDIPortRef>(mPort));
+        MIDIPortDispose(static_cast<MIDIPortRef>(reinterpret_cast<uintptr_t>(mPort)));
         mPort = nullptr;
     }
     if (mClient)
     {
-        MIDIClientDispose(static_cast<MIDIClientRef>(mClient));
+        MIDIClientDispose(static_cast<MIDIClientRef>(reinterpret_cast<uintptr_t>(mClient)));
         mClient = nullptr;
     }
     mQueueRead = 0;

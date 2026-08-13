@@ -16,6 +16,8 @@ postbuildcommands {
     '{COPYFILE} "' .. thirdPartyLicense .. '" "%{cfg.targetdir}"',
 }
 
+local macosBundleScript = path.getabsolute(path.join(_SCRIPT_DIR, "src/macos/make_bundle.sh"))
+
 includedirs {
     path.join(_SCRIPT_DIR, "include"),
     path.join(_SCRIPT_DIR, "include/imgui"),
@@ -130,6 +132,10 @@ entrypoint "mainCRTStartup"
 
 filter { "system:macosx", "configurations:Release" }
 linktimeoptimization "off" -- TODO: Fix LTO crashes
+
+postbuildcommands {
+    '"' .. macosBundleScript .. '" "%{cfg.targetdir}" "%{cfg.buildtarget.abspath}"',
+}
 
 group "Dependencies"
 include "vendor/sead"

@@ -87,6 +87,20 @@ public:
     bool saveAs(const sead::SafeString &filePath);
     bool saveBackup(const sead::SafeString &path);
 
+    bool hasPendingSaveFinalize() const
+    {
+        return mHasPendingSaveFinalize;
+    }
+
+    const sead::SafeString &getPendingSaveFinalizePath() const
+    {
+        return mPendingSaveFinalizeDest;
+    }
+
+    bool retryPendingSaveFinalize();
+    bool forcePendingSaveFinalize();
+    void cancelPendingSaveFinalize();
+
     void planStreamSaves(std::vector<StreamSaveJob> &out) const;
     void executeStreamSave(const StreamSaveJob &job) const;
     void close();
@@ -544,6 +558,7 @@ private:
     bool open_(const nw::snd::MemorySoundArchive &soundArchive, u32 bfsarSize, sead::Heap *heap);
     void save_(sead::FileHandle &handle, const sead::SafeString *metadataPathOverride = nullptr, bool writeStreams = true);
     bool saveArchiveFile_(const sead::SafeString &path);
+    bool finalizeSavedFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath);
     void planNonStreamBinarySave_(const Sound *sound, const sead::SafeString &archiveDir, const sead::SafeString &sourceDir, bool inPlace, std::unordered_set<std::string> &seen, std::vector<StreamSaveJob> &out) const;
     void close_();
 
@@ -569,6 +584,10 @@ private:
     sead::HeapSafeString *mFilePath;
     sead::HeapSafeString *mLoadedArchivePath{nullptr};
     bool mCmpbinPreferZstd{false};
+
+    bool mHasPendingSaveFinalize{false};
+    sead::FixedSafeString<560> mPendingSaveFinalizeStaged;
+    sead::FixedSafeString<560> mPendingSaveFinalizeDest;
 
     sead::Endian::Types mEndian;
     u32 mVersion;

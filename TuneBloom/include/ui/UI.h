@@ -122,6 +122,10 @@ void LoadMetadataConfig();
 void SaveBackupConfig();
 void LoadBackupConfig();
 
+extern bool sForceSaveWhenInUse;
+void SaveSaveConfig();
+void LoadSaveConfig();
+
 void OpenPreferencesWindow();
 
 void RequestExportInstrument(Item* instrument);

@@ -209,7 +209,8 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
 }
 
 static bool ReplaceStreamFileAtomic_(const sead::SafeString &tempPath, const sead::SafeString &destPath);
-static bool FinalizeCmpbin_(const sead::SafeString &tmpPath, const sead::SafeString &destPath, bool preferZstd);
+static bool CompressCmpbin_(const sead::SafeString &tmpPath, const sead::SafeString &destPath, bool preferZstd, sead::BufferedSafeString *outStagedPath);
+static bool ForceOverwriteFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath);
 
 bool Bfsar::save()
 {
@@ -260,19 +261,110 @@ bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
         save_(handle);
     }
 
-    if (asCmpbin)
-        return FinalizeCmpbin_(tmpPath, path, mCmpbinPreferZstd);
+    sead::FixedSafeString<560> stagedPath = tmpPath;
 
-    if (!ReplaceStreamFileAtomic_(tmpPath, path))
-    {
-        PopupMgr::instance()->addPopup({"Couldn't finalize saved file, kept savetmp copy"});
+    if (asCmpbin && !CompressCmpbin_(tmpPath, path, mCmpbinPreferZstd, &stagedPath))
         return false;
+
+    return finalizeSavedFile_(stagedPath, path);
+}
+
+bool Bfsar::finalizeSavedFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath)
+{
+    if (ReplaceStreamFileAtomic_(stagedPath, destPath))
+        return true;
+
+    if (sForceSaveWhenInUse)
+    {
+        if (ForceOverwriteFile_(stagedPath, destPath))
+            return true;
     }
+
+    mPendingSaveFinalizeStaged = stagedPath;
+    mPendingSaveFinalizeDest = destPath;
+    mHasPendingSaveFinalize = true;
+
+    return false;
+}
+
+bool Bfsar::retryPendingSaveFinalize()
+{
+    if (!mHasPendingSaveFinalize)
+        return false;
+
+    if (!ReplaceStreamFileAtomic_(mPendingSaveFinalizeStaged, mPendingSaveFinalizeDest))
+        return false;
+
+    mHasPendingSaveFinalize = false;
 
     return true;
 }
 
-static bool FinalizeCmpbin_(const sead::SafeString &tmpPath, const sead::SafeString &destPath, bool preferZstd)
+bool Bfsar::forcePendingSaveFinalize()
+{
+    if (!mHasPendingSaveFinalize)
+        return false;
+
+    if (!ForceOverwriteFile_(mPendingSaveFinalizeStaged, mPendingSaveFinalizeDest))
+        return false;
+
+    mHasPendingSaveFinalize = false;
+
+    return true;
+}
+
+void Bfsar::cancelPendingSaveFinalize()
+{
+    if (!mHasPendingSaveFinalize)
+        return;
+
+    std::error_code ec;
+    std::filesystem::remove(mPendingSaveFinalizeStaged.cstr(), ec);
+
+    mHasPendingSaveFinalize = false;
+}
+
+static bool ForceOverwriteFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath)
+{
+    std::vector<u8> raw;
+
+    if (FILE *f = fopen(stagedPath.cstr(), "rb"))
+    {
+        fseek(f, 0, SEEK_END);
+        long sz = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        
+        if (sz > 0)
+        {
+            raw.resize((size_t)sz);
+            fread(raw.data(), 1, raw.size(), f);
+        }
+
+        fclose(f);
+    }
+    else
+    {
+        return false;
+    }
+
+    FILE *dest = fopen(destPath.cstr(), "wb");
+
+    if (!dest)
+        return false;
+
+    bool success = raw.empty() || fwrite(raw.data(), 1, raw.size(), dest) == raw.size();
+    fclose(dest);
+
+    if (success)
+    {
+        std::error_code ec;
+        std::filesystem::remove(stagedPath.cstr(), ec);
+    }
+
+    return success;
+}
+
+static bool CompressCmpbin_(const sead::SafeString &tmpPath, const sead::SafeString &destPath, bool preferZstd, sead::BufferedSafeString *outStagedPath)
 {
     std::error_code ec;
 
@@ -320,9 +412,9 @@ static bool FinalizeCmpbin_(const sead::SafeString &tmpPath, const sead::SafeStr
         return false;
     }
 
-    ReplaceStreamFileAtomic_(cmpTmpPath, destPath);
-
     std::filesystem::remove(tmpPath.cstr(), ec);
+    outStagedPath->copy(cmpTmpPath);
+
     return true;
 }
 
@@ -5240,11 +5332,11 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
     auto getOrigIncludeInBfsar = [&](const File &file) -> bool
     {
-        if (!isV3Bfsar())
-            return (file.id < mFileOriginalIncludeInBfsar.size()) ? mFileOriginalIncludeInBfsar[file.id] : file.includeInBfsar;
-
         if (file.origId < mFileOriginalIncludeInBfsar.size())
             return mFileOriginalIncludeInBfsar[file.origId];
+
+        if (!isV3Bfsar())
+            return (file.origId == nw::snd::SoundArchive::INVALID_ID && file.id < mFileOriginalIncludeInBfsar.size()) ? mFileOriginalIncludeInBfsar[file.id] : file.includeInBfsar;
 
         return file.includeInBfsar || embeddedFileIds.count(file.id) != 0;
     };
@@ -6101,12 +6193,7 @@ void Bfsar::save_(sead::FileHandle &handle, const sead::SafeString *metadataPath
 
                                     const std::vector<u32> *pIds = &sEmptyGroups;
 
-                                    if (!isV3Bfsar())
-                                    {
-                                        if (file.id < mFileAttachedGroups.size())
-                                            pIds = &mFileAttachedGroups[file.id];
-                                    }
-                                    else if (file.origId < mFileAttachedGroups.size())
+                                    if (file.origId < mFileAttachedGroups.size())
                                     {
                                         pIds = &mFileAttachedGroups[file.origId];
                                     }

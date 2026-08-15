@@ -98,6 +98,7 @@ std::string gPlaybackDeviceName;
 f32 gMasterVolume = 1.0f;
 
 bool sSaveMetadataDefault = true;
+bool sForceSaveWhenInUse = false;
 
 static bool sPendingExport = false;
 static std::vector<Sound*> sPendingExportSounds;
@@ -389,6 +390,8 @@ static bool sWantsAbout = false;
 static bool sNeedsNewFileFormat = false;
 static bool sWantsSaveDirect = false;
 static bool (*sPendingFileAction)() = nullptr;
+static bool sSaveInUseRemember = false;
+static bool sSaveInUseRetryFailed = false;
 
 static bool NewFileFormatTrigger()
 {
@@ -824,6 +827,13 @@ static void DrawFileOptions()
 
         if (ImGui::IsItemDeactivatedAfterEdit())
             SaveMetadataConfig();
+    }
+
+    {
+        ImGui::Checkbox("Always force-save files in use", &sForceSaveWhenInUse);
+
+        if (ImGui::IsItemDeactivatedAfterEdit())
+            SaveSaveConfig();
     }
 
     ImGui::Unindent(10.0f);
@@ -1476,6 +1486,45 @@ void LoadMetadataConfig()
     }
 }
 
+void SaveSaveConfig()
+{
+    std::string path = GetConfigDir() + "/save.cfg";
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    CreateDirectoryA(GetConfigDir().c_str(), NULL);
+#else
+    mkdir(GetConfigDir().c_str(), 0755);
+#endif
+
+    FILE *f = fopen(path.c_str(), "w");
+    if (f)
+    {
+        fprintf(f, "force_when_in_use=%d\n", sForceSaveWhenInUse ? 1 : 0);
+        fclose(f);
+    }
+}
+
+void LoadSaveConfig()
+{
+    std::string path = GetConfigDir() + "/save.cfg";
+
+    FILE *f = fopen(path.c_str(), "r");
+    if (f)
+    {
+        char buf[1024];
+        while (fgets(buf, sizeof(buf), f))
+        {
+            size_t len = strlen(buf);
+            if (len > 0 && buf[len - 1] == '\n')
+                buf[len - 1] = '\0';
+
+            if (strncmp(buf, "force_when_in_use=", 18) == 0)
+                sForceSaveWhenInUse = atoi(buf + 18) != 0;
+        }
+        fclose(f);
+    }
+}
+
 void SaveBackupConfig()
 {
     std::string path = GetConfigDir() + "/backup.cfg";
@@ -2049,6 +2098,83 @@ void DrawUI()
         }
     }
 
+    if (sBfsar.hasPendingSaveFinalize() && !ImGui::IsPopupOpen("###SaveFileInUse"))
+    {
+        sSaveInUseRemember = false;
+        sSaveInUseRetryFailed = false;
+        ImGui::OpenPopup("###SaveFileInUse");
+    }
+
+    {
+        ImVec2 c = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(c, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("File In Use ?###SaveFileInUse", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text(ICON_LC_TRIANGLE_ALERT "The file is currently in use by another program.");
+
+            ImGui::Separator();
+
+            ImGui::TextDisabled("%s", sBfsar.getPendingSaveFinalizePath().cstr());
+
+            if (sSaveInUseRetryFailed)
+                ImGui::TextColored(ImVec4(0.90f, 0.45f, 0.45f, 1.0f), "The file is still in use.");
+
+            ImGui::Separator();
+
+            ImGui::Checkbox("Always save anyway", &sSaveInUseRemember);
+
+            ImGui::Separator();
+            ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+            ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 3.0f) / 3.0f, 0.0f);
+
+            if (ImGui::Button("Save anyway", buttonSize))
+            {
+                if (sBfsar.forcePendingSaveFinalize())
+                {
+                    if (sSaveInUseRemember)
+                    {
+                        sForceSaveWhenInUse = true;
+                        SaveSaveConfig();
+                    }
+
+                    SetUnsavedChanges(false);
+                    ImGui::CloseCurrentPopup();
+                }
+                else
+                {
+                    PopupMgr::instance()->addPopup({"Failed to write the file in use."});
+                }
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Try Again", buttonSize))
+            {
+                if (sBfsar.retryPendingSaveFinalize())
+                {
+                    SetUnsavedChanges(false);
+                    ImGui::CloseCurrentPopup();
+                }
+                else
+                {
+                    sSaveInUseRetryFailed = true;
+                }
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Cancel", buttonSize))
+            {
+                sBfsar.cancelPendingSaveFinalize();
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+    }
+
     {
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -2232,15 +2358,12 @@ static void SanitizeFilenameInPlace(sead::BufferedSafeString *s)
 
 static void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Sound* sound, const char* ext)
 {
-    const char* rawName = sound->getName().cstr();
-    sead::FixedSafeString<256> upperName;
-    upperName.format("%s", rawName);
-    for (s32 i = 0; i < upperName.calcLength(); i++)
-        upperName.getBuffer()[i] = ::toupper((unsigned char)upperName.getBuffer()[i]);
-    SanitizeFilenameInPlace(&upperName);
+    sead::FixedSafeString<256> name;
+    name.format("%s", sound->getName().cstr());
+    SanitizeFilenameInPlace(&name);
 
     std::string cwd = std::filesystem::current_path().string();
-    outPath->format("%s/%s.%s", cwd.c_str(), upperName.cstr(), ext);
+    outPath->format("%s/%s.%s", cwd.c_str(), name.cstr(), ext);
 }
 
 static void DecodeWaveFileChannels(const WaveFile* wave, std::vector<std::vector<s16>>& outChannels)
@@ -2411,15 +2534,41 @@ static bool WriteWavCustom(const sead::SafeString& path, u32 sampleRate, const s
     return true;
 }
 
+static std::unordered_set<std::string> sExportUsedNames;
+
+static void BeginExportNameBatch()
+{
+    sExportUsedNames.clear();
+}
+
+static std::string MakeExportNameKey(const sead::SafeString &name, const char *ext)
+{
+    std::string key = name.cstr();
+    key += '.';
+    key += ext;
+
+    for (char &c : key)
+        c = (char)::tolower((unsigned char)c);
+
+    return key;
+}
+
+static void BuildUniqueExportPath(sead::BufferedSafeString *outPath, const char *dir, const sead::SafeString &rawName, const char *ext)
+{
+    sead::FixedSafeString<256> name;
+    name.format("%s", rawName.cstr());
+    SanitizeFilenameInPlace(&name);
+
+    sead::FixedSafeString<256> uniqueName = name;
+    for (u32 copyNum = 2; !sExportUsedNames.emplace(MakeExportNameKey(uniqueName, ext)).second; copyNum++)
+        uniqueName.format("%s_%u", name.cstr(), copyNum);
+
+    outPath->format("%s/%s.%s", dir, uniqueName.cstr(), ext);
+}
+
 static void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char *dir, const Sound *sound, const char *ext)
 {
-    const char *rawName = sound->getName().cstr();
-    sead::FixedSafeString<256> upperName;
-    upperName.format("%s", rawName);
-    for (s32 i = 0; i < upperName.calcLength(); i++)
-        upperName.getBuffer()[i] = ::toupper((unsigned char)upperName.getBuffer()[i]);
-    SanitizeFilenameInPlace(&upperName);
-    outPath->format("%s/%s.%s", dir, upperName.cstr(), ext);
+    BuildUniqueExportPath(outPath, dir, sound->getName(), ext);
 }
 
 static bool ExportStreamSoundToWav(Sound* sound, const char* path, bool multiChannel, bool loop, int loopCount, float fadeSec, u32 targetRate)
@@ -4581,14 +4730,13 @@ static void DrawFileExportDialogs()
             sead::FixedSafeString<512> dirPath;
             if (SelectFolderDialog(&dirPath, "Select directory for WAV export"))
             {
+                BeginExportNameBatch();
+
                 for (WaveFile *wave : sPendingExportWaveToWavs)
                 {
-                    sead::FixedSafeString<256> safeName;
-                    safeName.format("%s", wave->getNameOrNull().cstr());
-                    SanitizeFilenameInPlace(&safeName);
-
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.wav", dirPath.cstr(), safeName.cstr());
+                    BuildUniqueExportPath(&filePath, dirPath.cstr(), wave->getNameOrNull(), "wav");
+
                     if (!wave->writeWavFile(filePath))
                     {
                         PopupMgr::instance()->addPopup({"Failed to write WAV file", nullptr});
@@ -4632,6 +4780,8 @@ static void DrawFileExportDialogs()
             sead::FixedSafeString<512> dirPath;
             if (SelectFolderDialog(&dirPath, "Select directory for MIDI export"))
             {
+                BeginExportNameBatch();
+
                 for (Sound *sound : sPendingExportMidiSounds)
                 {
                     sead::FixedSafeString<512> filePath;
@@ -4948,6 +5098,7 @@ void DrawExportProgressPopup()
     }
     else
     {
+        BeginExportNameBatch();
         sExportProcessingStarted = true;
     }
 }
@@ -6680,7 +6831,7 @@ void DrawStreamSoundsUI()
             const Sound* sound = static_cast<const Sound*>(item);
             return sound->getSoundType() == Sound::SoundType::Strm && ItemMatchesFilter(sound);
         },
-        false, nullptr, sSortState.mode, sSortState.ascending
+        false, nullptr, sSortState.mode, sSortState.ascending, &InsertSoundAtHook, &RemoveSoundWithCascade
     );
 }
 

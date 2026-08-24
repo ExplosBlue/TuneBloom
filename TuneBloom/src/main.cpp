@@ -91,6 +91,36 @@ static void ensureDir(const char* path)
     mkdir_p(dir.c_str());
 }
 
+static u32 dumpItemList(const char* label, Item::List& list)
+{
+    u32 count = 0;
+
+    for (const Item* item : list)
+    {
+        if (!item->isNameValid())
+            continue;
+
+        fprintf(stdout, "%-10s 0x%08x  %s\n", label, item->getIdWithType(), item->getName().cstr());
+        count++;
+    }
+
+    return count;
+}
+
+static void dumpItemIds()
+{
+    u32 total = 0;
+
+    total += dumpItemList("sound", sBfsar.getSoundList());
+    total += dumpItemList("soundgroup", sBfsar.getSoundSetList());
+    total += dumpItemList("bank", sBfsar.getBankList());
+    total += dumpItemList("player", sBfsar.getPlayerList());
+    total += dumpItemList("warc", sBfsar.getWaveArchiveList());
+    total += dumpItemList("group", sBfsar.getGroupList());
+
+    fprintf(stderr, "%u named items\n", total);
+}
+
 int main(int argc, char* argv[])
 {
 #if defined(SEAD_PLATFORM_MACOSX)
@@ -157,6 +187,14 @@ int main(int argc, char* argv[])
         {
             fprintf(stderr, "Failed to parse '%s'\n", inPath);
             return 1;
+        }
+
+        if (strcmp(outPath, "--dump-ids") == 0)
+        {
+            dumpItemIds();
+            fflush(stdout);
+            _Exit(0);
+            return 0;
         }
 
         sead::FormatFixedSafeString<1024> outPathStr(outPath);

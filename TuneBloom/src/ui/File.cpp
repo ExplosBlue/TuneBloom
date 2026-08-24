@@ -24,6 +24,10 @@
 
 #include <portable-file-dialogs.h>
 
+#if defined(SEAD_PLATFORM_MACOSX)
+#include <macos/fileDialogs.h>
+#endif
+
 static void AddToRecentFiles(const char* path)
 {
     const size_t maxRecent = 10;
@@ -55,12 +59,19 @@ bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     filtersVec.push_back("All Files (*.*)");
     filtersVec.push_back("*.*");
 
+    std::string resultPath;
+#if defined(SEAD_PLATFORM_MACOSX)
+    if (!macos::openFileDialog(title ? title : "", filtersVec, resultPath))
+        return false;
+#else
     std::vector<std::string> result = pfd::open_file(title ? title : "", "", filtersVec, pfd::opt::none).result();
     if (result.empty())
         return false;
+    resultPath = result[0];
+#endif
 
-    LOG_STR(result[0].c_str());
-    outPath->copy(result[0].c_str());
+    LOG_STR(resultPath.c_str());
+    outPath->copy(resultPath.c_str());
     return true;
 }
 
@@ -69,9 +80,15 @@ bool SelectFolderDialog(sead::BufferedSafeString* outPath, const char* title)
     LOG_FMT("title=\"%s\"", title ? title : "nullptr");
     SEAD_ASSERT(outPath);
 
-    std::string result = pfd::select_folder(title ? title : "", "").result();
+    std::string result;
+#if defined(SEAD_PLATFORM_MACOSX)
+    if (!macos::selectFolderDialog(title ? title : "", result))
+        return false;
+#else
+    result = pfd::select_folder(title ? title : "", "").result();
     if (result.empty())
         return false;
+#endif
 
     LOG_STR(result.c_str());
     outPath->copy(result.c_str());
@@ -83,6 +100,15 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     LOG_FMT("title=\"%s\" filterCount=%u defaultExt=\"%s\" defaultName=\"%s\"", title ? title : "nullptr", filterCount, defaultExt ? defaultExt : "nullptr", defaultName ? defaultName : "nullptr");
     SEAD_ASSERT(outPath);
 
+    std::string defaultPath;
+    if (defaultName && *defaultName)
+        defaultPath = std::filesystem::path(defaultName).make_preferred().string();
+
+    std::string result;
+#if defined(SEAD_PLATFORM_MACOSX)
+    if (!macos::saveFileDialog(title ? title : "", defaultPath, result))
+        return false;
+#else
     std::vector<std::string> filtersVec;
     for (u32 i = 0; i < filterCount; i++)
     {
@@ -93,17 +119,11 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     filtersVec.push_back("All Files (*.*)");
     filtersVec.push_back("*.*");
 
-    // Normalize path separators to platform-native (critical on Windows where
-    // GetSaveFileNameW rejects forward slashes with FNERR_INVALIDFILENAME)
-    std::string defaultPath;
-    if (defaultName && *defaultName)
-        defaultPath = std::filesystem::path(defaultName).make_preferred().string();
-
-    std::string result = pfd::save_file(title ? title : "", defaultPath, filtersVec, pfd::opt::none).result();
+    result = pfd::save_file(title ? title : "", defaultPath, filtersVec, pfd::opt::none).result();
     if (result.empty())
         return false;
+#endif
 
-    // If the user typed a filename without an extension, append the default extension
     if (defaultExt && *defaultExt)
     {
         std::string extWithDot = ".";

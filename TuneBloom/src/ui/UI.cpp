@@ -2571,6 +2571,24 @@ static void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char
     BuildUniqueExportPath(outPath, dir, sound->getName(), ext);
 }
 
+static void ResolveExportBaseName(const Item *item, const char *fallbackLabel, sead::BufferedSafeString *out)
+{
+    if (item->isNameValid())
+    {
+        const char *name = item->getName().cstr();
+        if (strncmp(name, "GUESS_", 6) == 0)
+            name += 6;
+
+        if (*name != '\0')
+        {
+            out->format("%s", name);
+            return;
+        }
+    }
+
+    out->format("%s %u", fallbackLabel, item->getId());
+}
+
 static bool ExportStreamSoundToWav(Sound* sound, const char* path, bool multiChannel, bool loop, int loopCount, float fadeSec, u32 targetRate)
 {
     auto& trackList = sound->getStreamSoundInfo().getTrackList();
@@ -3432,116 +3450,134 @@ static void ExportInstrumentBundle(const BankFile::Instrument* instr, sead::File
     }
 }
 
+static void BuildItemDefaultExportPath(const Item* item, const char* fallbackLabel, const char* ext, sead::BufferedSafeString* out)
+{
+    sead::FixedSafeString<256> baseName;
+    ResolveExportBaseName(item, fallbackLabel, &baseName);
+    SanitizeFilenameInPlace(&baseName);
+
+    std::string cwd = std::filesystem::current_path().string();
+    out->format("%s/%s.%s", cwd.c_str(), baseName.cstr(), ext);
+}
+
+template <typename T>
+static void ExportRawFileItems(std::vector<T*>& pending, const char* ext, const char* formatName, const char* fallbackLabel, void (*writeFn)(const T*, sead::FileDevice*, const char*))
+{
+    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+
+    if (pending.size() > 1)
+    {
+        sead::FixedSafeString<512> dirPath;
+        if (SelectFolderDialog(&dirPath, "Select export directory"))
+        {
+            BeginExportNameBatch();
+
+            for (T* item : pending)
+            {
+                sead::FixedSafeString<256> baseName;
+                ResolveExportBaseName(item, fallbackLabel, &baseName);
+
+                sead::FixedSafeString<512> filePath;
+                BuildUniqueExportPath(&filePath, dirPath.cstr(), baseName, ext);
+                if (device)
+                    writeFn(item, device, filePath.cstr());
+            }
+        }
+    }
+    else
+    {
+        T* item = pending[0];
+
+        sead::FixedSafeString<512> defaultPath;
+        BuildItemDefaultExportPath(item, fallbackLabel, ext, &defaultPath);
+
+        sead::FixedSafeString<64> filterName;
+        filterName.format("%s file (*.%s)", formatName, ext);
+        sead::FixedSafeString<32> filterPattern;
+        filterPattern.format("*.%s", ext);
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { filterName.cstr(), filterPattern.cstr() }
+        };
+
+        sead::FixedSafeString<512> path;
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+        {
+            if (device)
+                writeFn(item, device, path.cstr());
+        }
+    }
+
+    pending.clear();
+}
+
+static void ExportBankModelItems(std::vector<BankFile*>& pending, const char* ext, const char* formatName, const char* filterDesc, bool (*exportFn)(const sead::SafeString&, const BankFile&))
+{
+    s32 bankCount = (s32)pending.size();
+
+    if (bankCount > 1)
+    {
+        sead::FixedSafeString<512> dirPath;
+        if (SelectFolderDialog(&dirPath, "Select export directory"))
+        {
+            BeginExportNameBatch();
+
+            for (BankFile* bank : pending)
+            {
+                sead::FixedSafeString<256> baseName;
+                ResolveExportBaseName(bank, "Bank", &baseName);
+
+                sead::FixedSafeString<512> filePath;
+                BuildUniqueExportPath(&filePath, dirPath.cstr(), baseName, ext);
+                exportFn(filePath, *bank);
+            }
+
+            sExportConfirmMessage.format("Exported %d banks as %s successfully.", bankCount, formatName);
+            sShowExportConfirm = true;
+        }
+    }
+    else
+    {
+        BankFile* bank = pending[0];
+
+        sead::FixedSafeString<64> filterName;
+        filterName.format("%s (*.%s)", filterDesc, ext);
+        sead::FixedSafeString<32> filterPattern;
+        filterPattern.format("*.%s", ext);
+        const u32 filterCount = 1;
+        FileFilter filters[filterCount] = {
+            { filterName.cstr(), filterPattern.cstr() }
+        };
+
+        sead::FixedSafeString<512> defaultPath;
+        BuildItemDefaultExportPath(bank, "Bank", ext, &defaultPath);
+
+        sead::FixedSafeString<512> path;
+        if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
+        {
+            if (exportFn(path, *bank))
+                sExportConfirmMessage.format("Bank exported as %s successfully.", formatName);
+            else
+                sExportConfirmMessage.format("%s export failed (bank has no instruments or waves).", formatName);
+            sShowExportConfirm = true;
+        }
+    }
+
+    pending.clear();
+}
+
 static void DrawFileExportDialogs()
 {
     if (!sPendingExportSequenceFiles.empty())
     {
         bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
-        const char* ext = isBcsar ? "bcseq" : "bfseq";
-        const char* name = isBcsar ? "BCSEQ" : "BFSEQ";
-
-        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-
-        if (sPendingExportSequenceFiles.size() > 1)
-        {
-            sead::FixedSafeString<512> dirPath;
-            if (SelectFolderDialog(&dirPath, "Select export directory"))
-            {
-                for (SequenceFile *seq : sPendingExportSequenceFiles)
-                {
-                    sead::FixedSafeString<256> safeName;
-                    safeName.format("%s", seq->getNameOrNull().cstr());
-                    SanitizeFilenameInPlace(&safeName);
-
-                    sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.%s", dirPath.cstr(), safeName.cstr(), ext);
-                    if (device)
-                        WriteSequenceFile(seq, device, filePath.cstr());
-                }
-            }
-        }
-        else
-        {
-            SequenceFile* seq = sPendingExportSequenceFiles[0];
-            sead::FixedSafeString<512> defaultPath;
-            {
-                const char* rawName = seq->getNameOrNull().cstr();
-                std::string cwd = std::filesystem::current_path().string();
-                defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
-            }
-
-            sead::FixedSafeString<64> filterName;
-            filterName.format("%s file (*.%s)", name, ext);
-            sead::FixedSafeString<32> filterPattern;
-            filterPattern.format("*.%s", ext);
-            const u32 filterCount = 1;
-            FileFilter filters[filterCount] = {
-                { filterName.cstr(), filterPattern.cstr() }
-            };
-
-            sead::FixedSafeString<512> path;
-            if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
-            {
-                if (device)
-                    WriteSequenceFile(seq, device, path.cstr());
-            }
-        }
-        sPendingExportSequenceFiles.clear();
+        ExportRawFileItems<SequenceFile>(sPendingExportSequenceFiles, isBcsar ? "bcseq" : "bfseq", isBcsar ? "BCSEQ" : "BFSEQ", "Sequence", &WriteSequenceFile);
     }
 
     if (!sPendingExportWaveFiles.empty())
     {
         bool isBcsar = sBfsar.getFormat() == ArchiveFormat::BCSAR;
-        const char* ext = isBcsar ? "bcwav" : "bfwav";
-        const char* name = isBcsar ? "BCWAV" : "BFWAV";
-
-        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-
-        if (sPendingExportWaveFiles.size() > 1)
-        {
-            sead::FixedSafeString<512> dirPath;
-            if (SelectFolderDialog(&dirPath, "Select export directory"))
-            {
-                for (WaveFile *wave : sPendingExportWaveFiles)
-                {
-                    sead::FixedSafeString<256> safeName;
-                    safeName.format("%s", wave->getNameOrNull().cstr());
-                    SanitizeFilenameInPlace(&safeName);
-
-                    sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.%s", dirPath.cstr(), safeName.cstr(), ext);
-                    if (device)
-                        WriteWaveFile(wave, device, filePath.cstr());
-                }
-            }
-        }
-        else
-        {
-            WaveFile* wave = sPendingExportWaveFiles[0];
-            sead::FixedSafeString<512> defaultPath;
-            {
-                const char* rawName = wave->getNameOrNull().cstr();
-                std::string cwd = std::filesystem::current_path().string();
-                defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
-            }
-
-            sead::FixedSafeString<64> filterName;
-            filterName.format("%s file (*.%s)", name, ext);
-            sead::FixedSafeString<32> filterPattern;
-            filterPattern.format("*.%s", ext);
-            const u32 filterCount = 1;
-            FileFilter filters[filterCount] = {
-                { filterName.cstr(), filterPattern.cstr() }
-            };
-
-            sead::FixedSafeString<512> path;
-            if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
-            {
-                if (device)
-                    WriteWaveFile(wave, device, path.cstr());
-            }
-        }
-        sPendingExportWaveFiles.clear();
+        ExportRawFileItems<WaveFile>(sPendingExportWaveFiles, isBcsar ? "bcwav" : "bfwav", isBcsar ? "BCWAV" : "BFWAV", "Wave", &WriteWaveFile);
     }
 
     if (!sPendingExportBankBundles.empty())
@@ -3557,14 +3593,15 @@ static void DrawFileExportDialogs()
             sead::FixedSafeString<512> dirPath;
             if (SelectFolderDialog(&dirPath, "Select export directory"))
             {
+                BeginExportNameBatch();
+
                 for (BankFile* bank : sPendingExportBankBundles)
                 {
-                    sead::FixedSafeString<256> safeName;
-                    safeName.format("%s", bank->getNameOrNull().cstr());
-                    SanitizeFilenameInPlace(&safeName);
+                    sead::FixedSafeString<256> baseName;
+                    ResolveExportBaseName(bank, "Bank", &baseName);
 
                     sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.%s", dirPath.cstr(), safeName.cstr(), ext);
+                    BuildUniqueExportPath(&filePath, dirPath.cstr(), baseName, ext);
                     // Use the single-bank export flow for each
                     if (device)
                     {
@@ -3596,11 +3633,7 @@ static void DrawFileExportDialogs()
             };
 
             sead::FixedSafeString<512> defaultPath;
-            {
-                const char* rawName = bank->getNameOrNull().cstr();
-                std::string cwd = std::filesystem::current_path().string();
-                defaultPath.format("%s/%s.%s", cwd.c_str(), rawName, ext);
-            }
+            BuildItemDefaultExportPath(bank, "Bank", ext, &defaultPath);
 
             if (SaveFileDialog(&path, nullptr, filterCount, filters, ext, defaultPath.cstr()))
             {
@@ -3622,105 +3655,10 @@ static void DrawFileExportDialogs()
     }
 
     if (!sPendingExportBankSf2.empty())
-    {
-        s32 bankCount = (s32)sPendingExportBankSf2.size();
-
-        if (bankCount > 1)
-        {
-            sead::FixedSafeString<512> dirPath;
-            if (SelectFolderDialog(&dirPath, "Select export directory"))
-            {
-                for (BankFile *bank : sPendingExportBankSf2)
-                {
-                    sead::FixedSafeString<256> safeName;
-                    safeName.format("%s", bank->getNameOrNull().cstr());
-                    SanitizeFilenameInPlace(&safeName);
-
-                    sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.sf2", dirPath.cstr(), safeName.cstr());
-                    exportBankToSf2(filePath, *bank);
-                }
-                sExportConfirmMessage.format("Exported %d banks as SF2 successfully.", bankCount);
-                sShowExportConfirm = true;
-            }
-        }
-        else
-        {
-            BankFile *bank = sPendingExportBankSf2[0];
-
-            sead::FixedSafeString<512> path;
-            const u32 filterCount = 1;
-            FileFilter filters[filterCount] = {{"SoundFont (*.sf2)", "*.sf2"}};
-
-            sead::FixedSafeString<512> defaultPath;
-            {
-                const char *rawName = bank->getNameOrNull().cstr();
-                std::string cwd = std::filesystem::current_path().string();
-                defaultPath.format("%s/%s.sf2", cwd.c_str(), rawName);
-            }
-
-            if (SaveFileDialog(&path, nullptr, filterCount, filters, "sf2", defaultPath.cstr()))
-            {
-                if (exportBankToSf2(path, *bank))
-                    sExportConfirmMessage.copy("Bank exported as SF2 successfully.");
-                else
-                    sExportConfirmMessage.copy("SF2 export failed (bank has no instruments or waves).");
-                sShowExportConfirm = true;
-            }
-        }
-        sPendingExportBankSf2.clear();
-    }
+        ExportBankModelItems(sPendingExportBankSf2, "sf2", "SF2", "SoundFont", &exportBankToSf2);
 
     if (!sPendingExportBankDls.empty())
-    {
-        s32 bankCount = (s32)sPendingExportBankDls.size();
-
-        if (bankCount > 1)
-        {
-            sead::FixedSafeString<512> dirPath;
-            if (SelectFolderDialog(&dirPath, "Select export directory"))
-            {
-                for (BankFile *bank : sPendingExportBankDls)
-                {
-                    sead::FixedSafeString<256> safeName;
-                    safeName.format("%s", bank->getNameOrNull().cstr());
-                    SanitizeFilenameInPlace(&safeName);
-
-                    sead::FixedSafeString<512> filePath;
-                    filePath.format("%s/%s.dls", dirPath.cstr(), safeName.cstr());
-                    exportBankToDls(filePath, *bank);
-                }
-
-                sExportConfirmMessage.format("Exported %d banks as DLS successfully.", bankCount);
-                sShowExportConfirm = true;
-            }
-        }
-        else
-        {
-            BankFile *bank = sPendingExportBankDls[0];
-
-            sead::FixedSafeString<512> path;
-            const u32 filterCount = 1;
-            FileFilter filters[filterCount] = {{"DLS (*.dls)", "*.dls"}};
-
-            sead::FixedSafeString<512> defaultPath;
-            {
-                const char *rawName = bank->getNameOrNull().cstr();
-                std::string cwd = std::filesystem::current_path().string();
-                defaultPath.format("%s/%s.dls", cwd.c_str(), rawName);
-            }
-
-            if (SaveFileDialog(&path, nullptr, filterCount, filters, "dls", defaultPath.cstr()))
-            {
-                if (exportBankToDls(path, *bank))
-                    sExportConfirmMessage.copy("Bank exported as DLS successfully.");
-                else
-                    sExportConfirmMessage.copy("DLS export failed (bank has no instruments or waves).");
-                sShowExportConfirm = true;
-            }
-        }
-        sPendingExportBankDls.clear();
-    }
+        ExportBankModelItems(sPendingExportBankDls, "dls", "DLS", "DLS", &exportBankToDls);
 
     if (sPendingExportInstrument)
     {
@@ -3741,7 +3679,8 @@ static void DrawFileExportDialogs()
         sead::FixedSafeString<512> defaultPath;
         {
             std::string cwd = std::filesystem::current_path().string();
-            std::string bankName;
+
+            const BankFile* ownerBank = nullptr;
             for (const auto& node : sBfsar.getBankFileList())
             {
                 const auto* bank = static_cast<const BankFile*>(node);
@@ -3749,16 +3688,24 @@ static void DrawFileExportDialogs()
                 {
                     if (iNode == instr)
                     {
-                        bankName = bank->getNameOrNull().cstr();
+                        ownerBank = bank;
                         break;
                     }
                 }
-                if (!bankName.empty()) break;
+                if (ownerBank) break;
             }
-            if (!bankName.empty())
-                defaultPath.format("%s/%s_prog_%d.%s", cwd.c_str(), bankName.c_str(), instr->getProgramNo(), ext);
+
+            sead::FixedSafeString<256> fileName;
+            if (instr->isNameValid())
+                fileName.format("%s", instr->getName().cstr());
+            else if (ownerBank && ownerBank->isNameValid())
+                fileName.format("(%s) Instrument %d", ownerBank->getName().cstr(), instr->getProgramNo());
             else
-                defaultPath.format("%s/%s.%s", cwd.c_str(), instr->getNameOrNull().cstr(), ext);
+                fileName.format("Instrument %d", instr->getProgramNo());
+
+            SanitizeFilenameInPlace(&fileName);
+
+            defaultPath.format("%s/%s.%s", cwd.c_str(), fileName.cstr(), ext);
         }
 
         sead::FixedSafeString<512> path;

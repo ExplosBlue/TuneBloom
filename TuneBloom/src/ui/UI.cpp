@@ -29,6 +29,12 @@
 #include <unistd.h>
 #endif
 
+#if defined(SEAD_PLATFORM_MACOSX)
+#define SHORTCUT_MOD "Cmd+"
+#else
+#define SHORTCUT_MOD "Ctrl+"
+#endif
+
 #include <midi/SeqMidiExporter.h>
 #include <midi/InstBankExporter.h>
 #include <midi/MidiInput.h>
@@ -892,7 +898,7 @@ void DrawMenuBar()
         if (ImGui::BeginMenu("File"))
         {
             bool bfsarOpen = sBfsar.isOpen();
-            if (ImGui::MenuItem(ICON_LC_FILE " New", "Ctrl+Shift+N"))
+            if (ImGui::MenuItem(ICON_LC_FILE " New", SHORTCUT_MOD "Shift+N"))
             {
                 if (bfsarOpen)
                 {
@@ -904,7 +910,7 @@ void DrawMenuBar()
                 }
             }
 
-            if (ImGui::MenuItem(ICON_LC_FOLDER_OPEN " Open", "Ctrl+O"))
+            if (ImGui::MenuItem(ICON_LC_FOLDER_OPEN " Open", SHORTCUT_MOD "O"))
             {
                 if (bfsarOpen)
                 {
@@ -1014,12 +1020,12 @@ void DrawMenuBar()
                 ImGui::BeginDisabled();
             }
 
-            if (ImGui::MenuItem(ICON_LC_SAVE " Save", "Ctrl+S"))
+            if (ImGui::MenuItem(ICON_LC_SAVE " Save", SHORTCUT_MOD "S"))
             {
                 sWantsSaveDirect = true;
             }
 
-            if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As", "Ctrl+Shift+S"))
+            if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As", SHORTCUT_MOD "Shift+S"))
             {
                 SaveFileAs();
             }
@@ -1874,33 +1880,27 @@ void DrawUI()
 {
     if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
     {
-        if (ImGui::IsKeyDown(ImGuiKey_ModCtrl) && !ImGui::IsKeyDown(ImGuiKey_ModShift))
-        {
-            if (ImGui::IsKeyPressed(ImGuiKey_S) && sBfsar.isOpen())
-                sWantsSaveDirect = true;
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiKey_S) && sBfsar.isOpen())
+            sWantsSaveDirect = true;
 
-            if (ImGui::IsKeyPressed(ImGuiKey_O))
-            {
-                if (sBfsar.isOpen())
-                    sWantsOpen = true;
-                else
-                    OpenFile();
-            }
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiKey_O))
+        {
+            if (sBfsar.isOpen())
+                sWantsOpen = true;
+            else
+                OpenFile();
         }
 
-        if (ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyDown(ImGuiKey_ModShift))
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiMod_Shift | ImGuiKey_N))
         {
-            if (ImGui::IsKeyPressed(ImGuiKey_N))
-            {
-                if (sBfsar.isOpen())
-                    sWantsNew = true;
-                else
-                    sNeedsNewFileFormat = true;
-            }
-
-            if (ImGui::IsKeyPressed(ImGuiKey_S) && sBfsar.isOpen())
-                SaveFileAs();
+            if (sBfsar.isOpen())
+                sWantsNew = true;
+            else
+                sNeedsNewFileFormat = true;
         }
+
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiMod_Shift | ImGuiKey_S) && sBfsar.isOpen())
+            SaveFileAs();
     }
 
     ImGuiID dockspaceId = DockSpaceOverViewport();

@@ -28,9 +28,11 @@
 
 #if defined(SEAD_PLATFORM_MACOSX)
 #include "macos/bundle.h"
+#include "macos/openFiles.h"
 #endif
 
 extern Bfsar sBfsar;
+extern sead::FixedSafeString<512> sDroppedFilePath;
 static bool sCliMode = false;
 
 void AssertException(const char* msg)
@@ -125,6 +127,7 @@ int main(int argc, char* argv[])
 {
 #if defined(SEAD_PLATFORM_MACOSX)
     macos::useBundleResources();
+    macos::installOpenFileHandler();
 #endif
 
     sead::Delegate1 deleg = sead::FunctionDelegateCreator<const char*>(&AssertException);
@@ -242,6 +245,9 @@ int main(int argc, char* argv[])
         framework->initializeGraphicsSystem(heap, sead::Vector2f(1280.0f, 720.0f));
         heap->adjust();
     }
+
+    if (argc == 2 && argv[1][0] != '-')
+        sDroppedFilePath = argv[1];
 
     sead::TaskBase::CreateArg rootArg(&sead::TTaskFactory<RootTask>);
     sead::Framework::RunArg runArg;

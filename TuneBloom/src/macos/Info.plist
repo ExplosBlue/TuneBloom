@@ -26,5 +26,24 @@
     <true/>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Nintendo Sound Archive</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>bfsar</string>
+                <string>bcsar</string>
+                <string>cmpbin</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

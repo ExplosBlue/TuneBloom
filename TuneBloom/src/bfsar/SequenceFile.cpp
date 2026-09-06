@@ -512,6 +512,33 @@ void SequenceFile::drawFileUI()
         cmd1aR("mod_speed", " speed", "Modulation speed", "(default 16)");
         cmd1aR("mod_delay", " delay", "Modulation decay", "(default 0)");
         cmd1aR("mod_type", " type",   "Modulation type", "(default 0)");
+        cmd1a("mod_phase", " phase", "Modulation start phase");
+        cmd1a("mod_curve", " curve", "Modulation waveform curve");
+        cmd1a("mod_period", " period", "Modulation period");
+        cmd1a("mod2_depth", " depth", "2nd modulation slot depth");
+        cmd1a("mod2_range", " range", "2nd modulation slot range");
+        cmd1a("mod2_speed", " speed", "2nd modulation slot speed");
+        cmd1a("mod2_delay", " delay", "2nd modulation slot delay");
+        cmd1a("mod2_type", " type",   "2nd modulation slot type");
+        cmd1a("mod2_phase", " phase", "2nd modulation slot phase");
+        cmd1a("mod2_curve", " curve", "2nd modulation slot curve");
+        cmd1a("mod2_period", " period", "2nd modulation slot period");
+        cmd1a("mod3_depth", " depth", "3rd modulation slot depth");
+        cmd1a("mod3_range", " range", "3rd modulation slot range");
+        cmd1a("mod3_speed", " speed", "3rd modulation slot speed");
+        cmd1a("mod3_delay", " delay", "3rd modulation slot delay");
+        cmd1a("mod3_type", " type",   "3rd modulation slot type");
+        cmd1a("mod3_phase", " phase", "3rd modulation slot phase");
+        cmd1a("mod3_curve", " curve", "3rd modulation slot curve");
+        cmd1a("mod3_period", " period", "3rd modulation slot period");
+        cmd1a("mod4_depth", " depth", "4th modulation slot depth");
+        cmd1a("mod4_range", " range", "4th modulation slot range");
+        cmd1a("mod4_speed", " speed", "4th modulation slot speed");
+        cmd1a("mod4_delay", " delay", "4th modulation slot delay");
+        cmd1a("mod4_type", " type",   "4th modulation slot type");
+        cmd1a("mod4_phase", " phase", "4th modulation slot phase");
+        cmd1a("mod4_curve", " curve", "4th modulation slot curve");
+        cmd1a("mod4_period", " period", "4th modulation slot period");
 
         section("Pitch");
         cmd1aR("pitchbend", " x",   "Pitch bend", "(-128 to 127, default 0)");
@@ -711,6 +738,9 @@ void SequenceFile::setCursorToLabel_(const sead::SafeString& label)
 
 void SequenceFile::invalidatePlayer_() const
 {
+    if (sBfsar.getCliMode())
+        return;
+
     if (sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
     {
         sSoundPlayer.getSequencePlayer().clearPlayingFile();
@@ -941,6 +971,32 @@ std::vector<std::string> split(std::string s, std::string delimiter)
 
     res.push_back(s.substr(pos_start));
     return res;
+}
+
+bool SequenceFile::recompileIfInvalid_()
+{
+    if (isValid())
+        return true;
+
+    if (!mSeqText)
+        return false;
+
+    bool hadEditor = mTextEditor != nullptr;
+    if (!hadEditor)
+    {
+        mTextEditor = new TextEditor();
+        mTextEditor->SetText(mSeqText->cstr());
+    }
+
+    compile_(false);
+
+    if (!hadEditor)
+    {
+        delete mTextEditor;
+        mTextEditor = nullptr;
+    }
+
+    return isValid();
 }
 
 void SequenceFile::compile_(bool setCursorPos)
@@ -2265,8 +2321,6 @@ bool CmdModTypeArgCallback(MmlCommandBase* base, const std::string& cmdName, con
 
     std::vector<std::string> args = args_;
 
-    MmlCommandModType* cmd = static_cast<MmlCommandModType*>(base);
-
     int argInt;
     if (!ParseListArg(&argInt, args, 1, MmlCommandModType::cTypes, MmlCommandModType::cTypeNum, "modulation type identifier", errorMsg))
     {
@@ -2280,7 +2334,7 @@ bool CmdModTypeArgCallback(MmlCommandBase* base, const std::string& cmdName, con
     }
 
     SeqArgBase* seqArg = new SeqArg8(argInt, false);
-    if (!cmd->setArg1(seqArg))
+    if (!base->setArg1(seqArg))
     {
         delete seqArg;
         return false;
@@ -2451,6 +2505,7 @@ std::pair<std::string, CommandInfo> GetCommandInfo(const std::string& cmd)
         { "fxsend_c",        { &TCommandFactory<MmlCommandFxSendC>,       SeqArgType::ArgU8,    1, true,  false, true, nullptr } },
         { "damper_on",       { &TCommandFactory<MmlCommandDamper>,        SeqArgType::ArgBool,  0, false, false, true, nullptr } },
         { "damper_off",      { &TCommandFactory<MmlCommandDamper>,        SeqArgType::ArgBool,  0, false, false, true, nullptr } },
+        { "userproc",        { &TCommandFactory<MmlCommandUserproc>,      SeqArgType::ArgU16,   1, false, false, true, nullptr } },
 
         { "mod_delay",       { &TCommandFactory<MmlCommandModDelay>,      SeqArgType::ArgS16,   1, true,  false, true, nullptr } },
         { "tempo",           { &TCommandFactory<MmlCommandTempo>,         SeqArgType::ArgS16,   1, true,  false, true, nullptr } },
@@ -2483,7 +2538,32 @@ std::pair<std::string, CommandInfo> GetCommandInfo(const std::string& cmd)
         { "cmp_lt",          { &TCommandFactory<MmlCommandCmpLt>,         SeqArgType::ArgU8,    2, true,  false, true, &CmdVarArgCallback<MmlCommandCmpLt> } },
         { "cmp_ne",          { &TCommandFactory<MmlCommandCmpNe>,         SeqArgType::ArgU8,    2, true,  false, true, &CmdVarArgCallback<MmlCommandCmpNe> } },
 
-        // TODO: Rest of extended commands
+        { "mod2_curve",      { &TCommandFactory<MmlCommandMod2Curve>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod2_phase",      { &TCommandFactory<MmlCommandMod2Phase>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod2_depth",      { &TCommandFactory<MmlCommandMod2Depth>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod2_speed",      { &TCommandFactory<MmlCommandMod2Speed>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod2_range",      { &TCommandFactory<MmlCommandMod2Range>,     SeqArgType::ArgU8,    1, false, false, true, nullptr, 0x00020000 } },
+        { "mod2_type",       { &TCommandFactory<MmlCommandMod2Type>,      SeqArgType::ArgU8,    1, false, false, true, &CmdModTypeArgCallback, 0x00020000 } },
+        { "mod2_delay",      { &TCommandFactory<MmlCommandMod2Delay>,     SeqArgType::ArgS16,   1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod2_period",     { &TCommandFactory<MmlCommandMod2Period>,    SeqArgType::ArgS16,   1, true,  false, true, nullptr, 0x00020000 } },
+
+        { "mod3_curve",      { &TCommandFactory<MmlCommandMod3Curve>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod3_phase",      { &TCommandFactory<MmlCommandMod3Phase>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod3_depth",      { &TCommandFactory<MmlCommandMod3Depth>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod3_speed",      { &TCommandFactory<MmlCommandMod3Speed>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod3_range",      { &TCommandFactory<MmlCommandMod3Range>,     SeqArgType::ArgU8,    1, false, false, true, nullptr, 0x00020000 } },
+        { "mod3_type",       { &TCommandFactory<MmlCommandMod3Type>,      SeqArgType::ArgU8,    1, false, false, true, &CmdModTypeArgCallback, 0x00020000 } },
+        { "mod3_delay",      { &TCommandFactory<MmlCommandMod3Delay>,     SeqArgType::ArgS16,   1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod3_period",     { &TCommandFactory<MmlCommandMod3Period>,    SeqArgType::ArgS16,   1, true,  false, true, nullptr, 0x00020000 } },
+
+        { "mod4_curve",      { &TCommandFactory<MmlCommandMod4Curve>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod4_phase",      { &TCommandFactory<MmlCommandMod4Phase>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod4_depth",      { &TCommandFactory<MmlCommandMod4Depth>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod4_speed",      { &TCommandFactory<MmlCommandMod4Speed>,     SeqArgType::ArgU8,    1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod4_range",      { &TCommandFactory<MmlCommandMod4Range>,     SeqArgType::ArgU8,    1, false, false, true, nullptr, 0x00020000 } },
+        { "mod4_type",       { &TCommandFactory<MmlCommandMod4Type>,      SeqArgType::ArgU8,    1, false, false, true, &CmdModTypeArgCallback, 0x00020000 } },
+        { "mod4_delay",      { &TCommandFactory<MmlCommandMod4Delay>,     SeqArgType::ArgS16,   1, true,  false, true, nullptr, 0x00020000 } },
+        { "mod4_period",     { &TCommandFactory<MmlCommandMod4Period>,    SeqArgType::ArgS16,   1, true,  false, true, nullptr, 0x00020000 } },
     };
 
     static bool sInitedCmdInfo = false;

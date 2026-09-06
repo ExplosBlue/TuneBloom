@@ -457,8 +457,9 @@ public:
 enum class MmlExCommandArgType
 {
     Invalid = 0,
-    //U8,
+    U8,
     U16,
+    S16,
     Variable_S16,
     Num
 };
@@ -469,19 +470,21 @@ class MmlExCommandBase : public MmlCommandBase
 
     MmlExCommandArgType getArgType_() const
     {
+        if (getCommand_() == MmlCommand::MML_USERPROC)
+            return MmlExCommandArgType::U16;
+
         switch (getCommand_() & 0xF0)
         {
             case 0x80:
             case 0x90:
                 return MmlExCommandArgType::Variable_S16;
 
-            case 0xE0:
-                return MmlExCommandArgType::U16;
+            case 0xA0:
+            case 0xB0:
+                return MmlExCommandArgType::U8;
 
-            // TODO: The following is only present in newer versions
-            // case 0xA0:
-            // case 0xB0:
-            //     return MmlExCommandArgType::U8;
+            case 0xE0:
+                return MmlExCommandArgType::S16;
 
             default:
                 return MmlExCommandArgType::Invalid;
@@ -524,8 +527,21 @@ public:
 
         switch (argType)
         {
-            //case MmlExCommandArgType::U8:
-                // TODO
+            case MmlExCommandArgType::U8:
+            {
+                const SeqArg8* arg1DefaultType = sead::DynamicCast<SeqArg8>(arg1);
+                if (arg1DefaultType)
+                {
+                    SEAD_ASSERT(!arg1DefaultType->mHasSign);
+                }
+                else
+                {
+                    SEAD_ASSERT(sead::IsDerivedTypes<SeqArgRandom>(arg1) || sead::IsDerivedTypes<SeqArgVariable>(arg1));
+                }
+
+                mArg1 = arg1;
+                break;
+            }
 
             case MmlExCommandArgType::U16:
             {
@@ -533,6 +549,22 @@ public:
                 if (arg1DefaultType)
                 {
                     SEAD_ASSERT(!arg1DefaultType->mHasSign);
+                }
+                else
+                {
+                    SEAD_ASSERT(sead::IsDerivedTypes<SeqArgRandom>(arg1) || sead::IsDerivedTypes<SeqArgVariable>(arg1));
+                }
+
+                mArg1 = arg1;
+                break;
+            }
+
+            case MmlExCommandArgType::S16:
+            {
+                const SeqArg16* arg1DefaultType = sead::DynamicCast<SeqArg16>(arg1);
+                if (arg1DefaultType)
+                {
+                    SEAD_ASSERT(arg1DefaultType->mHasSign);
                 }
                 else
                 {
@@ -603,8 +635,22 @@ public:
 
         switch (argType)
         {
-            //case MmlExCommandArgType::U8:
-                // TODO
+            case MmlExCommandArgType::U8:
+                if (sead::IsDerivedTypes<SeqArgRandom>(mArg1))
+                {
+                    ret.push_back(MmlCommand::MML_RANDOM);
+                }
+                else if (sead::IsDerivedTypes<SeqArgVariable>(mArg1))
+                {
+                    ret.push_back(MmlCommand::MML_VARIABLE);
+                }
+                else
+                {
+                    const SeqArg8* arg1DefaultType = sead::DynamicCast<SeqArg8>(mArg1);
+                    SEAD_ASSERT(arg1DefaultType);
+                    SEAD_ASSERT(!arg1DefaultType->mHasSign);
+                }
+                break;
 
             case MmlExCommandArgType::U16:
                 if (sead::IsDerivedTypes<SeqArgRandom>(mArg1))
@@ -620,6 +666,23 @@ public:
                     const SeqArg16* arg1DefaultType = sead::DynamicCast<SeqArg16>(mArg1);
                     SEAD_ASSERT(arg1DefaultType);
                     SEAD_ASSERT(!arg1DefaultType->mHasSign);
+                }
+                break;
+
+            case MmlExCommandArgType::S16:
+                if (sead::IsDerivedTypes<SeqArgRandom>(mArg1))
+                {
+                    ret.push_back(MmlCommand::MML_RANDOM);
+                }
+                else if (sead::IsDerivedTypes<SeqArgVariable>(mArg1))
+                {
+                    ret.push_back(MmlCommand::MML_VARIABLE);
+                }
+                else
+                {
+                    const SeqArg16* arg1DefaultType = sead::DynamicCast<SeqArg16>(mArg1);
+                    SEAD_ASSERT(arg1DefaultType);
+                    SEAD_ASSERT(arg1DefaultType->mHasSign);
                 }
                 break;
 
@@ -651,10 +714,9 @@ public:
 
         switch (argType)
         {
-            //case MmlExCommandArgType::U8:
-                // TODO
-
+            case MmlExCommandArgType::U8:
             case MmlExCommandArgType::U16:
+            case MmlExCommandArgType::S16:
             {
                 const auto& arg1Bytes = mArg1->encode();
                 ret.insert(ret.end(), arg1Bytes.begin(), arg1Bytes.end());
@@ -695,8 +757,22 @@ public:
 
         switch (argType)
         {
-            //case MmlExCommandArgType::U8:
-                // TODO
+            case MmlExCommandArgType::U8:
+                if (sead::IsDerivedTypes<SeqArgRandom>(mArg1))
+                {
+                    cmd += "_r";
+                }
+                else if (sead::IsDerivedTypes<SeqArgVariable>(mArg1))
+                {
+                    cmd += "_v";
+                }
+                else
+                {
+                    const SeqArg8* arg1DefaultType = sead::DynamicCast<SeqArg8>(mArg1);
+                    SEAD_ASSERT(arg1DefaultType);
+                    SEAD_ASSERT(!arg1DefaultType->mHasSign);
+                }
+                break;
 
             case MmlExCommandArgType::U16:
                 if (sead::IsDerivedTypes<SeqArgRandom>(mArg1))
@@ -712,6 +788,23 @@ public:
                     const SeqArg16* arg1DefaultType = sead::DynamicCast<SeqArg16>(mArg1);
                     SEAD_ASSERT(arg1DefaultType);
                     SEAD_ASSERT(!arg1DefaultType->mHasSign);
+                }
+                break;
+
+            case MmlExCommandArgType::S16:
+                if (sead::IsDerivedTypes<SeqArgRandom>(mArg1))
+                {
+                    cmd += "_r";
+                }
+                else if (sead::IsDerivedTypes<SeqArgVariable>(mArg1))
+                {
+                    cmd += "_v";
+                }
+                else
+                {
+                    const SeqArg16* arg1DefaultType = sead::DynamicCast<SeqArg16>(mArg1);
+                    SEAD_ASSERT(arg1DefaultType);
+                    SEAD_ASSERT(arg1DefaultType->mHasSign);
                 }
                 break;
 
@@ -1988,6 +2081,15 @@ public:
 public:
     using MmlCommandArgs1::MmlCommandArgs1;
 
+    static std::vector<std::string> FormatTypeArg_(const SeqArgBase* arg)
+    {
+        const SeqArg8* argDefaultType = sead::DynamicCast<const SeqArg8>(arg);
+        if (argDefaultType && 0 <= argDefaultType->mValue && argDefaultType->mValue < cTypeNum)
+            return { cTypes[argDefaultType->mValue] };
+
+        return { arg->toString() };
+    }
+
     bool validateArgValueDefaultType_(const SeqArg8* arg) const override
     {
         return 0 <= arg->mValue && arg->mValue < cTypeNum;
@@ -2000,11 +2102,7 @@ public:
 
     std::vector<std::string> getArgs_() const override
     {
-        const SeqArg8* argDefaultType = sead::DynamicCast<const SeqArg8>(mArg);
-        if (argDefaultType && 0 <= argDefaultType->mValue && argDefaultType->mValue < cTypeNum)
-            return { cTypes[argDefaultType->mValue] };
-
-        return { mArg->toString() };
+        return FormatTypeArg_(mArg);
     }
 
     const char* getCommandString_() const override
@@ -2058,7 +2156,7 @@ public:
 class MmlCommandUserproc : public MmlExCommandBase
 {
 public:
-    MmlCommandUserproc(SeqArgBase* arg, bool conditional = false)
+    MmlCommandUserproc(SeqArgBase* arg = nullptr, bool conditional = false)
         : MmlExCommandBase(arg, nullptr, conditional)
     {
     }
@@ -2482,5 +2580,476 @@ public:
     const char* getCommandString_() const override
     {
         return "frontbypass_";
+    }
+};
+
+class MmlCommandMod2Curve : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Curve(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_CURVE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_curve";
+    }
+};
+
+class MmlCommandMod2Phase : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Phase(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_PHASE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_phase";
+    }
+};
+
+class MmlCommandMod2Depth : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Depth(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_DEPTH;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_depth";
+    }
+};
+
+class MmlCommandMod2Speed : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Speed(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_SPEED;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_speed";
+    }
+};
+
+class MmlCommandMod2Range : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Range(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_RANGE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_range";
+    }
+};
+
+class MmlCommandMod2Type : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Type(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_TYPE;
+    }
+
+    std::vector<std::string> getArgs_() const override
+    {
+        return MmlCommandModType::FormatTypeArg_(mArg1);
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_type";
+    }
+};
+
+class MmlCommandMod2Delay : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Delay(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_DELAY;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_delay";
+    }
+};
+
+class MmlCommandMod2Period : public MmlExCommandBase
+{
+public:
+    MmlCommandMod2Period(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_2_PERIOD;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod2_period";
+    }
+};
+
+class MmlCommandMod3Curve : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Curve(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_CURVE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_curve";
+    }
+};
+
+class MmlCommandMod3Phase : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Phase(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_PHASE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_phase";
+    }
+};
+
+class MmlCommandMod3Depth : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Depth(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_DEPTH;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_depth";
+    }
+};
+
+class MmlCommandMod3Speed : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Speed(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_SPEED;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_speed";
+    }
+};
+
+class MmlCommandMod3Range : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Range(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_RANGE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_range";
+    }
+};
+
+class MmlCommandMod3Type : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Type(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_TYPE;
+    }
+
+    std::vector<std::string> getArgs_() const override
+    {
+        return MmlCommandModType::FormatTypeArg_(mArg1);
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_type";
+    }
+};
+
+class MmlCommandMod3Delay : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Delay(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_DELAY;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_delay";
+    }
+};
+
+class MmlCommandMod3Period : public MmlExCommandBase
+{
+public:
+    MmlCommandMod3Period(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_3_PERIOD;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod3_period";
+    }
+};
+
+class MmlCommandMod4Curve : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Curve(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_CURVE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_curve";
+    }
+};
+
+class MmlCommandMod4Phase : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Phase(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_PHASE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_phase";
+    }
+};
+
+class MmlCommandMod4Depth : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Depth(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_DEPTH;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_depth";
+    }
+};
+
+class MmlCommandMod4Speed : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Speed(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_SPEED;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_speed";
+    }
+};
+
+class MmlCommandMod4Range : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Range(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_RANGE;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_range";
+    }
+};
+
+class MmlCommandMod4Type : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Type(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_TYPE;
+    }
+
+    std::vector<std::string> getArgs_() const override
+    {
+        return MmlCommandModType::FormatTypeArg_(mArg1);
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_type";
+    }
+};
+
+class MmlCommandMod4Delay : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Delay(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_DELAY;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_delay";
+    }
+};
+
+class MmlCommandMod4Period : public MmlExCommandBase
+{
+public:
+    MmlCommandMod4Period(SeqArgBase* arg = nullptr, bool conditional = false)
+        : MmlExCommandBase(arg, nullptr, conditional)
+    {
+    }
+
+    MmlCommand::MmlEx getCommand_() const override
+    {
+        return MmlCommand::MML_MOD_4_PERIOD;
+    }
+
+    const char* getCommandString_() const override
+    {
+        return "mod4_period";
     }
 };

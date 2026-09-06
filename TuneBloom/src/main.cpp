@@ -164,6 +164,8 @@ int main(int argc, char* argv[])
         if (!device)
         {
             fprintf(stderr, "Failed to find native file device\n");
+            fflush(stderr);
+            _Exit(1);
             return 1;
         }
 
@@ -174,6 +176,8 @@ int main(int argc, char* argv[])
         if (!bfsarFile)
         {
             fprintf(stderr, "Failed to load '%s'\n", inPath);
+            fflush(stderr);
+            _Exit(1);
             return 1;
         }
 
@@ -181,6 +185,8 @@ int main(int argc, char* argv[])
         {
             fprintf(stderr, "'%s' is not a valid BFSAR/BCSAR file\n", inPath);
             delete bfsarFile;
+            fflush(stderr);
+            _Exit(1);
             return 1;
         }
 
@@ -189,6 +195,8 @@ int main(int argc, char* argv[])
         if (!sBfsar.open(bfsarFile, static_cast<u32>(loadArg.read_size), inPathStr, nullptr))
         {
             fprintf(stderr, "Failed to parse '%s'\n", inPath);
+            fflush(stderr);
+            _Exit(1);
             return 1;
         }
 
@@ -205,6 +213,8 @@ int main(int argc, char* argv[])
         if (!sBfsar.saveAs(outPathStr))
         {
             fprintf(stderr, "Failed to save to '%s'\n", outPath);
+            fflush(stderr);
+            _Exit(1);
             return 1;
         }
 

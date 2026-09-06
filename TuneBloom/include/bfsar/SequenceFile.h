@@ -117,6 +117,8 @@ public:
         mLoadError = true;
     }
 
+    bool recompileIfInvalid_();
+
     void setCursorToLabel_(const sead::SafeString& label);
 
     SeqTextInfo& getSeqTextInfo_()

@@ -67,7 +67,17 @@ static void InvalidateSeqFile()
         SequenceFile* seqFile = static_cast<SequenceFile*>(item);
         seqFile->setLoadError_();
     }
-} 
+}
+
+static void CheckMultiModVersion(u32 cmd, u32 cmdex)
+{
+    if (sBfsar.getVersionForBfseq() < 0x00020000)
+    {
+        sead::FormatFixedSafeString<128> msg("Command not supported in current version: 0x%02X (ex: 0x%02X)", cmd, cmdex);
+        PopupMgr::instance()->pushCurrentItemError(msg);
+        InvalidateSeqFile();
+    }
+}
 
 MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData, nw::snd::internal::SequenceSoundFileReader& reader)
 {
@@ -400,20 +410,130 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                 {
                 case 0xa0: case 0xb0: // u8 parameters.
                 {
-                    sead::FormatFixedSafeString<128> msg("Command type does not exist in current version: 0x%02X (ex: 0x%02X)", cmd, cmdex);
-                    PopupMgr::instance()->pushCurrentItemError(msg);
-                    InvalidateSeqFile();
+                    arg1 = nw__snd__internal__driver__MmlParser__ReadArg(
+                        &trackData,
+                        useArgType ? argType : MmlParser::SEQ_ARG_U8
+                    );
+
+                    switch (cmdex)
+                    {
+                        case MmlCommand::MML_MOD_2_CURVE:
+                            cmdInst = new MmlCommandMod2Curve(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_2_PHASE:
+                            cmdInst = new MmlCommandMod2Phase(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_2_DEPTH:
+                            cmdInst = new MmlCommandMod2Depth(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_2_SPEED:
+                            cmdInst = new MmlCommandMod2Speed(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_2_TYPE:
+                            cmdInst = new MmlCommandMod2Type(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_2_RANGE:
+                            cmdInst = new MmlCommandMod2Range(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_CURVE:
+                            cmdInst = new MmlCommandMod3Curve(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_PHASE:
+                            cmdInst = new MmlCommandMod3Phase(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_DEPTH:
+                            cmdInst = new MmlCommandMod3Depth(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_SPEED:
+                            cmdInst = new MmlCommandMod3Speed(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_TYPE:
+                            cmdInst = new MmlCommandMod3Type(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_RANGE:
+                            cmdInst = new MmlCommandMod3Range(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_CURVE:
+                            cmdInst = new MmlCommandMod4Curve(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_PHASE:
+                            cmdInst = new MmlCommandMod4Phase(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_DEPTH:
+                            cmdInst = new MmlCommandMod4Depth(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_SPEED:
+                            cmdInst = new MmlCommandMod4Speed(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_TYPE:
+                            cmdInst = new MmlCommandMod4Type(arg1, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_RANGE:
+                            cmdInst = new MmlCommandMod4Range(arg1, conditional);
+                            break;
+                        default:
+                        {
+                            delete arg1;
+                            sead::FormatFixedSafeString<128> msg("Command type does not exist in current version: 0x%02X (ex: 0x%02X)", cmd, cmdex);
+                            PopupMgr::instance()->pushCurrentItemError(msg);
+                            InvalidateSeqFile();
+                            break;
+                        }
+                    }
+
+                    if (cmdInst)
+                        CheckMultiModVersion(cmd, cmdex);
+
                     break;
                 }
 
                 case 0xe0: // u16 parameter
                 {
+                    if (cmdex == MmlCommand::MML_USERPROC)
+                    {
+                        arg = nw__snd__internal__driver__MmlParser__ReadArg(
+                            &trackData,
+                            useArgType ? argType : MmlParser::SEQ_ARG_S16
+                        );
+                        cmdInst = new MmlCommandUserproc(arg, conditional);
+                        break;
+                    }
+
                     arg = nw__snd__internal__driver__MmlParser__ReadArg(
                         &trackData,
-                        useArgType ? argType : MmlParser::SEQ_ARG_S16
+                        useArgType ? argType : MmlParser::SEQ_ARG_S16,
+                        true
                     );
-                    if (cmdex == MmlCommand::MML_USERPROC)
-                        cmdInst = new MmlCommandUserproc(arg, conditional);
+
+                    switch (cmdex)
+                    {
+                        case MmlCommand::MML_MOD_2_DELAY:
+                            cmdInst = new MmlCommandMod2Delay(arg, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_2_PERIOD:
+                            cmdInst = new MmlCommandMod2Period(arg, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_DELAY:
+                            cmdInst = new MmlCommandMod3Delay(arg, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_3_PERIOD:
+                            cmdInst = new MmlCommandMod3Period(arg, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_DELAY:
+                            cmdInst = new MmlCommandMod4Delay(arg, conditional);
+                            break;
+                        case MmlCommand::MML_MOD_4_PERIOD:
+                            cmdInst = new MmlCommandMod4Period(arg, conditional);
+                            break;
+                        default:
+                            delete arg;
+                            arg = nullptr;
+                            break;
+                    }
+
+                    if (cmdInst)
+                        CheckMultiModVersion(cmd, cmdex);
+
                     break;
                 }
 

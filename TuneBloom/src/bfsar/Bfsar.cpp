@@ -212,6 +212,14 @@ static bool ReplaceStreamFileAtomic_(const sead::SafeString &tempPath, const sea
 static bool CompressCmpbin_(const sead::SafeString &tmpPath, const sead::SafeString &destPath, bool preferZstd, sead::BufferedSafeString *outStagedPath);
 static bool ForceOverwriteFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath);
 
+void Bfsar::recompileInvalidSequences_()
+{
+    for (Item* item : mSequenceFileList)
+    {
+        static_cast<SequenceFile*>(item)->recompileIfInvalid_();
+    }
+}
+
 bool Bfsar::save()
 {
     LOG_FUNC();
@@ -222,6 +230,8 @@ bool Bfsar::save()
     {
         return SaveFileAs();
     }
+
+    recompileInvalidSequences_();
 
     if (!validate_())
         return false;
@@ -426,6 +436,11 @@ bool Bfsar::saveAs(const sead::SafeString &filePath)
     if (!mOpen)
         return false;
 
+    recompileInvalidSequences_();
+
+    if (!validate_())
+        return false;
+
     delete mFilePath;
     mFilePath = new sead::HeapSafeString(nullptr, filePath);
 
@@ -440,7 +455,12 @@ bool Bfsar::saveAs(const sead::SafeString &filePath)
 
 bool Bfsar::saveBackup(const sead::SafeString &path)
 {
-    if (!mOpen || !validate_(false))
+    if (!mOpen)
+        return false;
+
+    recompileInvalidSequences_();
+
+    if (!validate_(false))
         return false;
 
     sead::FileDevice *device = sead::FileDeviceMgr::instance()->findDevice("native");
@@ -897,89 +917,91 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             {
                 sead::FixedSafeString<512> filePath;
 
-                if (mCliMode)
+                sead::FixedSafeString<512> dir;
+                if (sead::Path::getDirectoryName(&dir, getFilePath()))
                 {
-                    sead::FixedSafeString<512> dir;
-                    if (sead::Path::getDirectoryName(&dir, getFilePath()))
+                    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+                    SEAD_ASSERT(device);
+
+                    sead::FileDevice::LoadArg arg;
+
+                    filePath.format("%s/extData/%s.bcgrp", dir.cstr(), group->mName.cstr());
+                    arg.path = filePath;
+                    bfgrpFile = device->tryLoad(arg);
+
+                    if (!bfgrpFile)
                     {
-                        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-                        SEAD_ASSERT(device);
-
-                        sead::FileDevice::LoadArg arg;
-
-                        filePath.format("%s/extData/%s.bcgrp", dir.cstr(), group->mName.cstr());
+                        filePath.format("%s/extData/%s.bfgrp", dir.cstr(), group->mName.cstr());
                         arg.path = filePath;
                         bfgrpFile = device->tryLoad(arg);
+                    }
 
-                        if (!bfgrpFile)
+                    if (!bfgrpFile)
+                    {
+                        namespace fs = std::filesystem;
+                        std::string targetName(group->mName.cstr());
+
+                        for (auto& entry : fs::recursive_directory_iterator(dir.cstr(), fs::directory_options::skip_permission_denied))
                         {
-                            filePath.format("%s/extData/%s.bfgrp", dir.cstr(), group->mName.cstr());
-                            arg.path = filePath;
-                            bfgrpFile = device->tryLoad(arg);
-                        }
-
-                        if (!bfgrpFile)
-                        {
-                            namespace fs = std::filesystem;
-                            std::string targetName(group->mName.cstr());
-
-                            for (auto& entry : fs::recursive_directory_iterator(dir.cstr(), fs::directory_options::skip_permission_denied))
+                            if (!entry.is_regular_file())
+                                continue;
+                            auto p = entry.path();
+                            if (p.stem() == targetName && (p.extension() == ".bcgrp" || p.extension() == ".bfgrp"))
                             {
-                                if (!entry.is_regular_file())
-                                    continue;
-                                auto p = entry.path();
-                                if (p.stem() == targetName && (p.extension() == ".bcgrp" || p.extension() == ".bfgrp"))
+                                filePath.copy(p.string().c_str());
+                                arg.path = filePath;
+                                bfgrpFile = device->tryLoad(arg);
+                                if (bfgrpFile)
                                 {
-                                    filePath.copy(p.string().c_str());
-                                    arg.path = filePath;
-                                    bfgrpFile = device->tryLoad(arg);
-                                    if (bfgrpFile)
-                                    {
-                                        fprintf(stdout, "Found external group: %s\n", p.string().c_str());
-                                        break;
-                                    }
+                                    fprintf(stdout, "Found external group: %s\n", p.string().c_str());
+                                    break;
                                 }
                             }
                         }
                     }
-
-                    if (!bfgrpFile)
-                        fprintf(stderr, "Failed to find external group file for '%s'\n", group->mName.cstr());
                 }
-                else
+
+                if (!bfgrpFile)
                 {
-                    const u32 filterCount = 1;
-                    FileFilter filters[filterCount] = {
-                        { "Group File (*.bfgrp)", "*.bfgrp" }
-                    };
-
-                    if (OpenFileDialog(&filePath, sead::FormatFixedSafeString<512>("Open group file for '%s'", group->getFormattedName().cstr()).cstr(), filterCount, filters))
+                    if (mCliMode)
                     {
-                        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-                        SEAD_ASSERT(device);
-
-                        sead::FileDevice::LoadArg arg;
-                        arg.path = filePath;
-
-                        bfgrpFile = device->tryLoad(arg);
-                        if (!bfgrpFile)
-                        {
-                            sead::FixedSafeString<512> file;
-                            if (sead::Path::getFileName(&file, filePath))
-                            {
-                                sead::FormatFixedSafeString<1024> msg("Couldn't load the file '%s'", file.cstr());
-                                PopupMgr::instance()->pushCurrentItemError(msg);
-                            }
-                            else
-                            {
-                                sead::FormatFixedSafeString<256> msg("Couldn't load file for group '%s'", group->getFormattedName().cstr());
-                                PopupMgr::instance()->pushCurrentItemError(msg);
-                            }
-                        }
+                        fprintf(stderr, "Failed to find external group file for '%s'\n", group->mName.cstr());
                     }
                     else
                     {
-                        PopupMgr::instance()->pushCurrentItemError("External group file wasn't loaded");
+                        const u32 filterCount = 1;
+                        FileFilter filters[filterCount] = {
+                            { "Group File (*.bfgrp)", "*.bfgrp" }
+                        };
+
+                        if (OpenFileDialog(&filePath, sead::FormatFixedSafeString<512>("Open group file for '%s'", group->getFormattedName().cstr()).cstr(), filterCount, filters))
+                        {
+                            sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+                            SEAD_ASSERT(device);
+
+                            sead::FileDevice::LoadArg arg;
+                            arg.path = filePath;
+
+                            bfgrpFile = device->tryLoad(arg);
+                            if (!bfgrpFile)
+                            {
+                                sead::FixedSafeString<512> file;
+                                if (sead::Path::getFileName(&file, filePath))
+                                {
+                                    sead::FormatFixedSafeString<1024> msg("Couldn't load the file '%s'", file.cstr());
+                                    PopupMgr::instance()->pushCurrentItemError(msg);
+                                }
+                                else
+                                {
+                                    sead::FormatFixedSafeString<256> msg("Couldn't load file for group '%s'", group->getFormattedName().cstr());
+                                    PopupMgr::instance()->pushCurrentItemError(msg);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            PopupMgr::instance()->pushCurrentItemError("External group file wasn't loaded");
+                        }
                     }
                 }
             }
@@ -2319,6 +2341,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
     for (u32 i = 0; i < soundArchive.GetBankCount(); i++)
     {
         const nw::snd::internal::SoundArchiveFile::BankInfo* bankInfo = soundArchive.GetBankInfo(soundArchive.GetBankIdFromIndex(i));
+       
         if (!bankInfo)
         {
             PopupMgr::instance()->setCorruptInfo("Invalid BankInfo");
@@ -2326,6 +2349,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         }
 
         u32 fileIdx = nw::snd::internal::Util::GetItemIndex(bankInfo->fileId);
+        
         if (fileIdx >= soundArchive.detail_GetFileCount())
         {
             LOG("Bank %u: Skipped (fileIdx=%u >= fileCount=%u)\n", i, fileIdx, soundArchive.detail_GetFileCount());
@@ -2334,9 +2358,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
         Bank* bank = new(heap) Bank();
         bank->mId = i;
+
         PopupMgr::instance()->setCurrentProcessItem(bank);
 
         bank->mEnableName = bankInfo->optionParameter.GetTrueCount(nw::snd::internal::BANK_INFO_STRING_ID) != 0;
+        
         if (mIncludeStringTable && bankInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
             bank->mName = soundArchive.GetString(bankInfo->GetStringId());
@@ -2352,8 +2378,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         if (warcIdTable->count > 0)
         {
             bank->mWaveArchiveType = WaveArchiveType::AutomaticIndividual;
-
             bank->mWaveArchiveRef.attach(getItem(warcIdTable->item[0], getWaveArchiveList()));
+            
             if (bank->mWaveArchiveRef.isAttached())
             {
                 bank->mWaveArchiveType = WaveArchiveType::Explicit;
@@ -2369,9 +2395,17 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             PopupMgr::instance()->pushCurrentItemError("Invalid WaveArchiveType");
         }
 
-        BankFile* bankFile = static_cast<BankFile*>(getItem(bankFileIdxMap[fileIdx], getBankFileList()));
+        u32 globalBankFileIdx = Item::cInvalidId;
+        {
+            auto it = bankFileIdxMap.find(fileIdx);
 
+            if (it != bankFileIdxMap.end())
+                globalBankFileIdx = it->second;
+        }
+
+        BankFile* bankFile = static_cast<BankFile*>(getItem(globalBankFileIdx, getBankFileList()));
         bank->mFileRef.attach(bankFile);
+
         if (bank->mFileRef.isAttached())
         {
             if (bankFile->mName == "Bank")
@@ -2389,9 +2423,11 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
     LOG_FMT("Banks: %d, BankFiles: %d", mBankList.size(), mBankFileList.size());
     std::unordered_map<std::string, const Sound*> streamSounds; //? Keep track of which .bfstm files we already loaded
+    
     for (u32 i = 0; i < soundArchive.GetSoundCount(); i++)
     {
         const nw::snd::internal::SoundArchiveFile::SoundInfo* soundInfo = soundArchive.GetSoundInfo(soundArchive.GetSoundIdFromIndex(i));
+        
         if (!soundInfo)
         {
             PopupMgr::instance()->setCorruptInfo("Invalid SoundInfo");
@@ -2403,6 +2439,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         PopupMgr::instance()->setCurrentProcessItem(sound);
 
         sound->mEnableName = soundInfo->GetOptionParameter().GetTrueCount(nw::snd::internal::SOUND_INFO_STRING_ID) != 0;
+        
         if (mIncludeStringTable && soundInfo->GetStringId() != nw::snd::internal::DEFAULT_STRING_ID)
         {
             sound->mName = soundArchive.GetString(soundInfo->GetStringId());
@@ -2413,6 +2450,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         }
 
         sound->mPlayerRef.attach(getItem(soundInfo->playerId, getPlayerList()));
+        
         if (!sound->mPlayerRef.isAttached())
         {
             PopupMgr::instance()->pushCurrentItemError("Invalid Player reference");
@@ -2470,6 +2508,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         }
 
         // Preserve SoundInfo option the tool doesn't model
+        
         {
             auto isModeledOption = [](u32 bit) -> bool
             {
@@ -2493,8 +2532,8 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         if (sound->mSoundType == Sound::SoundType::Seq)
         {
             const nw::snd::internal::SoundArchiveFile::SequenceSoundInfo& seqSoundInfo = soundInfo->GetSequenceSoundInfo();
-
             const nw::snd::internal::Util::Table<nw::ut::ResU32>& table = seqSoundInfo.GetBankIdTable();
+           
             for (u32 j = 0; j < table.count; j++)
             {
                 if (table.item[j] != nw::snd::SoundArchive::INVALID_ID)
@@ -2508,10 +2547,18 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 }
             }
 
-            u32 globalSeqIdx = seqFileIdxMap[nw::snd::internal::Util::GetItemIndex(soundInfo->fileId)];
+            u32 globalSeqIdx = Item::cInvalidId;
+            {
+                auto it = seqFileIdxMap.find(nw::snd::internal::Util::GetItemIndex(soundInfo->fileId));
+                
+                if (it != seqFileIdxMap.end())
+                    globalSeqIdx = it->second;
+            }
+
             SequenceFile* seqFile = static_cast<SequenceFile*>(getItem(globalSeqIdx, getSequenceFileList()));
 
             sound->mSequenceSoundInfo.mSequenceFileRef.attach(seqFile);
+            
             if (sound->mSequenceSoundInfo.mSequenceFileRef.isAttached())
             {
                 if (seqFile->mName == "Sequence")
@@ -2525,6 +2572,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             }
 
             sound->mSequenceSoundInfo.mEnableStartOffset = seqSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::SEQ_SOUND_INFO_START_OFFSET) != 0;
+            
             if (sound->mSequenceSoundInfo.mEnableStartOffset && seqFile)
             {
                 u32 startOff = seqSoundInfo.GetStartOffset();
@@ -2536,6 +2584,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             }
 
             sound->mSequenceSoundInfo.mEnablePriority = seqSoundInfo.optionParameter.GetTrueCount(nw::snd::internal::SEQ_SOUND_INFO_PRIORITY) != 0;
+            
             if (sound->mSequenceSoundInfo.mEnablePriority)
             {
                 sound->mSequenceSoundInfo.mChannelPriority = seqSoundInfo.GetChannelPriority();
@@ -2545,15 +2594,18 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         else if (sound->mSoundType == Sound::SoundType::Strm)
         {
             const nw::snd::internal::SoundArchiveFile::StreamSoundInfo& strmSoundInfo = soundInfo->GetStreamSoundInfo();
-
             const nw::snd::internal::SoundArchiveFile::FileInfo* fileInfo = soundArchive.detail_GetFileInfo(soundInfo->fileId);
+            
             if (fileInfo)
             {
                 const nw::snd::internal::SoundArchiveFile::ExternalFileInfo* extFileInfo = fileInfo->GetExternalFileInfo();
+                
                 if (extFileInfo)
                     sound->mStreamSoundInfo.mPath = extFileInfo->filePath;
             }
+            
             bool validPath = !sound->mStreamSoundInfo.mPath.isEmpty();
+            
             if (!validPath)
             {
                 PopupMgr::instance()->pushCurrentItemError("Path is empty");
@@ -2563,15 +2615,18 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             sound->mStreamSoundInfo.mAllocateChannelCount = strmSoundInfo.allocateChannelCount;
 
             sead::FileDevice* device = nullptr;
+            
             if (sead::FileDeviceMgr::instance() != nullptr)
                 device = sead::FileDeviceMgr::instance()->findDevice("native");
 
             u8* strmFile = nullptr;
             bool validStrmFile = false;
             bool strmFileIsOpus = false;
+            
             if (validPath && device)
             {
                 sead::FixedSafeString<512> dir;
+                
                 if (sead::Path::getDirectoryName(&dir, getFilePath()))
                 {
                     const char* filePath = sound->mStreamSoundInfo.mPath.cstr();

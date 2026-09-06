@@ -509,6 +509,7 @@ public:
 
     //? Validate every item for saving
     bool validate_(bool showErrors = true);
+    void recompileInvalidSequences_();
 
     const char* getArchiveMagic() const
     {

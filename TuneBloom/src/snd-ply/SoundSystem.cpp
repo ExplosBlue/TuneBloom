@@ -469,7 +469,7 @@ u32 SoundSystem::getOutputSampleRate()
 
 void SoundSystem::setMasterVolume(f32 volume)
 {
-    internal::driver::HardwareMgr::instance()->setMasterVolume(volume, 0);
+    internal::driver::HardwareMgr::instance()->setMasterVolume(volume, 30);
 }
 
 f32 SoundSystem::getMasterVolume()

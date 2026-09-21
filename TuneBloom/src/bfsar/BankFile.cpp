@@ -5,6 +5,7 @@
 #include <Debug.h>
 
 #include <ui/PopupMgr.h>
+#include <ui/Shortcuts.h>
 #include <ui/UI.h>
 
 #include <midi/MidiInput.h>
@@ -1432,11 +1433,11 @@ void DrawKeyboardWithRegions(
 
             if (io.MouseWheel != 0.0f)
             {
-                if (io.KeyCtrl)
+                if (shortcuts::Held(shortcuts::Modifier::ZoomHorizontal))
                     requestZoom(sZoomTarget * (1.0f + io.MouseWheel * 0.20f), io.MousePos.x - visibleCanvasPos.x);
-                else if (io.KeyAlt)
+                else if (shortcuts::Held(shortcuts::Modifier::ZoomVertical))
                     requestZoomY(sZoomTargetY * (1.0f + io.MouseWheel * 0.20f), io.MousePos.y - visibleCanvasPos.y);
-                else if (io.KeyShift)
+                else if (shortcuts::Held(shortcuts::Modifier::PanHorizontal))
                     sScrollXTarget -= io.MouseWheel * kPanStep;
                 else
                     sScrollYTarget -= io.MouseWheel * kPanStep;
@@ -1445,11 +1446,8 @@ void DrawKeyboardWithRegions(
             if (io.MouseWheelH != 0.0f)
                 sScrollXTarget -= io.MouseWheelH * kPanStep;
 
-            if (io.KeyCtrl)
-            {
-                if (ImGui::IsKeyPressed(ImGuiKey_Equal)) requestZoom(sZoomTarget * 1.25f, width * 0.5f);
-                if (ImGui::IsKeyPressed(ImGuiKey_Minus)) requestZoom(sZoomTarget / 1.25f, width * 0.5f);
-            }
+            if (shortcuts::Pressed(shortcuts::Action::ZoomIn)) requestZoom(sZoomTarget * 1.25f, width * 0.5f);
+            if (shortcuts::Pressed(shortcuts::Action::ZoomOut)) requestZoom(sZoomTarget / 1.25f, width * 0.5f);
         }
 
         if (fabsf(sZoomTarget - sZoom) > 0.0005f)
@@ -2073,7 +2071,7 @@ void DrawKeyboardWithRegions(
         {
             BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
             BankFile::KeyRegion* keyRegion = sContextKeyRegion;
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectNext))
             {
                 BankFile::VelocityRegion* prev = velRegion->getPrev(*keyRegion);
                 if (prev)
@@ -2082,7 +2080,7 @@ void DrawKeyboardWithRegions(
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
             {
                 BankFile::VelocityRegion* next = velRegion->getNext(*keyRegion);
                 if (next)
@@ -2240,7 +2238,7 @@ void DrawKeyboardWithRegions(
             sDrag = {};
         }
 
-        if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Delete) && sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
+        if (ImGui::IsWindowFocused() && shortcuts::Pressed(shortcuts::Action::DeleteSelection) && sSubSelectedItem && sSubSelectedItem->getItemType() == Item::ItemType::BankFileVelocityRegion)
         {
             BankFile::VelocityRegion* velRegion = static_cast<BankFile::VelocityRegion*>(sSubSelectedItem);
             BankFile::KeyRegion* keyRegion = sContextKeyRegion;

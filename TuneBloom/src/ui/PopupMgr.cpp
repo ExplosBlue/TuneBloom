@@ -1,5 +1,6 @@
 #include <ui/PopupMgr.h>
 
+#include <ui/Shortcuts.h>
 #include <ui/UI.h>
 
 SEAD_SINGLETON_DISPOSER_IMPL(PopupMgr);
@@ -161,7 +162,7 @@ void PopupMgr::updateErrors_()
         bool scroll = false;
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_AnyWindow))
         {
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
             {
                 if (sSelected != 0)
                 {
@@ -171,7 +172,7 @@ void PopupMgr::updateErrors_()
                 }
             }
             
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectNext))
             {
                 if (sSelected < mProcessedErrors.size() - 1)
                 {

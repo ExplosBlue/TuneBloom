@@ -1,3 +1,4 @@
+#include <ui/Shortcuts.h>
 #include <ui/UI.h>
 #include <ui/WaveImportPanel.h>
 
@@ -522,7 +523,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
     {
         if (!ImGui::GetIO().WantTextInput && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && selectedItem && &list == selectedItem->list())
         {
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
             {
                 sMultiSelectedItems.clear();
                 sMultiSelectAnchor = selectedItem;
@@ -540,7 +541,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectNext))
             {
                 sMultiSelectedItems.clear();
                 sMultiSelectAnchor = selectedItem;
@@ -558,7 +559,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_PageUp))
+            if (shortcuts::Pressed(shortcuts::Action::SelectPageUp))
             {
                 sMultiSelectedItems.clear();
                 sMultiSelectAnchor = selectedItem;
@@ -583,7 +584,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_PageDown))
+            if (shortcuts::Pressed(shortcuts::Action::SelectPageDown))
             {
                 sMultiSelectedItems.clear();
                 sMultiSelectAnchor = selectedItem;
@@ -608,7 +609,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_Home))
+            if (shortcuts::Pressed(shortcuts::Action::SelectFirst))
             {
                 sMultiSelectedItems.clear();
                 sMultiSelectAnchor = selectedItem;
@@ -625,7 +626,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_End))
+            if (shortcuts::Pressed(shortcuts::Action::SelectLast))
             {
                 sMultiSelectedItems.clear();
                 sMultiSelectAnchor = selectedItem;
@@ -642,12 +643,12 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_G))
+            if (shortcuts::Pressed(shortcuts::Action::ScrollToSelection))
             {
                 sScrollItem = selectedItem;
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_A) && ImGui::GetIO().KeyCtrl)
+            if (shortcuts::Pressed(shortcuts::Action::SelectAll))
             {
                 sMultiSelectedItems.clear();
                 for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
@@ -664,7 +665,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 sScrollItem = selectedItem;
             }
 
-            if (canEdit && ImGui::IsKeyPressed(ImGuiKey_Delete) && sSubSelectedItem == nullptr && sSelectedItemIsSubWindow == false)
+            if (canEdit && shortcuts::Pressed(shortcuts::Action::DeleteSelection) && sSubSelectedItem == nullptr && sSelectedItemIsSubWindow == false)
             {
                 if (!sMultiSelectedItems.empty())
                     sDeleteItems = sMultiSelectedItems;
@@ -787,18 +788,17 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
         
         if (ImGui::Selectable(selName.cstr(), selected, tableOpen ? ImGuiSelectableFlags_SpanAllColumns : ImGuiSelectableFlags_None))
         {
-            bool ctrl = ImGui::GetIO().KeyCtrl;
-            bool shift = ImGui::GetIO().KeyShift;
+            const bool toggleSelection = shortcuts::Held(shortcuts::Modifier::ToggleSelection);
+            const bool extendSelection = shortcuts::Held(shortcuts::Modifier::ExtendSelection);
 
-            if (ctrl && shift && !sMultiSelectedItems.empty())
+            if (toggleSelection && extendSelection && !sMultiSelectedItems.empty())
             {
-                // Ctrl+Shift: add range from last multi-selected item to clicked item
-                Item* ctrlAnchor = sMultiSelectedItems.back();
+                Item* rangeAnchor = sMultiSelectedItems.back();
                 bool between = false;
                 for (auto it2 = list.robustBegin(); it2 != list.robustEnd(); ++it2)
                 {
                     Item* cur = static_cast<Item*>((*it2).val());
-                    if (cur == ctrlAnchor || cur == item)
+                    if (cur == rangeAnchor || cur == item)
                     {
                         if (std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), cur) == sMultiSelectedItems.end())
                             sMultiSelectedItems.push_back(cur);
@@ -814,7 +814,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 }
                 selectedItem = item;
             }
-            else if (ctrl)
+            else if (toggleSelection)
             {
                 auto& ref = sMultiSelectedItemsArr[(size_t)sSelectedUIType];
                 (void)ref;
@@ -841,7 +841,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                     sMultiSelectAnchor = item;
                 }
             }
-            else if (shift && sMultiSelectAnchor != nullptr)
+            else if (extendSelection && sMultiSelectAnchor != nullptr)
             {
                 sMultiSelectedItems.clear();
                 bool between = false;
@@ -1351,7 +1351,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
 
 void ApplyRenameShortcut()
 {
-    if (ImGui::IsKeyPressed(ImGuiKey_F2, false) && !ImGui::IsAnyItemActive())
+    if (shortcuts::Pressed(shortcuts::Action::RenameSelection) && !ImGui::IsAnyItemActive())
         ImGui::SetKeyboardFocusHere();
 }
 

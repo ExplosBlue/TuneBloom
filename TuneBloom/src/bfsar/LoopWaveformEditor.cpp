@@ -2,6 +2,7 @@
 
 #include <imgui/imgui_internal.h>
 #include <math/seadMathCalcCommon.h>
+#include <ui/Shortcuts.h>
 #include <ui/TimeUtil.h>
 #include <ui/UI.h>
 
@@ -509,7 +510,7 @@ static bool HandleInteraction(LoopWaveformState& state, const std::vector<float>
 
     if (hovered && io.MouseWheel != 0.0f)
     {
-        if (io.KeyShift)
+        if (shortcuts::Held(shortcuts::Modifier::PanHorizontal))
         {
             const double deltaSamples = -io.MouseWheel * cWheelPanFraction * ViewSpan(state);
             const s64 newStart = static_cast<s64>(state.viewStart) + static_cast<s64>(std::lround(deltaSamples));

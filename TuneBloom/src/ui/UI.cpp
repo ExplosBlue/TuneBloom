@@ -3,6 +3,7 @@
 
 #include <ui/OutputMeter.h>
 #include <ui/PopupMgr.h>
+#include <ui/Shortcuts.h>
 #include <ui/WaveImportPanel.h>
 
 #include <theme/SystemTheme.h>
@@ -28,12 +29,6 @@
 #include <cstdlib>
 #include <sys/stat.h>
 #include <unistd.h>
-#endif
-
-#if defined(SEAD_PLATFORM_MACOSX)
-#define SHORTCUT_MOD "Cmd+"
-#else
-#define SHORTCUT_MOD "Ctrl+"
 #endif
 
 #include <midi/SeqMidiExporter.h>
@@ -899,7 +894,7 @@ void DrawMenuBar()
         if (ImGui::BeginMenu("File"))
         {
             bool bfsarOpen = sBfsar.isOpen();
-            if (ImGui::MenuItem(ICON_LC_FILE " New", SHORTCUT_MOD "Shift+N"))
+            if (ImGui::MenuItem(ICON_LC_FILE " New", shortcuts::Label(shortcuts::Action::NewProject)))
             {
                 if (bfsarOpen)
                 {
@@ -911,7 +906,7 @@ void DrawMenuBar()
                 }
             }
 
-            if (ImGui::MenuItem(ICON_LC_FOLDER_OPEN " Open", SHORTCUT_MOD "O"))
+            if (ImGui::MenuItem(ICON_LC_FOLDER_OPEN " Open", shortcuts::Label(shortcuts::Action::OpenProject)))
             {
                 if (bfsarOpen)
                 {
@@ -1021,12 +1016,12 @@ void DrawMenuBar()
                 ImGui::BeginDisabled();
             }
 
-            if (ImGui::MenuItem(ICON_LC_SAVE " Save", SHORTCUT_MOD "S"))
+            if (ImGui::MenuItem(ICON_LC_SAVE " Save", shortcuts::Label(shortcuts::Action::SaveProject)))
             {
                 sWantsSaveDirect = true;
             }
 
-            if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As", SHORTCUT_MOD "Shift+S"))
+            if (ImGui::MenuItem(ICON_LC_SAVE_ALL " Save As", shortcuts::Label(shortcuts::Action::SaveProjectAs)))
             {
                 SaveFileAs();
             }
@@ -1881,10 +1876,10 @@ void DrawUI()
 {
     if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
     {
-        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiKey_S) && sBfsar.isOpen())
+        if (shortcuts::Pressed(shortcuts::Action::SaveProject) && sBfsar.isOpen())
             sWantsSaveDirect = true;
 
-        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiKey_O))
+        if (shortcuts::Pressed(shortcuts::Action::OpenProject))
         {
             if (sBfsar.isOpen())
                 sWantsOpen = true;
@@ -1892,7 +1887,7 @@ void DrawUI()
                 OpenFile();
         }
 
-        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiMod_Shift | ImGuiKey_N))
+        if (shortcuts::Pressed(shortcuts::Action::NewProject))
         {
             if (sBfsar.isOpen())
                 sWantsNew = true;
@@ -1900,7 +1895,7 @@ void DrawUI()
                 sNeedsNewFileFormat = true;
         }
 
-        if (ImGui::IsKeyChordPressed(ImGuiMod_Shortcut | ImGuiMod_Shift | ImGuiKey_S) && sBfsar.isOpen())
+        if (shortcuts::Pressed(shortcuts::Action::SaveProjectAs) && sBfsar.isOpen())
             SaveFileAs();
     }
 
@@ -5167,7 +5162,7 @@ void DrawProjectUI()
 
         if (ImGui::IsWindowFocused())
         {
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
             {
                 if (sSelectedUIType > UIType::Min)
                 {
@@ -5175,7 +5170,7 @@ void DrawProjectUI()
                 }
             }
 
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+            if (shortcuts::Pressed(shortcuts::Action::SelectNext))
             {
                 if (sSelectedUIType < UIType::Max)
                 {
@@ -5294,7 +5289,7 @@ static void DrawTabFilterBarPane_(int pane)
     bool setFocus = false;
     
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
-        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyDown(ImGuiKey_F))
+        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && shortcuts::Pressed(shortcuts::Action::FocusFilter))
     {
         tabFilter.active = true;
         setFocus = true;
@@ -5304,7 +5299,7 @@ static void DrawTabFilterBarPane_(int pane)
         return;
 
     if (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
-        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && ImGui::IsKeyPressed(ImGuiKey_Escape))
+        !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId) && shortcuts::Pressed(shortcuts::Action::CloseFilter))
     {
         CloseFilterPane_(pane);
         return;
@@ -6324,7 +6319,7 @@ void DrawFileUI(ImGuiID dockspaceId)
 
         bool visible = ImGui::Begin(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%u", file->getFormattedName().cstr(), file).cstr(), window->getOpenPtr(), flags);
 
-        if (visible && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyDown(ImGuiKey_ModCtrl) && ImGui::IsKeyPressed(ImGuiKey_W) && !dirty)
+        if (visible && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && shortcuts::Pressed(shortcuts::Action::CloseFileWindow) && !dirty)
             *window->getOpenPtr() = false;
 
         if (!window->isOpen() && dirty)

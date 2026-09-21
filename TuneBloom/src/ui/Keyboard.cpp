@@ -16,6 +16,7 @@ bool TestPianoBoardFunct(void* UserData, int Msg, int Key, float Vel) {
 
 #include <ui/UI.h>
 #include <math/seadMathCalcCommon.h>
+#include <ui/Shortcuts.h>
 
 void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s32 BeginOctaveNote, s32 EndOctaveNote, ImGuiPianoKeyboardProc Callback, void* UserData, ImGuiPianoStyles* Style, s32 RootKey)
 {
@@ -96,7 +97,7 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
     {
         for (s32 i = 0; i < IM_ARRAYSIZE(sKeyMappings); i++)
         {
-            bool isDown = ImGui::IsKeyDown(sKeyMappings[i].key);
+            bool isDown = !shortcuts::Claimed(sKeyMappings[i].key) && ImGui::IsKeyDown(sKeyMappings[i].key);
             s32 note = sOctaveBase + sKeyMappings[i].offset;
             if (note < 0 || note >= 128)
                 continue;
@@ -114,11 +115,11 @@ void ImGui_PianoKeyboard(const char* IDName, ImVec2 Size, s32* PrevNoteActive, s
 
         if (!ImGui::GetIO().WantTextInput)
         {
-            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+            if (shortcuts::Pressed(shortcuts::Action::OctaveDown))
                 newBase -= 12;
-            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+            if (shortcuts::Pressed(shortcuts::Action::OctaveUp))
                 newBase += 12;
-            if (ImGui::IsKeyPressed(ImGuiKey_Backspace))
+            if (shortcuts::Pressed(shortcuts::Action::OctaveReset))
                 newBase = 48;
         }
 

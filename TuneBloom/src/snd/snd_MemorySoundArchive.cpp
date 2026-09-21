@@ -36,7 +36,8 @@ bool MemorySoundArchive::Initialize(const void* soundArchiveData)
 
     mHeader = header; // Copy
 
-    const char* archiveFmt = sead::MemUtil::compare(soundArchiveData, "CSAR", 4) == 0 ? "CSAR" : "FSAR";
+    const InnerFileFormatInfo* archiveFormat = FindInnerFileFormat(soundArchiveData, InnerFileKind::SoundArchive);
+    const char* archiveFmt = archiveFormat ? archiveFormat->displayName : cUnknownInnerFileFormat.displayName;
 
     const void* infoBlock = sead::PtrUtil::addOffset(soundArchiveData, mHeader.GetInfoBlockOffset());
     if (!CheckBlockCorrupt(archiveFmt, "INFO", infoBlock))

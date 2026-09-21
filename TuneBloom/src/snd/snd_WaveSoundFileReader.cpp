@@ -20,21 +20,22 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveSoundFile);
 
-        if (sead::MemUtil::compare(header->signature, "FWSD", 4) != 0 && sead::MemUtil::compare(header->signature, "CWSD", 4) != 0)
+        const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::WaveSoundData);
+        if (!fileFormat)
         {
             PopupMgr::instance()->pushCurrentItemError("File is not a valid wave sound file");
             return;
         }
 
-        wsdFmt = sead::MemUtil::compare(header->signature, "CWSD", 4) == 0 ? "CWSD" : "FWSD";
+        wsdFmt = fileFormat->displayName;
 
-        if (sead::MemUtil::compare(header->signature, "CWSD", 4) == 0)
+        if (fileFormat->format == ArchiveFormat::BCSAR)
         {
             u32 major = ((u32)header->version >> 24) & 0xFF;
             u32 minor = ((u32)header->version >> 16) & 0xFF;
             if (major < 1)
             {
-                sead::FormatFixedSafeString<64> msg("CWSD version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 return;
             }
         }
@@ -42,7 +43,7 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010100))
             {
-                sead::FormatFixedSafeString<64> msg("FWSD version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 return;
             }
         }
@@ -146,7 +147,8 @@ bool WaveSoundFileReader::ReadNoteInfo(WaveSoundNoteInfo* dst, u32 index, u32 no
 bool WaveSoundFileReader::IsFilterSupportedVersion() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
-    if (sead::MemUtil::compare(header.signature, "CWSD", 4) == 0)
+    const InnerFileFormatInfo* wsdFormat = FindInnerFileFormat(header.signature, InnerFileKind::WaveSoundData);
+    if (wsdFormat && wsdFormat->format == ArchiveFormat::BCSAR)
     {
         u32 major = ((u32)header.version >> 24) & 0xFF;
         u32 minor = ((u32)header.version >> 16) & 0xFF;

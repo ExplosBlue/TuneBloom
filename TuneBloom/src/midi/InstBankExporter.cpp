@@ -70,7 +70,7 @@ struct ExportModel
     std::vector<ExportInstrument> instruments;
 };
 
-static s16 tsFromSeconds_(double sec)
+static s16 TimecentsFromSeconds(double sec)
 {
     if (sec <= 0.0)
         return -32768;
@@ -82,17 +82,32 @@ static s16 tsFromSeconds_(double sec)
     return (s16)tc;
 }
 
-static const u8 kAttackTailTable_[127 - 109 + 1] = {
+constexpr s16 cEnvelopeTimecentsMin = -12000;
+constexpr s16 cEnvelopeTimecentsMax = 8000;
+constexpr s16 cHoldTimecentsMax = 5000;
+
+static s16 ClampEnvelopeTimecents(s16 timecents, s16 maxTimecents = cEnvelopeTimecentsMax)
+{
+    if (timecents < cEnvelopeTimecentsMin)
+        return cEnvelopeTimecentsMin;
+
+    if (timecents > maxTimecents)
+        return maxTimecents;
+
+    return timecents;
+}
+
+static const u8 cAttackTailTable[127 - 109 + 1] = {
     0, 1, 5, 14, 26, 38, 51, 63, 73, 84,
     92, 100, 109, 116, 123, 127, 132, 137, 143};
 
-static f32 attackCoefficient_(u8 attack)
+static f32 AttackCoefficient(u8 attack)
 {
-    double x = (attack < 109) ? (255.0 - attack) : (double)kAttackTailTable_[127 - attack];
+    double x = (attack < 109) ? (255.0 - attack) : (double)cAttackTailTable[127 - attack];
     return (f32)std::pow(x / 256.0, 1.0 / 5.0);
 }
 
-static const s16 kSustainDbX10Table_[128] = {
+static const s16 cSustainDbX10Table[128] = {
     -723, -722, -721, -651, -601, -562, -530, -503,
     -480, -460, -442, -425, -410, -396, -383, -371,
     -360, -349, -339, -330, -321, -313, -305, -297,
@@ -110,14 +125,14 @@ static const s16 kSustainDbX10Table_[128] = {
     -22, -20, -19, -17, -16, -14, -13, -11,
     -10, -8, -7, -6, -4, -3, -1, 0};
 
-static u8 clampAdshrIndex_(u8 idx)
+static u8 ClampAdshrIndex(u8 idx)
 {
     return idx > 127 ? 127 : idx;
 }
 
-static double calcEngineRate_(u8 idx)
+static double CalcEngineRate(u8 idx)
 {
-    idx = clampAdshrIndex_(idx);
+    idx = ClampAdshrIndex(idx);
 
     if (idx == 127)
         return 65535.0;
@@ -131,39 +146,39 @@ static double calcEngineRate_(u8 idx)
     return (60.0 / (126 - idx)) / 5.0;
 }
 
-static double engineDecayReleaseSeconds_(u8 idx)
+static double EngineDecayReleaseSeconds(u8 idx)
 {
-    return 1.0 / calcEngineRate_(idx);
+    return 1.0 / CalcEngineRate(idx);
 }
 
-static double engineAttackSeconds_(u8 idx)
+static double EngineAttackSeconds(u8 idx)
 {
-    f32 mAttack = attackCoefficient_(clampAdshrIndex_(idx));
+    f32 mAttack = AttackCoefficient(ClampAdshrIndex(idx));
 
     if (mAttack <= 0.0f)
         return 0.0;
 
-    const double kInitValueX10 = -904.0;
-    const double kThresholdX10 = -1.0 / 32.0;
-    double n = std::log(kThresholdX10 / kInitValueX10) / std::log((double)mAttack);
+    const double cInitValueX10 = -904.0;
+    const double cThresholdX10 = -1.0 / 32.0;
+    double n = std::log(cThresholdX10 / cInitValueX10) / std::log((double)mAttack);
 
     return n > 0.0 ? n / 1000.0 : 0.0;
 }
 
-static double engineHoldSeconds_(u8 idx)
+static double EngineHoldSeconds(u8 idx)
 {
-    idx = clampAdshrIndex_(idx);
+    idx = ClampAdshrIndex(idx);
     return ((double)(idx + 1) * (double)(idx + 1) / 4.0) / 1000.0;
 }
 
-static s16 engineSustainCb_(u8 idx)
+static s16 EngineSustainCb(u8 idx)
 {
-    return (s16)(-kSustainDbX10Table_[clampAdshrIndex_(idx)]);
+    return (s16)(-cSustainDbX10Table[ClampAdshrIndex(idx)]);
 }
 
-static s32 engineSustainPermille_(u8 idx)
+static s32 EngineSustainPermille(u8 idx)
 {
-    double dbX10 = (double)kSustainDbX10Table_[clampAdshrIndex_(idx)];
+    double dbX10 = (double)cSustainDbX10Table[ClampAdshrIndex(idx)];
     double linear = std::pow(10.0, dbX10 / 10.0 / 20.0);
     s32 permille = (s32)std::lround(linear * 1000.0);
 
@@ -188,17 +203,17 @@ struct RegionGenSet
     s32 pitchCentsDls;
 };
 
-static RegionGenSet computeRegionGenSet_(const ExportRegion &r)
+static RegionGenSet ComputeRegionGenSet(const ExportRegion &r)
 {
     RegionGenSet g;
 
-    g.attackTc = tsFromSeconds_(engineAttackSeconds_(r.attack));
-    g.decayTc = tsFromSeconds_(engineDecayReleaseSeconds_(r.decay));
-    g.releaseTc = tsFromSeconds_(engineDecayReleaseSeconds_(r.release));
-    g.holdTc = (r.hold == 0) ? (s16)-12000 : tsFromSeconds_(engineHoldSeconds_(r.hold));
+    g.attackTc = TimecentsFromSeconds(EngineAttackSeconds(r.attack));
+    g.decayTc = TimecentsFromSeconds(EngineDecayReleaseSeconds(r.decay));
+    g.releaseTc = TimecentsFromSeconds(EngineDecayReleaseSeconds(r.release));
+    g.holdTc = (r.hold == 0) ? (s16)-12000 : TimecentsFromSeconds(EngineHoldSeconds(r.hold));
 
-    g.sustainCb = engineSustainCb_(r.sustain);
-    g.sustainPermille = engineSustainPermille_(r.sustain);
+    g.sustainCb = EngineSustainCb(r.sustain);
+    g.sustainPermille = EngineSustainPermille(r.sustain);
 
     if (r.hardPanOverride)
     {
@@ -236,13 +251,13 @@ static RegionGenSet computeRegionGenSet_(const ExportRegion &r)
     return g;
 }
 
-static void putU16_(std::vector<u8> &o, u16 v)
+static void PutU16(std::vector<u8> &o, u16 v)
 {
     o.push_back(v & 0xFF);
     o.push_back((v >> 8) & 0xFF);
 }
 
-static void putU32_(std::vector<u8> &o, u32 v)
+static void PutU32(std::vector<u8> &o, u32 v)
 {
     o.push_back(v & 0xFF);
     o.push_back((v >> 8) & 0xFF);
@@ -250,16 +265,16 @@ static void putU32_(std::vector<u8> &o, u32 v)
     o.push_back((v >> 24) & 0xFF);
 }
 
-static void putBytes_(std::vector<u8> &o, const void *p, u32 n)
+static void PutBytes(std::vector<u8> &o, const void *p, u32 n)
 {
     const u8 *b = static_cast<const u8 *>(p);
     o.insert(o.end(), b, b + n);
 }
 
-static void appendChunk_(std::vector<u8> &out, const char *tag, const std::vector<u8> &data)
+static void AppendChunk(std::vector<u8> &out, const char *tag, const std::vector<u8> &data)
 {
-    putBytes_(out, tag, 4);
-    putU32_(out, (u32)data.size());
+    PutBytes(out, tag, 4);
+    PutU32(out, (u32)data.size());
 
     out.insert(out.end(), data.begin(), data.end());
 
@@ -267,7 +282,7 @@ static void appendChunk_(std::vector<u8> &out, const char *tag, const std::vecto
         out.push_back(0);
 }
 
-static void putName20_(std::vector<u8> &o, const std::string &name)
+static void PutName20(std::vector<u8> &o, const std::string &name)
 {
     char buf[20];
 
@@ -275,10 +290,10 @@ static void putName20_(std::vector<u8> &o, const std::string &name)
     size_t n = name.size() < 19 ? name.size() : 19;
     std::memcpy(buf, name.data(), n);
 
-    putBytes_(o, buf, 20);
+    PutBytes(o, buf, 20);
 }
 
-static std::vector<u8> zstrEven_(const std::string &s)
+static std::vector<u8> ZeroTerminatedEven(const std::string &s)
 {
     std::vector<u8> b(s.begin(), s.end());
     b.push_back(0);
@@ -289,14 +304,14 @@ static std::vector<u8> zstrEven_(const std::string &s)
     return b;
 }
 
-static std::string instrumentDisplayName_(const ExportInstrument &in, const char *fallbackPrefix)
+static std::string InstrumentDisplayName(const ExportInstrument &in, const char *fallbackPrefix)
 {
     if (!in.name.empty())
         return in.name;
     return fallbackPrefix + std::to_string(in.programNo);
 }
 
-static std::string sanitizeFilename_(std::string name)
+static std::string SanitizeFilename(std::string name)
 {
     for (char &c : name)
     {
@@ -306,12 +321,12 @@ static std::string sanitizeFilename_(std::string name)
     return name;
 }
 
-static std::string resolveItemName_(const Item &item, const char *fallback)
+static std::string ResolveItemName(const Item &item, const char *fallback)
 {
-    return sanitizeFilename_(item.isNameValid() ? item.getName().cstr() : fallback);
+    return SanitizeFilename(item.isNameValid() ? item.getName().cstr() : fallback);
 }
 
-static bool writeFileBytes_(const sead::SafeString &path, const std::vector<u8> &data)
+static bool WriteFileBytes(const sead::SafeString &path, const std::vector<u8> &data)
 {
     FILE *fp = std::fopen(path.cstr(), "wb");
 
@@ -324,10 +339,10 @@ static bool writeFileBytes_(const sead::SafeString &path, const std::vector<u8> 
     return ok;
 }
 
-static void putEmptyModTerminator_(std::vector<u8> &mod)
+static void PutEmptyModTerminator(std::vector<u8> &mod)
 {
     for (int i = 0; i < 5; i++)
-        putU16_(mod, 0);
+        PutU16(mod, 0);
 }
 
 enum
@@ -352,13 +367,13 @@ enum
     GEN_SAMPLEID = 53,
 };
 
-static void putGen_(std::vector<u8> &igen, u16 op, u16 value)
+static void PutGen(std::vector<u8> &igen, u16 op, u16 value)
 {
-    putU16_(igen, op);
-    putU16_(igen, value);
+    PutU16(igen, op);
+    PutU16(igen, value);
 }
 
-static bool writeSf2_(const sead::SafeString &path, const ExportModel &model, const char *bankName)
+static bool WriteSf2(const sead::SafeString &path, const ExportModel &model, const char *bankName)
 {
     if (model.instruments.empty())
         return false;
@@ -367,17 +382,17 @@ static bool writeSf2_(const sead::SafeString &path, const ExportModel &model, co
     {
         std::vector<u8> ifil;
 
-        putU16_(ifil, 2);
-        putU16_(ifil, 1);
+        PutU16(ifil, 2);
+        PutU16(ifil, 1);
 
-        appendChunk_(info, "ifil", ifil);
-        appendChunk_(info, "isng", zstrEven_("EMU8000"));
-        appendChunk_(info, "INAM", zstrEven_(bankName && *bankName ? bankName : "TuneBloom Bank"));
-        appendChunk_(info, "ISFT", zstrEven_("TuneBloom"));
+        AppendChunk(info, "ifil", ifil);
+        AppendChunk(info, "isng", ZeroTerminatedEven("EMU8000"));
+        AppendChunk(info, "INAM", ZeroTerminatedEven(bankName && *bankName ? bankName : "TuneBloom Bank"));
+        AppendChunk(info, "ISFT", ZeroTerminatedEven("TuneBloom"));
     }
 
     std::vector<u8> infoList;
-    putBytes_(infoList, "INFO", 4);
+    PutBytes(infoList, "INFO", 4);
     infoList.insert(infoList.end(), info.begin(), info.end());
 
     std::vector<u8> smpl;
@@ -387,17 +402,17 @@ static bool writeSf2_(const sead::SafeString &path, const ExportModel &model, co
     {
         u32 start = (u32)(smpl.size() / 2);
         for (s16 v : s.pcm)
-            putU16_(smpl, (u16)v);
+            PutU16(smpl, (u16)v);
         for (int g = 0; g < 46; g++)
-            putU16_(smpl, 0);
+            PutU16(smpl, 0);
         u32 end = start + (u32)s.pcm.size();
         sampleOffsets.push_back({start, end});
     }
 
     std::vector<u8> sdta;
-    appendChunk_(sdta, "smpl", smpl);
+    AppendChunk(sdta, "smpl", smpl);
     std::vector<u8> sdtaList;
-    putBytes_(sdtaList, "sdta", 4);
+    PutBytes(sdtaList, "sdta", 4);
     sdtaList.insert(sdtaList.end(), sdta.begin(), sdta.end());
 
     std::vector<u8> shdr, inst, ibag, igen, phdr, pbag, pgen;
@@ -420,13 +435,13 @@ static bool writeSf2_(const sead::SafeString &path, const ExportModel &model, co
             le = end > start ? end - 1 : start;
         }
 
-        putName20_(shdr, s.name);
+        PutName20(shdr, s.name);
 
-        putU32_(shdr, start);
-        putU32_(shdr, end);
-        putU32_(shdr, ls);
-        putU32_(shdr, le);
-        putU32_(shdr, s.sampleRate);
+        PutU32(shdr, start);
+        PutU32(shdr, end);
+        PutU32(shdr, ls);
+        PutU32(shdr, le);
+        PutU32(shdr, s.sampleRate);
         shdr.push_back(s.rootKey & 0x7F);
 
         shdr.push_back(0);
@@ -434,143 +449,143 @@ static bool writeSf2_(const sead::SafeString &path, const ExportModel &model, co
         u16 sampleType = (s.stereoSide == 0) ? 1 : ((s.stereoSide < 0) ? 4 : 2);
         u16 sampleLink = (s.linkedSample < 0) ? 0 : (u16)s.linkedSample;
 
-        putU16_(shdr, sampleLink);
-        putU16_(shdr, sampleType);
+        PutU16(shdr, sampleLink);
+        PutU16(shdr, sampleType);
     }
-    putName20_(shdr, "EOS");
+    PutName20(shdr, "EOS");
 
-    putU32_(shdr, 0);
-    putU32_(shdr, 0);
-    putU32_(shdr, 0);
-    putU32_(shdr, 0);
-    putU32_(shdr, 0);
+    PutU32(shdr, 0);
+    PutU32(shdr, 0);
+    PutU32(shdr, 0);
+    PutU32(shdr, 0);
+    PutU32(shdr, 0);
 
     shdr.push_back(0);
     shdr.push_back(0);
 
-    putU16_(shdr, 0);
-    putU16_(shdr, 0);
+    PutU16(shdr, 0);
+    PutU16(shdr, 0);
 
     u16 ibagIndex = 0;
     for (const ExportInstrument &in : model.instruments)
     {
-        std::string iname = instrumentDisplayName_(in, "INST_");
-        putName20_(inst, iname);
-        putU16_(inst, ibagIndex);
+        std::string iname = InstrumentDisplayName(in, "INST_");
+        PutName20(inst, iname);
+        PutU16(inst, ibagIndex);
 
         for (const ExportRegion &r : in.regions)
         {
-            putU16_(ibag, (u16)(igen.size() / 4));
-            putU16_(ibag, 0);
+            PutU16(ibag, (u16)(igen.size() / 4));
+            PutU16(ibag, 0);
             ibagIndex++;
 
-            RegionGenSet g = computeRegionGenSet_(r);
+            RegionGenSet g = ComputeRegionGenSet(r);
 
-            putGen_(igen, GEN_KEYRANGE, (u16)((r.keyMax << 8) | r.keyMin));
-            putGen_(igen, GEN_VELRANGE, (u16)((r.velMax << 8) | r.velMin));
-            putGen_(igen, GEN_PAN, (u16)g.pan);
-            putGen_(igen, GEN_INITATTEN, (u16)g.initAttenCb);
-            putGen_(igen, GEN_ATTACKVOLENV, (u16)g.attackTc);
-            putGen_(igen, GEN_HOLDVOLENV, (u16)g.holdTc);
-            putGen_(igen, GEN_DECAYVOLENV, (u16)g.decayTc);
-            putGen_(igen, GEN_SUSTAINVOLENV, (u16)g.sustainCb);
-            putGen_(igen, GEN_RELEASEVOLENV, (u16)g.releaseTc);
-            putGen_(igen, GEN_COARSETUNE, (u16)g.coarseTune);
-            putGen_(igen, GEN_FINETUNE, (u16)g.fineTune);
-            putGen_(igen, GEN_ROOTKEY, r.rootKey);
-            putGen_(igen, GEN_SAMPLEMODES, r.loop ? 1 : 0);
-            putGen_(igen, GEN_EXCLUSIVECLASS, r.keyGroup);
-            putGen_(igen, GEN_SAMPLEID, (u16)r.sampleIndex);
+            PutGen(igen, GEN_KEYRANGE, (u16)((r.keyMax << 8) | r.keyMin));
+            PutGen(igen, GEN_VELRANGE, (u16)((r.velMax << 8) | r.velMin));
+            PutGen(igen, GEN_PAN, (u16)g.pan);
+            PutGen(igen, GEN_INITATTEN, (u16)g.initAttenCb);
+            PutGen(igen, GEN_ATTACKVOLENV, (u16)ClampEnvelopeTimecents(g.attackTc));
+            PutGen(igen, GEN_HOLDVOLENV, (u16)ClampEnvelopeTimecents(g.holdTc, cHoldTimecentsMax));
+            PutGen(igen, GEN_DECAYVOLENV, (u16)ClampEnvelopeTimecents(g.decayTc));
+            PutGen(igen, GEN_SUSTAINVOLENV, (u16)g.sustainCb);
+            PutGen(igen, GEN_RELEASEVOLENV, (u16)ClampEnvelopeTimecents(g.releaseTc));
+            PutGen(igen, GEN_COARSETUNE, (u16)g.coarseTune);
+            PutGen(igen, GEN_FINETUNE, (u16)g.fineTune);
+            PutGen(igen, GEN_ROOTKEY, r.rootKey);
+            PutGen(igen, GEN_SAMPLEMODES, r.loop ? 1 : 0);
+            PutGen(igen, GEN_EXCLUSIVECLASS, r.keyGroup);
+            PutGen(igen, GEN_SAMPLEID, (u16)r.sampleIndex);
         }
     }
 
-    putName20_(inst, "EOI");
+    PutName20(inst, "EOI");
 
-    putU16_(inst, ibagIndex);
-    putU16_(ibag, (u16)(igen.size() / 4));
-    putU16_(ibag, 0);
+    PutU16(inst, ibagIndex);
+    PutU16(ibag, (u16)(igen.size() / 4));
+    PutU16(ibag, 0);
 
-    putGen_(igen, 0, 0);
+    PutGen(igen, 0, 0);
 
     std::vector<u8> imod;
-    putEmptyModTerminator_(imod);
+    PutEmptyModTerminator(imod);
     u16 pbagIndex = 0;
 
     for (size_t i = 0; i < model.instruments.size(); i++)
     {
         const ExportInstrument &in = model.instruments[i];
-        std::string pname = instrumentDisplayName_(in, "PRG_");
-        putName20_(phdr, pname);
-        putU16_(phdr, in.programNo);
-        putU16_(phdr, in.bankNo);
-        putU16_(phdr, pbagIndex);
-        putU32_(phdr, 0);
-        putU32_(phdr, 0);
-        putU32_(phdr, 0);
+        std::string pname = InstrumentDisplayName(in, "PRG_");
+        PutName20(phdr, pname);
+        PutU16(phdr, in.programNo);
+        PutU16(phdr, in.bankNo);
+        PutU16(phdr, pbagIndex);
+        PutU32(phdr, 0);
+        PutU32(phdr, 0);
+        PutU32(phdr, 0);
 
-        putU16_(pbag, (u16)(pgen.size() / 4));
-        putU16_(pbag, 0);
+        PutU16(pbag, (u16)(pgen.size() / 4));
+        PutU16(pbag, 0);
         pbagIndex++;
 
-        putGen_(pgen, GEN_INSTRUMENT, (u16)i);
+        PutGen(pgen, GEN_INSTRUMENT, (u16)i);
     }
 
-    putName20_(phdr, "EOP");
+    PutName20(phdr, "EOP");
 
-    putU16_(phdr, 0);
-    putU16_(phdr, 0);
-    putU16_(phdr, pbagIndex);
+    PutU16(phdr, 0);
+    PutU16(phdr, 0);
+    PutU16(phdr, pbagIndex);
 
-    putU32_(phdr, 0);
-    putU32_(phdr, 0);
-    putU32_(phdr, 0);
+    PutU32(phdr, 0);
+    PutU32(phdr, 0);
+    PutU32(phdr, 0);
 
-    putU16_(pbag, (u16)(pgen.size() / 4));
-    putU16_(pbag, 0);
+    PutU16(pbag, (u16)(pgen.size() / 4));
+    PutU16(pbag, 0);
 
-    putGen_(pgen, 0, 0);
+    PutGen(pgen, 0, 0);
 
     std::vector<u8> pmod;
-    putEmptyModTerminator_(pmod);
+    PutEmptyModTerminator(pmod);
     std::vector<u8> pdta;
 
-    appendChunk_(pdta, "phdr", phdr);
-    appendChunk_(pdta, "pbag", pbag);
-    appendChunk_(pdta, "pmod", pmod);
-    appendChunk_(pdta, "pgen", pgen);
-    appendChunk_(pdta, "inst", inst);
-    appendChunk_(pdta, "ibag", ibag);
-    appendChunk_(pdta, "imod", imod);
-    appendChunk_(pdta, "igen", igen);
-    appendChunk_(pdta, "shdr", shdr);
+    AppendChunk(pdta, "phdr", phdr);
+    AppendChunk(pdta, "pbag", pbag);
+    AppendChunk(pdta, "pmod", pmod);
+    AppendChunk(pdta, "pgen", pgen);
+    AppendChunk(pdta, "inst", inst);
+    AppendChunk(pdta, "ibag", ibag);
+    AppendChunk(pdta, "imod", imod);
+    AppendChunk(pdta, "igen", igen);
+    AppendChunk(pdta, "shdr", shdr);
 
     std::vector<u8> pdtaList;
 
-    putBytes_(pdtaList, "pdta", 4);
+    PutBytes(pdtaList, "pdta", 4);
 
     pdtaList.insert(pdtaList.end(), pdta.begin(), pdta.end());
 
     std::vector<u8> body;
 
-    putBytes_(body, "sfbk", 4);
+    PutBytes(body, "sfbk", 4);
 
-    appendChunk_(body, "LIST", infoList);
-    appendChunk_(body, "LIST", sdtaList);
-    appendChunk_(body, "LIST", pdtaList);
+    AppendChunk(body, "LIST", infoList);
+    AppendChunk(body, "LIST", sdtaList);
+    AppendChunk(body, "LIST", pdtaList);
 
     std::vector<u8> file;
 
-    appendChunk_(file, "RIFF", body);
+    AppendChunk(file, "RIFF", body);
 
-    return writeFileBytes_(path, file);
+    return WriteFileBytes(path, file);
 }
 
-static void appendListChunk_(std::vector<u8> &out, const char *listType, const std::vector<u8> &payload)
+static void AppendListChunk(std::vector<u8> &out, const char *listType, const std::vector<u8> &payload)
 {
     std::vector<u8> body;
-    putBytes_(body, listType, 4);
+    PutBytes(body, listType, 4);
     body.insert(body.end(), payload.begin(), payload.end());
-    appendChunk_(out, "LIST", body);
+    AppendChunk(out, "LIST", body);
 }
 
 enum
@@ -587,44 +602,44 @@ enum
     DLS_CONN_DST_EG1_HOLDTIME = 0x020C,
 };
 
-static void putConnection_(std::vector<u8> &o, u16 dst, s32 scale)
+static void PutConnection(std::vector<u8> &o, u16 dst, s32 scale)
 {
-    putU16_(o, DLS_CONN_SRC_NONE);
-    putU16_(o, DLS_CONN_SRC_NONE);
-    putU16_(o, dst);
-    putU16_(o, DLS_CONN_TRN_NONE);
-    putU32_(o, (u32)(s32)((s64)scale << 16));
+    PutU16(o, DLS_CONN_SRC_NONE);
+    PutU16(o, DLS_CONN_SRC_NONE);
+    PutU16(o, dst);
+    PutU16(o, DLS_CONN_TRN_NONE);
+    PutU32(o, (u32)(s32)((s64)scale << 16));
 }
 
-static void putWsmp_(std::vector<u8> &out, u16 unityNote, const ExportSample &s)
+static void PutWsmp(std::vector<u8> &out, u16 unityNote, const ExportSample &s)
 {
     bool hasLoop = s.loopStart >= 0;
     std::vector<u8> wsmp;
 
-    putU32_(wsmp, 20);
+    PutU32(wsmp, 20);
 
-    putU16_(wsmp, unityNote);
-    putU16_(wsmp, 0);
+    PutU16(wsmp, unityNote);
+    PutU16(wsmp, 0);
 
-    putU32_(wsmp, 0);
-    putU32_(wsmp, 0);
-    putU32_(wsmp, hasLoop ? 1 : 0);
+    PutU32(wsmp, 0);
+    PutU32(wsmp, 0);
+    PutU32(wsmp, hasLoop ? 1 : 0);
 
     if (hasLoop)
     {
         u32 loopStart = (u32)s.loopStart;
         u32 loopLen = (s.loopEnd > s.loopStart) ? (u32)(s.loopEnd - s.loopStart) : 0;
 
-        putU32_(wsmp, 16);
-        putU32_(wsmp, 0);
-        putU32_(wsmp, loopStart);
-        putU32_(wsmp, loopLen);
+        PutU32(wsmp, 16);
+        PutU32(wsmp, 0);
+        PutU32(wsmp, loopStart);
+        PutU32(wsmp, loopLen);
     }
 
-    appendChunk_(out, "wsmp", wsmp);
+    AppendChunk(out, "wsmp", wsmp);
 }
 
-static bool writeDls_(const sead::SafeString &path, const ExportModel &model, const char *bankName)
+static bool WriteDls(const sead::SafeString &path, const ExportModel &model, const char *bankName)
 {
     if (model.instruments.empty())
         return false;
@@ -638,35 +653,35 @@ static bool writeDls_(const sead::SafeString &path, const ExportModel &model, co
 
         std::vector<u8> fmt;
 
-        putU16_(fmt, 1);
-        putU16_(fmt, 1);
-        putU32_(fmt, s.sampleRate);
-        putU32_(fmt, s.sampleRate * 2);
-        putU16_(fmt, 2);
-        putU16_(fmt, 16);
+        PutU16(fmt, 1);
+        PutU16(fmt, 1);
+        PutU32(fmt, s.sampleRate);
+        PutU32(fmt, s.sampleRate * 2);
+        PutU16(fmt, 2);
+        PutU16(fmt, 16);
 
         std::vector<u8> data;
         data.reserve(s.pcm.size() * 2);
 
         for (s16 v : s.pcm)
-            putU16_(data, (u16)v);
+            PutU16(data, (u16)v);
 
         std::vector<u8> wave;
 
-        appendChunk_(wave, "fmt ", fmt);
-        appendChunk_(wave, "data", data);
+        AppendChunk(wave, "fmt ", fmt);
+        AppendChunk(wave, "data", data);
 
-        putWsmp_(wave, s.rootKey, s);
-        appendListChunk_(wvplPayload, "wave", wave);
+        PutWsmp(wave, s.rootKey, s);
+        AppendListChunk(wvplPayload, "wave", wave);
     }
 
     std::vector<u8> ptbl;
 
-    putU32_(ptbl, 8);
-    putU32_(ptbl, (u32)cueOffsets.size());
+    PutU32(ptbl, 8);
+    PutU32(ptbl, (u32)cueOffsets.size());
 
     for (u32 off : cueOffsets)
-        putU32_(ptbl, off);
+        PutU32(ptbl, off);
 
 
     std::vector<u8> linsPayload;
@@ -675,11 +690,11 @@ static bool writeDls_(const sead::SafeString &path, const ExportModel &model, co
         std::vector<u8> insPayload;
         std::vector<u8> insh;
 
-        putU32_(insh, (u32)in.regions.size());
-        putU32_(insh, in.bankNo);
-        putU32_(insh, in.programNo);
+        PutU32(insh, (u32)in.regions.size());
+        PutU32(insh, in.bankNo);
+        PutU32(insh, in.programNo);
 
-        appendChunk_(insPayload, "insh", insh);
+        AppendChunk(insPayload, "insh", insh);
 
         std::vector<u8> lrgnPayload;
 
@@ -688,17 +703,17 @@ static bool writeDls_(const sead::SafeString &path, const ExportModel &model, co
             std::vector<u8> rgnPayload;
             std::vector<u8> rgnh;
 
-            putU16_(rgnh, r.keyMin);
-            putU16_(rgnh, r.keyMax);
-            putU16_(rgnh, r.velMin);
-            putU16_(rgnh, r.velMax);
-            putU16_(rgnh, 0);
-            putU16_(rgnh, r.keyGroup);
+            PutU16(rgnh, r.keyMin);
+            PutU16(rgnh, r.keyMax);
+            PutU16(rgnh, r.velMin);
+            PutU16(rgnh, r.velMax);
+            PutU16(rgnh, 0);
+            PutU16(rgnh, r.keyGroup);
 
-            appendChunk_(rgnPayload, "rgnh", rgnh);
+            AppendChunk(rgnPayload, "rgnh", rgnh);
 
             const ExportSample &sample = model.samples[r.sampleIndex];
-            putWsmp_(rgnPayload, r.rootKey, sample);
+            PutWsmp(rgnPayload, r.rootKey, sample);
 
             bool isStereo = sample.stereoSide != 0;
             u32 channelMask = isStereo ? ((sample.stereoSide < 0) ? 1u : 2u) : 1u;
@@ -707,75 +722,75 @@ static bool writeDls_(const sead::SafeString &path, const ExportModel &model, co
 
             std::vector<u8> wlnk;
 
-            putU16_(wlnk, fusOptions);
-            putU16_(wlnk, phaseGroup);
-            putU32_(wlnk, channelMask);
-            putU32_(wlnk, r.sampleIndex);
+            PutU16(wlnk, fusOptions);
+            PutU16(wlnk, phaseGroup);
+            PutU32(wlnk, channelMask);
+            PutU32(wlnk, r.sampleIndex);
 
-            appendChunk_(rgnPayload, "wlnk", wlnk);
+            AppendChunk(rgnPayload, "wlnk", wlnk);
 
-            RegionGenSet g = computeRegionGenSet_(r);
+            RegionGenSet g = ComputeRegionGenSet(r);
 
             std::vector<u8> conns;
 
-            putConnection_(conns, DLS_CONN_DST_ATTENUATION, g.initAttenCb);
-            putConnection_(conns, DLS_CONN_DST_PAN, g.pan);
-            putConnection_(conns, DLS_CONN_DST_PITCH, g.pitchCentsDls);
-            putConnection_(conns, DLS_CONN_DST_EG1_ATTACKTIME, g.attackTc);
-            putConnection_(conns, DLS_CONN_DST_EG1_HOLDTIME, g.holdTc);
-            putConnection_(conns, DLS_CONN_DST_EG1_DECAYTIME, g.decayTc);
-            putConnection_(conns, DLS_CONN_DST_EG1_SUSTAINLEVEL, g.sustainPermille);
-            putConnection_(conns, DLS_CONN_DST_EG1_RELEASETIME, g.releaseTc);
+            PutConnection(conns, DLS_CONN_DST_ATTENUATION, g.initAttenCb);
+            PutConnection(conns, DLS_CONN_DST_PAN, g.pan);
+            PutConnection(conns, DLS_CONN_DST_PITCH, g.pitchCentsDls);
+            PutConnection(conns, DLS_CONN_DST_EG1_ATTACKTIME, g.attackTc);
+            PutConnection(conns, DLS_CONN_DST_EG1_HOLDTIME, g.holdTc);
+            PutConnection(conns, DLS_CONN_DST_EG1_DECAYTIME, g.decayTc);
+            PutConnection(conns, DLS_CONN_DST_EG1_SUSTAINLEVEL, g.sustainPermille);
+            PutConnection(conns, DLS_CONN_DST_EG1_RELEASETIME, g.releaseTc);
 
             std::vector<u8> artChunkBody;
-            putU32_(artChunkBody, 8);
-            putU32_(artChunkBody, 8);
+            PutU32(artChunkBody, 8);
+            PutU32(artChunkBody, 8);
 
             artChunkBody.insert(artChunkBody.end(), conns.begin(), conns.end());
 
             std::vector<u8> lartPayload;
-            appendChunk_(lartPayload, "art1", artChunkBody);
-            appendListChunk_(rgnPayload, "lart", lartPayload);
+            AppendChunk(lartPayload, "art1", artChunkBody);
+            AppendListChunk(rgnPayload, "lart", lartPayload);
 
             std::vector<u8> lar2Payload;
-            appendChunk_(lar2Payload, "art2", artChunkBody);
-            appendListChunk_(rgnPayload, "lar2", lar2Payload);
+            AppendChunk(lar2Payload, "art2", artChunkBody);
+            AppendListChunk(rgnPayload, "lar2", lar2Payload);
 
-            appendListChunk_(lrgnPayload, "rgn2", rgnPayload);
+            AppendListChunk(lrgnPayload, "rgn2", rgnPayload);
         }
 
-        appendListChunk_(insPayload, "lrgn", lrgnPayload);
+        AppendListChunk(insPayload, "lrgn", lrgnPayload);
 
         std::vector<u8> instInfo;
-        std::string iname = instrumentDisplayName_(in, "INST_");
+        std::string iname = InstrumentDisplayName(in, "INST_");
 
-        appendChunk_(instInfo, "INAM", zstrEven_(iname));
-        appendListChunk_(insPayload, "INFO", instInfo);
-        appendListChunk_(linsPayload, "ins ", insPayload);
+        AppendChunk(instInfo, "INAM", ZeroTerminatedEven(iname));
+        AppendListChunk(insPayload, "INFO", instInfo);
+        AppendListChunk(linsPayload, "ins ", insPayload);
     }
 
     std::vector<u8> colh;
-    putU32_(colh, (u32)model.instruments.size());
+    PutU32(colh, (u32)model.instruments.size());
 
     std::vector<u8> info;
-    appendChunk_(info, "INAM", zstrEven_(bankName && *bankName ? bankName : "TuneBloom Bank"));
-    appendChunk_(info, "ISFT", zstrEven_("TuneBloom"));
+    AppendChunk(info, "INAM", ZeroTerminatedEven(bankName && *bankName ? bankName : "TuneBloom Bank"));
+    AppendChunk(info, "ISFT", ZeroTerminatedEven("TuneBloom"));
 
     std::vector<u8> body;
-    putBytes_(body, "DLS ", 4);
-    appendChunk_(body, "colh", colh);
-    appendListChunk_(body, "lins", linsPayload);
-    appendChunk_(body, "ptbl", ptbl);
-    appendListChunk_(body, "wvpl", wvplPayload);
-    appendListChunk_(body, "INFO", info);
+    PutBytes(body, "DLS ", 4);
+    AppendChunk(body, "colh", colh);
+    AppendListChunk(body, "lins", linsPayload);
+    AppendChunk(body, "ptbl", ptbl);
+    AppendListChunk(body, "wvpl", wvplPayload);
+    AppendListChunk(body, "INFO", info);
 
     std::vector<u8> file;
-    appendChunk_(file, "RIFF", body);
+    AppendChunk(file, "RIFF", body);
 
-    return writeFileBytes_(path, file);
+    return WriteFileBytes(path, file);
 }
 
-static void addBankToModel_(ExportModel &model,
+static void AddBankToModel(ExportModel &model,
                             std::unordered_map<const WaveFile *, CachedSampleIndices> &sampleCache,
                             const BankFile &bank, u16 bankNo,
                             const std::set<std::pair<u16, u16>> *usedPrograms = nullptr)
@@ -840,8 +855,8 @@ static void addBankToModel_(ExportModel &model,
                         }
 
                         es.sampleRate = pcm.sampleRate ? pcm.sampleRate : 22050;
-                        es.loopStart = wave->getIsLoop() ? (s32) wave->getOriginalLoopStartFrame() : -1;
-                        es.loopEnd = wave->getIsLoop() ? (s32) wave->getOriginalLoopEndFrame() : (s32) pcm.sampleCount;
+                        es.loopStart = pcm.isLoop ? (s32) pcm.loopStartFrame : -1;
+                        es.loopEnd = pcm.isLoop ? (s32) pcm.loopEndFrame : (s32) pcm.sampleCount;
                         es.rootKey = vr->getRootKey();
                         es.name = wave->isNameValid() ? wave->getName().cstr() : "WAVE_" + std::to_string(wave->getId());
                         es.stereoSide = stereoSide;
@@ -958,16 +973,16 @@ bool exportBankToSf2(const sead::SafeString &path, const BankFile &bank)
     ExportModel model;
     std::unordered_map<const WaveFile *, CachedSampleIndices> sampleCache;
 
-    addBankToModel_(model, sampleCache, bank, 0);
+    AddBankToModel(model, sampleCache, bank, 0);
     
     if (model.instruments.empty())
         return false;
     
-    std::string name = resolveItemName_(bank, "TuneBloom Bank");
-    return writeSf2_(path, model, name.c_str());
+    std::string name = ResolveItemName(bank, "TuneBloom Bank");
+    return WriteSf2(path, model, name.c_str());
 }
 
-static bool buildSeqSoundModel_(const Sound &sound, ExportModel &model)
+static bool BuildSeqSoundModel(const Sound &sound, ExportModel &model)
 {
     if (sound.getSoundType() != Sound::SoundType::Seq)
         return false;
@@ -1001,7 +1016,7 @@ static bool buildSeqSoundModel_(const Sound &sound, ExportModel &model)
 
         const BankFile *bankFile = static_cast<const BankFile *>(fileItem);
         
-        addBankToModel_(model, sampleCache, *bankFile, (u16)i, filter);
+        AddBankToModel(model, sampleCache, *bankFile, (u16)i, filter);
     }
 
     return !model.instruments.empty();
@@ -1011,12 +1026,12 @@ bool exportSeqSoundToSf2(const sead::SafeString &path, const Sound &sound)
 {
     ExportModel model;
 
-    if (!buildSeqSoundModel_(sound, model))
+    if (!BuildSeqSoundModel(sound, model))
         return false;
     
-    std::string name = resolveItemName_(sound, "Sequence");
+    std::string name = ResolveItemName(sound, "Sequence");
 
-    return writeSf2_(path, model, name.c_str());
+    return WriteSf2(path, model, name.c_str());
 }
 
 bool exportBankToDls(const sead::SafeString &path, const BankFile &bank)
@@ -1024,28 +1039,28 @@ bool exportBankToDls(const sead::SafeString &path, const BankFile &bank)
     ExportModel model;
     std::unordered_map<const WaveFile *, CachedSampleIndices> sampleCache;
 
-    addBankToModel_(model, sampleCache, bank, 0);
+    AddBankToModel(model, sampleCache, bank, 0);
 
     if (model.instruments.empty())
         return false;
     
-    std::string name = resolveItemName_(bank, "TuneBloom Bank");
-    return writeDls_(path, model, name.c_str());
+    std::string name = ResolveItemName(bank, "TuneBloom Bank");
+    return WriteDls(path, model, name.c_str());
 }
 
 bool exportSeqSoundToDls(const sead::SafeString &path, const Sound &sound)
 {
     ExportModel model;
 
-    if (!buildSeqSoundModel_(sound, model))
+    if (!BuildSeqSoundModel(sound, model))
         return false;
     
-    std::string name = resolveItemName_(sound, "Sequence");
+    std::string name = ResolveItemName(sound, "Sequence");
 
-    return writeDls_(path, model, name.c_str());
+    return WriteDls(path, model, name.c_str());
 }
 
-static bool exportSeqSoundSetToDir_(const sead::SafeString &dirPath, const SoundSet &soundSet, const char *ext, bool useDls)
+static bool ExportSeqSoundSetToDir(const sead::SafeString &dirPath, const SoundSet &soundSet, const char *ext, bool useDls)
 {
     if (soundSet.getIsEmpty() || soundSet.getSoundSetType() != SoundSet::SoundSetType::Seq)
         return false;
@@ -1069,7 +1084,7 @@ static bool exportSeqSoundSetToDir_(const sead::SafeString &dirPath, const Sound
         if (sound->getSoundType() != Sound::SoundType::Seq)
             continue;
 
-        std::string name = resolveItemName_(*sound, "Sequence");
+        std::string name = ResolveItemName(*sound, "Sequence");
 
         sead::FormatFixedSafeString<512> outPath("%s/%s.%s", dirPath.cstr(), name.c_str(), ext);
         
@@ -1082,10 +1097,10 @@ static bool exportSeqSoundSetToDir_(const sead::SafeString &dirPath, const Sound
 
 bool exportSeqSoundSetToSf2Dir(const sead::SafeString &dirPath, const SoundSet &soundSet)
 {
-    return exportSeqSoundSetToDir_(dirPath, soundSet, "sf2", false);
+    return ExportSeqSoundSetToDir(dirPath, soundSet, "sf2", false);
 }
 
 bool exportSeqSoundSetToDlsDir(const sead::SafeString &dirPath, const SoundSet &soundSet)
 {
-    return exportSeqSoundSetToDir_(dirPath, soundSet, "dls", true);
+    return ExportSeqSoundSetToDir(dirPath, soundSet, "dls", true);
 }

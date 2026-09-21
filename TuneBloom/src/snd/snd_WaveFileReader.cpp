@@ -41,20 +41,21 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
             {
                 const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(waveFile);
 
-                if (sead::MemUtil::compare(header->signature, "FWAV", 4) != 0 && sead::MemUtil::compare(header->signature, "CWAV", 4) != 0)
+                const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Wave);
+                if (!fileFormat)
                 {
                     PopupMgr::instance()->pushCurrentItemError("File is not a valid wave file");
                     return;
                 }
 
-                waveFmt = sead::MemUtil::compare(header->signature, "CWAV", 4) == 0 ? "BCWAV" : "BFWAV";
+                waveFmt = fileFormat->displayName;
 
-                if (sead::MemUtil::compare(header->signature, "CWAV", 4) == 0)
+                if (fileFormat->format == ArchiveFormat::BCSAR)
                 {
                     u32 major = ((u32)header->version >> 24) & 0xFF;
                     if (major < 1)
                     {
-                        sead::FormatFixedSafeString<64> msg("BCWAV version not supported (0x%08X)", (u32)header->version);
+                        sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                         PopupMgr::instance()->pushCurrentItemError(msg);
                         return;
                     }
@@ -63,7 +64,7 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
                 {
                     if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010200))
                     {
-                        sead::FormatFixedSafeString<64> msg("BFWAV version not supported (0x%08X)", (u32)header->version);
+                        sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                         PopupMgr::instance()->pushCurrentItemError(msg);
                         return;
                     }
@@ -113,12 +114,10 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
 bool WaveFileReader::IsOriginalLoopAvailable() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
-    if (sead::MemUtil::compare(&header.signature, "CSTM", 4) == 0)
-        return false;
-    if (header.version >= 0x00010200)
-        return true;
+    const InnerFileFormatInfo* waveFormat = FindInnerFileFormat(&header.signature, InnerFileKind::Wave);
+    const ArchiveFormat format = waveFormat ? waveFormat->format : ArchiveFormat::BFSAR;
 
-    return false;
+    return ::WaveFile::isOriginalLoopAvailable(format, (u32)header.version);
 }
 
 bool WaveFileReader::ReadWaveInfo(WaveInfo* info, const void* waveDataOffsetOrigin) const

@@ -3101,7 +3101,7 @@ u32 BankFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     LOG_SIZE("instruments (pre-write)", instruments.size());
 
     FileWriter writer(handle, stream);
-    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CBNK" : "FBNK", 1, mVersion);
+    writer.openFile(GetInnerFileMagic(mFormat, InnerFileKind::Bank), 1, mVersion);
 
     auto writeVelocityRegion = [&](const VelocityRegion& velocityRegion)
     {

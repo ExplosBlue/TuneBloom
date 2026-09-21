@@ -31,7 +31,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     SEAD_ASSERT(mGroupTargetWarcs);
 
     FileWriter writer(handle, stream);
-    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CGRP" : "FGRP", 3, mVersion);
+    writer.openFile(GetInnerFileMagic(mFormat, InnerFileKind::Group), 3, mVersion);
 
     u32 fileSize = 0;
 

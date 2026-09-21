@@ -850,7 +850,7 @@ bool SequenceFile::doRead(const void* fileAddr)
 
 u32 SequenceFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
-    const char* magic = mFormat == ArchiveFormat::BCSAR ? "CSEQ" : "FSEQ";
+    const char* magic = GetInnerFileMagic(mFormat, InnerFileKind::Sequence);
     LOG_FMT("%s: doWrite magic=%.4s seqBytes=%u labels=%zu version=%u", getNameOrNull().cstr(), magic, mSeqBytesSize, mLabels.size(), mVersion);
 
     if (!isValid())
@@ -860,7 +860,7 @@ u32 SequenceFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, b
     }
 
     FileWriter writer(handle, stream);
-    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CSEQ" : "FSEQ", 2, mVersion);
+    writer.openFile(GetInnerFileMagic(mFormat, InnerFileKind::Sequence), 2, mVersion);
 
     //? Data Block
     {

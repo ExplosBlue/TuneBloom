@@ -23,7 +23,8 @@ void StreamSoundFileReader::Initialize(const void* streamSoundFile)
     if (!IsValidFileHeader(streamSoundFile))
         return;
 
-    const char* streamFmt = sead::MemUtil::compare(streamSoundFile, "CSTM", 4) == 0 ? "CSTM" : "FSTM";
+    const InnerFileFormatInfo* streamFormat = FindInnerFileFormat(streamSoundFile, InnerFileKind::Stream);
+    const char* streamFmt = streamFormat ? streamFormat->displayName : cUnknownInnerFileFormat.displayName;
     const StreamSoundFile::FileHeader* header = reinterpret_cast<const StreamSoundFile::FileHeader*>(streamSoundFile);
 
     const StreamSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
@@ -63,7 +64,8 @@ void StreamSoundFileReader::Finalize()
 bool StreamSoundFileReader::IsTrackInfoAvailable() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
-    if (sead::MemUtil::compare(&header.signature, "CSTM", 4) == 0)
+    const InnerFileFormatInfo* streamFormat = FindInnerFileFormat(&header.signature, InnerFileKind::Stream);
+    if (streamFormat && streamFormat->format == ArchiveFormat::BCSAR)
         return true;
     if (header.version <= 0x00020000)
         return true;
@@ -73,7 +75,8 @@ bool StreamSoundFileReader::IsTrackInfoAvailable() const
 bool StreamSoundFileReader::IsOriginalLoopAvailable() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
-    if (sead::MemUtil::compare(header.signature, "CSTM", 4) == 0)
+    const InnerFileFormatInfo* streamFormat = FindInnerFileFormat(header.signature, InnerFileKind::Stream);
+    if (streamFormat && streamFormat->format == ArchiveFormat::BCSAR)
     {
         u32 major = ((u32)header.version >> 24) & 0xFF;
         if (major >= 4)
@@ -94,13 +97,14 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
 
     const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(streamSoundFile);
 
-    if (sead::MemUtil::compare(header->signature, "FSTM", 4) != 0 && sead::MemUtil::compare(header->signature, "CSTM", 4) != 0)
+    const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Stream);
+    if (!fileFormat)
     {
         PopupMgr::instance()->pushCurrentItemError("File is not a valid stream file");
         return false;
     }
 
-    if (sead::MemUtil::compare(header->signature, "CSTM", 4) == 0)
+    if (fileFormat->format == ArchiveFormat::BCSAR)
     {
         u32 major = ((u32)header->version >> 24) & 0xFF;
         if (major < 1 || major > 4)

@@ -32,20 +32,21 @@ void BankFileReader::Initialize(const void* bankFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(bankFile);
 
-        if (sead::MemUtil::compare(header->signature, "FBNK", 4) != 0 && sead::MemUtil::compare(header->signature, "CBNK", 4) != 0)
+        const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Bank);
+        if (!fileFormat)
         {
             PopupMgr::instance()->pushCurrentItemError("File is not a valid bank file");
             return;
         }
 
-        bankFmt = sead::MemUtil::compare(header->signature, "CBNK", 4) == 0 ? "CBNK" : "FBNK";
+        bankFmt = fileFormat->displayName;
 
-        if (sead::MemUtil::compare(header->signature, "CBNK", 4) == 0)
+        if (fileFormat->format == ArchiveFormat::BCSAR)
         {
             u32 major = ((u32)header->version >> 24) & 0xFF;
             if (major < 1)
             {
-                sead::FormatFixedSafeString<64> msg("CBNK version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -54,7 +55,7 @@ void BankFileReader::Initialize(const void* bankFile)
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && (u32)header->version != 0x00010000)
             {
-                sead::FormatFixedSafeString<64> msg("FBNK version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }

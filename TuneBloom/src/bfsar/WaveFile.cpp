@@ -364,7 +364,7 @@ void WaveFile::drawUI()
     CenteredTextX("Version (For Stream)");
 
     u32 version = sBfsar.getVersionForBfstm();
-    DrawInnerVersionUI(&version, sBfsar.getFormat() == ArchiveFormat::BCSAR ? 4 : 3);
+    DrawInnerVersionUI(&version, GetArchiveVersionByteCount(sBfsar.getFormat()));
     ImGui::EndDisabled();
 
     bool enableName = isEnableName();
@@ -690,7 +690,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     mEndian = sBfsar.getEndian();
 
     FileWriter writer(handle, stream);
-    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWAV" : "FWAV", 2, mVersion);
+    writer.openFile(GetInnerFileMagic(mFormat, InnerFileKind::Wave), 2, mVersion);
 
     //? Info Block
     {

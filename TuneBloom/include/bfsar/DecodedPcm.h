@@ -9,6 +9,10 @@ struct DecodedPcm
     u32 sampleRate = 0;
     u32 sampleCount = 0;
 
+    bool isLoop = false;
+    u32 loopStartFrame = 0;
+    u32 loopEndFrame = 0;
+
     bool isValid() const
     {
         return sampleCount > 0 && !channels.empty();

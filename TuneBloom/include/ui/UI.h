@@ -132,6 +132,8 @@ void RequestExportInstrument(Item* instrument);
 void RequestImportInstrument(Item* targetBank);
 void RequestReplaceInstrument(Item* instrument, Item* bank);
 
+void CancelPendingExportsAndImports();
+
 class FileWindow : public Item
 {
 public:

@@ -12,7 +12,7 @@
 u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
     LOG_FUNC();
-    LOG_FMT("format=%s, version=0x%04X", mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD", mVersion);
+    LOG_FMT("format=%s, version=0x%04X", GetInnerFileMagic(mFormat, InnerFileKind::WaveSoundData), mVersion);
     LOG_U32("soundSetStartId", mSoundSet ? mSoundSet->getStartId() : 0);
     LOG_U32("soundSetEndId", mSoundSet ? mSoundSet->getEndId() : 0);
 
@@ -105,9 +105,9 @@ u32 BfwsdFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
     };
 
     FileWriter writer(handle, stream);
-    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD", 1, mVersion);
+    writer.openFile(GetInnerFileMagic(mFormat, InnerFileKind::WaveSoundData), 1, mVersion);
 
-    LOG_FMT("File opened: magic=%s, blockCount=1, version=0x%04X", mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD", mVersion);
+    LOG_FMT("File opened: magic=%s, blockCount=1, version=0x%04X", GetInnerFileMagic(mFormat, InnerFileKind::WaveSoundData), mVersion);
 
     LOG_U32("waveIdsCount", waveIds.size());
     LOG_U32("waveSoundCount", waveSoundCount);

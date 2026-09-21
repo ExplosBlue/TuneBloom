@@ -141,7 +141,7 @@ bool SoundPlayer::playSeqSound(const Sound* sound)
     return true;
 }
 
-void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* sound, u32 maxDurationSecs, u32 targetSampleRate)
+bool SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* sound, u32 maxDurationSecs, u32 targetSampleRate)
 {
     mSeqExportPath = path;
     mSeqCapture.prepare();
@@ -158,7 +158,7 @@ void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* soun
     {
         mSeqCapture.finish();
         snd::SoundSystem::resumeAudio();
-        return;
+        return false;
     }
 
     snd::internal::driver::SoundThread* soundThread = snd::internal::driver::SoundThread::instance();
@@ -286,11 +286,7 @@ void SoundPlayer::exportSeqToWav(const sead::SafeString& path, const Sound* soun
         right = &resampledRight;
     }
 
-    writeSeqWavFile(mSeqExportPath, *left, *right, targetSampleRate);
-
-    PopupMgr::instance()->addPopup({
-        sead::FormatFixedSafeString<256>("Exported sequence to %s", mSeqExportPath.cstr()), nullptr
-    });
+    return writeSeqWavFile(mSeqExportPath, *left, *right, targetSampleRate);
 }
 
 bool SoundPlayer::writeSeqWavFile(const sead::SafeString& path, const std::vector<f32>& left, const std::vector<f32>& right, u32 sampleRate)
@@ -355,7 +351,7 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
     }
     else if (streamType != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
     {
-        const char *streamFmtP = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+        const char *streamFmtP = GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream);
         PopupMgr::instance()->addPopup({sead::FormatFixedSafeString<64>("Only %s and Opus streams are supported", streamFmtP).cstr(), nullptr});
         return false;
     }

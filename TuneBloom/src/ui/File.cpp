@@ -174,7 +174,7 @@ void InnerFile::drawUI()
         CenteredTextX("Version");
 
         u32 version = mVersion;
-        if (DrawInnerVersionUI(&version, mFormat == ArchiveFormat::BCSAR ? 4 : 3))
+        if (DrawInnerVersionUI(&version, GetArchiveVersionByteCount(mFormat)))
         {
             mVersion = version;
             SetUnsavedChanges(true);
@@ -467,6 +467,8 @@ bool SaveFileAs()
 bool CloseFile()
 {
     PopupMgr::instance()->closeFile();
+
+    CancelPendingExportsAndImports();
 
     for (size_t i = 0; i <= (size_t)UIType::Max; i++)
     {

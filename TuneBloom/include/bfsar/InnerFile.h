@@ -1,78 +1,7 @@
 #pragma once
 
+#include <bfsar/ArchiveFormat.h>
 #include <bfsar/writer/FileWriter.h>
-
-enum class ArchiveFormat
-{
-    BFSAR,
-    BCSAR
-};
-
-enum class ArchivePlatform
-{
-    CAFE,
-    CTR,
-    NX
-};
-
-struct ArchiveFormatInfo
-{
-    ArchiveFormat format;
-    ArchivePlatform platform;
-    sead::Endian::Types endian;
-    const u32 defaultVersion;
-    const char* extension;
-    const char* fmtName;
-    const char* label;
-    const char* systemName;
-};
-
-inline constexpr ArchiveFormatInfo kFormatTable[] = {
-    { 
-        ArchiveFormat::BFSAR,
-        ArchivePlatform::CAFE,
-        sead::Endian::eBig,
-        0x00020000,
-        "bfsar",
-        "BFSAR",
-        "Cafe Sound Archive",
-        "Wii U"
-    },
-    { 
-        ArchiveFormat::BCSAR,
-        ArchivePlatform::CTR,
-        sead::Endian::eLittle,
-        0x02000000,
-        "bcsar",
-        "BCSAR",
-        "CTR Sound Archive",
-        "3DS"
-    },
-    { 
-        ArchiveFormat::BFSAR,
-        ArchivePlatform::NX,
-        sead::Endian::eLittle,
-        0x00020400,
-        "bfsar",
-        "BFSAR",
-        "Cafe Sound Archive",
-        "Switch"
-    },
-};
-
-inline const ArchiveFormatInfo *getFormatInfo(ArchiveFormat format, ArchivePlatform platform)
-{
-    for (const auto &info : kFormatTable)
-    {
-        if (info.format != format)
-            continue;
-
-        if (info.platform == platform)
-            return &info;
-    }
-
-    return nullptr;
-}
 
 static constexpr u32 makeVersion(u32 major, u32 minor, u32 patch)
 {

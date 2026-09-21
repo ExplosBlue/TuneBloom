@@ -17,10 +17,23 @@ inline DecodedPcm decodeWaveFileForEditing(const WaveFile& wave)
     out.sampleCount = sampleCount;
     out.channels.assign(channels.size(), std::vector<float>(sampleCount, 0.0f));
 
+    const WaveFile::Channel* firstChannel = channels.nth(0);
+    const bool useFullData = firstChannel && firstChannel->getFullData_() != nullptr;
+
+    out.isLoop = wave.getIsLoop();
+    out.loopStartFrame = useFullData ? wave.getOriginalLoopStartFrame() : wave.getLoopStartFrame(false);
+    out.loopEndFrame = useFullData ? wave.getOriginalLoopEndFrame() : wave.getLoopEndFrame(false);
+
+    if (out.loopEndFrame > sampleCount)
+        out.loopEndFrame = sampleCount;
+
+    if (out.loopStartFrame > out.loopEndFrame)
+        out.loopStartFrame = out.loopEndFrame;
+
     for (u32 c = 0; c < channels.size(); c++)
     {
         const WaveFile::Channel* channel = channels.nth(c);
-        const void* data = channel->getFullData_();
+        const void* data = useFullData ? channel->getFullData_() : nullptr;
 
         WaveFile::Encoding encoding = data ? channel->getFullDataEncoding_() : wave.getEncoding();
         if (!data)

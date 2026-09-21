@@ -9,12 +9,12 @@
 u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
     LOG_FUNC();
-    LOG_FMT("format=%s, version=0x%04X, waveFiles=%d", mFormat == ArchiveFormat::BCSAR ? "CWAR" : "FWAR", mVersion, (s32)mWaveFiles.size());
+    LOG_FMT("format=%s, version=0x%04X, waveFiles=%d", GetInnerFileMagic(mFormat, InnerFileKind::WaveArchive), mVersion, (s32)mWaveFiles.size());
 
     FileWriter writer(handle, stream);
-    writer.openFile(mFormat == ArchiveFormat::BCSAR ? "CWAR" : "FWAR", nw::snd::internal::WaveArchiveFile::BLOCK_SIZE, mVersion);
+    writer.openFile(GetInnerFileMagic(mFormat, InnerFileKind::WaveArchive), nw::snd::internal::WaveArchiveFile::BLOCK_SIZE, mVersion);
 
-    LOG_FMT("File opened: magic=%s, blockCount=%u, version=0x%04X", mFormat == ArchiveFormat::BCSAR ? "CWAR" : "FWAR", nw::snd::internal::WaveArchiveFile::BLOCK_SIZE, mVersion);
+    LOG_FMT("File opened: magic=%s, blockCount=%u, version=0x%04X", GetInnerFileMagic(mFormat, InnerFileKind::WaveArchive), nw::snd::internal::WaveArchiveFile::BLOCK_SIZE, mVersion);
 
     //? Info Block
     {

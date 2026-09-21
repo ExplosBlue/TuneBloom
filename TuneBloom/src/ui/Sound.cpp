@@ -860,7 +860,7 @@ void DrawSoundPropertiesUI()
                         ImGui::BeginDisabled();
 
                     {
-                        const char *streamFmt = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+                        const char *streamFmt = GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream);
                         const char *streamTypeLabels[] = {streamFmt, "ADTS (AAC)", "Opus"};
 
                         u32 streamType = (enableSend ? strmSoundInfo.getStreamType() : Sound::StreamSoundInfo::StreamType::NwStreamBinary) - 1;
@@ -890,7 +890,7 @@ void DrawSoundPropertiesUI()
                                 ImGui::EndDisabled();
                             }
 
-                            const char* loopHelpFmt = sBfsar.getFormat() == ArchiveFormat::BCSAR ? "CSTM" : "BFSTM";
+                            const char* loopHelpFmt = GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream);
                             sead::FormatFixedSafeString<128> helpMsg(
                                 "Note: For %s Streams this looping info is ignored\n"
                                 "and instead is taken from the first Track attached Wave File",

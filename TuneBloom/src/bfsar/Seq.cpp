@@ -39,7 +39,8 @@ bool ParseSequenceFile(std::vector<std::string>* outLines, std::unordered_map<u3
     // Set the correct endianness for sequence parameter values:
     // For 'C' format (CSEQ), parameter endianness is OPPOSITE of the file header BOM.
     // For 'F' format (FSEQ), parameter endianness MATCHES the file header BOM.
-    if (sead::MemUtil::compare(seqFile, "CSEQ", 4) == 0)
+    const InnerFileFormatInfo* seqFormat = FindInnerFileFormat(seqFile, InnerFileKind::Sequence);
+    if (seqFormat && seqFormat->format == ArchiveFormat::BCSAR)
         MmlParser::sSeqParamEndian = sFileEndian == sead::Endian::eLittle ? sead::Endian::eBig : sead::Endian::eLittle;
     else
         MmlParser::sSeqParamEndian = sFileEndian;

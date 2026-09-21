@@ -513,42 +513,42 @@ public:
 
     const char* getArchiveMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CSAR" : "FSAR";
+        return GetInnerFileMagic(mFormat, InnerFileKind::SoundArchive);
     }
 
     const char* getSeqMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CSEQ" : "FSEQ";
+        return GetInnerFileMagic(mFormat, InnerFileKind::Sequence);
     }
 
     const char* getBankMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CBNK" : "FBNK";
+        return GetInnerFileMagic(mFormat, InnerFileKind::Bank);
     }
 
     const char* getWsdMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CWSD" : "FWSD";
+        return GetInnerFileMagic(mFormat, InnerFileKind::WaveSoundData);
     }
 
     const char* getWarMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CWAR" : "FWAR";
+        return GetInnerFileMagic(mFormat, InnerFileKind::WaveArchive);
     }
 
     const char* getGrpMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CGRP" : "FGRP";
+        return GetInnerFileMagic(mFormat, InnerFileKind::Group);
     }
 
     const char* getStmMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CSTM" : "FSTM";
+        return GetInnerFileMagic(mFormat, InnerFileKind::Stream);
     }
 
     const char* getWavMagic() const
     {
-        return mFormat == ArchiveFormat::BCSAR ? "CWAV" : "FWAV";
+        return GetInnerFileMagic(mFormat, InnerFileKind::Wave);
     }
 
 public:

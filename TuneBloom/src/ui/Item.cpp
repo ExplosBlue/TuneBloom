@@ -423,6 +423,80 @@ static bool ItemContextMenu(Item* item, CreateItemCallback createCallback, Conte
 
 static Item *sScrollItem = nullptr;
 
+static bool IsItemVisible(Item* item, ItemFilterCallback filterCallback)
+{
+    return item && (!filterCallback || filterCallback(item));
+}
+
+static void PruneFilteredSelection(const std::vector<Item*>& listItems, ItemFilterCallback filterCallback)
+{
+    if (!filterCallback || sMultiSelectedItems.empty())
+        return;
+
+    std::vector<Item*>& selection = sMultiSelectedItems;
+
+    for (Item* item : listItems)
+    {
+        if (!item || filterCallback(item))
+            continue;
+
+        auto it = std::find(selection.begin(), selection.end(), item);
+        if (it != selection.end())
+            selection.erase(it);
+
+        if (sMultiSelectAnchor == item)
+            sMultiSelectAnchor = nullptr;
+    }
+}
+
+static void CollectVisibleRange(Item::List& list, ItemFilterCallback filterCallback, Item* anchor, Item* target, std::vector<Item*>* outRange)
+{
+    outRange->clear();
+
+    if (!anchor || !target)
+        return;
+
+    bool inRange = false;
+    bool complete = false;
+
+    for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
+    {
+        Item* cur = static_cast<Item*>((*it).val());
+        if (!IsItemVisible(cur, filterCallback))
+            continue;
+
+        const bool isEndpoint = cur == anchor || cur == target;
+
+        if (!inRange)
+        {
+            if (!isEndpoint)
+                continue;
+
+            inRange = true;
+            outRange->push_back(cur);
+
+            if (anchor == target)
+            {
+                complete = true;
+                break;
+            }
+
+            continue;
+        }
+
+        outRange->push_back(cur);
+
+        if (isEndpoint)
+        {
+            complete = true;
+            break;
+        }
+    }
+
+    if (!complete)
+        outRange->clear();
+}
+
 void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ContextMenuCallback beforeDeleteCallback, int sortMode, bool sortAscending, ItemInsertCallback onInsert, ItemRemoveCallback onRemove, bool forceSubWindow, Item *highlightItem)
 {
     const bool cUseChild = true;
@@ -436,6 +510,8 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
     for (auto it = list.robustBegin(); it != list.robustEnd(); ++it)
         if (it->val())
             displayItems.push_back(it->val());
+
+    PruneFilteredSelection(displayItems, filterCallback);
 
     if (sortMode == -1)
     {
@@ -791,33 +867,22 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
             const bool toggleSelection = shortcuts::Held(shortcuts::Modifier::ToggleSelection);
             const bool extendSelection = shortcuts::Held(shortcuts::Modifier::ExtendSelection);
 
-            if (toggleSelection && extendSelection && !sMultiSelectedItems.empty())
+            std::vector<Item*> range;
+            if (extendSelection)
+                CollectVisibleRange(list, filterCallback, sMultiSelectAnchor, item, &range);
+
+            if (toggleSelection && extendSelection && !range.empty())
             {
-                Item* rangeAnchor = sMultiSelectedItems.back();
-                bool between = false;
-                for (auto it2 = list.robustBegin(); it2 != list.robustEnd(); ++it2)
+                for (Item* cur : range)
                 {
-                    Item* cur = static_cast<Item*>((*it2).val());
-                    if (cur == rangeAnchor || cur == item)
-                    {
-                        if (std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), cur) == sMultiSelectedItems.end())
-                            sMultiSelectedItems.push_back(cur);
-                        if (between)
-                            break;
-                        between = true;
-                    }
-                    else if (between)
-                    {
-                        if (std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), cur) == sMultiSelectedItems.end())
-                            sMultiSelectedItems.push_back(cur);
-                    }
+                    if (std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), cur) == sMultiSelectedItems.end())
+                        sMultiSelectedItems.push_back(cur);
                 }
+
                 selectedItem = item;
             }
             else if (toggleSelection)
             {
-                auto& ref = sMultiSelectedItemsArr[(size_t)sSelectedUIType];
-                (void)ref;
                 auto it = std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item);
                 if (it != sMultiSelectedItems.end())
                 {
@@ -841,25 +906,9 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                     sMultiSelectAnchor = item;
                 }
             }
-            else if (extendSelection && sMultiSelectAnchor != nullptr)
+            else if (extendSelection && !range.empty())
             {
-                sMultiSelectedItems.clear();
-                bool between = false;
-                for (auto it2 = list.robustBegin(); it2 != list.robustEnd(); ++it2)
-                {
-                    Item* cur = static_cast<Item*>((*it2).val());
-                    if (cur == sMultiSelectAnchor || cur == item)
-                    {
-                        sMultiSelectedItems.push_back(cur);
-                        if (between)
-                            break;
-                        between = true;
-                    }
-                    else if (between)
-                    {
-                        sMultiSelectedItems.push_back(cur);
-                    }
-                }
+                sMultiSelectedItems = range;
                 selectedItem = item;
             }
             else
@@ -1017,6 +1066,9 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                     sSelectedItemArr[i] = nullptr;
                 if (sSubSelectedItemArr[i] == itemToDelete)
                     sSubSelectedItemArr[i] = nullptr;
+                if (sMultiSelectAnchorArr[i] == itemToDelete)
+                    sMultiSelectAnchorArr[i] = nullptr;
+
                 auto& multi = sMultiSelectedItemsArr[i];
                 auto it = std::find(multi.begin(), multi.end(), itemToDelete);
                 if (it != multi.end())
@@ -1337,6 +1389,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
                 {
                     selectedItem = newDups.back();
                     sMultiSelectedItems = newDups;
+                    sMultiSelectAnchor = newDups.front();
                 }
                 sDuplicateItems.clear();
             }

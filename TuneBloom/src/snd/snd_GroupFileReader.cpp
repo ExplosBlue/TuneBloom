@@ -20,21 +20,22 @@ GroupFileReader::GroupFileReader(const void* groupFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(groupFile);
 
-        if (sead::MemUtil::compare(header->signature, "FGRP", 4) != 0 && sead::MemUtil::compare(header->signature, "CGRP", 4) != 0)
+        const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Group);
+        if (!fileFormat)
         {
             PopupMgr::instance()->pushCurrentItemError("File is not a valid group file");
             return;
         }
 
-        grpFmt = sead::MemUtil::compare(header->signature, "CGRP", 4) == 0 ? "CGRP" : "FGRP";
+        grpFmt = fileFormat->displayName;
 
-        if (sead::MemUtil::compare(header->signature, "CGRP", 4) == 0)
+        if (fileFormat->format == ArchiveFormat::BCSAR)
         {
             u32 major = ((u32)header->version >> 24) & 0xFF;
             u32 minor = ((u32)header->version >> 16) & 0xFF;
             if (major != 1)
             {
-                sead::FormatFixedSafeString<64> msg("CGRP version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -43,7 +44,7 @@ GroupFileReader::GroupFileReader(const void* groupFile)
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && (u32)header->version != 0x00010000)
             {
-                sead::FormatFixedSafeString<64> msg("FGRP version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }

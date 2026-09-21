@@ -110,14 +110,13 @@ void SequenceSoundPlayer::prepare(const void* seqFile, s32 seqOffset, const void
 
     {
         SEAD_ASSERT(seqFile);
-        bool isCSEQ = sead::MemUtil::compare(seqFile, "CSEQ", 4) == 0;
-        bool isFSEQ = sead::MemUtil::compare(seqFile, "FSEQ", 4) == 0;
-        if (isCSEQ || isFSEQ)
+        const InnerFileFormatInfo* seqFormat = FindInnerFileFormat(seqFile, InnerFileKind::Sequence);
+        if (seqFormat)
         {
             const nw::ut::BinaryFileHeader& hdr = *static_cast<const nw::ut::BinaryFileHeader*>(seqFile);
             sead::Endian::Types fileEndian = nw::ut::GetFileEndian(hdr);
             // XOR rule: for CSEQ, param endian is opposite of file BOM; for FSEQ it matches.
-            MmlParser::sSeqParamEndian = isCSEQ
+            MmlParser::sSeqParamEndian = seqFormat->format == ArchiveFormat::BCSAR
                 ? (fileEndian == sead::Endian::eLittle ? sead::Endian::eBig : sead::Endian::eLittle)
                 : fileEndian;
         }

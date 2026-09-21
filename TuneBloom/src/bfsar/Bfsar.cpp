@@ -93,7 +93,7 @@ Bfsar::~Bfsar()
 
 ArchivePlatform getDefaultPlatformForFormat(ArchiveFormat format)
 {
-    for (const auto &info : kFormatTable)
+    for (const auto &info : cFormatTable)
         if (info.format == format)
             return info.platform;
 
@@ -1179,8 +1179,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
             const void* refAddr = variations[0].fileAddr;
             u32 refSize = variations[0].fileSize;
 
-            if ((sead::MemUtil::compare(refAddr, "FSEQ", 4) == 0 || sead::MemUtil::compare(refAddr, "CSEQ", 4) == 0) ||
-                (sead::MemUtil::compare(refAddr, "FWAR", 4) == 0 || sead::MemUtil::compare(refAddr, "CWAR", 4) == 0))
+            if (MatchesInnerFileKind(refAddr, InnerFileKind::Sequence) || MatchesInnerFileKind(refAddr, InnerFileKind::WaveArchive))
             {
                 for (u32 variationId = 1; variationId < varCount; variationId++)
                 {
@@ -1190,7 +1189,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                     }
                 }
             }
-            else if (sead::MemUtil::compare(refAddr, "FBNK", 4) == 0 || sead::MemUtil::compare(refAddr, "CBNK", 4) == 0)
+            else if (MatchesInnerFileKind(refAddr, InnerFileKind::Bank))
             {
                 nw::snd::internal::BankFileReader readerRef(refAddr);
 
@@ -1213,7 +1212,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                     }
                 }
             }
-            else if (sead::MemUtil::compare(refAddr, "FWSD", 4) == 0 || sead::MemUtil::compare(refAddr, "CWSD", 4) == 0)
+            else if (MatchesInnerFileKind(refAddr, InnerFileKind::WaveSoundData))
             {
                 nw::snd::internal::WaveSoundFileReader readerRef(refAddr);
 
@@ -1240,7 +1239,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
         file->read(variations[0].fileAddr, variations[0].fileSize);
 
-        if (sead::MemUtil::compare(variations[0].fileAddr, "FBNK", 4) == 0 || sead::MemUtil::compare(variations[0].fileAddr, "CBNK", 4) == 0)
+        if (MatchesInnerFileKind(variations[0].fileAddr, InnerFileKind::Bank))
         {
             for (const auto& variation : variations)
             {
@@ -1255,7 +1254,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                 file->pushBackWaveIdTableVariation(variation.groupFileId, std::move(waveIdTable));
             }
         }
-        else if (sead::MemUtil::compare(variations[0].fileAddr, "FWSD", 4) == 0 || sead::MemUtil::compare(variations[0].fileAddr, "CWSD", 4) == 0)
+        else if (MatchesInnerFileKind(variations[0].fileAddr, InnerFileKind::WaveSoundData))
         {
             for (const auto& variation : variations)
             {
@@ -1321,7 +1320,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         u32 seqFileSize = 0;
         const void* seqFile = soundArchive.detail_GetFileAddress(i, &seqFileSize);
 
-        if (!seqFile || (sead::MemUtil::compare(seqFile, "FSEQ", 4) != 0 && sead::MemUtil::compare(seqFile, "CSEQ", 4) != 0))
+        if (!MatchesInnerFileKind(seqFile, InnerFileKind::Sequence))
         {
             continue;
         }
@@ -2288,7 +2287,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
         u32 bankFileSize = 0;
         const void* bankFile = soundArchive.detail_GetFileAddress(i, &bankFileSize);
 
-        if (!bankFile || (sead::MemUtil::compare(bankFile, "FBNK", 4) != 0 && sead::MemUtil::compare(bankFile, "CBNK", 4) != 0))
+        if (!MatchesInnerFileKind(bankFile, InnerFileKind::Bank))
         {
             referencedFileIndices.erase(i);
             continue;
@@ -2943,7 +2942,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
                     }
 
                     u32 wsdVersion = reader.mHeader->header.version;
-                    if (sead::MemUtil::compare(reader.mHeader->header.signature, "CWSD", 4) == 0)
+                    if (const InnerFileFormatInfo* wsdFormat = FindInnerFileFormat(reader.mHeader->header.signature, InnerFileKind::WaveSoundData); wsdFormat && wsdFormat->format == ArchiveFormat::BCSAR)
                     {
                         u32 major = (wsdVersion >> 24) & 0xFF;
                         u32 minor = (wsdVersion >> 16) & 0xFF;

@@ -21,20 +21,21 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     {
         const ut::BinaryFileHeader* header = reinterpret_cast<const ut::BinaryFileHeader*>(sequenceFile);
 
-        if (sead::MemUtil::compare(header->signature, "FSEQ", 4) != 0 && sead::MemUtil::compare(header->signature, "CSEQ", 4) != 0)
+        const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Sequence);
+        if (!fileFormat)
         {
             PopupMgr::instance()->pushCurrentItemError("File is not a valid sequence file");
             return;
         }
 
-        seqFmt = sead::MemUtil::compare(header->signature, "CSEQ", 4) == 0 ? "CSEQ" : "FSEQ";
+        seqFmt = fileFormat->displayName;
 
-        if (sead::MemUtil::compare(header->signature, "CSEQ", 4) == 0)
+        if (fileFormat->format == ArchiveFormat::BCSAR)
         {
             u32 major = ((u32)header->version >> 24) & 0xFF;
             if (major < 1 || major > 2)
             {
-                sead::FormatFixedSafeString<64> msg("CSEQ version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -43,7 +44,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version < 0x00030000))
             {
-                sead::FormatFixedSafeString<64> msg("FSEQ version not supported (0x%08X)", (u32)header->version);
+                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }

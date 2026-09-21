@@ -96,7 +96,7 @@ u64 BfstmFile::ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, 
 bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format)
 {
     LOG_FUNC();
-    LOG_FMT("format=%s, version=0x%04X, endian=%d", format == ArchiveFormat::BCSAR ? "CSTM" : "FSTM", version, endian);
+    LOG_FMT("format=%s, version=0x%04X, endian=%d", GetInnerFileMagic(format, InnerFileKind::Stream), version, endian);
 
     sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(endian);
@@ -287,9 +287,9 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     }
 
     FileWriter writer(&handle, &stream);
-    writer.openFile(format == ArchiveFormat::BCSAR ? "CSTM" : "FSTM", fileBlockCount, version);
+    writer.openFile(GetInnerFileMagic(format, InnerFileKind::Stream), fileBlockCount, version);
 
-    LOG_FMT("File opened: magic=%s, blockCount=%u, version=0x%04X", format == ArchiveFormat::BCSAR ? "CSTM" : "FSTM", fileBlockCount, version);
+    LOG_FMT("File opened: magic=%s, blockCount=%u, version=0x%04X", GetInnerFileMagic(format, InnerFileKind::Stream), fileBlockCount, version);
 
     //? Info Block
     {

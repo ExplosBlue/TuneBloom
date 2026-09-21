@@ -2,6 +2,7 @@
 
 #include <ui/UI.h>
 
+#include <bfsar/ArchiveFormat.h>
 #include <bfsar/LoopWaveformEditor.h>
 #include <bfsar/LoopAnalysis.h>
 #include <bfsar/DecodedPcm.h>
@@ -12,7 +13,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-#include <strings.h>
 #include <string>
 #include <vector>
 
@@ -30,9 +30,7 @@ constexpr u32 cRatePresets[] = { 8000, 11025, 16000, 22050, 32000, 44100, 48000 
 
 bool IsNativeWaveFile(const sead::SafeString& path)
 {
-    const char* pathStr = path.cstr();
-    const char* dot = strrchr(pathStr, '.');
-    return dot && (strcasecmp(dot, ".bcwav") == 0 || strcasecmp(dot, ".bfwav") == 0);
+    return MatchesInnerFileExtension(path.cstr(), InnerFileKind::Wave);
 }
 
 void FormatRate(char* buffer, size_t size, u32 rate, bool isSource)

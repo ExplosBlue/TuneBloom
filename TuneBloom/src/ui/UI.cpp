@@ -7459,9 +7459,7 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
             if (dotPos != -1)
                 sFileName.trim(dotPos);
 
-            const char* pathStr = sRiffWaveInfo.path.cstr();
-            const char* dot = strrchr(pathStr, '.');
-            sIsNative = dot && (strcasecmp(dot, ".bcwav") == 0 || strcasecmp(dot, ".bfwav") == 0);
+            sIsNative = MatchesInnerFileExtension(sRiffWaveInfo.path.cstr(), InnerFileKind::Wave);
 
             if (sIsNative)
             {

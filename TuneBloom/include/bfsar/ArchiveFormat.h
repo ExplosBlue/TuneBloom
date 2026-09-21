@@ -4,6 +4,7 @@
 #include <basis/seadTypes.h>
 #include <prim/seadEndian.h>
 
+#include <cctype>
 #include <cstring>
 
 enum class ArchiveFormat
@@ -191,4 +192,48 @@ inline const InnerFileFormatInfo* FindInnerFileFormat(const void* signature)
 inline bool MatchesInnerFileKind(const void* signature, InnerFileKind kind)
 {
     return FindInnerFileFormat(signature, kind) != nullptr;
+}
+
+inline bool EqualsIgnoreCase(const char* left, const char* right)
+{
+    while (*left && *right)
+    {
+        if (tolower((unsigned char)*left) != tolower((unsigned char)*right))
+            return false;
+
+        left++;
+        right++;
+    }
+
+    return *left == *right;
+}
+
+inline const InnerFileFormatInfo* FindInnerFileFormatByExtension(const char* extension, InnerFileKind kind)
+{
+    if (!extension)
+        return nullptr;
+
+    if (*extension == '.')
+        extension++;
+
+    for (const auto& info : cInnerFileFormatTable)
+    {
+        if (info.kind != kind)
+            continue;
+
+        if (EqualsIgnoreCase(extension, info.extension))
+            return &info;
+    }
+
+    return nullptr;
+}
+
+inline bool MatchesInnerFileExtension(const char* path, InnerFileKind kind)
+{
+    if (!path)
+        return false;
+
+    const char* extension = strrchr(path, '.');
+
+    return extension && FindInnerFileFormatByExtension(extension, kind) != nullptr;
 }

@@ -215,6 +215,10 @@ void DrawPlayersUI();
 
 void DrawPlayerUI();
 
+bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
+                 bool seekable, bool allowDrag,
+                 f32 loopStartFrac, f32 loopEndFrac, f32& outSeekFraction);
+
 //
 using ItemPropertiesCallback = void (*)(bool clear, Item* item, bool* validate);
 using InstanciateItemCallback = Item* (*)();

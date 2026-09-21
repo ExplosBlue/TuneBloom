@@ -3,6 +3,7 @@
 
 #include <ui/OutputMeter.h>
 #include <ui/PopupMgr.h>
+#include <ui/WaveImportPanel.h>
 
 #include <theme/SystemTheme.h>
 
@@ -1997,9 +1998,9 @@ void DrawUI()
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (ImGui::BeginPopupModal(ICON_LC_SAVE " Save ?###Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal(ICON_LC_SAVE " Save?###Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("Do you want to save the current file ?");
+        ImGui::Text("Do you want to save the current file?");
         ImGui::Separator();
 
         ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 3.0f) / 3.0f, 0.0f);
@@ -2057,7 +2058,7 @@ void DrawUI()
         ImVec2 c = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(c, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Save Names ?###MetadataWarning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal("Save Names?###MetadataWarning", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::Text(ICON_LC_TRIANGLE_ALERT " This archive has named instruments or waves,\n"
                                                "but metadata saving is disabled for this archive.\n"
@@ -2109,7 +2110,7 @@ void DrawUI()
         ImVec2 c = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(c, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("File In Use ?###SaveFileInUse", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal("File In Use?###SaveFileInUse", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::Text(ICON_LC_TRIANGLE_ALERT "The file is currently in use by another program.");
 
@@ -2344,6 +2345,8 @@ void DrawUI()
     DrawExportConfirmPopup();
     DrawMidiExportFormatPopup();
     DrawExportProgressPopup();
+
+    WaveImportTick();
 }
 
 static void SanitizeFilenameInPlace(sead::BufferedSafeString *s)
@@ -7294,734 +7297,6 @@ void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
         ImGui::EndDisabled();
 }
 
-static bool IsNativeWaveFile_(const sead::SafeString& path)
-{
-    const char* pathStr = path.cstr();
-    const char* dot = strrchr(pathStr, '.');
-    return dot && (strcasecmp(dot, ".bcwav") == 0 || strcasecmp(dot, ".bfwav") == 0);
-}
-
-namespace {
-
-struct ImportPreviewCache
-{
-    sead::FixedSafeString<512> cachedPath;
-    DecodedPcm pcm;
-    ImGui::LoopWaveformState waveformState;
-    WaveFile* previewWave = nullptr;
-    bool hasDecoded = false;
-    bool previewBuilt = false;
-    bool previewStale = false;
-    enum class PreviewMode { None, Full, Loop } previewMode = PreviewMode::None;
-
-    enum class LoopMode : s32 { DetectFromWav = 0, Disabled = 1, Manual = 2 };
-    LoopMode loopMode = LoopMode::DetectFromWav;
-    bool sourceHadLoop = false;
-
-    u32 workingLoopStart = 0, workingLoopEnd = 0;
-    bool workingLoopInit = false;
-    double origLoopFracStart = 0.0, origLoopFracEnd = 1.0;
-    double manualLoopFracStart = 0.0, manualLoopFracEnd = 1.0;
-
-    u32 startOffsetSamples = 0;
-
-    u32 targetSampleRate = 0;
-    float speedMultiplier = 1.0f;
-    bool normalizeEnabled = false;
-    float normalizeTargetDb = 0.0f;
-    AudioProcessing::ChannelMode channelMode = AudioProcessing::ChannelMode::Stereo;
-    s32 channelIndexFor3Plus = 0;
-
-    bool derivedDirty = true;
-    std::vector<std::vector<float>> workingChannels;
-    std::vector<float> mono;
-    u32 workingSampleRate = 0;
-    u32 period = 0;
-
-    void ensureDecoded(const WaveFile::RiffWaveInfo& info)
-    {
-        if (hasDecoded && std::strcmp(cachedPath.cstr(), info.path.cstr()) == 0)
-            return;
-
-        pcm = decodePcmForPreview(info);
-        cachedPath.copy(info.path.cstr());
-        hasDecoded = true;
-        previewBuilt = false;
-        previewStale = false;
-        previewMode = PreviewMode::None;
-        loopMode = LoopMode::DetectFromWav;
-        sourceHadLoop = info.isLoop;
-        waveformState = ImGui::LoopWaveformState{};
-        targetSampleRate = pcm.isValid() ? pcm.sampleRate : 0;
-        speedMultiplier = 1.0f;
-        normalizeEnabled = false;
-        normalizeTargetDb = 0.0f;
-        channelMode = AudioProcessing::ChannelMode::Stereo;
-        channelIndexFor3Plus = 0;
-        workingLoopInit = false;
-        derivedDirty = true;
-        startOffsetSamples = 0;
-        manualLoopFracStart = 0.0;
-        manualLoopFracEnd = 1.0;
-
-        const double sc = pcm.isValid() ? static_cast<double>(pcm.sampleCount) : 0.0;
-        origLoopFracStart = sc > 0.0 ? static_cast<double>(info.loopStartFrame) / sc : 0.0;
-        origLoopFracEnd = sc > 0.0 ? static_cast<double>(info.loopEndFrame) / sc : 1.0;
-    }
-
-    bool isUnmodified() const
-    {
-        return targetSampleRate == pcm.sampleRate && speedMultiplier == 1.0f && !normalizeEnabled && channelMode == AudioProcessing::ChannelMode::Stereo && channelIndexFor3Plus == 0 && startOffsetSamples == 0;
-    }
-
-    void setStartOffsetSamples(u32 newOffset)
-    {
-        newOffset = std::min<u32>(newOffset, pcm.sampleCount > 0 ? pcm.sampleCount - 1 : 0);
-        if (newOffset == startOffsetSamples)
-            return;
-
-        if (loopMode == LoopMode::Manual && workingLoopInit)
-        {
-            const u32 oldTrimmedLen = (pcm.sampleCount > startOffsetSamples) ? (pcm.sampleCount - startOffsetSamples) : 0;
-            const u32 newTrimmedLen = (pcm.sampleCount > newOffset) ? (pcm.sampleCount - newOffset) : 0;
-
-            if (oldTrimmedLen > 0 && newTrimmedLen > 0)
-            {
-                const double origPosStart = startOffsetSamples + manualLoopFracStart * oldTrimmedLen;
-                const double origPosEnd = startOffsetSamples + manualLoopFracEnd * oldTrimmedLen;
-
-                manualLoopFracStart = std::min(1.0, std::max(0.0, (origPosStart - newOffset) / newTrimmedLen));
-                manualLoopFracEnd = std::min(1.0, std::max(0.0, (origPosEnd - newOffset) / newTrimmedLen));
-            }
-        }
-
-        startOffsetSamples = newOffset;
-        derivedDirty = true;
-    }
-
-    std::pair<u32, u32> detectFromWavLoop(u32 totalSamples) const
-    {
-        double fracStart = 0.0, fracEnd = 1.0;
-        const u32 origTrimmedLen = (pcm.sampleCount > startOffsetSamples) ? (pcm.sampleCount - startOffsetSamples) : 0;
-        
-        if (origTrimmedLen > 0)
-        {
-            const double origPosStart = origLoopFracStart * pcm.sampleCount;
-            const double origPosEnd = origLoopFracEnd * pcm.sampleCount;
-            fracStart = (origPosStart - startOffsetSamples) / static_cast<double>(origTrimmedLen);
-            fracEnd = (origPosEnd - startOffsetSamples) / static_cast<double>(origTrimmedLen);
-        }
-
-        fracStart = std::min(1.0, std::max(0.0, fracStart));
-        fracEnd = std::min(1.0, std::max(0.0, fracEnd));
-
-        u32 ls = static_cast<u32>(std::lround(fracStart * totalSamples));
-        u32 le = static_cast<u32>(std::lround(fracEnd * totalSamples));
-
-        if (le > totalSamples)
-            le = totalSamples;
-        
-        if (totalSamples > 0 && ls >= le)
-            ls = le > 0 ? le - 1 : 0;
-        
-        return {ls, le};
-    }
-
-    u32 crossfadeSamples(u32 ls, u32 le) const
-    {
-        s32 xf = static_cast<s32>(waveformState.crossfadeMs / 1000.0f * workingSampleRate);
-        const s32 lenM1 = (le > ls) ? static_cast<s32>(le - ls - 1) : -1;
-        xf = std::min({ xf, static_cast<s32>(ls), lenM1 });
-        return xf > 0 ? static_cast<u32>(xf) : 0u;
-    }
-
-    std::vector<std::vector<float>> bakedChannels(bool isLoop, u32 ls, u32 le, bool equalPower) const
-    {
-        std::vector<std::vector<float>> out = workingChannels;
-        const u32 xf = crossfadeSamples(ls, le);
-        if (!isLoop || xf == 0)
-            return out;
-
-        constexpr double kPi = 3.14159265358979323846;
-        for (auto& d : out)
-        {
-            if (le > d.size())
-                continue;
-            for (u32 k = 0; k < xf; k++)
-            {
-                const u32 tail = le - xf + k;
-                const u32 lead = ls - xf + k;
-                const double t = static_cast<double>(k + 1) / static_cast<double>(xf + 1);
-                const double gOut = equalPower ? std::cos(t * kPi / 2.0) : (1.0 - t);
-                const double gIn  = equalPower ? std::sin(t * kPi / 2.0) : t;
-                d[tail] = static_cast<float>(d[tail] * gOut + d[lead] * gIn);
-            }
-        }
-        return out;
-    }
-
-    void rebuildDerived(bool isNative)
-    {
-        const u32 oldLen = static_cast<u32>(mono.size());
-        workingSampleRate = pcm.sampleRate;
-
-        std::vector<std::vector<float>> trimmed = pcm.channels;
-        if (startOffsetSamples > 0)
-        {
-            for (auto& ch : trimmed)
-            {
-                const u32 off = std::min<u32>(startOffsetSamples, static_cast<u32>(ch.size()));
-                ch.erase(ch.begin(), ch.begin() + off);
-            }
-        }
-
-        if (isNative || isUnmodified())
-        {
-            workingChannels = trimmed;
-        }
-        else
-        {
-            if (static_cast<u32>(trimmed.size()) > 2 && channelIndexFor3Plus > 0)
-                workingChannels = AudioProcessing::selectChannelByIndex(trimmed, static_cast<u32>(channelIndexFor3Plus));
-            else
-                workingChannels = AudioProcessing::selectChannels(trimmed, channelMode);
-
-            if (speedMultiplier != 1.0f)
-                workingChannels = AudioProcessing::applySpeed(workingChannels, speedMultiplier).channels;
-
-            if (targetSampleRate != 0 && targetSampleRate != pcm.sampleRate)
-            {
-                for (auto& ch : workingChannels)
-                    ch = AudioProcessing::resample(ch, pcm.sampleRate, targetSampleRate);
-                workingSampleRate = targetSampleRate;
-            }
-
-            if (normalizeEnabled)
-                workingChannels = AudioProcessing::normalizeChannels(workingChannels, true, normalizeTargetDb).channels;
-        }
-
-        if (workingChannels.empty())
-            mono.clear();
-        else if (workingChannels.size() == 1)
-            mono = workingChannels[0];
-        else
-        {
-            mono.assign(workingChannels[0].size(), 0.0f);
-            const float invN = 1.0f / static_cast<float>(workingChannels.size());
-            for (size_t i = 0; i < mono.size(); i++)
-            {
-                float s = 0.0f;
-                for (const auto& ch : workingChannels) s += ch[i];
-                mono[i] = s * invN;
-            }
-        }
-
-        period = mono.empty() ? 0u : LoopAnalysis::estimatePeriod(mono, workingSampleRate);
-
-        const u32 newLen = static_cast<u32>(mono.size());
-
-        if (loopMode == LoopMode::Manual && workingLoopInit)
-        {
-            const double fracStart = std::min(1.0, std::max(0.0, manualLoopFracStart));
-            const double fracEnd = std::min(1.0, std::max(0.0, manualLoopFracEnd));
-            workingLoopStart = static_cast<u32>(std::lround(fracStart * newLen));
-            workingLoopEnd = static_cast<u32>(std::lround(fracEnd * newLen));
-            if (workingLoopEnd > newLen) workingLoopEnd = newLen;
-            if (newLen > 0 && workingLoopStart >= workingLoopEnd)
-                workingLoopStart = workingLoopEnd > 0 ? workingLoopEnd - 1 : 0;
-        }
-        else
-        {
-            const auto lp = detectFromWavLoop(newLen);
-            workingLoopStart = lp.first;
-            workingLoopEnd = lp.second;
-        }
-
-        workingLoopInit = true;
-
-        if (oldLen > 0 && newLen > 0 && oldLen != newLen && waveformState.viewInitialized)
-        {
-            const double r = static_cast<double>(newLen) / static_cast<double>(oldLen);
-            u32 vs = static_cast<u32>(waveformState.viewStart * r);
-            u32 ve = static_cast<u32>(waveformState.viewEnd * r);
-            if (ve > newLen) ve = newLen;
-            if (vs >= ve) { vs = 0; ve = newLen; }
-            waveformState.viewStart = vs;
-            waveformState.viewEnd = ve;
-        }
-
-        derivedDirty = false;
-    }
-};
-}
-
-static ImportPreviewCache sImportCache;
-
-static std::string FinalizeImportInfoForCommit(WaveFile::RiffWaveInfo *info)
-{
-    if (!info || !sImportCache.hasDecoded)
-        return {};
-
-    if (IsNativeWaveFile_(info->path))
-        return {};
-
-    if (std::strcmp(sImportCache.cachedPath.cstr(), info->path.cstr()) != 0)
-        return {};
-
-    if (sImportCache.workingChannels.empty())
-        return {};
-
-    const bool isLoop = info->isLoop;
-    const u32 ls = sImportCache.workingLoopStart;
-    u32 le = sImportCache.workingLoopEnd;
-    const u32 workingLen = static_cast<u32>(sImportCache.workingChannels[0].size());
-
-    const bool manualLoop = (sImportCache.loopMode == ImportPreviewCache::LoopMode::Manual);
-    const bool bakeNeeded = isLoop && manualLoop && sImportCache.crossfadeSamples(ls, le) > 0;
-    const bool truncateNeeded = isLoop && le < workingLen;
-
-    if (sImportCache.isUnmodified() && !bakeNeeded && !truncateNeeded)
-        return {};
-
-    char tempPathBuf[600];
-    snprintf(tempPathBuf, sizeof(tempPathBuf), "%s.loopbloom_processed.wav", sImportCache.cachedPath.cstr());
-
-    std::vector<std::vector<float>> baked = sImportCache.bakedChannels(manualLoop, ls, le, sImportCache.waveformState.equalPowerCurve);
-
-    if (truncateNeeded)
-    {
-        for (auto &ch : baked)
-            if (ch.size() > le)
-                ch.resize(le);
-    }
-
-    std::string written = TempWavWriter::write(baked, sImportCache.workingSampleRate, isLoop, ls, le, tempPathBuf);
-
-    if (written.empty())
-        return {};
-
-    info->path.copy(written.c_str());
-    WaveFile::readRiffWavInfo(info);
-
-    info->isLoop = isLoop;
-    info->loopStartFrame = ls;
-    info->loopEndFrame = le;
-
-    return written;
-}
-
-void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)
-{
-    ImportPreviewCache& sCache = sImportCache;
-
-    const bool isNative = IsNativeWaveFile_(info->path);
-    sCache.ensureDecoded(*info);
-
-    if (!sCache.pcm.isValid())
-    {
-        ComboScroll("Encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
-        ImGui::Separator();
-        DrawWaveLoopInfo(info->isLoop, info->loopStartFrame, info->loopEndFrame,
-                          info->sampleCount, info->sampleRate, true, nullptr, true);
-        return;
-    }
-
-    {
-        const char* p = info->path.cstr();
-        const char* fslash = strrchr(p, '/');
-        const char* bslash = strrchr(p, '\\');
-        const char* base = (fslash > bslash ? fslash : bslash);
-        base = base ? base + 1 : p;
-        const u32 nch = static_cast<u32>(sCache.pcm.channels.size());
-        const double durSec = sCache.pcm.sampleRate ? static_cast<double>(sCache.pcm.sampleCount) / sCache.pcm.sampleRate : 0.0;
-        ImGui::TextDisabled("%s  -  %u Hz  -  %s  -  %.2fs", base, sCache.pcm.sampleRate, nch == 1 ? "mono" : nch == 2 ? "stereo" : "multi-ch", durSec);
-    }
-    ImGui::Separator();
-
-    bool rebuiltThisFrame = false;
-    if (sCache.derivedDirty) { sCache.rebuildDerived(isNative); rebuiltThisFrame = true; }
-
-    const std::vector<float>& mono = sCache.mono;
-    const u32 workingSampleRate = sCache.workingSampleRate;
-    const u32 totalSamples = static_cast<u32>(mono.size());
-    const u32 period = sCache.period;
-
-    using LoopMode = ImportPreviewCache::LoopMode;
-    const bool manualLoop = (sCache.loopMode == LoopMode::Manual);
-    const bool loopActive = manualLoop || (sCache.loopMode == LoopMode::DetectFromWav && sCache.sourceHadLoop);
-    const bool showLoop = loopActive;
-    const bool editable = manualLoop;
-
-    u32 loopStart = sCache.workingLoopStart;
-    u32 loopEnd = sCache.workingLoopEnd;
-
-    char readout[96];
-    readout[0] = '\0';
-    if (showLoop)
-    {
-        const u32 len = (loopEnd > loopStart) ? (loopEnd - loopStart) : 0;
-        const double loopMs = workingSampleRate ? static_cast<double>(len) / workingSampleRate * 1000.0 : 0.0;
-        if (period) snprintf(readout, sizeof(readout), "loop %.1f ms  -  %u smp  -  %.2f periods",
-                             loopMs, len, static_cast<double>(len) / period);
-        else        snprintf(readout, sizeof(readout), "loop %.1f ms  -  %u smp", loopMs, len);
-    }
-
-    float playheadSample = -1.0f;
-    if (sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == sCache.previewWave)
-        playheadSample = static_cast<float>(sSoundPlayer.getPlaySamplePosition(true));
-
-    bool changed = ImGui::LoopWaveformEditor("import", sCache.waveformState, mono, workingSampleRate,
-                                              loopStart, loopEnd, playheadSample,
-                                              showLoop, editable,
-                                              showLoop ? readout : nullptr, ImVec2(0.0f, 150.0f));
-
-
-    auto rebuildPreview = [&]() {
-
-        const bool manualNow = (sCache.loopMode == LoopMode::Manual);
-        const bool loopActiveNow = manualNow
-            || (sCache.loopMode == LoopMode::DetectFromWav && sCache.sourceHadLoop);
-
-        DecodedPcm previewPcm;
-        previewPcm.channels = sCache.bakedChannels(manualNow, loopStart, loopEnd, sCache.waveformState.equalPowerCurve);
-        previewPcm.sampleRate = workingSampleRate;
-
-        if (loopActiveNow && !previewPcm.channels.empty())
-        {
-            const u32 len = static_cast<u32>(previewPcm.channels[0].size());
-            if (loopEnd >= len && loopEnd > loopStart)
-            {
-                const u32 guard = std::min<u32>(loopEnd - loopStart, 256u);
-                for (auto& ch : previewPcm.channels)
-                {
-                    ch.reserve(len + guard);
-                    for (u32 i = 0; i < guard; i++)
-                        ch.push_back(ch[loopStart + i]);
-                }
-            }
-        }
-        previewPcm.sampleCount = previewPcm.channels.empty() ? 0u : static_cast<u32>(previewPcm.channels[0].size());
-        if (!sCache.previewWave)
-            sCache.previewWave = new WaveFile;
-        sCache.previewWave->setupPreviewPcm16(previewPcm, loopActiveNow, loopStart, loopEnd);
-        sCache.previewBuilt = true;
-        sCache.previewStale = false;
-    };
-    auto ensurePreviewFresh = [&]() {
-        if (!sCache.previewBuilt || sCache.previewStale)
-        {
-            sSoundPlayer.stopAllPlayers(true);
-            rebuildPreview();
-        }
-    };
-
-    auto restartPreview = [&]() {
-        sSoundPlayer.stopAllPlayers(true);
-        rebuildPreview();
-        const u32 off = (sCache.previewMode == ImportPreviewCache::PreviewMode::Loop) ? loopStart : 0u;
-        sSoundPlayer.playWaveFile(*sCache.previewWave, -1, nullptr, off, false);
-    };
-
-    if (ImGui::Button(ICON_LC_PLAY " Preview"))
-    {
-        ensurePreviewFresh();
-        sSoundPlayer.playWaveFile(*sCache.previewWave, -1, nullptr, 0, false);
-        sCache.previewMode = ImportPreviewCache::PreviewMode::Full;
-    }
-    ImGui::SameLine();
-    if (!loopActive) ImGui::BeginDisabled();
-    if (ImGui::Button(ICON_LC_REPEAT " Loop"))
-    {
-        ensurePreviewFresh();
-        sSoundPlayer.playWaveFile(*sCache.previewWave, -1, nullptr, loopStart, false);
-        sCache.previewMode = ImportPreviewCache::PreviewMode::Loop;
-    }
-    if (!loopActive) ImGui::EndDisabled();
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_LC_CIRCLE_STOP " Stop"))
-    {
-        sSoundPlayer.stopAllPlayers(true);
-        sCache.previewMode = ImportPreviewCache::PreviewMode::None;
-    }
-
-    ImGui::SeparatorText("Output format");
-    {
-        const float kLabelW = 120.0f;
-        const float kCtrlW  = 210.0f;
-        auto field = [&](const char* label, const char* tip = nullptr) {
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(label);
-            if (tip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
-            ImGui::SameLine(kLabelW);
-            ImGui::SetNextItemWidth(kCtrlW);
-        };
-
-        field("Encoding", "How the sample is stored in the bank/archive.");
-        ComboScroll("##encoding", (s32*)encoding, WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
-
-        // Sample rate
-        static const u32 kRatePresets[] = { 8000, 11025, 16000, 22050, 32000, 44100, 48000 };
-        char rateLabel[40];
-        if (sCache.targetSampleRate == sCache.pcm.sampleRate)
-            snprintf(rateLabel, sizeof(rateLabel), "%u Hz (source)", sCache.targetSampleRate);
-        else
-            snprintf(rateLabel, sizeof(rateLabel), "%u Hz", sCache.targetSampleRate);
-        field("Sample rate", "Audio is resampled to this rate on import.");
-        if (ImGui::BeginCombo("##rate", rateLabel))
-        {
-            char srcL[48]; snprintf(srcL, sizeof(srcL), "%u Hz (source)", sCache.pcm.sampleRate);
-            if (ImGui::Selectable(srcL, sCache.targetSampleRate == sCache.pcm.sampleRate))
-            { sCache.targetSampleRate = sCache.pcm.sampleRate; sCache.derivedDirty = true; }
-            for (size_t i = 0; i < IM_ARRAYSIZE(kRatePresets); i++)
-            {
-                if (kRatePresets[i] == sCache.pcm.sampleRate) continue;
-                char label[32]; snprintf(label, sizeof(label), "%u Hz", kRatePresets[i]);
-                if (ImGui::Selectable(label, kRatePresets[i] == sCache.targetSampleRate))
-                { sCache.targetSampleRate = kRatePresets[i]; sCache.derivedDirty = true; }
-            }
-            ImGui::EndCombo();
-        }
-
-        if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0f)
-        {
-            u32 effectiveRates[1 + IM_ARRAYSIZE(kRatePresets)];
-            int effectiveCount = 0;
-
-            effectiveRates[effectiveCount++] = sCache.pcm.sampleRate;
-
-            for (size_t i = 0; i < IM_ARRAYSIZE(kRatePresets); i++)
-                if (kRatePresets[i] != sCache.pcm.sampleRate)
-                    effectiveRates[effectiveCount++] = kRatePresets[i];
-
-            int curIdx = 0;
-
-            for (int i = 0; i < effectiveCount; i++)
-                if (effectiveRates[i] == sCache.targetSampleRate)
-                {
-                    curIdx = i;
-                    break;
-                }
-
-            int delta = -(int)ImGui::GetIO().MouseWheel;
-            int newIdx = curIdx + delta;
-
-            if (newIdx < 0)
-                newIdx = 0;
-            
-            if (newIdx >= effectiveCount)
-                newIdx = effectiveCount - 1;
-            
-            if (newIdx != curIdx)
-            {
-                sCache.targetSampleRate = effectiveRates[newIdx];
-                sCache.derivedDirty = true;
-            }
-            
-            ImGui::GetIO().MouseWheel = 0.0f;
-        }
-
-        // Channels
-        const u32 srcChannels = static_cast<u32>(sCache.pcm.channels.size());
-        const char* channelModeNames[] = { "Keep all channels", "Left only (mono)", "Right only (mono)", "Mix to mono" };
-        s32 channelModeIdx = static_cast<s32>(sCache.channelMode);
-        field("Channels", "Which channel(s) of the source to import.");
-        if (ComboScroll("##channels", &channelModeIdx, channelModeNames, IM_ARRAYSIZE(channelModeNames)))
-        { sCache.channelMode = static_cast<AudioProcessing::ChannelMode>(channelModeIdx); sCache.derivedDirty = true; }
-        if (srcChannels > 2)
-        {
-            field("Or pick track", "Source has more than 2 channels; import one specific track as mono.");
-            const ImU32 cStepS32 = 1;
-            if (ImGui::InputScalar("##picktrack", ImGuiDataType_S32, &sCache.channelIndexFor3Plus, &cStepS32))
-            {
-                sCache.channelIndexFor3Plus = std::max<s32>(0, std::min<s32>(sCache.channelIndexFor3Plus, srcChannels - 1));
-                sCache.derivedDirty = true;
-            }
-            ImGui::SameLine(); ImGui::TextDisabled("of %u", srcChannels);
-        }
-
-        // Start offset
-        {
-            const double maxOffsetMs = sCache.pcm.sampleRate && sCache.pcm.sampleCount > 0 ? static_cast<double>(sCache.pcm.sampleCount - 1) / sCache.pcm.sampleRate * 1000.0 : 0.0;
-            float offsetMs = sCache.pcm.sampleRate ? static_cast<float>(static_cast<double>(sCache.startOffsetSamples) / sCache.pcm.sampleRate * 1000.0) : 0.0f;
-
-            field("Start offset", "Trims leading samples from the source before any other processing.\nUseful for cutting off silence or a click at the start of a recording.");
-
-            if (ImGui::SliderFloat("##startoffset", &offsetMs, 0.0f, static_cast<float>(maxOffsetMs), "%.1f ms"))
-            {
-                const u32 newOffsetSamples = sCache.pcm.sampleRate ? static_cast<u32>(std::lround(static_cast<double>(offsetMs) / 1000.0 * sCache.pcm.sampleRate)) : 0u;
-                sCache.setStartOffsetSamples(newOffsetSamples);
-            }
-
-            ImGui::SameLine();
-            ImGui::TextDisabled("%u smp", sCache.startOffsetSamples);
-            ImGui::SameLine();
-
-            if (ImGui::SmallButton("Reset##offset"))
-                sCache.setStartOffsetSamples(0);
-        }
-
-        // Speed
-        field("Speed", "Varispeed: changes pitch and length together. 1.00x = unchanged.");
-        if (ImGui::SliderFloat("##speed", &sCache.speedMultiplier, 0.25f, 4.0f, "%.2fx"))
-            sCache.derivedDirty = true;
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Reset##speed")) { sCache.speedMultiplier = 1.0f; sCache.derivedDirty = true; }
-
-        // Normalize
-        field("Normalize", "Scale the peak level to a target. Off = leave levels untouched.");
-        if (ImGui::Checkbox("##norm", &sCache.normalizeEnabled))
-            sCache.derivedDirty = true;
-        ImGui::SameLine();
-        if (sCache.normalizeEnabled)
-        {
-            ImGui::SetNextItemWidth(kCtrlW - 30.0f);
-            if (ImGui::SliderFloat("##normdb", &sCache.normalizeTargetDb, -24.0f, 0.0f, "%.1f dBFS"))
-                sCache.derivedDirty = true;
-        }
-        else
-            ImGui::TextDisabled("off");
-    }
-
-    ImGui::SeparatorText("Loop");
-    {
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Loop mode");
-        ImGui::SameLine(120.0f);
-        ImGui::SetNextItemWidth(210.0f);
-        const char* loopModeNames[] = { "Detect from WAV", "Disabled", "Manual" };
-        s32 modeIdx = static_cast<s32>(sCache.loopMode);
-        if (ComboScroll("##loopmode", &modeIdx, loopModeNames, IM_ARRAYSIZE(loopModeNames)))
-        {
-            sCache.loopMode = static_cast<LoopMode>(modeIdx);
-            changed = true;
-
-            ImGui::SetWindowSize(ImVec2(ImGui::GetWindowWidth(), 0.0f));
-
-            if (sCache.loopMode == LoopMode::DetectFromWav)
-            {
-                const auto lp = sCache.detectFromWavLoop(totalSamples);
-                loopStart = lp.first;
-                loopEnd = lp.second;
-            }
-        }
-
-        if (sCache.loopMode == LoopMode::Manual)
-        {
-            const float kLabelW = 120.0f;
-            const float kCtrlW  = 160.0f;
-            auto field = [&](const char* label) {
-                ImGui::AlignTextToFramePadding();
-                ImGui::TextUnformatted(label);
-                ImGui::SameLine(kLabelW);
-                ImGui::SetNextItemWidth(kCtrlW);
-            };
-
-            const ImU32 cStepU32 = 1;
-            s32 lsField = static_cast<s32>(loopStart), leField = static_cast<s32>(loopEnd);
-            bool fieldsChanged = false;
-
-            field("Loop start");
-            if (ImGui::InputScalar("##loopstart", ImGuiDataType_S32, &lsField, &cStepU32)) fieldsChanged = true;
-            ImGui::SameLine(); ImGui::TextDisabled("smp");
-
-            field("Loop end");
-            if (ImGui::InputScalar("##loopend", ImGuiDataType_S32, &leField, &cStepU32)) fieldsChanged = true;
-            ImGui::SameLine(); ImGui::TextDisabled("smp");
-
-            if (fieldsChanged)
-            {
-                lsField = std::max<s32>(0, std::min<s32>(lsField, static_cast<s32>(totalSamples) - 1));
-                leField = std::max<s32>(lsField + 1, std::min<s32>(leField, static_cast<s32>(totalSamples)));
-                loopStart = static_cast<u32>(lsField); loopEnd = static_cast<u32>(leField); changed = true;
-            }
-
-            if (ImGui::Button("Suggest loop"))
-            {
-                LoopAnalysis::SuggestResult sug = LoopAnalysis::suggestLoop(mono, workingSampleRate);
-                if (sug.ok)
-                {
-                    loopStart = sug.loopStart; loopEnd = sug.loopEnd;
-                    ImGui::LoopWaveformZoomToLoop(sCache.waveformState, sug.loopStart, sug.loopEnd, totalSamples);
-                    changed = true;
-                }
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Snap to frame + period"))
-            {
-                LoopAnalysis::FrameSnapResult snap = LoopAnalysis::snapFramePeriod(loopStart, loopEnd, period, totalSamples);
-                loopStart = snap.loopStart; loopEnd = snap.loopEnd; changed = true;
-            }
-            ImGui::SameLine();
-            HelpMarker(
-                "Drag on the waveform: left-click sets the loop start, right-click sets the end.\n"
-                "Scroll to zoom; shift-scroll or middle-drag to pan.\n\n"
-                "Suggest loop: auto-detect a clean loop region.\n"
-                "Snap to frame + period: align the loop to the 14-sample DSP-ADPCM frame grid and a\n"
-                "whole number of waveform periods, for the cleanest seam.");
-
-            const u32 loopLenNow = (loopEnd > loopStart) ? (loopEnd - loopStart) : 0;
-            const u32 xfadeMaxSamples = std::min(loopStart, loopLenNow > 0 ? loopLenNow - 1 : 0);
-            const float xfadeMax = std::max(1.0f, workingSampleRate ? static_cast<float>(xfadeMaxSamples) / workingSampleRate * 1000.0f : 1.0f);
-
-            field("Crossfade");
-            if (ImGui::SliderFloat("##xfade", &sCache.waveformState.crossfadeMs, 0.0f, xfadeMax, "%.0f ms"))
-                changed = true;
-
-            ImGui::SameLine();
-
-            if (ImGui::Checkbox("Equal-power", &sCache.waveformState.equalPowerCurve))
-                changed = true;
-        }
-        else if (sCache.loopMode == LoopMode::DetectFromWav)
-        {
-            if (sCache.sourceHadLoop)
-                ImGui::TextDisabled("Using the loop embedded in the WAV (start %u, end %u smp).", loopStart, loopEnd);
-            else
-                ImGui::TextDisabled("This WAV has no embedded loop.");
-        }
-        else
-            ImGui::TextDisabled("The sample will import without a loop.");
-    }
-
-    sCache.workingLoopStart = loopStart;
-    sCache.workingLoopEnd = loopEnd;
-
-    if (manualLoop && totalSamples > 0)
-    {
-        sCache.manualLoopFracStart = std::min(1.0, std::max(0.0, (double)loopStart / totalSamples));
-        sCache.manualLoopFracEnd = std::min(1.0, std::max(0.0, (double)loopEnd / totalSamples));
-    }
-
-    info->isLoop = loopActive;
-    info->loopStartFrame = loopStart;
-    info->loopEndFrame = loopEnd;
-
-    {
-        const bool previewPlaying = sSoundPlayer.isActive()
-            && sSoundPlayer.getPlayingWaveFile() == sCache.previewWave;
-        const bool dragging = ImGui::IsMouseDown(ImGuiMouseButton_Left)
-            || ImGui::IsMouseDown(ImGuiMouseButton_Right);
-        if (!sCache.previewBuilt)
-            rebuildPreview();
-        else if (changed || rebuiltThisFrame)
-        {
-            if (!previewPlaying)      rebuildPreview();
-            else if (dragging)        sCache.previewStale = true;
-            else                      restartPreview();
-        }
-        else if (sCache.previewStale)
-        {
-            if (!previewPlaying)      rebuildPreview();
-            else if (!dragging)       restartPreview();
-        }
-    }
-
-    ImGui::Separator();
-    HelpMarker(
-        "To avoid multiple re-encodes which degrade audio quality,\nit is recommended to set your looping parameters upfront here.\n"
-        "Alternatively, import as Pcm16 which lets you edit parameters without re-encodes,\nthen convert to DspAdpcm once at the end."
-    );
-}
 
 InstanciateItemCallback CreateWaveFileFunc(bool clear)
 {
@@ -8038,6 +7313,7 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
         sAskForPath = true;
         sEncoding = WaveFile::Encoding::DspAdpcm;
         sIsNative = false;
+        ResetWaveImport();
     }
 
     if (sAskForPath)
@@ -8555,6 +7831,42 @@ static sead::FixedSafeString<32> FormatByteSize(u64 bytes)
     return out;
 }
 
+enum class WaveImportResult
+{
+    None,
+    Commit,
+    Cancel,
+};
+
+static WaveImportResult DrawWaveImportBody(const char* header, WaveFile::Encoding* encoding,
+                                           WaveFile::RiffWaveInfo* info, const char* commitLabel)
+{
+    if (ImGui::IsWindowAppearing())
+        ResetWaveImport();
+
+    ImGui::TextUnformatted(header);
+
+    DrawWaveImportInfo(encoding, info);
+
+    ImGui::Separator();
+
+    const ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
+
+    const bool commit = ImGui::Button(commitLabel, buttonSize);
+
+    ImGui::SameLine();
+
+    const bool cancelClicked = ImGui::Button("Cancel", buttonSize);
+
+    if (commit)
+        return WaveImportResult::Commit;
+
+    if (WaveImportConfirmCancel(cancelClicked))
+        return WaveImportResult::Cancel;
+
+    return WaveImportResult::None;
+}
+
 void DrawWaveFilesUI()
 {
     static SortState sSortState;
@@ -8695,15 +8007,11 @@ void DrawWaveFilesUI()
 
     if (ImGui::BeginPopupModal("WavImport", nullptr, ImGuiWindowFlags_NoTitleBar))
     {
-        ImGui::Text("Replace with '%s'", sWavFileName.cstr());
+        const WaveImportResult result = DrawWaveImportBody(
+            sead::FormatFixedSafeString<560>("Replace with '%s'", sWavFileName.cstr()).cstr(),
+            &sEncoding, &sRiffWaveInfo, "Replace");
 
-        DrawWaveImportInfo(&sEncoding, &sRiffWaveInfo);
-
-        ImGui::Separator();
-
-        ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
-
-        if (ImGui::Button("Replace", buttonSize))
+        if (result == WaveImportResult::Commit)
         {
             std::string tempPath = FinalizeImportInfoForCommit(&sRiffWaveInfo);
 
@@ -8714,20 +8022,12 @@ void DrawWaveFilesUI()
 
             if (!tempPath.empty())
                 ::remove(tempPath.c_str());
-            
+
             if (success)
                 sImportWaveFile->getName() = sWavFileName;
-
-            sImportWaveFile = nullptr;
-            sRiffWaveInfo.clear();
-            sWavFileName.clear();
-
-            ImGui::CloseCurrentPopup();
         }
 
-        ImGui::SameLine();
-
-        if (ImGui::Button("Cancel", buttonSize))
+        if (result != WaveImportResult::None)
         {
             sImportWaveFile = nullptr;
             sRiffWaveInfo.clear();
@@ -8777,15 +8077,11 @@ static void DrawWavRegionDropImport()
 
     if (ImGui::BeginPopupModal("WavRegionImport", nullptr, ImGuiWindowFlags_NoTitleBar))
     {
-        ImGui::Text("Import '%s' onto velocity region", sDropName.cstr());
+        const WaveImportResult result = DrawWaveImportBody(
+            sead::FormatFixedSafeString<560>("Import '%s' onto velocity region", sDropName.cstr()).cstr(),
+            &sDropEncoding, &sDropInfo, "Import");
 
-        DrawWaveImportInfo(&sDropEncoding, &sDropInfo);
-
-        ImGui::Separator();
-
-        ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);
-
-        if (ImGui::Button("Import", buttonSize))
+        if (result == WaveImportResult::Commit)
         {
             sSoundPlayer.stopAllPlayers(true);
 
@@ -8802,7 +8098,7 @@ static void DrawWavRegionDropImport()
             {
                 if (!tempPath.empty())
                     ::remove(tempPath.c_str());
-                
+
                 sBfsar.getWaveFileList().pushBack(wave);
                 sBfsar.updateList(sBfsar.getWaveFileList());
 
@@ -8815,20 +8111,13 @@ static void DrawWavRegionDropImport()
             {
                 if (!tempPath.empty())
                     ::remove(tempPath.c_str());
-                
+
                 delete wave;
                 PopupMgr::instance()->addPopup({ "Failed to import WAV file" });
             }
-
-            sDropTarget = nullptr;
-            sDropInfo.clear();
-            sDropName.clear();
-            ImGui::CloseCurrentPopup();
         }
 
-        ImGui::SameLine();
-
-        if (ImGui::Button("Cancel", buttonSize))
+        if (result != WaveImportResult::None)
         {
             sSoundPlayer.stopAllPlayers(true);
 

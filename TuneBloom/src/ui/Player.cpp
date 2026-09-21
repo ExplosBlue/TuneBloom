@@ -1,6 +1,7 @@
 #include <ui/UI.h>
 
 #include <ui/PopupMgr.h>
+#include <ui/TimeUtil.h>
 
 #include <bfsar/SoundPlayer.h>
 
@@ -129,17 +130,122 @@ SoundPlayer sSoundPlayer;
 
 static void DrawTimeText(f32 seconds)
 {
-    if (seconds < 0.0f)
-        seconds = 0.0f;
-    
-    u32 m = static_cast<u32>(seconds) / 60;
-    u32 s = static_cast<u32>(seconds) % 60;
-    u32 ms = static_cast<u32>(seconds * 1000.0f) % 1000;
+    char clock[16];
+    timeutil::FormatClock(clock, sizeof(clock), seconds);
 
-    ImGui::Text("%02u:%02u.%03u", m, s, ms);
+    ImGui::TextUnformatted(clock);
 }
 
-static void DrawPlaybackProgress()
+constexpr float cSeekBarRounding      = 2.0f;
+constexpr float cLoopMarkerThickness  = 2.0f;
+constexpr ImU32 cLoopStartMarkerColor = IM_COL32(0, 255, 0, 255);
+constexpr ImU32 cLoopEndMarkerColor   = IM_COL32(255, 0, 0, 255);
+
+bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
+                 bool seekable, bool allowDrag,
+                 f32 loopStartFrac, f32 loopEndFrac, f32& outSeekFraction)
+{
+    ImGui::PushID(id);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, cSeekBarRounding);
+    ImVec4 fillColor = gAccentColor;
+    fillColor.w = 1.0f;
+    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, fillColor);
+
+    ImVec2 barStart = ImGui::GetCursorScreenPos();
+    barStart.y -= 1;
+
+    if (determinate)
+    {
+        ImGui::ProgressBar(fraction, ImVec2(width, 0.0f), "");
+    }
+    else
+    {
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::ProgressBar(1.0f, ImVec2(width, 0.0f), "");
+        ImGui::PopStyleColor();
+    }
+
+    const f32 barHeight = ImGui::GetItemRectSize().y;
+
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID canSeekKey = ImGui::GetID("##canSeek");
+    bool canSeek = storage->GetBool(canSeekKey, false);
+
+    if (ImGui::IsItemHovered() && seekable)
+    {
+        canSeek = true;
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    const bool wantSeek = ImGui::IsMouseClicked(ImGuiMouseButton_Left) || (allowDrag && ImGui::IsMouseDragging(ImGuiMouseButton_Left));
+    bool seeked = false;
+
+    if (canSeek && wantSeek)
+    {
+        const f32 barEnd = barStart.x + width;
+        const f32 mouseX = sead::Mathf::clamp2(barStart.x, ImGui::GetMousePos().x, barEnd);
+        outSeekFraction = (mouseX - barStart.x) / width;
+        seeked = true;
+    }
+    else
+    {
+        canSeek = false;
+    }
+
+    storage->SetBool(canSeekKey, canSeek);
+
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar();
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+
+    if (loopStartFrac >= 0.0f)
+    {
+        const f32 markerX = barStart.x + loopStartFrac * width;
+        draw->AddLine(ImVec2(markerX, barStart.y), ImVec2(markerX, barStart.y + barHeight), cLoopStartMarkerColor, cLoopMarkerThickness);
+    }
+
+    if (loopEndFrac >= 0.0f)
+    {
+        const f32 markerX = barStart.x + loopEndFrac * width;
+        draw->AddLine(ImVec2(markerX, barStart.y), ImVec2(markerX, barStart.y + barHeight), cLoopEndMarkerColor, cLoopMarkerThickness);
+    }
+
+    ImGui::PopID();
+    return seeked;
+}
+
+static const WaveFile* ResolvePrimaryWaveFile(const Sound* sound)
+{
+    if (sound->getSoundType() == Sound::SoundType::Wave)
+        return static_cast<const WaveFile*>(sound->getWaveSoundInfo().getWaveFileRef().getItem());
+
+    if (sound->getSoundType() == Sound::SoundType::Strm && !sound->getStreamSoundInfo().getTrackList().isEmpty())
+    {
+        Sound::StreamSoundInfo::Track* track = static_cast<Sound::StreamSoundInfo::Track*>(sound->getStreamSoundInfo().getTrackList().front()->val());
+        return static_cast<const WaveFile*>(track->getWaveFileRef().getItem());
+    }
+
+    return nullptr;
+}
+
+struct PlaybackProgress
+{
+    f32 fraction = 0.0f;
+    f32 elapsedSec = 0.0f;
+    f32 totalSec = 0.0f;
+
+    bool determinate = true;
+    bool seekable = false;
+    bool allowDrag = false;
+    bool showTotalTime = true;
+
+    f32 loopStartFrac = -1.0f;
+    f32 loopEndFrac = -1.0f;
+};
+
+static PlaybackProgress BuildPlaybackProgress()
 {
     const bool isSeq = sSoundPlayer.isCurrentPlayerSequence();
     const bool active = sSoundPlayer.isActive();
@@ -147,11 +253,8 @@ static void DrawPlaybackProgress()
     u32 sampleCount = sSoundPlayer.getSampleCount();
     u32 sampleRate = sSoundPlayer.getSampleRate();
 
-    f32 fraction = 0.0f;
-    f32 elapsedSec = 0.0f;
-    f32 totalSec = 0.0f;
-
-    bool determinate = true;
+    PlaybackProgress progress;
+    progress.allowDrag = !isSeq;
 
     if (isSeq)
     {
@@ -159,168 +262,86 @@ static void DrawPlaybackProgress()
         {
             u32 tot = sSoundPlayer.getSeqTotalTicks();
             u32 cur = active ? sSoundPlayer.getSeqCurrentTick() : 0;
-            fraction = sead::Mathf::clamp2(0.0f, static_cast<f32>(cur) / static_cast<f32>(tot), 1.0f);
-            totalSec = sSoundPlayer.getSeqTotalSeconds();
-            elapsedSec = totalSec * fraction;
+            progress.fraction = sead::Mathf::clamp2(0.0f, static_cast<f32>(cur) / static_cast<f32>(tot), 1.0f);
+            progress.totalSec = sSoundPlayer.getSeqTotalSeconds();
+            progress.elapsedSec = progress.totalSec * progress.fraction;
         }
         else
         {
-            determinate = !active;
+            progress.determinate = !active;
         }
     }
     else
     {
         s32 currentSample = sSoundPlayer.getPlaySamplePosition(true);
-        fraction = sampleCount != 0 ? sead::Mathf::clamp2(0.0f, static_cast<f32>(currentSample) / static_cast<f32>(sampleCount), 1.0f) : 0.0f;
-        elapsedSec = sampleRate != 0 ? static_cast<f32>(currentSample) / static_cast<f32>(sampleRate) : 0.0f;
+        const u32 elapsedSamples = currentSample > 0 ? static_cast<u32>(currentSample) : 0;
+        progress.fraction = sampleCount != 0 ? sead::Mathf::clamp2(0.0f, static_cast<f32>(currentSample) / static_cast<f32>(sampleCount), 1.0f) : 0.0f;
+        progress.elapsedSec = static_cast<f32>(timeutil::SamplesToSeconds(elapsedSamples, sampleRate));
     }
 
-    const char *volIcon = ICON_LC_VOLUME_2;
+    if (!isSeq || !active)
+    {
+        const WaveFile *wave = nullptr;
+
+        if (active && sSoundPlayer.getPlayingWaveFile())
+        {
+            wave = sSoundPlayer.getPlayingWaveFile();
+        }
+        else if (sSelectedItem && (sSelectedItem->getItemType() == Item::ItemType::WaveFile || sSelectedItem->getItemType() == Item::ItemType::Sound))
+        {
+            if (sSelectedItem->getItemType() == Item::ItemType::WaveFile)
+                wave = static_cast<WaveFile *>(sSelectedItem);
+            else
+                wave = ResolvePrimaryWaveFile(static_cast<Sound *>(sSelectedItem));
+        }
+        else if (sSoundPlayer.getLastPlayedSound())
+        {
+            wave = ResolvePrimaryWaveFile(sSoundPlayer.getLastPlayedSound());
+        }
+
+        if (wave)
+        {
+            sampleCount = wave->getSampleCount();
+            sampleRate = wave->getSampleRate();
+            progress.totalSec = static_cast<f32>(timeutil::SamplesToSeconds(sampleCount, sampleRate));
+
+            if (wave->getIsLoop())
+                progress.loopStartFrac = wave->getOriginalLoopStartFrame() / static_cast<f32>(sampleCount);
+
+            progress.loopEndFrac = wave->getOriginalLoopEndFrame() / static_cast<f32>(sampleCount);
+        }
+    }
+
+    progress.seekable = active && progress.determinate && (!isSeq || sSoundPlayer.seqHasFiniteTotal());
+    progress.showTotalTime = !(isSeq && !sSoundPlayer.seqHasFiniteTotal());
+
+    return progress;
+}
+
+constexpr f32 cVolumeSliderWidth = 120.0f;
+
+static const char* MasterVolumeIcon()
+{
+    if (gMasterVolume <= 0.0f)
+        return ICON_LC_VOLUME_X;
 
     if (gMasterVolume <= 0.5f)
-        volIcon = ICON_LC_VOLUME_1;
-    
-    if (gMasterVolume <= 0.0f)
-        volIcon = ICON_LC_VOLUME_X;
+        return ICON_LC_VOLUME_1;
 
-    const f32 volSliderW = 120.0f;
-    const f32 spacing = ImGui::GetStyle().ItemSpacing.x;
+    return ICON_LC_VOLUME_2;
+}
 
-    DrawTimeText(elapsedSec);
-    ImGui::SameLine();
+static f32 MasterVolumeWidth()
+{
+    return ImGui::CalcTextSize(MasterVolumeIcon()).x + cVolumeSliderWidth;
+}
 
-    f32 reserveRight = ImGui::CalcTextSize("00:00.000").x + ImGui::CalcTextSize(volIcon).x + volSliderW + spacing * 4.0f;
-    f32 adjustSize = ImGui::GetContentRegionAvail().x - reserveRight;
-    if (adjustSize < 60.0f)
-        adjustSize = 60.0f;
-
-    {
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
-        ImVec4 fillCol = gAccentColor;
-        fillCol.w = 1.0f;
-        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, fillCol);
-
-        f32 barStartX = ImGui::GetCursorPosX();
-        ImVec2 barStartScreenPos = ImGui::GetCursorScreenPos();
-        barStartScreenPos.y -= 1;
-
-        if (determinate)
-        {
-            ImGui::ProgressBar(fraction, ImVec2(adjustSize, 0.0f), "");
-        }
-        else
-        {
-            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-            ImGui::ProgressBar(1.0f, ImVec2(adjustSize, 0.0f), "");
-            ImGui::PopStyleColor();
-        }
-
-        f32 barYSize = ImGui::GetItemRectSize().y;
-
-        bool hoverSeekable = active && determinate && (!isSeq || sSoundPlayer.seqHasFiniteTotal());
-        static bool sCanSeek = false;
-
-        if (ImGui::IsItemHovered() && hoverSeekable)
-        {
-            sCanSeek = true;
-            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-        }
-
-        bool wantSeek = ImGui::IsMouseClicked(ImGuiMouseButton_Left) || (!isSeq && ImGui::IsMouseDragging(ImGuiMouseButton_Left));
-        
-        if (sCanSeek && wantSeek)
-        {
-            f32 barEndX = adjustSize + barStartX;
-            f32 mouseX = ImGui::GetMousePos().x - ImGui::GetWindowPos().x;
-            mouseX = sead::Mathf::clamp2(barStartX, mouseX, barEndX);
-            sSoundPlayer.seek((mouseX - barStartX) / (barEndX - barStartX));
-        }
-        else
-        {
-            sCanSeek = false;
-        }
-
-        ImGui::PopStyleColor();
-        ImGui::PopStyleVar();
-
-        if (!isSeq || !active)
-        {
-            const WaveFile *wave = nullptr;
-
-            if (active && sSoundPlayer.getPlayingWaveFile())
-            {
-                wave = sSoundPlayer.getPlayingWaveFile();
-            }
-            else if (sSelectedItem && (sSelectedItem->getItemType() == Item::ItemType::WaveFile || sSelectedItem->getItemType() == Item::ItemType::Sound))
-            {
-                if (sSelectedItem->getItemType() == Item::ItemType::WaveFile)
-                {
-                    wave = static_cast<WaveFile *>(sSelectedItem);
-                }
-                else
-                {
-                    Sound *sound = static_cast<Sound *>(sSelectedItem);
-                    if (sound->getSoundType() == Sound::SoundType::Wave)
-                    {
-                        wave = static_cast<WaveFile *>(sound->getWaveSoundInfo().getWaveFileRef().getItem());
-                    }
-                    else if (sound->getSoundType() == Sound::SoundType::Strm && !sound->getStreamSoundInfo().getTrackList().isEmpty())
-                    {
-                        Sound::StreamSoundInfo::Track *track = static_cast<Sound::StreamSoundInfo::Track *>(sound->getStreamSoundInfo().getTrackList().front()->val());
-                        wave = static_cast<WaveFile *>(track->getWaveFileRef().getItem());
-                    }
-                }
-            }
-            else if (sSoundPlayer.getLastPlayedSound())
-            {
-                const Sound *sound = sSoundPlayer.getLastPlayedSound();
-                if (sound->getSoundType() == Sound::SoundType::Wave)
-                {
-                    wave = static_cast<const WaveFile *>(sound->getWaveSoundInfo().getWaveFileRef().getItem());
-                }
-                else if (sound->getSoundType() == Sound::SoundType::Strm && !sound->getStreamSoundInfo().getTrackList().isEmpty())
-                {
-                    Sound::StreamSoundInfo::Track *track = static_cast<Sound::StreamSoundInfo::Track *>(sound->getStreamSoundInfo().getTrackList().front()->val());
-                    wave = static_cast<const WaveFile *>(track->getWaveFileRef().getItem());
-                }
-            }
-
-            if (wave)
-            {
-                sampleCount = wave->getSampleCount();
-                sampleRate = wave->getSampleRate();
-                totalSec = sampleRate != 0 ? static_cast<f32>(sampleCount) / static_cast<f32>(sampleRate) : 0.0f;
-
-                ImDrawList *draw = ImGui::GetWindowDrawList();
-                f32 loopStartX = wave->getOriginalLoopStartFrame() / static_cast<f32>(sampleCount);
-                f32 loopEndX = wave->getOriginalLoopEndFrame() / static_cast<f32>(sampleCount);
-
-                if (wave->getIsLoop())
-                {
-                    draw->AddLine(
-                        ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y),
-                        ImVec2(barStartScreenPos.x + loopStartX * adjustSize, barStartScreenPos.y + barYSize), IM_COL32(0, 255, 0, 255), 2.0f);
-                }
-
-                draw->AddLine(
-                    ImVec2(barStartScreenPos.x + loopEndX * adjustSize, barStartScreenPos.y),
-                    ImVec2(barStartScreenPos.x + loopEndX * adjustSize, barStartScreenPos.y + barYSize), IM_COL32(255, 0, 0, 255), 2.0f);
-            }
-        }
-    }
-
-    ImGui::SameLine();
-    
-    if (isSeq && !sSoundPlayer.seqHasFiniteTotal())
-        ImGui::TextDisabled("%s", ICON_LC_REPEAT);
-    else
-        DrawTimeText(totalSec);
-
-    ImGui::SameLine();
+static void DrawMasterVolume()
+{
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(volIcon);
+    ImGui::TextUnformatted(MasterVolumeIcon());
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(volSliderW);
+    ImGui::SetNextItemWidth(cVolumeSliderWidth);
 
     int volPct = static_cast<int>(gMasterVolume * 100.0f + 0.5f);
 
@@ -334,7 +355,39 @@ static void DrawPlaybackProgress()
         SaveAudioConfig();
 }
 
-void DrawPlayerUI()
+static void DrawTransportBar(const PlaybackProgress& progress)
+{
+    const f32 spacing = ImGui::GetStyle().ItemSpacing.x;
+
+    DrawTimeText(progress.elapsedSec);
+    ImGui::SameLine();
+    const f32 reserveRight = ImGui::CalcTextSize("00:00.000").x + MasterVolumeWidth() + spacing * 4.0f;
+    f32 seekBarWidth = ImGui::GetContentRegionAvail().x - reserveRight;
+    if (seekBarWidth < 60.0f)
+        seekBarWidth = 60.0f;
+
+    f32 seekFrac = 0.0f;
+
+    if (DrawSeekBar("##transport", seekBarWidth, progress.fraction, progress.determinate, progress.seekable, progress.allowDrag, progress.loopStartFrac, progress.loopEndFrac, seekFrac))
+        sSoundPlayer.seek(seekFrac);
+
+    ImGui::SameLine();
+    if (!progress.showTotalTime)
+        ImGui::TextDisabled("%s", ICON_LC_REPEAT);
+    else
+        DrawTimeText(progress.totalSec);
+}
+
+static void DrawPlaybackProgress()
+{
+    const PlaybackProgress progress = BuildPlaybackProgress();
+
+    DrawTransportBar(progress);
+    ImGui::SameLine();
+    DrawMasterVolume();
+}
+
+static void DrawDebugPanels()
 {
     if (false)
     {
@@ -361,7 +414,10 @@ void DrawPlayerUI()
         }
         ImGui::End();
     }
+}
 
+static void DrawTransportWindow()
+{
     if (ImGui::Begin(ICON_LC_MUSIC " Player###PlayerWindow"))
     {
         ImGuiWindow* win = ImGui::GetCurrentWindow();
@@ -391,7 +447,6 @@ void DrawPlayerUI()
         }
 
         ImGui::SameLine();
-
         if (ImGui::ButtonEx(ICON_LC_SQUARE, ImVec2(0.0f, 0.0f), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle))
         {
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
@@ -411,22 +466,34 @@ void DrawPlayerUI()
         }
 
         ImGui::SameLine();
-
         DrawPlaybackProgress();
     }
     ImGui::End();
+}
 
+static void DrawPlayerParametersWindow()
+{
     if (ImGui::Begin(ICON_LC_SETTINGS_2 " Player Parameters###PlayerParamWindow"))
     {
         sSoundPlayer.drawParameters();
     }
     ImGui::End();
+}
 
+static void DrawSequenceVariablesWindow()
+{
     if (ImGui::Begin(ICON_LC_BINARY " Sequence Variables###SequenceVarWindow"))
     {
         sSoundPlayer.drawSeqVars();
     }
     ImGui::End();
+}
 
+void DrawPlayerUI()
+{
+    DrawDebugPanels();
+    DrawTransportWindow();
+    DrawPlayerParametersWindow();
+    DrawSequenceVariablesWindow();
     sSoundPlayer.update();
 }

@@ -1,4 +1,5 @@
 #include <ui/UI.h>
+#include <ui/WaveImportPanel.h>
 
 #include <bfsar/Sound.h>
 
@@ -1165,7 +1166,9 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
 
             ImGui::SameLine();
 
-            if (ImGui::Button("Cancel", buttonSize))
+            const bool cancelClicked = ImGui::Button("Cancel", buttonSize);
+
+            if (WaveImportConfirmCancel(cancelClicked))
             {
                 sInsertAfterItem = nullptr;
                 ImGui::CloseCurrentPopup();
@@ -1179,9 +1182,9 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
         if (ImGui::BeginPopupModal(ICON_LC_ALERT_TRIANGLE " Warning###References", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             if (sDeleteItem)
-                ImGui::Text("The Item '%s' is referenced by other Items\nDelete anyway ?", sDeleteItem->getFormattedName().cstr());
+                ImGui::Text("The Item '%s' is referenced by other Items\nDelete anyway?", sDeleteItem->getFormattedName().cstr());
             else
-                ImGui::Text("One or more items are referenced by other items.\nDelete anyway ?");
+                ImGui::Text("One or more items are referenced by other items.\nDelete anyway?");
             ImGui::Separator();
 
             ImVec2 buttonSize((ImGui::GetWindowContentRegionMax().x - ImGui::GetStyle().WindowPadding.x * 2.0f) / 2.0f, 0.0f);

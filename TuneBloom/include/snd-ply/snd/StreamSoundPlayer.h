@@ -157,6 +157,7 @@ public:
     void applyTvOutputParamForMultiChannel(snd::internal::OutputParam* pOutputParam, snd::internal::driver::Channel* pVoice, s32 channelIndex, snd::MixMode mixMode);
 
     void setTrackVolume(u32 trackBitFlag, f32 volume);
+    void setTrackDataVolume(u32 trackIndex, u8 volume);
 
     s32 getPlaySamplePosition(bool isOriginalSamplePosition) const;
 

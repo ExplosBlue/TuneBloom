@@ -1039,6 +1039,33 @@ void SoundPlayer::setVolume(f32 volume)
     }
 }
 
+void SoundPlayer::refreshSoundVolume(const Sound& sound)
+{
+    if (!isCurrentPlayer() || mPlayingSound != &sound)
+        return;
+
+    snd::internal::driver::SoundThreadLock lock;
+    mCurrentPlayer->setInitialVolume(static_cast<f32>(sound.getVolume()) / 127.0f);
+}
+
+void SoundPlayer::refreshStreamTrackVolume(const Sound::StreamSoundInfo::Track& track)
+{
+    if (!isCurrentPlayerStream() || !mPlayingSound)
+        return;
+
+    const Sound::StreamSoundInfo::Track::List& trackList = mPlayingSound->getStreamSoundInfo().getTrackList();
+
+    for (u32 i = 0; i < trackList.size(); i++)
+    {
+        if (trackList.nth(i)->val() != &track)
+            continue;
+
+        snd::internal::driver::SoundThreadLock lock;
+        mStreamPlayer.setTrackDataVolume(i, track.getVolume());
+        return;
+    }
+}
+
 void SoundPlayer::invalidateBankFile(const BankFile& bankFile)
 {
     stopAllBankNotes(true);

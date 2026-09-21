@@ -794,6 +794,15 @@ void StreamSoundPlayer::channelCallbackFunc(snd::internal::driver::Channel* drop
     channel->mVoice = nullptr;
 }
 
+void StreamSoundPlayer::setTrackDataVolume(u32 trackIndex, u8 volume)
+{
+    if (trackIndex >= mTrackCount)
+        return;
+
+    mStreamDataInfoTracks[trackIndex].volume = volume;
+    mTracks[trackIndex].volume = volume;
+}
+
 void StreamSoundPlayer::setTrackVolume(u32 trackBitFlag, f32 volume)
 {
     for (u32 trackNo = 0; trackNo < mTrackCount && trackBitFlag != 0; trackNo++, trackBitFlag >>= 1)

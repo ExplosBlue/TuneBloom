@@ -196,6 +196,7 @@ void DrawSoundPropertiesUI()
         if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cVolumeMin, &cVolumeMax))
         {
             sound->setVolume(volume);
+            sSoundPlayer.refreshSoundVolume(*sound);
             SetUnsavedChanges(true);
         }
     }
@@ -1303,6 +1304,7 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (ImGui::SliderScalar(sead::FormatFixedSafeString<32>("Volume (%.3f)###vol", static_cast<f32>(volume) / 127.0f).cstr(), ImGuiDataType_U8, &volume, &cVolumeMin, &cVolumeMax))
         {
             setVolume(volume);
+            sSoundPlayer.refreshStreamTrackVolume(*this);
             SetUnsavedChanges(true);
         }
     }

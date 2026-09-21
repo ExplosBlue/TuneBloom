@@ -83,6 +83,9 @@ public:
     f32 getVolume() const { return mVolume; }
     void setVolume(f32 volume);
 
+    void refreshSoundVolume(const Sound& sound);
+    void refreshStreamTrackVolume(const Sound::StreamSoundInfo::Track& track);
+
     const Sound* getPlayingSound() const { return mPlayingSound; }
     void resetPlayingSound() { mPlayingSound = nullptr; }
     const Sound* getLastPlayedSound() const { return mLastPlayedSound; }

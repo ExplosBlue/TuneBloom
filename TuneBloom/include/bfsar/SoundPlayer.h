@@ -12,6 +12,7 @@ class SoundPlayer
 {
 public:
     static const u32 cMaxTracks = 16;
+    static constexpr s32 cPlaybackErrorLength = 128;
 
 public:
     SoundPlayer()
@@ -53,6 +54,15 @@ public:
     void stopAllPlayers(bool stop);
     void stopAllPlayersWithoutLock(bool stop);
     void stopAllVoices();
+
+    static bool GetSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError);
+    static bool GetWaveFilePlaybackError(const WaveFile& wave, sead::BufferedSafeString* outError);
+
+    static bool CanPlaySound(const Sound& sound)
+    {
+        sead::FixedSafeString<cPlaybackErrorLength> error;
+        return !GetSoundPlaybackError(sound, &error);
+    }
 
     bool playSound(const Sound* sound, u32 startOffsetSample = 0);
     bool playLastSound();

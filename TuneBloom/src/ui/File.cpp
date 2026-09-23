@@ -1,4 +1,5 @@
 #include <ui/UI.h>
+#include <ui/Messages.h>
 
 #include <ui/PopupMgr.h>
 
@@ -359,7 +360,7 @@ bool OpenFile()
 
     if (!sBfsar.open(bfsarFile, fileSize, filePath, nullptr)) //? bfsarFile is freed here
     {
-        sead::FormatFixedSafeString<1024> msg("Your BFSAR file is corrupted beyond repair :(\n%s", PopupMgr::instance()->getCorruptInfo().cstr());
+        sead::FormatFixedSafeString<1024> msg(messages::archive::cCorruptFormat, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::SoundArchive), PopupMgr::instance()->getCorruptInfo().cstr());
         PopupMgr::instance()->addPopup({msg, nullptr});
         CloseFile();
         return false;

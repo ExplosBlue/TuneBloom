@@ -238,7 +238,7 @@ public:
         friend class Bfsar;
         friend class WaveFile;
 
-        friend bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound);
+        friend bool ReadStreamWaves(Sound* sound, const void* strmFile, u32 strmFileSize, const Sound* srcSound);
         friend bool opusstream::AttachStreamWaves(Sound *sound);
     };
 
@@ -320,6 +320,7 @@ public:
         , mChannels()
 
         , mIsStreamExtended(false)
+        , mIsFromStreamFile(false)
 
         , mUseOriginalData(false)
         , mOriginalData(nullptr)
@@ -474,6 +475,11 @@ public:
         return mIsStreamExtended;
     }
 
+    bool getIsFromStreamFile() const
+    {
+        return mIsFromStreamFile;
+    }
+
     const std::string& getMd5Hash() const
     {
         return mMd5Hash;
@@ -538,6 +544,7 @@ private:
     sead::ObjList<Channel> mChannels;
 
     bool mIsStreamExtended; //? If data already accounts for Stream Sounds
+    bool mIsFromStreamFile;
 
     bool mUseOriginalData;
     u8* mOriginalData;
@@ -558,6 +565,6 @@ private:
     friend class Bfsar;
     friend class BfwarFile;
 
-    friend bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound);
+    friend bool ReadStreamWaves(Sound* sound, const void* strmFile, u32 strmFileSize, const Sound* srcSound);
     friend bool opusstream::AttachStreamWaves(Sound *sound);
 };

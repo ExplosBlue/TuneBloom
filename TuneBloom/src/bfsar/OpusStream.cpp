@@ -6,6 +6,7 @@
 #include <bfsar/WaveFile.h>
 #include <bfsar/WaveFileEditDecode.h>
 
+#include <ui/Messages.h>
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
@@ -39,6 +40,60 @@ namespace opusstream
             return (p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3];
         }
 
+        bool findChunks(const u8 *base, u32 size, u32 *outInfoOffset, u32 *outDataOffset, u32 *outDataSize)
+        {
+            bool hasInfo = false;
+            bool hasData = false;
+
+            for (u32 o = 0; o + 8 <= size;)
+            {
+                u32 id = readLE32(base + o);
+                u32 chunkSize = readLE32(base + o + 4);
+
+                if (chunkSize > size - o - 8)
+                    chunkSize = size - o - 8;
+
+                if (id == cInfoChunkId && chunkSize >= 0x18)
+                {
+                    *outInfoOffset = o + 8;
+                    hasInfo = true;
+                }
+                else if (id == cDataChunkId)
+                {
+                    *outDataOffset = o + 8;
+                    *outDataSize = chunkSize;
+                    hasData = true;
+                    break;
+                }
+
+                o += 8 + chunkSize;
+            }
+
+            return hasInfo && hasData;
+        }
+
+    }
+
+    bool ReadInfoHeader(const void *data, u32 size, Info &outInfo)
+    {
+        if (!data)
+            return false;
+
+        const u8 *base = static_cast<const u8 *>(data);
+
+        u32 infoOffset = 0;
+        u32 dataOffset = 0;
+        u32 dataSize = 0;
+
+        if (!findChunks(base, size, &infoOffset, &dataOffset, &dataSize))
+            return false;
+
+        outInfo.channelCount = base[infoOffset + 0x01];
+        outInfo.sampleRate = readLE32(base + infoOffset + 0x04);
+        outInfo.preSkip = readLE32(base + infoOffset + 0x14);
+        outInfo.sampleCount = 0;
+
+        return outInfo.channelCount >= 1 && outInfo.channelCount <= 2;
     }
 
     bool IsOpusStream(const void *data, u32 size)
@@ -63,34 +118,8 @@ namespace opusstream
         u32 infoOffset = 0;
         u32 dataOffset = 0;
         u32 dataSize = 0;
-        bool hasInfo = false;
-        bool hasData = false;
 
-        for (u32 o = 0; o + 8 <= size;)
-        {
-            u32 id = readLE32(base + o);
-            u32 chunkSize = readLE32(base + o + 4);
-
-            if (chunkSize > size - o - 8)
-                chunkSize = size - o - 8;
-
-            if (id == cInfoChunkId && chunkSize >= 0x18)
-            {
-                infoOffset = o + 8;
-                hasInfo = true;
-            }
-            else if (id == cDataChunkId)
-            {
-                dataOffset = o + 8;
-                dataSize = chunkSize;
-                hasData = true;
-                break;
-            }
-
-            o += 8 + chunkSize;
-        }
-
-        if (!hasInfo || !hasData)
+        if (!findChunks(base, size, &infoOffset, &dataOffset, &dataSize))
             return fail("Not a valid OpusStream file (missing info/data chunk)");
 
         u8 channelCount = base[infoOffset + 0x01];
@@ -276,7 +305,7 @@ namespace opusstream
 
         if (!fileData)
         {
-            sead::FormatFixedSafeString<1024> msg("Couldn't load '%s'\nThis should be relative to your .bfsar file", strmSoundInfo.getPath().cstr());
+            sead::FormatFixedSafeString<1024> msg(messages::stream::cFileMissingFormat, strmSoundInfo.getPath().cstr(), GetInnerFileExtension(sBfsar.getFormat(), InnerFileKind::SoundArchive));
             PopupMgr::instance()->addPopup({msg, sound});
 
             return false;
@@ -320,6 +349,7 @@ namespace opusstream
 
             WaveFile *wave = new WaveFile();
             wave->mId = sBfsar.getWaveFileList().size();
+            wave->mIsFromStreamFile = true;
 
             wave->mEnableName = true;
             if (tracks.size() == 1)

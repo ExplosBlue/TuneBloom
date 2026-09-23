@@ -9,12 +9,32 @@
 #include <vector>
 
 #include <bfsar/Item.h>
+#include <ui/Messages.h>
 
 class PopupMgr
 {
     SEAD_SINGLETON_DISPOSER(PopupMgr);
 
 public:
+    enum class ErrorContext
+    {
+        Opening,
+        Saving
+    };
+
+    enum class Severity
+    {
+        Error,
+        Warning
+    };
+
+    struct ItemMessage
+    {
+        std::string text;
+        std::string detail;
+        Severity severity = Severity::Error;
+    };
+
     struct PopupInfo
     {
     private:
@@ -46,6 +66,7 @@ private:
 
 public:
     void addPopup(const PopupInfo& info);
+    void forgetItem(const Item* item);
     void update();
     void closeFile();
 
@@ -64,15 +85,32 @@ public:
         mCurrentProcessItem = item;
     }
 
+    void setErrorContext(ErrorContext context)
+    {
+        mErrorContext = context;
+    }
+
     Item* getCurrentProcessItem_()
     {
         return mCurrentProcessItem;
     }
 
-    void pushCurrentItemError(const sead::SafeString& error);
+    void pushCurrentItemError(const sead::SafeString& error, const char* detail = nullptr);
+    void pushCurrentItemWarning(const sead::SafeString& warning, const char* detail = nullptr);
+
+    void pushCurrentItemError(const messages::Message& message)
+    {
+        pushCurrentItemError(message.text, message.detail);
+    }
+
+    void pushCurrentItemWarning(const messages::Message& message)
+    {
+        pushCurrentItemWarning(message.text, message.detail);
+    }
 
 private:
-    void updateErrors_();
+    void pushCurrentItemMessage(const sead::SafeString& text, const char* detail, Severity severity);
+    void updateErrors();
 
 private:
     sead::FixedRingBuffer<PopupInfo, 10> mPopups;
@@ -81,6 +119,7 @@ private:
     sead::FixedSafeString<1024> mCorruptInfo;
 
     Item* mCurrentProcessItem;
+    ErrorContext mErrorContext;
 
     struct Cmp
     {
@@ -90,5 +129,5 @@ private:
         }
     };
 
-    std::map<Item*, std::vector<std::string>, Cmp> mProcessedErrors;
+    std::map<Item*, std::vector<ItemMessage>, Cmp> mProcessedErrors;
 };

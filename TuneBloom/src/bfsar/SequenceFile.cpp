@@ -7,6 +7,7 @@
 #include <snd/snd_SequenceSoundFileReader.h>
 #include <snd/DisposeCallbackMgr.h>
 
+#include <ui/Messages.h>
 #include <ui/UI.h>
 #include <imgui/imgui.h>
 #include <imgui/imgui_custom.h>
@@ -251,11 +252,8 @@ void SequenceFile::drawFileUI()
         if (!bankFile)
         {
             ImGui::EndDisabled();
-        }
 
-        if (bank && !bankFile && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone))
-        {
-            ImGui::SetTooltip("Bank has no file attached");
+            SetDisabledTooltip(bank ? messages::bank::cNoFileAttached : messages::reference::cNoBank);
         }
     }
 
@@ -2622,7 +2620,7 @@ MmlCommandBase* SequenceFile::parseCommand_(const std::string& str, const std::v
         const CommandInfo& cmdInfo = info.second;
         if (cmdInfo.version > sBfsar.getVersionForBfseq())
         {
-            errorMsg = "Command '" + cmdName + "' requires BFSEQ version >= " + std::format("0x{:08X}", cmdInfo.version);
+            errorMsg = std::format(messages::sequence::cCommandVersionFormat, cmdName, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Sequence), cmdInfo.version);
             errorMsg += " (Current: " + std::format("0x{:08X}", sBfsar.getVersionForBfseq()) + ")";
             return nullptr;
         }

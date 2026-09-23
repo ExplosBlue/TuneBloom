@@ -2,6 +2,7 @@
 
 #include <bfsar/OpusStream.h>
 
+#include <ui/Messages.h>
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
@@ -58,6 +59,116 @@ void SoundPlayer::stopAllVoices()
     snd::internal::driver::MultiVoiceMgr::instance()->stopAllVoices();
 }
 
+static bool GetSequenceSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError)
+{
+    if (!sound.getSequenceSoundInfo().getSequenceFileRef().isAttached())
+    {
+        outError->copy(messages::reference::cNoSequenceFile);
+        return true;
+    }
+
+    return false;
+}
+
+static bool GetStreamSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError)
+{
+    const Sound::StreamSoundInfo& streamSoundInfo = sound.getStreamSoundInfo();
+    const Sound::StreamSoundInfo::StreamType streamType = streamSoundInfo.getStreamType();
+
+    if (streamType != Sound::StreamSoundInfo::StreamType::NwStreamBinary && streamType != Sound::StreamSoundInfo::StreamType::Opus)
+    {
+        outError->format(messages::stream::cTypeUnsupportedFormat, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream));
+        return true;
+    }
+
+    const Sound::StreamSoundInfo::Track::List& trackList = streamSoundInfo.getTrackList();
+
+    if (trackList.isEmpty())
+    {
+        outError->copy(streamSoundInfo.getAllocateChannelCount() != 0 ? messages::stream::cFileNotLoaded : messages::stream::cNeedsTrack);
+        return true;
+    }
+
+    if (trackList.size() > cStrmTrackNum)
+    {
+        outError->format(messages::stream::cTrackLimitFormat, cStrmTrackNum);
+        return true;
+    }
+
+    if (streamType == Sound::StreamSoundInfo::StreamType::Opus)
+        return false;
+
+    for (u32 i = 0; i < trackList.size(); i++)
+    {
+        const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(trackList.nth(i)->val());
+
+        if (!track.getWaveFileRef().isAttached())
+        {
+            if (track.getChannels_().isEmpty())
+                outError->format(messages::stream::cTrackNoWaveFileFormat, i);
+            else
+                outError->copy(messages::stream::cFileNotLoaded);
+
+            return true;
+        }
+
+        const WaveFile& waveFile = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
+
+        if (waveFile.getChannels().isEmpty())
+        {
+            outError->format(messages::stream::cTrackWaveFileNoChannelsFormat, i);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool GetWaveSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError)
+{
+    const Item* waveFileItem = sound.getWaveSoundInfo().getWaveFileRef().getItem();
+
+    if (!waveFileItem)
+    {
+        outError->copy(messages::reference::cNoWaveFile);
+        return true;
+    }
+
+    return SoundPlayer::GetWaveFilePlaybackError(*static_cast<const WaveFile*>(waveFileItem), outError);
+}
+
+bool SoundPlayer::GetWaveFilePlaybackError(const WaveFile& wave, sead::BufferedSafeString* outError)
+{
+    if (wave.getChannels().isEmpty())
+    {
+        outError->copy(messages::playback::cWaveFileNoChannels);
+        return true;
+    }
+
+    return false;
+}
+
+bool SoundPlayer::GetSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError)
+{
+    switch (sound.getSoundType())
+    {
+        case Sound::SoundType::Seq:
+            return GetSequenceSoundPlaybackError(sound, outError);
+
+        case Sound::SoundType::Strm:
+            return GetStreamSoundPlaybackError(sound, outError);
+
+        case Sound::SoundType::Wave:
+            return GetWaveSoundPlaybackError(sound, outError);
+
+        default:
+            break;
+    }
+
+    outError->copy(messages::playback::cUnsupportedSoundType);
+    return true;
+}
+
 bool SoundPlayer::playSound(const Sound* sound, u32 startOffsetSample)
 {
     SEAD_ASSERT(sound);
@@ -99,13 +210,15 @@ bool SoundPlayer::playSeqSound(const Sound* sound)
 {
     const Sound::SequenceSoundInfo& seqSoundInfo = sound->getSequenceSoundInfo();
 
-    const Item* seqFileItem = seqSoundInfo.getSequenceFileRef().getItem();
-    if (!seqFileItem)
+    sead::FixedSafeString<cPlaybackErrorLength> playbackError;
+
+    if (GetSequenceSoundPlaybackError(*sound, &playbackError))
     {
-        PopupMgr::instance()->addPopup({ "No Sequence File attached", nullptr });
+        PopupMgr::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
 
+    const Item* seqFileItem = seqSoundInfo.getSequenceFileRef().getItem();
     SEAD_ASSERT(seqFileItem->getItemType() == Item::ItemType::SequenceFile);
 
     const SequenceFile& seqFile = *static_cast<const SequenceFile*>(seqFileItem);
@@ -344,31 +457,21 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
 {
     Sound::StreamSoundInfo::StreamType streamType = sound->getStreamSoundInfo().getStreamType();
 
+    sead::FixedSafeString<cPlaybackErrorLength> playbackError;
+
+    if (GetStreamSoundPlaybackError(*sound, &playbackError))
+    {
+        PopupMgr::instance()->addPopup({ playbackError, nullptr });
+        return false;
+    }
+
     if (streamType == Sound::StreamSoundInfo::StreamType::Opus)
     {
         if (!opusstream::AttachStreamWaves(const_cast<Sound *>(sound)))
             return false;
     }
-    else if (streamType != Sound::StreamSoundInfo::StreamType::NwStreamBinary)
-    {
-        const char *streamFmtP = GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream);
-        PopupMgr::instance()->addPopup({sead::FormatFixedSafeString<64>("Only %s and Opus streams are supported", streamFmtP).cstr(), nullptr});
-        return false;
-    }
 
     const Sound::StreamSoundInfo &strmSoundInfo = sound->getStreamSoundInfo();
-
-    if (strmSoundInfo.getTrackList().isEmpty())
-    {
-        PopupMgr::instance()->addPopup({ "Streams must have at least 1 Track", nullptr });
-        return false;
-    }
-
-    if (strmSoundInfo.getTrackList().size() > 8)
-    {
-        PopupMgr::instance()->addPopup({ "Streams can only have up to 8 Tracks", nullptr });
-        return false;
-    }
 
     StreamSoundPlayer::SetupArg setupArg;
     setupArg.allocChannelCount = strmSoundInfo.getAllocateChannelCount();
@@ -517,12 +620,15 @@ bool SoundPlayer::playStrmSound(const Sound* sound)
 
 bool SoundPlayer::playWaveSound(const Sound* sound, u32 startOffsetSample)
 {
-    const Item* waveFile = sound->getWaveSoundInfo().getWaveFileRef().getItem();
-    if (!waveFile)
+    sead::FixedSafeString<cPlaybackErrorLength> playbackError;
+
+    if (GetWaveSoundPlaybackError(*sound, &playbackError))
     {
-        PopupMgr::instance()->addPopup({ "No Wave File attached", nullptr });
+        PopupMgr::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
+
+    const Item* waveFile = sound->getWaveSoundInfo().getWaveFileRef().getItem();
 
     if (!playWaveFile(*static_cast<const WaveFile*>(waveFile), -1, sound, startOffsetSample))
     {
@@ -539,7 +645,7 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
 {
     if (!seqFile.isValid())
     {
-        PopupMgr::instance()->addPopup({ "Sequence File is not compiled", nullptr });
+        PopupMgr::instance()->addPopup({ messages::sequence::cNotCompiled, nullptr });
         return false;
     }
 
@@ -703,9 +809,11 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
 {
     SEAD_ASSERT(wave.getItemType() == Item::ItemType::WaveFile);
 
-    if (wave.getChannels().isEmpty())
+    sead::FixedSafeString<cPlaybackErrorLength> playbackError;
+
+    if (GetWaveFilePlaybackError(wave, &playbackError))
     {
-        PopupMgr::instance()->addPopup({ "Wave File has no channels", nullptr });
+        PopupMgr::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
 
@@ -1294,10 +1402,7 @@ void SoundPlayer::drawParameters()
             }
             ImGui::EndDisabled();
 
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            {
-                ImGui::SetTooltip("Not implemented");
-            }
+            SetDisabledTooltip(messages::cNotImplemented);
         }
 
         ImGui::EndTabBar();

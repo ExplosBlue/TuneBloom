@@ -1,9 +1,14 @@
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
+#include <ui/Messages.h>
 
 #include <imgui/imgui_custom.h>
 
 #include <bfsar/BfwsdFile.h>
+
+#include <filedevice/seadPath.h>
+
+#include <filesystem>
 
 static constexpr ImS8 cStepS8 = 1;
 static constexpr ImU8 cStepU8 = 1;
@@ -37,6 +42,241 @@ static void DrawMainAndFxSendUI(GetMain getMain, SetMain setMain, GetFx getFx, S
     }
 }
 
+
+namespace
+{
+
+class StateHash
+{
+public:
+    void mixBytes(const void* data, size_t size)
+    {
+        const u8* bytes = static_cast<const u8*>(data);
+
+        for (size_t i = 0; i < size; i++)
+        {
+            mValue ^= bytes[i];
+            mValue *= 0x100000001B3ULL;
+        }
+    }
+
+    template <typename T>
+    void mixValue(const T& value)
+    {
+        mixBytes(&value, sizeof(value));
+    }
+
+    void mixText(const sead::SafeString& text)
+    {
+        mixBytes(text.cstr(), text.calcLength() + 1);
+    }
+
+    void mixRef(const ItemReference& reference)
+    {
+        if (!reference.isAttached())
+        {
+            mixValue(static_cast<u8>(0));
+            return;
+        }
+
+        mixValue(static_cast<u8>(1));
+        mixValue(reference.getItem());
+    }
+
+    u64 value() const
+    {
+        return mValue;
+    }
+
+private:
+    u64 mValue = 0xCBF29CE484222325ULL;
+};
+
+}
+
+void Sound::captureBaseline()
+{
+    mBaselineSignature = computeStateSignature();
+    mHasBaseline = true;
+
+    mCachedSignature = mBaselineSignature;
+    mCachedSignatureGeneration = GetEditGeneration();
+}
+
+bool Sound::isModifiedSinceBaseline() const
+{
+    if (!mHasBaseline)
+        return true;
+
+    const u64 generation = GetEditGeneration();
+
+    if (mCachedSignatureGeneration != generation)
+    {
+        mCachedSignature = computeStateSignature();
+        mCachedSignatureGeneration = generation;
+    }
+
+    return mCachedSignature != mBaselineSignature;
+}
+
+u64 Sound::computeStateSignature() const
+{
+    StateHash hash;
+
+    hash.mixValue(isEnableName());
+    hash.mixText(getName());
+    hash.mixRef(getPlayerRef());
+
+    hash.mixValue(getVolume());
+    hash.mixValue(getRemoteFilter());
+    hash.mixValue(getSoundType());
+
+    hash.mixValue(isEnablePanParam());
+    hash.mixValue(getPanMode());
+    hash.mixValue(getPanCurve());
+
+    hash.mixValue(isEnablePlayerParam());
+    hash.mixValue(getPlayerPriority());
+    hash.mixValue(getActorPlayerId());
+
+    for (u32 i = 0; i < 4; i++)
+    {
+        hash.mixValue(isEnableUserParam(i));
+        hash.mixValue(getUserParam(i));
+    }
+
+    hash.mixValue(isEnableIsFrontBypass());
+    hash.mixValue(getIsFrontBypass());
+
+    hash.mixValue(isEnableSound3DInfo());
+
+    {
+        const Sound3DInfo& info3D = getSound3DInfo();
+
+        hash.mixValue(info3D.getFlags());
+        hash.mixValue(info3D.getDecayRatio());
+        hash.mixValue(info3D.getDecayCurve());
+        hash.mixValue(info3D.getDopplerFactor());
+    }
+
+    hash.mixBytes(mV3NameField.data(), mV3NameField.size());
+
+    for (const std::pair<u32, u32>& option : mExtraSoundInfoOptions)
+    {
+        hash.mixValue(option.first);
+        hash.mixValue(option.second);
+    }
+
+    {
+        const SequenceSoundInfo& seqInfo = getSequenceSoundInfo();
+
+        hash.mixRef(seqInfo.getSequenceFileRef());
+
+        for (u32 i = 0; i < 4; i++)
+            hash.mixRef(seqInfo.getBankRef(i));
+
+        hash.mixValue(seqInfo.isEnableStartOffset());
+        hash.mixText(seqInfo.getStartLabel());
+        hash.mixValue(seqInfo.isEnablePriority());
+        hash.mixValue(seqInfo.getChannelPriority());
+        hash.mixValue(seqInfo.getIsReleasePriorityFix());
+    }
+
+    {
+        const StreamSoundInfo& strmInfo = getStreamSoundInfo();
+
+        hash.mixText(strmInfo.getPath());
+        hash.mixValue(strmInfo.getAllocateTrackFlags());
+        hash.mixValue(strmInfo.getAllocateChannelCount());
+        hash.mixValue(strmInfo.getPitch());
+        hash.mixValue(strmInfo.getMainSend());
+
+        for (u32 i = 0; i < 3; i++)
+            hash.mixValue(strmInfo.getFxSend(i));
+
+        hash.mixValue(strmInfo.isEnableStreamSoundExtension());
+        hash.mixValue(strmInfo.getStreamType());
+        hash.mixValue(strmInfo.getIsLoop());
+        hash.mixValue(strmInfo.getLoopStartFrame());
+        hash.mixValue(strmInfo.getLoopEndFrame());
+        hash.mixValue(strmInfo.getStreamTypeInfoUpper());
+        hash.mixRef(strmInfo.getPrefetchFileRef());
+
+        const StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
+
+        for (s32 i = 0; i < tracks.size(); i++)
+        {
+            const StreamSoundInfo::Track& track = *static_cast<const StreamSoundInfo::Track*>(tracks.nth(i)->val());
+
+            hash.mixValue(track.isEnableName());
+            hash.mixText(track.getName());
+            hash.mixRef(track.getWaveFileRef());
+
+            hash.mixValue(track.getVolume());
+            hash.mixValue(track.getPan());
+            hash.mixValue(track.getSPan());
+            hash.mixValue(track.getFlags());
+            hash.mixValue(track.getMainSend());
+
+            for (u32 j = 0; j < 3; j++)
+                hash.mixValue(track.getFxSend(j));
+
+            hash.mixValue(track.getLpfFreq());
+            hash.mixValue(track.getBiquadType());
+            hash.mixValue(track.getBiquadValue());
+
+            const sead::ObjList<u8>& channels = track.getChannels_();
+
+            for (s32 j = 0; j < channels.size(); j++)
+                hash.mixValue(*channels.nth(j));
+        }
+    }
+
+    {
+        const WaveSoundInfo& waveInfo = getWaveSoundInfo();
+
+        hash.mixRef(waveInfo.getWaveFileRef());
+        hash.mixValue(waveInfo.getAllocateTrackCount());
+
+        hash.mixValue(waveInfo.isEnablePriority());
+        hash.mixValue(waveInfo.getChannelPriority());
+        hash.mixValue(waveInfo.getIsReleasePriorityFix());
+
+        hash.mixValue(waveInfo.isEnablePan());
+        hash.mixValue(waveInfo.getPan());
+        hash.mixValue(waveInfo.getSurroundPan());
+
+        hash.mixValue(waveInfo.isEnablePitch());
+        hash.mixValue(waveInfo.getPitch());
+
+        hash.mixValue(waveInfo.isEnableSend());
+        hash.mixValue(waveInfo.getMainSend());
+        hash.mixValue(waveInfo.getFxSendCount());
+
+        for (u32 i = 0; i < 3; i++)
+            hash.mixValue(waveInfo.getFxSend(i));
+
+        hash.mixValue(waveInfo.isEnableEnvelope());
+
+        {
+            const snd::AdshrCurve& adshrCurve = waveInfo.getAdshrCurve();
+
+            hash.mixValue(adshrCurve.attack);
+            hash.mixValue(adshrCurve.decay);
+            hash.mixValue(adshrCurve.sustain);
+            hash.mixValue(adshrCurve.hold);
+            hash.mixValue(adshrCurve.release);
+        }
+
+        hash.mixValue(waveInfo.isEnableFilter());
+        hash.mixValue(waveInfo.getLpfFreq());
+        hash.mixValue(waveInfo.getBiquadType());
+        hash.mixValue(waveInfo.getBiquadValue());
+    }
+
+    return hash.value();
+}
+
 Sound::~Sound()
 {
     if (this == sSoundPlayer.getPlayingSound())
@@ -59,7 +299,7 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
 
     if (!getPlayerRef().isAttached())
     {
-        error = "Invalid Player";
+        error = messages::validation::cInvalidPlayer;
         return this;
     }
 
@@ -70,20 +310,20 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
             const Sound::SequenceSoundInfo& seqInfo = getSequenceSoundInfo();
             if (!seqInfo.getSequenceFileRef().isAttached())
             {
-                error = "Invalid Sequence File";
+                error = messages::validation::cInvalidSequenceFile;
                 return this;
             }
 
             const SequenceFile& seqFile = *static_cast<const SequenceFile*>(seqInfo.getSequenceFileRef().getItem());
             if (!seqFile.isValid())
             {
-                error = "Sequence File is not compiled";
+                error = messages::sequence::cNotCompiled;
                 return this;
             }
 
             if (seqFile.getLabelOffset(seqInfo.getStartLabel()) == SequenceFile::cInvaldOffset)
             {
-                error = "Invalid Start Label (Is Sequence File compiled ?)";
+                error = messages::sequence::cInvalidStartLabel;
                 return this;
             }
 
@@ -95,56 +335,61 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
             const Sound::StreamSoundInfo& strmInfo = getStreamSoundInfo();
             if (strmInfo.getPath().isEmpty())
             {
-                error = "Path is empty";
+                error = messages::stream::cNoPath.text;
                 return this;
             }
 
             if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary)
             {
                 const Sound::StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
-                if (tracks.isEmpty())
+
+                if (tracks.size() > cStrmTrackNum)
                 {
-                    error = "Streams must have at least 1 Track";
+                    error.format(messages::stream::cTrackLimitFormat, cStrmTrackNum);
                     return this;
                 }
 
-                if (tracks.size() > 8)
+                if (tracks.isEmpty() && strmInfo.getAllocateChannelCount() == 0)
                 {
-                    error = "Streams can only have up to 8 Tracks";
+                    error = messages::stream::cNoTracksOrChannels;
                     return this;
                 }
 
-                WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
-                u32 mainSampleRate = 0;
+                const WaveFile* mainWaveFile = nullptr;
+
                 for (s32 i = 0; i < tracks.size(); i++)
                 {
                     const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
+
                     if (!track.getWaveFileRef().isAttached())
                     {
-                        error.format("Track %i: Invalid Wave File", i);
-                        return &track;
+                        if (track.getChannels_().isEmpty())
+                        {
+                            error.format(messages::stream::cTrackNoWaveFileFormat, i);
+                            return this;
+                        }
+
+                        continue;
                     }
 
                     const WaveFile& waveFile = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
 
-                    if (i == 0)
+                    if (!mainWaveFile)
                     {
-                        mainEncoding = waveFile.getEncoding();
-                        mainSampleRate = waveFile.getSampleRate();
+                        mainWaveFile = &waveFile;
+                        continue;
                     }
-                    else
-                    {
-                        if (mainEncoding != waveFile.getEncoding())
-                        {
-                            error = "All Stream Tracks must have the same encoding";
-                            return this;
-                        }
 
-                        if (mainSampleRate != waveFile.getSampleRate())
-                        {
-                            error = "All Stream Tracks must have the same sample rate";
-                            return this;
-                        }
+                    if (mainWaveFile->getEncoding() != waveFile.getEncoding())
+                    {
+                        error = messages::stream::cTracksSameEncoding;
+                        return this;
+                    }
+
+                    if (mainWaveFile->getSampleRate() != waveFile.getSampleRate())
+                    {
+                        error = messages::stream::cTracksSameSampleRate;
+                        return this;
                     }
                 }
             }
@@ -163,7 +408,7 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
             const Sound::WaveSoundInfo& waveInfo = getWaveSoundInfo();
             if (!waveInfo.getWaveFileRef().isAttached())
             {
-                error = "Invalid Wave File";
+                error = messages::validation::cInvalidWaveFile;
                 return this;
             }
 
@@ -171,11 +416,198 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
         }
 
         default:
-            error = "Invalid Sound Type";
+            error = messages::validation::cInvalidSoundType;
             return this;
     }
 
     return nullptr;
+}
+
+static Sound* sStreamReloadSound = nullptr;
+static Bfsar::StreamReloadResult sStreamReloadResult;
+
+bool ReloadStreamFile(Sound* sound)
+{
+    sStreamReloadSound = sound;
+    sStreamReloadResult = sBfsar.reloadStreamSound(sound);
+
+    if (sStreamReloadResult.succeeded)
+        SetUnsavedChanges(true);
+
+    return sStreamReloadResult.succeeded;
+}
+
+static void ReplaceStreamFile(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo)
+{
+    const InnerFileFormatInfo& streamFormat = GetInnerFileFormat(sBfsar.getFormat(), InnerFileKind::Stream);
+
+    sead::FixedSafeString<64> filterName;
+    filterName.format("%s file (*.%s)", streamFormat.displayName, streamFormat.extension);
+
+    sead::FixedSafeString<32> filterPattern;
+    filterPattern.format("*.%s", streamFormat.extension);
+
+    FileFilter filters[1] = {
+        { filterName.cstr(), filterPattern.cstr() }
+    };
+
+    sead::FixedSafeString<1024> pickedPath;
+
+    if (!OpenFileDialog(&pickedPath, nullptr, 1, filters))
+        return;
+
+    sead::FixedSafeString<512> archiveDir;
+
+    if (!sead::Path::getDirectoryName(&archiveDir, sBfsar.getFilePath()) &&
+        !sead::Path::getDirectoryName(&archiveDir, sBfsar.getLoadedArchivePath()))
+    {
+        PopupMgr::instance()->addPopup({messages::stream::cReloadNoArchiveFolder, sound});
+        return;
+    }
+
+    std::error_code error;
+    std::filesystem::path relativePath = std::filesystem::relative(pickedPath.cstr(), archiveDir.cstr(), error);
+
+    if (error || relativePath.empty())
+    {
+        sead::FormatFixedSafeString<1024> msg(messages::stream::cReplaceOutsideArchiveFolderFormat, pickedPath.cstr());
+        PopupMgr::instance()->addPopup({msg, sound});
+        return;
+    }
+
+    std::string newPath = relativePath.generic_string();
+
+    if (newPath.rfind("..", 0) == 0)
+    {
+        sead::FormatFixedSafeString<1024> msg(messages::stream::cReplaceOutsideArchiveFolderFormat, newPath.c_str());
+        PopupMgr::instance()->addPopup({msg, sound});
+    }
+
+    const sead::FixedSafeString<512> previousPath(strmSoundInfo.getPath());
+    strmSoundInfo.getPath() = newPath.c_str();
+
+    if (!ReloadStreamFile(sound))
+        strmSoundInfo.getPath() = previousPath;
+}
+
+static void SetStreamReloadTooltip(const Sound* sound, const Sound::StreamSoundInfo& strmSoundInfo, bool hasPath, bool hasArchiveDir)
+{
+    if (!IsItemHoveredAllowDisabled())
+        return;
+
+    if (!hasPath)
+    {
+        ImGui::SetTooltip("%s", messages::stream::cNoPath.text);
+        return;
+    }
+
+    if (!hasArchiveDir)
+    {
+        ImGui::SetTooltip("%s", messages::stream::cReloadNoArchiveFolder);
+        return;
+    }
+
+    sead::FixedSafeString<1024> resolvedPath;
+
+    if (!sBfsar.resolveStreamFilePath(*sound, &resolvedPath))
+    {
+        ImGui::SetTooltip(messages::stream::cReloadNotFoundFormat, strmSoundInfo.getPath().cstr());
+        return;
+    }
+
+    ImGui::SetTooltip("%s", messages::stream::cReloadTooltip);
+}
+
+static void DrawStreamReloadSummary(const Sound* sound, const Sound::StreamSoundInfo& strmSoundInfo)
+{
+    if (sStreamReloadSound != sound || !sStreamReloadResult.succeeded)
+        return;
+
+    ImGui::TextDisabled(messages::stream::cReloadedSummaryFormat,
+                        sStreamReloadResult.trackCount, sStreamReloadResult.trackCount == 1 ? "" : "s",
+                        sStreamReloadResult.channelCount, sStreamReloadResult.channelCount == 1 ? "" : "s",
+                        sStreamReloadResult.sampleRate);
+
+    if (sStreamReloadResult.layoutChanged)
+        ImGui::TextDisabled("%s", messages::stream::cReloadLayoutChanged);
+
+    if (sStreamReloadResult.tracksReplaced)
+        ImGui::TextDisabled("%s", messages::stream::cReloadTracksReplaced);
+
+    if (sStreamReloadResult.streamTypeChanged)
+    {
+        const char* typeName = strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus
+                                   ? messages::stream::cTypeOpus
+                                   : GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream);
+
+        ImGui::TextDisabled(messages::stream::cReloadTypeChangedFormat, typeName);
+    }
+
+    if (sStreamReloadResult.loopChanged)
+        ImGui::TextDisabled("%s", messages::stream::cReloadLoopChanged);
+
+    if (sStreamReloadResult.sharedSoundCount != 0)
+    {
+        ImGui::TextDisabled(messages::stream::cReloadSharedFormat, sStreamReloadResult.sharedSoundCount,
+                            sStreamReloadResult.sharedSoundCount == 1 ? "" : "s");
+    }
+}
+
+static void DrawStreamPathUI(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo)
+{
+    const bool hasArchiveDir = sBfsar.hasArchiveDirectory();
+    const bool hasPath = !strmSoundInfo.getPath().isEmpty();
+    const bool canReload = hasPath && hasArchiveDir;
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 buttonWidth = ImGui::GetFrameHeight();
+
+    ImGui::SetNextItemWidth(ImGui::CalcItemWidth() - (buttonWidth + style.ItemInnerSpacing.x) * 2.0f);
+
+    sead::FixedSafeString<512> path(strmSoundInfo.getPath());
+
+    if (ImGui::InputText("###Path", path.getBuffer(), path.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
+    {
+        if (path != strmSoundInfo.getPath())
+        {
+            strmSoundInfo.getPath() = path;
+            SetUnsavedChanges(true);
+        }
+    }
+
+    ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+
+    if (!canReload)
+        ImGui::BeginDisabled();
+
+    if (ImGui::Button(ICON_LC_REFRESH_CW "###ReloadStream", ImVec2(buttonWidth, buttonWidth)))
+        ReloadStreamFile(sound);
+
+    if (!canReload)
+        ImGui::EndDisabled();
+
+    SetStreamReloadTooltip(sound, strmSoundInfo, hasPath, hasArchiveDir);
+
+    ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+
+    if (!hasArchiveDir)
+        ImGui::BeginDisabled();
+
+    if (ImGui::Button(ICON_LC_FOLDER_OPEN "###ReplaceStream", ImVec2(buttonWidth, buttonWidth)))
+        ReplaceStreamFile(sound, strmSoundInfo);
+
+    if (!hasArchiveDir)
+        ImGui::EndDisabled();
+
+    SetDisabledTooltip(hasArchiveDir ? messages::stream::cReplaceTooltip : messages::stream::cReloadNoArchiveFolder);
+
+    ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+    ImGui::TextUnformatted(messages::stream::cPathLabel);
+
+    ImGui::SameLine();
+    HelpMarker(sead::FormatFixedSafeString<64>(messages::stream::cPathRelativeFormat, GetInnerFileExtension(sBfsar.getFormat(), InnerFileKind::SoundArchive)).cstr());
+
+    DrawStreamReloadSummary(sound, strmSoundInfo);
 }
 
 void DrawSoundPropertiesUI()
@@ -527,6 +959,8 @@ void DrawSoundPropertiesUI()
                 if (!seqFile)
                 {
                     ImGui::EndDisabled();
+
+                    SetDisabledTooltip(messages::reference::cNoSequenceFile);
                 }
             }
 
@@ -562,11 +996,8 @@ void DrawSoundPropertiesUI()
                     if (!bankFile)
                     {
                         ImGui::EndDisabled();
-                    }
 
-                    if (bank && !bankFile && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone))
-                    {
-                        ImGui::SetTooltip("Bank has no file attached");
+                        SetDisabledTooltip(bank ? messages::bank::cNoFileAttached : messages::reference::cNoBank);
                     }
                 }
 
@@ -687,11 +1118,12 @@ void DrawSoundPropertiesUI()
                     if (!seqFile)
                     {
                         ImGui::EndDisabled();
-                    }
 
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone))
+                        SetDisabledTooltip(messages::reference::cNoSequenceFile);
+                    }
+                    else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
                     {
-                        ImGui::SetTooltip("Go to label with Bank info");
+                        ImGui::SetTooltip("%s", messages::sequence::cGoToLabelHint);
                     }
                 }
             }
@@ -749,19 +1181,7 @@ void DrawSoundPropertiesUI()
         {
             Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
 
-            {
-                sead::FixedSafeString<512> path(strmSoundInfo.getPath());
-                if (ImGui::InputText("Path", path.getBuffer(), path.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
-                {
-                    if (path != strmSoundInfo.getPath())
-                    {
-                        strmSoundInfo.getPath() = path;
-                    }
-                }
-
-                ImGui::SameLine();
-                HelpMarker("This is relative to your .bfsar file");
-            }
+            DrawStreamPathUI(sound, strmSoundInfo);
 
             // {
             //     u32 allocateTrackFlags = strmSoundInfo.getAllocateTrackFlags();
@@ -862,7 +1282,7 @@ void DrawSoundPropertiesUI()
 
                     {
                         const char *streamFmt = GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream);
-                        const char *streamTypeLabels[] = {streamFmt, "ADTS (AAC)", "Opus"};
+                        const char *streamTypeLabels[] = {streamFmt, messages::stream::cTypeAdts, messages::stream::cTypeOpus};
 
                         u32 streamType = (enableSend ? strmSoundInfo.getStreamType() : Sound::StreamSoundInfo::StreamType::NwStreamBinary) - 1;
                         u32 streamTypeCount = sBfsar.isV3Bfsar() || streamType + 1 == Sound::StreamSoundInfo::StreamType::Opus ? IM_ARRAYSIZE(streamTypeLabels) : IM_ARRAYSIZE(streamTypeLabels) - 1;
@@ -1010,6 +1430,8 @@ void DrawSoundPropertiesUI()
                 if (!waveFile)
                 {
                     ImGui::EndDisabled();
+
+                    SetDisabledTooltip(messages::reference::cNoWaveFile);
                 }
             }
 
@@ -1296,6 +1718,8 @@ void Sound::StreamSoundInfo::Track::drawUI()
         if (!waveFile)
         {
             ImGui::EndDisabled();
+
+            SetDisabledTooltip(messages::reference::cNoWaveFile);
         }
     }
 

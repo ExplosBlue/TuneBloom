@@ -23,6 +23,7 @@ namespace opusstream
     };
 
     bool IsOpusStream(const void *data, u32 size);
+    bool ReadInfoHeader(const void *data, u32 size, Info &outInfo);
     bool DecodeToPcm16(const void *data, u32 size, Info &outInfo, std::vector<s16 *> &outChannelData, const char **outError);
     bool AttachStreamWaves(Sound *sound);
     bool WriteStreamFile(sead::FileHandle &handle, const Sound *sound);

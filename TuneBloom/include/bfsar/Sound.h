@@ -375,6 +375,21 @@ public:
                 return mChannels;
             }
 
+            void copyChannelsFrom(const Track& other)
+            {
+                mChannels.clear();
+
+                for (s32 i = 0; i < other.mChannels.size(); i++)
+                {
+                    u8* channel = mChannels.birthBack();
+
+                    if (!channel)
+                        break;
+
+                    *channel = *other.mChannels.nth(i);
+                }
+            }
+
             // sead::ObjList<u8>& getChannels_()
             // {
             //     return mChannels;
@@ -389,7 +404,7 @@ public:
 
                 if (!mWaveFileRef.isAttached())
                 {
-                    return 0;
+                    return static_cast<u16>(mChannels.size());
                 }
 
                 const WaveFile* wave = static_cast<const WaveFile*>(mWaveFileRef.getItem());
@@ -483,7 +498,7 @@ public:
         StreamSoundInfo(Sound* owner)
             : mPath()
 
-            //, mAllocateTrackFlags(0)
+            , mAllocateTrackFlags(0)
             , mAllocateChannelCount(0)
             , mTrackList()
             , mPitch(1.0f)
@@ -519,6 +534,11 @@ public:
 
         u16 getAllocateTrackFlags() const
         {
+            if (mTrackList.isEmpty())
+            {
+                return mAllocateTrackFlags;
+            }
+
             return ~(sead::MathCalcCommon<u16>::maxNumber() << mTrackList.size());
         }
 
@@ -529,7 +549,7 @@ public:
 
         u16 getAllocateChannelCount() const
         {
-            if (mStreamType != StreamType::NwStreamBinary)
+            if (mStreamType != StreamType::NwStreamBinary || mTrackList.isEmpty())
             {
                 return mAllocateChannelCount;
             }
@@ -551,6 +571,12 @@ public:
         //     channelCount = sead::MathCalcCommon<u16>::clampMax(channelCount, 16);
         //     mAllocateChannelCount = channelCount;
         // }
+
+        void copyAllocationFrom(const StreamSoundInfo& other)
+        {
+            mAllocateTrackFlags = other.mAllocateTrackFlags;
+            mAllocateChannelCount = other.mAllocateChannelCount;
+        }
 
         const Track::List& getTrackList() const
         {
@@ -665,6 +691,11 @@ public:
             return mPrefetchFileRef.getItemId();
         }
 
+        const ItemReference& getPrefetchFileRef() const
+        {
+            return mPrefetchFileRef;
+        }
+
         ItemReference& getPrefetchFileRef()
         {
             return mPrefetchFileRef;
@@ -683,7 +714,7 @@ public:
     private:
         sead::FixedSafeString<512> mPath; //? Temp solution, will probably not leave like this
 
-        //u16 mAllocateTrackFlags;
+        u16 mAllocateTrackFlags;
         u16 mAllocateChannelCount; //? For AAC streams (TEMP UNTIL PROPER SUPPORT)
         Track::List mTrackList;
         f32 mPitch;
@@ -1283,6 +1314,17 @@ public:
         return mStreamSoundInfo;
     }
 
+    u64 computeStateSignature() const;
+
+    void captureBaseline();
+    bool isModifiedSinceBaseline() const override;
+
+    void copyStreamFileBaselineFrom(const Sound& other)
+    {
+        mStreamFileSignature = other.mStreamFileSignature;
+        mHasStreamFileBaseline = other.mHasStreamFileBaseline;
+    }
+
     const WaveSoundInfo& getWaveSoundInfo() const
     {
         return mWaveSoundInfo;
@@ -1354,6 +1396,14 @@ private:
 
     mutable u64 mStreamFileSignature{0};
     mutable bool mHasStreamFileBaseline{false};
+
+    static const u64 cUncachedGeneration = ~0ULL;
+
+    u64 mBaselineSignature{0};
+    bool mHasBaseline{false};
+
+    mutable u64 mCachedSignature{0};
+    mutable u64 mCachedSignatureGeneration{cUncachedGeneration};
 
     friend class Bfsar;
     friend class SoundSet;

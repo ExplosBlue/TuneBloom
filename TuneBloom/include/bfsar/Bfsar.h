@@ -11,6 +11,8 @@
 #include <bfsar/WaveArchive.h>
 #include <bfsar/WaveFile.h>
 
+#include <ui/Messages.h>
+
 #include <filedevice/seadFileDevice.h>
 #include <prim/seadSafeString.h>
 
@@ -38,6 +40,12 @@ struct SoundArchivePlayerInfo
     u8 streamBufferTimes;
     u32 options;
 };
+
+namespace nw { namespace snd { namespace internal {
+
+class StreamSoundFileReader;
+
+} } }
 
 ArchivePlatform getDefaultPlatformForFormat(ArchiveFormat format);
 
@@ -83,6 +91,12 @@ public:
         bool copyOnly = false;
     };
 
+    struct SkippedStream
+    {
+        const Sound *sound = nullptr;
+        messages::Message message;
+    };
+
     bool save();
     bool saveAs(const sead::SafeString &filePath);
     bool saveBackup(const sead::SafeString &path);
@@ -101,7 +115,7 @@ public:
     bool forcePendingSaveFinalize();
     void cancelPendingSaveFinalize();
 
-    void planStreamSaves(std::vector<StreamSaveJob> &out) const;
+    void planStreamSaves(std::vector<StreamSaveJob> &out, std::vector<SkippedStream> &outSkipped) const;
     void executeStreamSave(const StreamSaveJob &job) const;
     void close();
 
@@ -377,6 +391,29 @@ public:
     std::vector<WaveFile*> findUnusedWaveFiles();
     u32 removeUnusedWaveFiles(const std::vector<WaveFile*>& unused);
 
+    struct StreamReloadResult
+    {
+        bool succeeded = false;
+
+        u32 trackCount = 0;
+        u32 channelCount = 0;
+        u32 sampleRate = 0;
+
+        bool layoutChanged = false;
+        bool tracksReplaced = false;
+        bool streamTypeChanged = false;
+        bool loopChanged = false;
+
+        u32 sharedSoundCount = 0;
+    };
+
+    bool hasArchiveDirectory() const;
+    bool resolveStreamFilePath(const Sound& sound, sead::BufferedSafeString* out) const;
+
+    StreamReloadResult reloadStreamSound(Sound* sound);
+
+    void captureSoundBaselines();
+
     u32 getVersionForBfwsd() const
     {
         if (isV3Bfsar())
@@ -560,7 +597,11 @@ private:
     void save_(sead::FileHandle &handle, const sead::SafeString *metadataPathOverride = nullptr, bool writeStreams = true);
     bool saveArchiveFile_(const sead::SafeString &path);
     bool finalizeSavedFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath);
-    void planNonStreamBinarySave_(const Sound *sound, const sead::SafeString &archiveDir, const sead::SafeString &sourceDir, bool inPlace, std::unordered_set<std::string> &seen, std::vector<StreamSaveJob> &out) const;
+    bool readEmbeddedStreamTracks(nw::snd::internal::StreamSoundFileReader& reader, Sound::StreamSoundInfo& strmSoundInfo, sead::Heap* heap) const;
+    void applyStreamTrackLayout(Sound* sound, u32 trackCount, u32 channelCount) const;
+    void detachStreamWaves(Sound* sound);
+    u32 shareStreamWavesWithSiblings(Sound* source, bool tracksFromFile);
+    void planNonStreamBinarySave(const Sound *sound, const sead::SafeString &archiveDir, const sead::SafeString &sourceDir, bool inPlace, std::unordered_set<std::string> &seen, std::vector<StreamSaveJob> &out, std::vector<SkippedStream> &outSkipped) const;
     void close_();
 
     bool validateName_(const sead::SafeString &name, const Item::List &list, const Item *ignoreItem = nullptr) const;

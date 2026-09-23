@@ -27,4 +27,7 @@ public:
 
     static bool WriteBfstmFile(sead::FileHandle &handle, const Sound::StreamSoundInfo &soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format = ArchiveFormat::BFSAR);
     static u64 ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, u32 version, sead::Endian::Types endian, ArchiveFormat format);
+    static bool IsComplete(const void *data, u32 size);
 };
+
+bool ReadStreamWaves(Sound *sound, const void *strmFile, u32 strmFileSize, const Sound *srcSound);

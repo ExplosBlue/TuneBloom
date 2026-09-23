@@ -1,4 +1,5 @@
 #include <ui/UI.h>
+#include <ui/Messages.h>
 
 #include <ui/PopupMgr.h>
 #include <ui/TimeUtil.h>
@@ -426,7 +427,11 @@ static void DrawTransportWindow()
 
         bool isPause = sSoundPlayer.isPause();
 
-        if (ImGui::Button(isPause ? ICON_LC_PLAY : ICON_LC_PAUSE) && sSoundPlayer.isCurrentPlayer())
+        const bool canTransport = sSoundPlayer.isCurrentPlayer() && (sSoundPlayer.isActive() || sSoundPlayer.getLastPlayedSound());
+
+        ImGui::BeginDisabled(!canTransport);
+
+        if (ImGui::Button(isPause ? ICON_LC_PLAY : ICON_LC_PAUSE))
         {
             if (!sSoundPlayer.isActive())
             {
@@ -438,12 +443,15 @@ static void DrawTransportWindow()
             }
         }
 
-        if (sSoundPlayer.isCurrentPlayer() && !sSoundPlayer.isActive() && sSoundPlayer.getLastPlayedSound())
+        ImGui::EndDisabled();
+
+        if (!canTransport)
         {
-            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-            {
-                ImGui::SetTooltip("Last Sound '%s'", sSoundPlayer.getLastPlayedSound()->getFormattedName().cstr());
-            }
+            SetDisabledTooltip(messages::playback::cNothingToPlay);
+        }
+        else if (!sSoundPlayer.isActive() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+        {
+            ImGui::SetTooltip("Last Sound '%s'", sSoundPlayer.getLastPlayedSound()->getFormattedName().cstr());
         }
 
         ImGui::SameLine();

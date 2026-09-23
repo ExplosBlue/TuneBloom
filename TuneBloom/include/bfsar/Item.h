@@ -172,6 +172,11 @@ public:
         return false;
     }
 
+    virtual bool isModifiedSinceBaseline() const
+    {
+        return false;
+    }
+
     virtual ~Item()
     {
         for (ItemReference::List::robustIterator it = mReferences.robustBegin(); it != mReferences.robustEnd(); ++it)

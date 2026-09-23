@@ -68,6 +68,7 @@ extern sead::FixedSafeString<512> sDroppedWavPath;
 extern Item* sWavDropTargetVel;
 
 void SelectItem(Item* item);
+void ForgetRemovedItems(const std::vector<Item*>& removed);
 
 Item* GetInsertAfterItem();
 void ClearInsertAfterItem();
@@ -193,6 +194,7 @@ void DrawUI();
 
 extern bool gUnsavedChanges;
 void SetUnsavedChanges(bool dirty);
+u64 GetEditGeneration();
 
 bool NewFile();
 bool NewFile(ArchiveFormat format);
@@ -271,6 +273,7 @@ bool ItemSelector(const char* name, const Item::List& list, Item** item, bool al
 bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** warc, const Item::List& warcList);
 void ItemIdTable(const char* name, IdTable& table, const Item::List& itemList);
 
+bool ReloadStreamFile(Sound* sound);
 void DrawSoundPropertiesUI();
 void DrawSoundSetPropertiesUI();
 void InsertSoundIntoSet(SoundSet* targetSet, Sound* newSound, Item* afterItem);
@@ -294,6 +297,8 @@ inline void CenteredTextX(const char* text, f32 sizeX = ImGui::GetWindowSize().x
 }
 
 void HelpMarker(const char* desc);
+bool IsItemHoveredAllowDisabled();
+void SetDisabledTooltip(const char* reason);
 void FormatFileSizeWithPct(sead::BufferedSafeString& out, u32 fileSize, u32 totalSize);
 
 //? Keyboard

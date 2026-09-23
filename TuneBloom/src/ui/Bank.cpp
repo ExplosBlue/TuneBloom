@@ -1,4 +1,5 @@
 #include <ui/UI.h>
+#include <ui/Messages.h>
 
 // Banks
 
@@ -24,31 +25,29 @@ const Item* Bank::validate(sead::BufferedSafeString& error) const
         //! Fallthrough
 
         default:
-            error = "Invalid Wave Archive";
+            error = messages::validation::cInvalidWaveArchive;
             return this;
-    }
-
-    if (!getFileRef().isAttached())
-    {
-        error = "Invalid Bank File";
-        return this;
     }
 
     return nullptr;
 }
 
+static constexpr s32 cBankFileModeCreateNew = 0;
+static constexpr s32 cBankFileModeSelectExisting = 1;
+static constexpr s32 cBankFileModeNone = 2;
+
 static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
 {
     static WaveArchiveType sWarcType = WaveArchiveType::AutomaticShared;
     static Item *sWarcItem = nullptr;
-    static int sBankFileMode = 0;
+    static s32 sBankFileMode = cBankFileModeCreateNew;
     static Item *sBankFileItem = nullptr;
 
     if (clear)
     {
         sWarcType = WaveArchiveType::AutomaticShared;
         sWarcItem = nullptr;
-        sBankFileMode = 0;
+        sBankFileMode = cBankFileModeCreateNew;
         sBankFileItem = nullptr;
         return;
     }
@@ -57,19 +56,26 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
     {
         WaveArchiveSelector("Wave Archive", &sWarcType, &sWarcItem, sBfsar.getWaveArchiveList());
 
-        ImGui::SeparatorText("Bank File");
+        ImGui::SeparatorText(messages::bank::cFileLabel);
 
-        ImGui::RadioButton("Create New", &sBankFileMode, 0);
+        ImGui::RadioButton(messages::bank::cFileModeCreateNew, &sBankFileMode, cBankFileModeCreateNew);
         ImGui::SameLine();
-        ImGui::RadioButton("Select Existing", &sBankFileMode, 1);
+        ImGui::RadioButton(messages::bank::cFileModeSelectExisting, &sBankFileMode, cBankFileModeSelectExisting);
+        ImGui::SameLine();
+        ImGui::RadioButton(messages::bank::cFileModeNone, &sBankFileMode, cBankFileModeNone);
 
-        if (sBankFileMode == 0)
+        if (sBankFileMode != cBankFileModeSelectExisting)
             ImGui::BeginDisabled();
 
-        ItemSelector("Bank File", sBfsar.getBankFileList(), &sBankFileItem, true);
+        ItemSelector(messages::bank::cFileLabel, sBfsar.getBankFileList(), &sBankFileItem, true);
 
-        if (sBankFileMode == 0)
+        if (sBankFileMode != cBankFileModeSelectExisting)
             ImGui::EndDisabled();
+
+        if (sBankFileMode == cBankFileModeNone)
+        {
+            ImGui::TextDisabled(messages::bank::cWillHaveNoFile);
+        }
     }
     else if (item && !validate)
     {
@@ -77,7 +83,7 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
         bank->getWaveArchiveRef().attach(sWarcItem);
         bank->setWaveArchiveType(sWarcType);
 
-        if (sBankFileMode == 0)
+        if (sBankFileMode == cBankFileModeCreateNew)
         {
             BankFile *bankFile = new BankFile();
             bankFile->setEnableName(true);
@@ -88,9 +94,13 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
 
             bank->getFileRef().attach(bankFile);
         }
-        else
+        else if (sBankFileMode == cBankFileModeSelectExisting)
         {
             bank->getFileRef().attach(sBankFileItem);
+        }
+        else
+        {
+            bank->getFileRef().attach(nullptr);
         }
     }
 }
@@ -118,6 +128,8 @@ const char* BankNamePrefixFunc(Item* item)
     if (!bankFile)
     {
         ImGui::EndDisabled();
+
+        SetDisabledTooltip(messages::bank::cNoFileAttached);
     }
 
     ImGui::SameLine();
@@ -153,7 +165,7 @@ void DrawBankPropertiesUI()
 
     {
         Item* file = bank->getFileRef().getItem();
-        if (ItemSelector("Bank File", sBfsar.getBankFileList(), &file))
+        if (ItemSelector(messages::bank::cFileLabel, sBfsar.getBankFileList(), &file, true))
         {
             bank->getFileRef().attach(file);
             SetUnsavedChanges(true);

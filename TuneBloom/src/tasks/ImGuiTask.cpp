@@ -381,6 +381,7 @@ static void SetupImGuiStyle()
     style.FrameRounding = 2.3f;
     style.ScrollbarRounding = 12;
     style.GrabRounding = 2;
+    style.DisabledAlpha = 0.35f;
 
     LoadAccentColor();
     LoadRecentFiles();

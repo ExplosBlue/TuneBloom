@@ -1,4 +1,5 @@
 #include <ui/UI.h>
+#include <ui/Messages.h>
 
 const Item* SoundSet::validate(sead::BufferedSafeString& error) const
 {
@@ -25,7 +26,7 @@ const Item* SoundSet::validate(sead::BufferedSafeString& error) const
                 //! Fallthrough
 
                 default:
-                    error = "Invalid Wave Archive";
+                    error = messages::validation::cInvalidWaveArchive;
                     return this;
             }
 
@@ -35,7 +36,7 @@ const Item* SoundSet::validate(sead::BufferedSafeString& error) const
             break;
 
         default:
-            error = "Invalid Sound Type";
+            error = messages::validation::cInvalidSoundType;
             return this;
     }
 

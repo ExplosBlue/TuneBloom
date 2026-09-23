@@ -4,6 +4,7 @@
 
 #include <Debug.h>
 
+#include <ui/Messages.h>
 #include <ui/PopupMgr.h>
 #include <ui/Shortcuts.h>
 #include <ui/UI.h>
@@ -306,7 +307,7 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
     }
     else
     {
-        sead::FormatFixedSafeString<256> msg("Instrument %u: Internal error (failed BFBNK patch - waveArchiveId=%u)", instrumentId, u32(waveId->waveArchiveId));
+        sead::FormatFixedSafeString<256> msg(messages::bank::cInstrumentPatchFailedFormat, instrumentId, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Bank), u32(waveId->waveArchiveId));
         PopupMgr::instance()->pushCurrentItemError(msg);
     }
 
@@ -362,6 +363,8 @@ void BankFile::VelocityRegion::drawUI()
         if (!waveFile)
         {
             ImGui::EndDisabled();
+
+            SetDisabledTooltip(messages::reference::cNoWaveFile);
         }
     }
 

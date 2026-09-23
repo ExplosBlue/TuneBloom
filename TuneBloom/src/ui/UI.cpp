@@ -2,6 +2,7 @@
 #include <ui/UI.h>
 
 #include <ui/OutputMeter.h>
+#include <ui/Messages.h>
 #include <ui/PopupMgr.h>
 #include <ui/Shortcuts.h>
 #include <ui/WaveImportPanel.h>
@@ -376,10 +377,17 @@ static s32 sBackupFailureStreak = 0;
 static const s32 cBackupFailureStreakBeforePopup = 3;
 static const float cBackupRetrySeconds = 20.0f;
 
+u64 GetEditGeneration()
+{
+    return sEditGeneration;
+}
+
 void SetUnsavedChanges(bool dirty)
 {
     if (dirty)
         sEditGeneration++;
+    else
+        sBfsar.captureSoundBaselines();
 
     if (gUnsavedChanges != dirty)
     {
@@ -2237,20 +2245,7 @@ void DrawUI()
             {
                 sSoundPlayer.reset();
 
-                auto isDeletedWave = [](Item* it)
-                {
-                    return it && std::find(sPendingUnusedWaves.begin(), sPendingUnusedWaves.end(), it) != sPendingUnusedWaves.end();
-                };
-
-                for (size_t t = 0; t <= (size_t)UIType::Max; t++)
-                {
-                    if (isDeletedWave(sSelectedItemArr[t]))      sSelectedItemArr[t] = nullptr;
-                    if (isDeletedWave(sSubSelectedItemArr[t]))   sSubSelectedItemArr[t] = nullptr;
-                    if (isDeletedWave(sMultiSelectAnchorArr[t])) sMultiSelectAnchorArr[t] = nullptr;
-
-                    std::vector<Item*>& ms = sMultiSelectedItemsArr[t];
-                    ms.erase(std::remove_if(ms.begin(), ms.end(), isDeletedWave), ms.end());
-                }
+                ForgetRemovedItems(std::vector<Item*>(sPendingUnusedWaves.begin(), sPendingUnusedWaves.end()));
 
                 if (sBfsar.removeUnusedWaveFiles(sPendingUnusedWaves) > 0)
                     SetUnsavedChanges(true);
@@ -2574,11 +2569,21 @@ static bool WriteWavCustom(const sead::SafeString& path, u32 sampleRate, const s
     return true;
 }
 
-static std::unordered_set<std::string> sExportUsedNames;
+static std::vector<std::string> sExportUsedNames;
 
 static void BeginExportNameBatch()
 {
     sExportUsedNames.clear();
+}
+
+static bool ClaimExportName(const std::string& key)
+{
+    if (std::find(sExportUsedNames.begin(), sExportUsedNames.end(), key) != sExportUsedNames.end())
+        return false;
+
+    sExportUsedNames.push_back(key);
+
+    return true;
 }
 
 static std::string MakeExportNameKey(const sead::SafeString &name, const char *ext)
@@ -2600,7 +2605,7 @@ static void BuildUniqueExportPath(sead::BufferedSafeString *outPath, const char 
     SanitizeFilenameInPlace(&name);
 
     sead::FixedSafeString<256> uniqueName = name;
-    for (u32 copyNum = 2; !sExportUsedNames.emplace(MakeExportNameKey(uniqueName, ext)).second; copyNum++)
+    for (u32 copyNum = 2; !ClaimExportName(MakeExportNameKey(uniqueName, ext)); copyNum++)
         uniqueName.format("%s_%u", name.cstr(), copyNum);
 
     outPath->format("%s/%s.%s", dir, uniqueName.cstr(), ext);
@@ -3620,6 +3625,16 @@ static void ExportBankModelItems(std::vector<BankFile*>& pending, const char* ex
     pending.clear();
 }
 
+static void ReportFailedBundledWaves(u32 failedWaveCount)
+{
+    if (failedWaveCount == 0)
+        return;
+
+    sead::FormatFixedSafeString<64> message(messages::import::cBundledWavesFailedFormat, failedWaveCount, failedWaveCount == 1 ? "" : "s");
+
+    PopupMgr::instance()->addPopup({message, nullptr});
+}
+
 static void DrawFileExportDialogs()
 {
     if (!sPendingExportSequenceFiles.empty())
@@ -3860,7 +3875,7 @@ static void DrawFileExportDialogs()
 
                     if (magic != 0x49424E44)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Invalid instrument bundle file");
+                        PopupMgr::instance()->addPopup({messages::import::cInstrumentBundleInvalid, nullptr});
                         device->unload(fileData);
                         return;
                     }
@@ -3869,7 +3884,7 @@ static void DrawFileExportDialogs()
 
                     if (version != 1)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Unsupported instrument bundle version");
+                        PopupMgr::instance()->addPopup({messages::import::cInstrumentBundleVersion, nullptr});
                         device->unload(fileData);
                         return;
                     }
@@ -3880,7 +3895,7 @@ static void DrawFileExportDialogs()
 
                     if (oob)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Instrument bundle file is truncated or corrupt");
+                        PopupMgr::instance()->addPopup({messages::import::cInstrumentBundleCorrupt, nullptr});
                         device->unload(fileData);
                         return;
                     }
@@ -4032,6 +4047,7 @@ static void DrawFileExportDialogs()
             };
 
             std::unordered_map<std::string, WaveFile *> waveMap;
+            u32 failedWaveCount = 0;
 
             for (u32 i = 0; !oob && i < sIbnkWaveCount; i++)
             {
@@ -4102,11 +4118,13 @@ static void DrawFileExportDialogs()
                 else
                 {
                     delete newWave;
-                    PopupMgr::instance()->pushCurrentItemError("Failed to read bundled wave file");
+                    failedWaveCount++;
                 }
 
                 offset += waveSize;
             }
+
+            ReportFailedBundledWaves(failedWaveCount);
 
             BankFile::Instrument *instr = new BankFile::Instrument();
 
@@ -4189,7 +4207,7 @@ static void DrawFileExportDialogs()
 
             if (oob)
             {
-                PopupMgr::instance()->pushCurrentItemError("Instrument bundle file is truncated or corrupt");
+                PopupMgr::instance()->addPopup({messages::import::cInstrumentBundleCorrupt, nullptr});
                 delete instr;
             }
             else if (sIbnkReplaceTarget)
@@ -4376,7 +4394,7 @@ static void DrawFileExportDialogs()
 
                     if (magic != 0x42424E44)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Invalid bank bundle file");
+                        PopupMgr::instance()->addPopup({messages::import::cBankBundleInvalid, nullptr});
                         device->unload(fileData);
                         return;
                     }
@@ -4385,7 +4403,7 @@ static void DrawFileExportDialogs()
 
                     if (version != 1)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Unsupported bank bundle version");
+                        PopupMgr::instance()->addPopup({messages::import::cBankBundleVersion, nullptr});
                         device->unload(fileData);
                         return;
                     }
@@ -4395,7 +4413,7 @@ static void DrawFileExportDialogs()
 
                     if (oob)
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Bank bundle file is truncated or corrupt");
+                        PopupMgr::instance()->addPopup({messages::import::cBankBundleCorrupt, nullptr});
                         device->unload(fileData);
                         return;
                     }
@@ -4507,6 +4525,7 @@ static void DrawFileExportDialogs()
             };
 
             std::unordered_map<std::string, WaveFile *> waveMap;
+            u32 failedWaveCount = 0;
 
             for (u32 i = 0; !oob && i < sBbnkWaveCount; i++)
             {
@@ -4582,15 +4601,17 @@ static void DrawFileExportDialogs()
                 else
                 {
                     delete newWave;
-                    PopupMgr::instance()->pushCurrentItemError("Failed to read bundled wave file");
+                    failedWaveCount++;
                 }
 
                 offset += waveSize;
             }
 
+            ReportFailedBundledWaves(failedWaveCount);
+
             if (oob || offset >= fileSize)
             {
-                PopupMgr::instance()->pushCurrentItemError("Truncated bank bundle");
+                PopupMgr::instance()->addPopup({messages::import::cBankBundleTruncated, nullptr});
                 CloseBbnkImport();
                 ImGui::CloseCurrentPopup();
                 return;
@@ -4599,7 +4620,7 @@ static void DrawFileExportDialogs()
             u32 instrumentCount = readU32();
             if (oob || instrumentCount == 0)
             {
-                PopupMgr::instance()->pushCurrentItemError(oob ? "Bank bundle is truncated or corrupt" : "Bank bundle has no instruments");
+                PopupMgr::instance()->addPopup({oob ? messages::import::cBankBundleCorrupt : messages::import::cBankBundleNoInstruments, nullptr});
                 CloseBbnkImport();
                 ImGui::CloseCurrentPopup();
                 return;
@@ -4694,7 +4715,7 @@ static void DrawFileExportDialogs()
 
             if (oob)
             {
-                PopupMgr::instance()->pushCurrentItemError("Bank bundle is truncated or corrupt");
+                PopupMgr::instance()->addPopup({messages::import::cBankBundleCorrupt, nullptr});
                 delete newBank;
                 CloseBbnkImport();
                 ImGui::CloseCurrentPopup();
@@ -6696,9 +6717,12 @@ InstanciateItemCallback CreateSequenceSoundFunc(bool clear)
     return CreateFixedSoundTypeFunc<Sound::SoundType::Seq>(clear);
 }
 
-const char* SoundNamePrefixFunc(Item* item)
+static void DrawSoundPlayButton(Sound* sound)
 {
-    Sound* sound = (Sound*)item;
+    sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
+    const bool canPlay = !SoundPlayer::GetSoundPlaybackError(*sound, &playbackError);
+
+    ImGui::BeginDisabled(!canPlay);
 
     if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", sound->getId()).cstr()))
     {
@@ -6711,7 +6735,21 @@ const char* SoundNamePrefixFunc(Item* item)
         sSoundPlayer.playSound(sound);
     }
 
+    ImGui::EndDisabled();
+
+    if (!canPlay)
+    {
+        SetDisabledTooltip(playbackError.cstr());
+    }
+
     ImGui::SameLine();
+}
+
+const char* SoundNamePrefixFunc(Item* item)
+{
+    Sound* sound = (Sound*)item;
+
+    DrawSoundPlayButton(sound);
 
     const char* icon = ICON_LC_FILE_QUESTION " ";
     switch (sound->getSoundType())
@@ -6757,40 +6795,85 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
         return;
 
     Sound* sound = static_cast<Sound*>(item);
-    bool canExport = false;
-    bool isSeq = false;
+    bool canExportWave = false;
+    bool canExportMidi = false;
+    sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> exportError;
+
     if (sound)
     {
         Sound::SoundType type = sound->getSoundType();
-        canExport = (type == Sound::SoundType::Wave || type == Sound::SoundType::Strm || type == Sound::SoundType::Seq);
-        isSeq = (type == Sound::SoundType::Seq);
+        const bool isExportableType = type == Sound::SoundType::Wave || type == Sound::SoundType::Strm || type == Sound::SoundType::Seq;
+        const bool hasAudio = !SoundPlayer::GetSoundPlaybackError(*sound, &exportError);
+
+        canExportWave = isExportableType && hasAudio;
+        canExportMidi = type == Sound::SoundType::Seq && hasAudio;
     }
 
-    // When multi-selection is active, check ALL items for enabling
     bool multiActive = sound && !sMultiSelectedItems.empty() &&
         std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), sound) != sMultiSelectedItems.end();
 
     if (multiActive)
     {
-        bool allCanExport = true;
-        bool allIsSeq = true;
-        for (Item* sel : sMultiSelectedItems)
+        bool allCanExportWave = true;
+        bool allCanExportMidi = true;
+
+        for (Item* selected : sMultiSelectedItems)
         {
-            Sound* s = static_cast<Sound*>(sel);
-            Sound::SoundType t = s->getSoundType();
-            if (!(t == Sound::SoundType::Wave || t == Sound::SoundType::Strm || t == Sound::SoundType::Seq))
-                allCanExport = false;
-            if (t != Sound::SoundType::Seq)
-                allIsSeq = false;
+            Sound* selectedSound = static_cast<Sound*>(selected);
+            Sound::SoundType type = selectedSound->getSoundType();
+            const bool isExportableType = type == Sound::SoundType::Wave || type == Sound::SoundType::Strm || type == Sound::SoundType::Seq;
+            const bool hasAudio = SoundPlayer::CanPlaySound(*selectedSound);
+
+            if (!isExportableType || !hasAudio)
+                allCanExportWave = false;
+
+            if (type != Sound::SoundType::Seq || !hasAudio)
+                allCanExportMidi = false;
         }
-        canExport = allCanExport;
-        isSeq = allIsSeq;
+
+        canExportWave = allCanExportWave;
+        canExportMidi = allCanExportMidi;
     }
 
     ImGui::Separator();
 
-    if (!canExport)
-        ImGui::BeginDisabled();
+    {
+        std::vector<Sound*> streamSounds;
+
+        for (Sound* candidate : CollectSoundsForAction(item))
+        {
+            if (candidate->getSoundType() == Sound::SoundType::Strm)
+                streamSounds.push_back(candidate);
+        }
+
+        const bool canReload = !streamSounds.empty();
+
+        ImGui::BeginDisabled(!canReload);
+
+        if (ImGui::MenuItem(messages::stream::cReloadMenuLabel))
+        {
+            u32 reloaded = 0;
+
+            for (Sound* streamSound : streamSounds)
+            {
+                if (ReloadStreamFile(streamSound))
+                    reloaded++;
+            }
+
+            if (streamSounds.size() > 1)
+            {
+                sead::FormatFixedSafeString<128> msg(messages::stream::cReloadBatchDoneFormat, reloaded, (u32)streamSounds.size());
+                PopupMgr::instance()->addPopup({msg});
+            }
+        }
+
+        ImGui::EndDisabled();
+
+        if (!canReload)
+            SetDisabledTooltip(messages::stream::cReloadNotStream);
+    }
+
+    ImGui::BeginDisabled(!canExportWave);
 
     if (ImGui::MenuItem("Export WAV"))
     {
@@ -6804,11 +6887,21 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
         }
     }
 
-    if (!canExport)
-        ImGui::EndDisabled();
+    ImGui::EndDisabled();
 
-    if (!isSeq)
-        ImGui::BeginDisabled();
+    if (!canExportWave)
+    {
+        const char* reason = messages::exporting::cWaveNotExportable;
+
+        if (!exportError.isEmpty())
+            reason = exportError.cstr();
+        else if (multiActive)
+            reason = messages::exporting::cSelectionNotExportable;
+
+        SetDisabledTooltip(reason);
+    }
+
+    ImGui::BeginDisabled(!canExportMidi);
 
     if (ImGui::MenuItem("Export MIDI"))
     {
@@ -6821,8 +6914,20 @@ void SoundContextMenuFunc(Item* item, bool afterDelete)
         }
     }
 
-    if (!isSeq)
-        ImGui::EndDisabled();
+    ImGui::EndDisabled();
+
+    if (!canExportMidi)
+    {
+        const bool isSequence = sound && sound->getSoundType() == Sound::SoundType::Seq;
+        const char* reason = messages::exporting::cMidiNeedsSequence;
+
+        if (isSequence && !exportError.isEmpty())
+            reason = exportError.cstr();
+        else if (isSequence && multiActive)
+            reason = messages::exporting::cSelectionNotExportable;
+
+        SetDisabledTooltip(reason);
+    }
 }
 
 void DrawAllSoundsUI()
@@ -6840,20 +6945,7 @@ void DrawAllSoundsUI()
 
 const char* SoundNamePrefixFunc2(Item* item)
 {
-    Sound* sound = (Sound*)item;
-
-    if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", sound->getId()).cstr()))
-    {
-        if (sound != sSelectedItem)
-        {
-            sSubSelectedItem = nullptr;
-            sSelectedItemIsSubWindow = false;
-        }
-
-        sSoundPlayer.playSound(sound);
-    }
-
-    ImGui::SameLine();
+    DrawSoundPlayButton(static_cast<Sound*>(item));
 
     return nullptr;
 }
@@ -7408,8 +7500,7 @@ void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
         }
     }
 
-    if (!allHaveSequences)
-        ImGui::BeginDisabled();
+    ImGui::BeginDisabled(!allHaveSequences);
 
     if (ImGui::MenuItem("Export MIDI"))
     {
@@ -7418,8 +7509,12 @@ void SequenceSoundSetContextMenuFunc(Item* item, bool afterDelete)
         sMidiExportFormatsConfirmed = false;
     }
 
+    ImGui::EndDisabled();
+
     if (!allHaveSequences)
-        ImGui::EndDisabled();
+    {
+        SetDisabledTooltip(messages::exporting::cSoundSetMidiNeedsSequences);
+    }
 }
 
 
@@ -7528,19 +7623,19 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
                         {
                             delete newWave;
                             device->unload(fileData);
-                            PopupMgr::instance()->pushCurrentItemError("Failed to read wave file");
+                            PopupMgr::instance()->addPopup({messages::import::cWaveReadFailed, nullptr});
                             return nullptr;
                         }
                     }
                     else
                     {
-                        PopupMgr::instance()->pushCurrentItemError("Failed to load wave file");
+                        PopupMgr::instance()->addPopup({messages::import::cWaveLoadFailed, nullptr});
                         return nullptr;
                     }
                 }
                 else
                 {
-                    PopupMgr::instance()->pushCurrentItemError("Native file device not available");
+                    PopupMgr::instance()->addPopup({messages::import::cNativeDeviceUnavailable, nullptr});
                     return nullptr;
                 }
             }
@@ -7597,9 +7692,21 @@ static const char* WaveFileNamePrefixFunc(Item* item)
 {
     WaveFile* wave = static_cast<WaveFile*>(item);
 
+    sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
+    const bool canPlay = !SoundPlayer::GetWaveFilePlaybackError(*wave, &playbackError);
+
+    ImGui::BeginDisabled(!canPlay);
+
     if (ImGui::Button(sead::FormatFixedSafeString<32>(ICON_LC_PLAY "###%u", wave->getId()).cstr()))
     {
         sSoundPlayer.playWaveFile(*wave);
+    }
+
+    ImGui::EndDisabled();
+
+    if (!canPlay)
+    {
+        SetDisabledTooltip(playbackError.cstr());
     }
 
     ImGui::SameLine();
@@ -7704,12 +7811,12 @@ void WaveFileContextMenuFunc(Item* item, bool afterDelete)
                 }
                 else
                 {
-                    PopupMgr::instance()->pushCurrentItemError("Reimport failed: couldn't write temp WAV");
+                    PopupMgr::instance()->addPopup({messages::import::cReimportWriteFailed, wave});
                 }
             }
             else
             {
-                PopupMgr::instance()->pushCurrentItemError("Reimport failed: couldn't decode this wave");
+                PopupMgr::instance()->addPopup({messages::import::cReimportDecodeFailed, wave});
             }
         }
 
@@ -7771,7 +7878,8 @@ void SequenceFileContextMenuFunc(Item* item, bool afterDelete)
     }
 
     bool disabled = seq == nullptr || !seq->isValid();
-    if (disabled) ImGui::BeginDisabled();
+
+    ImGui::BeginDisabled(disabled);
 
     if (ImGui::MenuItem("Export"))
     {
@@ -7780,7 +7888,12 @@ void SequenceFileContextMenuFunc(Item* item, bool afterDelete)
             sPendingExportSequenceFiles = std::move(seqs);
     }
 
-    if (disabled) ImGui::EndDisabled();
+    ImGui::EndDisabled();
+
+    if (disabled && seq)
+    {
+        SetDisabledTooltip(messages::sequence::cNotCompiled);
+    }
 }
 
 static std::vector<BankFile*> CollectBankFilesForAction(Item* item)
@@ -7894,8 +8007,9 @@ void BankContextMenuFunc(Item *item, bool afterDelete)
     {
         bool disabled = bank == nullptr || !bank->getFileRef().isAttached();
 
-        if (disabled)
-            ImGui::BeginDisabled();
+        ImGui::BeginDisabled(disabled);
+
+        bool hovered = false;
 
         if (ImGui::MenuItem("Export Bank Bundle"))
         {
@@ -7904,6 +8018,8 @@ void BankContextMenuFunc(Item *item, bool afterDelete)
             if (!banks.empty())
                 sPendingExportBankBundles = std::move(banks);
         }
+
+        hovered |= IsItemHoveredAllowDisabled();
 
         ImGui::Separator();
 
@@ -7915,6 +8031,8 @@ void BankContextMenuFunc(Item *item, bool afterDelete)
                 sPendingExportBankSf2 = std::move(banks);
         }
 
+        hovered |= IsItemHoveredAllowDisabled();
+
         if (ImGui::MenuItem("Export as DLS"))
         {
             auto banks = CollectBankFilesFromBanks(item);
@@ -7923,8 +8041,14 @@ void BankContextMenuFunc(Item *item, bool afterDelete)
                 sPendingExportBankDls = std::move(banks);
         }
 
-        if (disabled)
-            ImGui::EndDisabled();
+        hovered |= IsItemHoveredAllowDisabled();
+
+        ImGui::EndDisabled();
+
+        if (disabled && hovered && bank)
+        {
+            ImGui::SetTooltip("%s", messages::bank::cNoFileAttached);
+        }
     }
 }
 
@@ -8069,15 +8193,18 @@ void DrawWaveFilesUI()
 
             bool nothingToMerge = sPendingDedup.empty();
 
-            if (nothingToMerge)
-                ImGui::BeginDisabled();
+            ImGui::BeginDisabled(nothingToMerge);
 
             if (ImGui::Button("Merge", buttonSize))
             {
                 sSoundPlayer.reset();
-                
-                if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::WaveFile)
-                    sSelectedItem = nullptr;
+
+                std::vector<Item*> mergedWaves;
+
+                for (const Bfsar::WaveDuplicateGroup& group : sPendingDedup)
+                    mergedWaves.insert(mergedWaves.end(), group.remove.begin(), group.remove.end());
+
+                ForgetRemovedItems(mergedWaves);
 
                 Bfsar::WaveMergeResult r = sBfsar.mergeDuplicateWaves(sPendingDedup);
                 sPendingDedup.clear();
@@ -8094,8 +8221,12 @@ void DrawWaveFilesUI()
                 ImGui::CloseCurrentPopup();
             }
 
+            ImGui::EndDisabled();
+
             if (nothingToMerge)
-                ImGui::EndDisabled();
+            {
+                SetDisabledTooltip(messages::exporting::cNothingToMerge);
+            }
 
             ImGui::SameLine();
 
@@ -8959,9 +9090,22 @@ void CenteredText(const char* text, const ImVec2& sizeArg)
 }
 
 // From ImGui Demo
+bool IsItemHoveredAllowDisabled()
+{
+    return ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone);
+}
+
+void SetDisabledTooltip(const char* reason)
+{
+    if (IsItemHoveredAllowDisabled())
+    {
+        ImGui::SetTooltip("%s", reason);
+    }
+}
+
 void HelpMarker(const char* desc)
 {
-    ImGui::TextDisabled("(?)");
+    ImGui::TextDisabled(messages::popup::cDetailMarker);
     if (ImGui::BeginItemTooltip())
     {
         ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);

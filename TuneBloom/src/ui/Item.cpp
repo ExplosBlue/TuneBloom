@@ -1,3 +1,5 @@
+#include <ui/Messages.h>
+#include <ui/PopupMgr.h>
 #include <ui/Shortcuts.h>
 #include <ui/UI.h>
 #include <ui/WaveImportPanel.h>
@@ -88,6 +90,7 @@ static Sound* CloneSound(Sound* src)
         Sound::StreamSoundInfo& srcStrm = src->getStreamSoundInfo();
 
         dstStrm.getPath() = srcStrm.getPath();
+        dstStrm.copyAllocationFrom(srcStrm);
         dstStrm.setPitch(srcStrm.getPitch());
         dstStrm.setMainSend(srcStrm.getMainSend());
         for (u32 i = 0; i < 3; i++)
@@ -125,6 +128,8 @@ static Sound* CloneSound(Sound* src)
             for (u32 i = 0; i < 3; i++)
                 dstTrack->setFxSend(i, srcTrack->getFxSend(i));
 
+            dstTrack->copyChannelsFrom(*srcTrack);
+
             dstStrm.getTrackList().pushBack(dstTrack);
         }
     }
@@ -156,6 +161,8 @@ static Sound* CloneSound(Sound* src)
         dstWave.setBiquadType(srcWave.getBiquadType());
         dstWave.setBiquadValue(srcWave.getBiquadValue());
     }
+
+    dup->copyStreamFileBaselineFrom(*src);
 
     return dup;
 }
@@ -860,7 +867,10 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
         bool isMultiSelected = std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item) != sMultiSelectedItems.end();
         bool selected = isSingleSelected || isMultiSelected || highlightOnly;
         
-        sead::FormatFixedSafeString<512> selName("%s%s%s###%p", namePrefix, name.cstr(), postFix, item);
+        const bool isModified = item->isModifiedSinceBaseline();
+        const char* modifiedMark = isModified ? ICON_LC_DOT : "";
+
+        sead::FormatFixedSafeString<512> selName("%s%s%s%s###%p", namePrefix, modifiedMark, name.cstr(), postFix, item);
         
         if (ImGui::Selectable(selName.cstr(), selected, tableOpen ? ImGuiSelectableFlags_SpanAllColumns : ImGuiSelectableFlags_None))
         {
@@ -955,6 +965,11 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
         if (popColor)
         {
             ImGui::PopStyleColor();
+        }
+
+        if (isModified && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        {
+            ImGui::SetTooltip("%s", messages::item::cModifiedTooltip);
         }
 
         if (sScrollItem == item)
@@ -1060,20 +1075,7 @@ void DrawAllItemsUI(const char *listName, Item::List &list, CreateItemCallback c
 
         auto doSingleDelete = [&](Item* itemToDelete)
         {
-            for (size_t i = 0; i <= (size_t)UIType::Max; i++)
-            {
-                if (sSelectedItemArr[i] == itemToDelete)
-                    sSelectedItemArr[i] = nullptr;
-                if (sSubSelectedItemArr[i] == itemToDelete)
-                    sSubSelectedItemArr[i] = nullptr;
-                if (sMultiSelectAnchorArr[i] == itemToDelete)
-                    sMultiSelectAnchorArr[i] = nullptr;
-
-                auto& multi = sMultiSelectedItemsArr[i];
-                auto it = std::find(multi.begin(), multi.end(), itemToDelete);
-                if (it != multi.end())
-                    multi.erase(it);
-            }
+            ForgetRemovedItems({itemToDelete});
 
             if (onRemove)
                 onRemove(itemToDelete);
@@ -1497,6 +1499,38 @@ void DrawItemPropertiesUI()
     DupeNamePopup();
 }
 
+void ForgetRemovedItems(const std::vector<Item*>& removed)
+{
+    if (removed.empty())
+        return;
+
+    auto isRemoved = [&removed](Item* item)
+    {
+        return item && std::find(removed.begin(), removed.end(), item) != removed.end();
+    };
+
+    for (size_t tab = 0; tab <= (size_t)UIType::Max; tab++)
+    {
+        if (isRemoved(sSelectedItemArr[tab]))
+            sSelectedItemArr[tab] = nullptr;
+
+        if (isRemoved(sSubSelectedItemArr[tab]))
+            sSubSelectedItemArr[tab] = nullptr;
+
+        if (isRemoved(sMultiSelectAnchorArr[tab]))
+            sMultiSelectAnchorArr[tab] = nullptr;
+
+        std::vector<Item*>& multiSelected = sMultiSelectedItemsArr[tab];
+        multiSelected.erase(std::remove_if(multiSelected.begin(), multiSelected.end(), isRemoved), multiSelected.end());
+    }
+
+    if (isRemoved(sScrollItem))
+        sScrollItem = nullptr;
+
+    for (Item* item : removed)
+        PopupMgr::instance()->forgetItem(item);
+}
+
 void SelectItem(Item* item)
 {
     SEAD_ASSERT(item);
@@ -1809,6 +1843,8 @@ bool ItemSelector(const char* name, const Item::List& list, Item** itemPtr, bool
         if (disable)
         {
             ImGui::EndDisabled();
+
+            SetDisabledTooltip(messages::reference::cNothingAttached);
         }
 
         ImGui::End();
@@ -2068,6 +2104,10 @@ bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** war
         if (disable)
         {
             ImGui::EndDisabled();
+
+            SetDisabledTooltip(*warcType == WaveArchiveType::Explicit
+                ? messages::reference::cNothingAttached
+                : messages::reference::cWaveArchiveNotExplicit);
         }
 
         ImGui::EndPopup();

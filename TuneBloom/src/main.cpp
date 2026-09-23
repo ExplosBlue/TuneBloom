@@ -18,6 +18,8 @@
 #include "AppFramework.h"
 #include "tasks/RootTask.h"
 
+#include <snd/DisposeCallbackMgr.h>
+#include <snd/SoundThread.h>
 #include <snd/ut/ut_BinaryFileFormat.h>
 
 #include "ui/PopupMgr.h"
@@ -150,6 +152,9 @@ int main(int argc, char* argv[])
         sead::CurrentHeapSetter heapSetter(sead::HeapMgr::getUnboundHeap());
 
         PopupMgr::createInstance(nullptr);
+
+        snd::internal::driver::SoundThread::createInstance(nullptr);
+        snd::internal::driver::DisposeCallbackMgr::createInstance(nullptr);
 
 #if defined(SEAD_PLATFORM_WINDOWS)
         sead::FileDeviceMgr::instance()->mount(new sead::WinNativeFileDevice());

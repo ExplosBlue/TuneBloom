@@ -4,6 +4,7 @@
 #include <bfsar/BfstmFile.h>
 #include <bfsar/writer/FileWriter.h>
 
+#include <ui/Messages.h>
 #include <ui/PopupMgr.h>
 #include <ui/UI.h>
 
@@ -530,7 +531,16 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     return true;
 }
 
-bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
+bool BfstmFile::IsComplete(const void *data, u32 size)
+{
+    if (!data || size < sizeof(nw::ut::BinaryFileHeader))
+        return false;
+
+    const nw::ut::BinaryFileHeader &header = *static_cast<const nw::ut::BinaryFileHeader *>(data);
+    return header.fileSize <= size;
+}
+
+bool ReadStreamWaves(Sound* sound, const void* strmFile, u32 strmFileSize, const Sound* srcSound)
 {
     LOG_FUNC();
 
@@ -547,11 +557,9 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
         const Sound::StreamSoundInfo::Track::List& srcTracks = srcSound->getStreamSoundInfo().getTrackList();
         if (tracks.size() != srcTracks.size())
         {
-            sead::FormatFixedSafeString<1024> msg(
-                "Stream Sound '%s' and '%s' should both have the same amount of Tracks (%d != %d)",
-                srcSound->getFormattedName().cstr(), sound->getFormattedName().cstr(), srcTracks.size(), tracks.size()
-            );
-            PopupMgr::instance()->pushCurrentItemError(msg);
+            sead::FormatFixedSafeString<1024> msg(messages::stream::cSharedTrackCountFormat,
+                                                  sound->getFormattedName().cstr(), srcSound->getFormattedName().cstr(), tracks.size(), srcTracks.size());
+            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             return false;
         }
 
@@ -604,6 +612,29 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
 
     WaveFile::Encoding encoding = static_cast<WaveFile::Encoding>(streamSoundInfo.encodeMethod);
 
+    const u64 channelCount = streamSoundInfo.channelCount;
+    const u64 blockCount = streamSoundInfo.blockCount;
+
+    if (blockCount == 0 || channelCount == 0 || channelCount > cStrmChannelNum)
+    {
+        LOG("ReadStreamWaves: invalid block or channel count");
+        return false;
+    }
+
+    const u64 sampleDataEnd = reader.GetSampleDataOffset() +
+                              (blockCount - 1) * streamSoundInfo.oneBlockBytes * channelCount +
+                              static_cast<u64>(streamSoundInfo.lastBlockPaddedBytes) * channelCount;
+
+    const u64 seekDataEnd = encoding == WaveFile::Encoding::DspAdpcm
+                                ? reader.GetSeekBlockOffset() + sizeof(nw::ut::BinaryBlockHeader) + blockCount * channelCount * sizeof(WaveFile::Channel::SeekInfo)
+                                : 0;
+
+    if (sampleDataEnd > strmFileSize || seekDataEnd > strmFileSize)
+    {
+        LOG("ReadStreamWaves: file is shorter than its blocks");
+        return false;
+    }
+
     u32 channelSize = streamSoundInfo.oneBlockBytes * (streamSoundInfo.blockCount - 1) + streamSoundInfo.lastBlockPaddedBytes;
 
     for (u32 i = 0; i < streamSoundInfo.channelCount; i++)
@@ -633,12 +664,15 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
         }
     }
 
+    bool readAllTracks = true;
+
     for (u32 trackNo = 0; trackNo < tracks.size(); trackNo++)
     {
         Sound::StreamSoundInfo::Track& track = *static_cast<Sound::StreamSoundInfo::Track*>(tracks.nth(trackNo)->val());
 
         WaveFile* wave = new WaveFile();
         wave->mId = sBfsar.getWaveFileList().size();
+        wave->mIsFromStreamFile = true;
 
         wave->mEnableName = true;
         if (tracks.size() == 1)
@@ -661,33 +695,31 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
         bool loopError = false;
         if (wave->mLoopStartFrame >= wave->mLoopEndFrame)
         {
-            sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop (%u >= %u)", trackNo, wave->mLoopStartFrame, wave->mLoopEndFrame);
-            PopupMgr::instance()->pushCurrentItemError(msg);
+            sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopInvalidFormat, trackNo, wave->mLoopStartFrame, wave->mLoopEndFrame);
+            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             loopError = true;
         }
 
         if (wave->getLoopStartFrame(true) != streamSoundInfo.loopStart)
         {
-            sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop start (%u should be %u)", trackNo, wave->getLoopStartFrame(true), (u32)streamSoundInfo.loopStart);
-            PopupMgr::instance()->pushCurrentItemError(msg);
+            sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopStartMismatchFormat, trackNo, wave->getLoopStartFrame(true), (u32)streamSoundInfo.loopStart);
+            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             loopError = true;
         }
 
         if (wave->getLoopEndFrame(true) != streamSoundInfo.frameCount)
         {
-            sead::FormatFixedSafeString<1024> msg("Track %u has invalid loop end (%u should be %u)", trackNo, wave->getLoopEndFrame(true), (u32)streamSoundInfo.frameCount);
-            PopupMgr::instance()->pushCurrentItemError(msg);
+            sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopEndMismatchFormat, trackNo, wave->getLoopEndFrame(true), (u32)streamSoundInfo.frameCount);
+            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             loopError = true;
         }
 
         sBfsar.getWaveFileList().pushBack(wave);
-        SetUnsavedChanges(true);
-
         track.getWaveFileRef().attach(wave);
-        SetUnsavedChanges(true);
 
         if (loopError)
         {
+            readAllTracks = false;
             continue;
         }
 
@@ -707,8 +739,10 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
 
             if (!channelBuffers[globalChannelIndex])
             {
-                sead::FormatFixedSafeString<1024> msg("Track %u has no associated channels", trackNo);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackChannelMissingFormat, trackNo);
+                PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+
+                readAllTracks = false;
                 continue;
             }
 
@@ -756,8 +790,10 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
                 }
                 else
                 {
-                    sead::FormatFixedSafeString<1024> msg("Track %u DspAdpcm channel read error (really bad)", trackNo);
-                    PopupMgr::instance()->pushCurrentItemError(msg);
+                    sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackAdpcmUnreadableFormat, trackNo);
+                    PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+
+                    readAllTracks = false;
                 }
 
                 channel->mSeekData.mSeekInfo.allocBuffer(streamSoundInfo.blockCount);
@@ -793,5 +829,5 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, const Sound* srcSound)
         }
     }
 
-    return true;
+    return readAllTracks;
 }

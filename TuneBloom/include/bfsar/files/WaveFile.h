@@ -329,6 +329,7 @@ public:
     static const u32 cFramesAfterLoopEnd = 140;
     static const u32 cSamplesPerFrame = 14;
     static const u32 cStreamLoopStartAlignmentFramesAdpcm = 0x3800;
+    static const u32 cCtrLoopStartAlignmentBytes = 512;
     static const u32 cStreamMinimumLoopFrames = 0x480;
 
 public:
@@ -468,20 +469,7 @@ public:
         return 0;
     }
 
-    u32 getLoopStartAlignmentFrames(bool forStream) const
-    {
-        switch (mEncoding)
-        {
-            case Encoding::DspAdpcm:
-                return forStream ? cStreamLoopStartAlignmentFramesAdpcm : cSamplesPerFrame;
-            case Encoding::Pcm16:
-                return forStream ? 8192 / sizeof(s16) : 0;
-            case Encoding::Pcm8:
-                return forStream ? 8192 / sizeof(u8) : 0;
-        }
-
-        return 0;
-    }
+    u32 getLoopStartAlignmentFrames(bool forStream) const;
 
     const sead::ObjList<Channel>& getChannels() const
     {

@@ -649,6 +649,34 @@ void WaveFile::disposeChannels_()
     }
 }
 
+u32 WaveFile::getLoopStartAlignmentFrames(bool forStream) const
+{
+    const bool isCtr = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+
+    switch (mEncoding)
+    {
+        case Encoding::DspAdpcm:
+            if (forStream)
+                return cStreamLoopStartAlignmentFramesAdpcm;
+
+            return isCtr ? cCtrLoopStartAlignmentBytes / cAdpcmFrameBytes * cSamplesPerFrame : cSamplesPerFrame;
+
+        case Encoding::Pcm16:
+            if (forStream)
+                return 8192 / sizeof(s16);
+
+            return isCtr ? cCtrLoopStartAlignmentBytes / sizeof(s16) : 0;
+
+        case Encoding::Pcm8:
+            if (forStream)
+                return 8192 / sizeof(u8);
+
+            return isCtr ? cCtrLoopStartAlignmentBytes / sizeof(u8) : 0;
+    }
+
+    return 0;
+}
+
 void WaveFile::updateLoopInfo_(bool update, bool updateStream)
 {
     if (mEncoding != Encoding::DspAdpcm)

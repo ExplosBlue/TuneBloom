@@ -143,7 +143,7 @@ static void ExportBankModels(std::vector<BankFile*>* pending, const char* ext, c
 
     const sead::FormatFixedSafeString<64> filterName("%s (*.%s)", filterDesc, ext);
 
-    ExportItemsToFiles(pending, { ext, filterName.cstr(), messages::exporting::cFallbackBank, messages::exporting::cSelectFolder },
+    ExportItemsToFiles(pending, { ext, filterName.cstr(), messages::common::cBank, messages::exporting::cSelectFolder },
         [exportFn](BankFile* bank, const sead::SafeString& path)
         {
             return exportFn(path, *bank);
@@ -160,7 +160,7 @@ static void ExportBankModels(std::vector<BankFile*>* pending, const char* ext, c
 
 static void ExportPendingWavesToWav()
 {
-    ExportItemsToFiles(&sPendingWavesToWav, { "wav", messages::filedialog::cFilterWave, messages::exporting::cFallbackWave, messages::exporting::cSelectWavFolder },
+    ExportItemsToFiles(&sPendingWavesToWav, { "wav", messages::filedialog::cFilterWave, messages::common::cWave, messages::exporting::cSelectWavFolder },
         [](WaveFile* wave, const sead::SafeString& path)
         {
             return wave->writeWavFile(path);
@@ -226,8 +226,8 @@ static void ImportPendingSequenceFile()
 
 void DrawFileExportDialogs()
 {
-    ExportInnerFiles(&sPendingSequenceFiles, InnerFileKind::Sequence, messages::exporting::cFallbackSequence);
-    ExportInnerFiles(&sPendingWaveFiles, InnerFileKind::Wave, messages::exporting::cFallbackWave);
+    ExportInnerFiles(&sPendingSequenceFiles, InnerFileKind::Sequence, messages::common::cSequence);
+    ExportInnerFiles(&sPendingWaveFiles, InnerFileKind::Wave, messages::common::cWave);
     ExportPendingBankBundles();
     ExportBankModels(&sPendingBankSf2, "sf2", messages::exporting::cFormatSf2, messages::exporting::cFormatSoundFont, &exportBankToSf2);
     ExportBankModels(&sPendingBankDls, "dls", messages::exporting::cFormatDls, messages::exporting::cFormatDls, &exportBankToDls);

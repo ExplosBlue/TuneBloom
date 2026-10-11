@@ -12,7 +12,7 @@ static constexpr f32 cTrackWaveWideWidthEm = 13.0f;
 static constexpr f32 cTrackChannelsMinEm   = 20.0f;
 static constexpr f32 cTrackHoveredAlpha    = 0.05f;
 
-static const char* cTrackChannelWidest = messages::stream::cTrackStereo;
+static const char* cTrackChannelWidest = messages::common::cStereo;
 
 static const TrackParam cTrackMuteParams[] = { TrackParam::Mute };
 static const TrackParam cTrackSoloParams[] = { TrackParam::Solo };
@@ -78,7 +78,7 @@ static void SetupTrackTableColumns(const TrackContext& ctx, const TrackTableLayo
     ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, layout.indexWidth);
     ImGui::TableSetupColumn(messages::stream::cTrackMute, ImGuiTableColumnFlags_WidthFixed, layout.muteWidth);
     ImGui::TableSetupColumn(messages::stream::cTrackSolo, ImGuiTableColumnFlags_WidthFixed, layout.soloWidth);
-    ImGui::TableSetupColumn(messages::stream::cTrackWaveFile, ImGuiTableColumnFlags_WidthFixed, waveWidth);
+    ImGui::TableSetupColumn(messages::common::cWaveFile, ImGuiTableColumnFlags_WidthFixed, waveWidth);
     ImGui::TableSetupColumn(messages::stream::cTrackMix, ImGuiTableColumnFlags_WidthFixed, layout.mixWidth);
     ImGui::TableSetupColumn(messages::stream::cTrackBypass, ImGuiTableColumnFlags_WidthFixed, layout.bypassWidth);
 
@@ -86,7 +86,7 @@ static void SetupTrackTableColumns(const TrackContext& ctx, const TrackTableLayo
         ImGui::TableSetupColumn(messages::panel::cSend, ImGuiTableColumnFlags_WidthFixed, layout.sendWidth);
 
     if (ctx.enableFilter)
-        ImGui::TableSetupColumn(messages::panel::cFilter, ImGuiTableColumnFlags_WidthFixed, layout.filterWidth);
+        ImGui::TableSetupColumn(messages::common::cFilter, ImGuiTableColumnFlags_WidthFixed, layout.filterWidth);
 }
 
 static void DrawTrackTableTitles(const TrackContext& ctx, const TrackTableLayout& layout)
@@ -157,9 +157,9 @@ static void DrawTrackChannelCount(u16 channelCount)
     ImGui::AlignTextToFramePadding();
 
     if (channelCount == 1)
-        ImGui::TextDisabled("%s", messages::stream::cTrackMono);
+        ImGui::TextDisabled("%s", messages::common::cMono);
     else if (channelCount == 2)
-        ImGui::TextDisabled("%s", messages::stream::cTrackStereo);
+        ImGui::TextDisabled("%s", messages::common::cStereo);
     else
         ImGui::TextDisabled(messages::stream::cTrackChannelsFormat, channelCount);
 }

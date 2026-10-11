@@ -271,7 +271,7 @@ static s32 sMenuThemeRequest = -1;
 
 static void DrawBackupsMenu()
 {
-    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_HISTORY " %s", messages::mainmenu::cBackups).cstr()))
+    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_HISTORY " %s", messages::common::cBackups).cstr()))
         return;
 
     if (MenuBarIconItem(ICON_LC_DATABASE_BACKUP, messages::mainmenu::cCreateBackup) && backup::CreateBackup())
@@ -295,18 +295,18 @@ static void DrawEditMenu()
     const Item* activeItem = bfsarOpen ? GetActiveSelection() : nullptr;
     const bool hasSound = activeItem && activeItem->getItemType() == Item::ItemType::Sound;
 
-    if (MenuBarIconItem(ICON_LC_TEXT_CURSOR_INPUT, messages::mainmenu::cRename, shortcuts::Label(shortcuts::Action::RenameSelection), hasItem))
+    if (MenuBarIconItem(ICON_LC_TEXT_CURSOR_INPUT, messages::common::cRename, shortcuts::Label(shortcuts::Action::RenameSelection), hasItem))
         shortcuts::Trigger(shortcuts::Action::RenameSelection);
 
-    if (MenuBarIconItem(ICON_LC_COPY, messages::mainmenu::cDuplicate, shortcuts::Label(shortcuts::Action::DuplicateSelection), hasSound))
+    if (MenuBarIconItem(ICON_LC_COPY, messages::common::cDuplicate, shortcuts::Label(shortcuts::Action::DuplicateSelection), hasSound))
         shortcuts::Trigger(shortcuts::Action::DuplicateSelection);
 
-    if (MenuBarIconItem(ICON_LC_LIST_CHECKS, messages::mainmenu::cSelectAll, shortcuts::Label(shortcuts::Action::SelectAll), bfsarOpen))
+    if (MenuBarIconItem(ICON_LC_LIST_CHECKS, messages::common::cSelectAll, shortcuts::Label(shortcuts::Action::SelectAll), bfsarOpen))
         shortcuts::Trigger(shortcuts::Action::SelectAll);
 
     ImGui::Separator();
 
-    if (MenuBarIconItem(ICON_LC_SEARCH, messages::mainmenu::cFind, shortcuts::Label(shortcuts::Action::FocusFilter), bfsarOpen))
+    if (MenuBarIconItem(ICON_LC_SEARCH, messages::common::cFind, shortcuts::Label(shortcuts::Action::FocusFilter), bfsarOpen))
     {
         sMenuFindFrame = ImGui::GetFrameCount() + 1;
         shortcuts::Trigger(shortcuts::Action::FocusFilter);
@@ -314,7 +314,7 @@ static void DrawEditMenu()
 
     ImGui::Separator();
 
-    if (MenuBarIconItem(ICON_LC_TRASH_2, messages::mainmenu::cDelete, nullptr, hasItem))
+    if (MenuBarIconItem(ICON_LC_TRASH_2, messages::common::cDelete, nullptr, hasItem))
         shortcuts::Trigger(shortcuts::Action::DeleteSelection);
 }
 
@@ -330,7 +330,7 @@ static void DrawViewMenu()
 
     ImGui::Separator();
 
-    if (BeginSubMenu(messages::mainmenu::cTheme))
+    if (BeginSubMenu(messages::common::cTheme))
     {
         if (MenuBarItem(messages::mainmenu::cThemeDark, nullptr, gThemeIsDark))
             sMenuThemeRequest = 1;
@@ -352,15 +352,15 @@ static void DrawTransportMenu()
     const bool isPlaying = sSoundPlayer.isActive() && !sSoundPlayer.isPause();
     const bool loopEnabled = sSoundPlayer.isLoopEnabled();
 
-    if (MenuBarIconItem(isPlaying ? ICON_LC_PAUSE : ICON_LC_PLAY, isPlaying ? messages::mainmenu::cPause : messages::mainmenu::cPlay, shortcuts::Label(shortcuts::Action::PlayPause), CanTogglePlayback(), messages::playback::cNothingToPlay))
+    if (MenuBarIconItem(isPlaying ? ICON_LC_PAUSE : ICON_LC_PLAY, isPlaying ? messages::common::cPause : messages::common::cPlay, shortcuts::Label(shortcuts::Action::PlayPause), CanTogglePlayback(), messages::playback::cNothingToPlay))
         TogglePlayback();
 
-    if (MenuBarIconItem(ICON_LC_SQUARE, messages::mainmenu::cStop, nullptr, sSoundPlayer.isActive()))
+    if (MenuBarIconItem(ICON_LC_SQUARE, messages::common::cStop, nullptr, sSoundPlayer.isActive()))
         sSoundPlayer.fadeOutPlayers();
 
     ImGui::Separator();
 
-    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_REPEAT " %s", messages::mainmenu::cLoop).cstr(), nullptr, loopEnabled))
+    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_REPEAT " %s", messages::common::cLoop).cstr(), nullptr, loopEnabled))
         SetPlaybackLoopEnabled(!loopEnabled);
 }
 
@@ -456,7 +456,7 @@ static void DrawFileMenu()
         ImGui::BeginDisabled();
     }
 
-    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE " %s", messages::mainmenu::cSave).cstr(), shortcuts::Label(shortcuts::Action::SaveProject)))
+    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE " %s", messages::common::cSave).cstr(), shortcuts::Label(shortcuts::Action::SaveProject)))
     {
         RequestSaveFile();
     }
@@ -499,7 +499,7 @@ static void DrawFileMenu()
 
     ImGui::Separator();
 
-    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::mainmenu::cClose, nullptr, bfsarOpen))
+    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, nullptr, bfsarOpen))
     {
         RequestCloseFile();
     }
@@ -555,7 +555,7 @@ static void DrawMenuBarItems(f32 em)
 
     CloseHoverMenuOnLeave();
 
-    if (BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_TEXT " %s", messages::mainmenu::cFile).cstr()))
+    if (BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_TEXT " %s", messages::common::cFile).cstr()))
     {
         DrawFileMenu();
         EndBarMenu();
@@ -590,7 +590,7 @@ static void DrawMenuBarItems(f32 em)
     if (preferencesClicked)
         OpenPreferencesWindow(PreferencesPage::File);
 
-    if (BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_CIRCLE_HELP " %s", messages::mainmenu::cHelp).cstr()))
+    if (BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_CIRCLE_HELP " %s", messages::common::cHelp).cstr()))
     {
         DrawHelpMenu();
         EndBarMenu();

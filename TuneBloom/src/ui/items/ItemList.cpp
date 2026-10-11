@@ -316,7 +316,7 @@ static void BeginItemListTable(ItemListContext& ctx)
         if (ctx.hasHeader)
             SetupItemIdColumn(ctx.itemType);
 
-        ImGui::TableSetupColumn(messages::item::cColumnName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
+        ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
         SetupItemColumns(ctx.columns, ctx.columnCount, ctx.hideAll);
     }
 

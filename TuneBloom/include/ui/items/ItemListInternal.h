@@ -11,7 +11,7 @@
 
 struct ItemRemoveText
 {
-    const char* label = messages::menu::cDelete;
+    const char* label = messages::common::cDelete;
     const char* manyFormat = messages::menu::cDeleteItemsFormat;
     bool removesData = true;
 };

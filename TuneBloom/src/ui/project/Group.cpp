@@ -139,10 +139,10 @@ void DrawGroupPropertiesUI()
 
 const char* Group::ItemInfo::sItemIdTypes[4] = {
     //"None",
-    messages::item::cTypeSound,
+    messages::common::cSound,
     messages::item::cTypeSoundSet,
-    messages::item::cTypeBank,
-    messages::item::cTypeWaveArchive
+    messages::common::cBank,
+    messages::common::cWaveArchive
 };
 
 static bool IsSameLoadItemKind(Item::ItemType itemType, const Item* oldItem, const Item* item)
@@ -163,7 +163,7 @@ static bool IsSameLoadItemKind(Item::ItemType itemType, const Item* oldItem, con
 void Group::ItemInfo::drawUI()
 {
     bool disabled = mIsDisabled;
-    PropertyRow(messages::group::cDisabledLabel);
+    PropertyRow(messages::common::cDisabled);
     if (ImGui::Checkbox("##Disable", &disabled))
     {
         mIsDisabled = disabled;
@@ -193,7 +193,7 @@ void Group::ItemInfo::drawUI()
     {
         Item* oldItem = mItemRef.getItem();
         Item* item = oldItem;
-        PropertyRow(messages::group::cItemLabel);
+        PropertyRow(messages::common::cItem);
         if (ItemSelector("##Item", sBfsar.getItemList(mItemRefType), &item, false))
         {
             mItemRef.attach(item);
@@ -218,7 +218,7 @@ void Group::ItemInfo::drawUI()
         {
             ImGui::BeginDisabled();
 
-            static const char* all = messages::group::cLoadAll;
+            static const char* all = messages::common::cAll;
 
             itemCount = 1;
             items = &all;
@@ -372,39 +372,39 @@ const char** Group::ItemInfo::GetLoadItems(const Item* item, ItemType itemType, 
     SEAD_ASSERT(outCount);
 
     static const char* sSequenceSoundLoadItems[] = {
-        messages::group::cLoadAll,
+        messages::common::cAll,
         messages::group::cLoadSequenceAndBank,
         messages::group::cLoadSequenceAndWaveArchive,
         messages::group::cLoadBankAndWaveArchive,
-        messages::group::cLoadSequence,
-        messages::group::cLoadBank,
-        messages::group::cLoadWaveArchive
+        messages::common::cSequence,
+        messages::common::cBank,
+        messages::common::cWaveArchive
     };
 
     static const char* sWaveSoundSetLoadItems[] = {
-        messages::group::cLoadAll,
-        messages::group::cLoadWaveSoundSet,
-        messages::group::cLoadWaveArchive
+        messages::common::cAll,
+        messages::common::cWaveSoundSet,
+        messages::common::cWaveArchive
     };
 
     static const char* sSequenceSetLoadItems[] = {
-        messages::group::cLoadAll,
+        messages::common::cAll,
         messages::group::cLoadSequenceSetAndBank,
         messages::group::cLoadSequenceSetAndWaveArchive,
         messages::group::cLoadBankAndWaveArchive,
         messages::group::cLoadSequenceSet,
-        messages::group::cLoadBank,
-        messages::group::cLoadWaveArchive
+        messages::common::cBank,
+        messages::common::cWaveArchive
     };
 
     static const char* sBankLoadItems[] = {
-        messages::group::cLoadAll,
-        messages::group::cLoadBank,
-        messages::group::cLoadWaveArchive
+        messages::common::cAll,
+        messages::common::cBank,
+        messages::common::cWaveArchive
     };
 
     static const char* sWaveArchiveLoadItems[] = {
-        messages::group::cLoadAll,
+        messages::common::cAll,
     };
 
     if (!item)

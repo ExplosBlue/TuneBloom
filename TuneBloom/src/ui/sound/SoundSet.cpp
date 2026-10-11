@@ -369,7 +369,7 @@ static void DrawSoundSetTypeBox(SoundSet* soundSet)
     if (!BeginPropertyBox("SoundSetType"))
         return;
 
-    static const char *sSoundSetTypes[] = {messages::sound::cTypeWave, messages::sound::cTypeSequence};
+    static const char *sSoundSetTypes[] = {messages::common::cWave, messages::common::cSequence};
 
     const bool isWave = soundSet->getSoundSetType() == SoundSet::SoundSetType::Wave;
 
@@ -385,7 +385,7 @@ static void DrawSoundSetTypeBox(SoundSet* soundSet)
         Item* warc = soundSet->getWaveArchiveRef().getItem();
         WaveArchiveType warcType = soundSet->getWaveArchiveType();
 
-        PropertyRow(messages::soundset::cWaveArchiveLabel);
+        PropertyRow(messages::common::cWaveArchive);
         if (WaveArchiveSelector("##WaveArchive", &warcType, &warc, sBfsar.getWaveArchiveList()))
         {
             soundSet->getWaveArchiveRef().attach(warc);
@@ -479,7 +479,7 @@ static void DrawSoundSetRangeBox(SoundSet* soundSet)
     RegionHeader(messages::soundset::cIdRangeTitle);
 
     bool isEmpty = soundSet->getIsEmpty();
-    PropertyRow(messages::soundset::cEmptyLabel);
+    PropertyRow(messages::common::cEmpty);
     DetailTooltip(messages::soundset::cEmptyDetail);
 
     if (ImGui::Checkbox("##IsEmpty", &isEmpty))

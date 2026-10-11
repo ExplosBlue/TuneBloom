@@ -98,7 +98,7 @@ void FormatTimeOfDay(char* buffer, size_t bufferSize, int64_t time, bool twelveH
     std::tm day;
     if (!GetLocalDay(time, &day))
     {
-        snprintf(buffer, bufferSize, "%s", messages::date::cUnknown);
+        snprintf(buffer, bufferSize, "%s", messages::common::cUnknown);
         return;
     }
 
@@ -117,7 +117,7 @@ void FormatDate(char* buffer, size_t bufferSize, int64_t time)
 
     if (!GetLocalDay(time, &day) || !GetLocalDay(static_cast<int64_t>(std::time(nullptr)), &today))
     {
-        snprintf(buffer, bufferSize, "%s", messages::date::cUnknown);
+        snprintf(buffer, bufferSize, "%s", messages::common::cUnknown);
         return;
     }
 
@@ -142,7 +142,7 @@ void FormatFullDate(char* buffer, size_t bufferSize, int64_t time)
     std::tm day;
     if (!GetLocalDay(time, &day))
     {
-        snprintf(buffer, bufferSize, "%s", messages::date::cUnknown);
+        snprintf(buffer, bufferSize, "%s", messages::common::cUnknown);
         return;
     }
 
@@ -161,7 +161,7 @@ void FormatRelativeDate(char* buffer, size_t bufferSize, int64_t time)
 
     if (!GetLocalDay(time, &day) || !GetLocalDay(now, &today))
     {
-        snprintf(buffer, bufferSize, "%s", messages::date::cUnknown);
+        snprintf(buffer, bufferSize, "%s", messages::common::cUnknown);
         return;
     }
 

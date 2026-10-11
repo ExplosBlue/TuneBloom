@@ -19,7 +19,7 @@ static constexpr f32 cAdshrInstantOctaves    = 1.0f;
 static constexpr u8 cAdsrMin = 0;
 static constexpr u8 cAdsrMax = 127;
 
-static const char* cRegionAdshrKnobs[] = { messages::bank::cKnobAttack, messages::bank::cKnobHold, messages::bank::cKnobDecay, messages::bank::cKnobSustain, messages::bank::cKnobRelease };
+static const char* cRegionAdshrKnobs[] = { messages::bank::cKnobAttack, messages::common::cHold, messages::bank::cKnobDecay, messages::bank::cKnobSustain, messages::bank::cKnobRelease };
 
 static f32 CalcAdshrLevel(f32 decibel, f32 floorDecibel)
 {
@@ -139,9 +139,9 @@ static AdshrTimes CalcAdshrTimes(const snd::AdshrCurve& adshrCurve)
 static sead::FixedSafeString<16> FormatAdshrTime(f32 msec)
 {
     if (msec < 1000.0f)
-        return sead::FormatFixedSafeString<16>(messages::bank::cEnvelopeTimeMsecFormat, msec);
+        return sead::FormatFixedSafeString<16>(messages::common::cMillisecondsFormat, msec);
 
-    return sead::FormatFixedSafeString<16>(messages::bank::cEnvelopeTimeSecFormat, msec / 1000.0f);
+    return sead::FormatFixedSafeString<16>(messages::common::cSecondsFormat, msec / 1000.0f);
 }
 
 static f32 CalcAdshrStageRatio(f32 msec, f32 maxMsec)

@@ -104,7 +104,7 @@ bool SampleField(const char* id, u32* value, u32 min, u32 max, u32 reset, u32 ra
     SetNextKnobReset(reset);
 
     if (!hasValue)
-        SetNextKnobText(messages::import::cWaveNoValue);
+        SetNextKnobText(messages::common::cNoValue);
 
     const bool changed = DragField(id, ImGuiDataType_U32, value, sead::Mathf::max(1.0f, static_cast<f32>(max) / cSampleDragRange), &min, &max);
 
@@ -116,7 +116,7 @@ bool SampleField(const char* id, u32* value, u32 min, u32 max, u32 reset, u32 ra
     }
 
     ImGui::SameLine();
-    ImGui::TextDisabled("%s", messages::wavefile::cLoopSamples);
+    ImGui::TextDisabled("%s", messages::common::cSamples);
 
     return changed;
 }
@@ -126,11 +126,11 @@ void WaveImportPanel::drawSourceHeader(const char* header, u32 sampleRate, u32 c
     sead::FixedSafeString<32> channels;
 
     if (channelCount == 1)
-        channels.copy(messages::item::cChannelsMono);
+        channels.copy(messages::common::cMono);
     else if (channelCount == 2)
-        channels.copy(messages::item::cChannelsStereo);
+        channels.copy(messages::common::cStereo);
     else
-        channels.format(messages::import::cWaveChannelCountFormat, channelCount);
+        channels.format(messages::common::cChannelCountFormat, channelCount);
 
     sead::FixedSafeString<32> length;
     FormatSampleTime(&length, sampleCount, sampleRate);
@@ -157,9 +157,9 @@ void WaveImportPanel::drawUndecodableSource(const char* header, WaveFile::Encodi
 
     ImGui::TextDisabled("%s", messages::import::cWaveNoPreview);
 
-    const f32 labelWidth = CalcLabelWidth({ messages::wavefile::cEncoding, messages::wavefile::cLoopStart, messages::wavefile::cLoopEnd });
+    const f32 labelWidth = CalcLabelWidth({ messages::common::cEncoding, messages::common::cStart, messages::common::cEnd });
 
-    if (BeginGroupBox(messages::wavefile::cFormat))
+    if (BeginGroupBox(messages::common::cFormat))
     {
         drawEncodingField(encoding, labelWidth);
         EndGroupBox();
@@ -167,7 +167,7 @@ void WaveImportPanel::drawUndecodableSource(const char* header, WaveFile::Encodi
 
     const f32 checkSize = ImGui::GetFrameHeight();
 
-    if (!BeginGroupBoxWithTools(messages::wavefile::cLoop, checkSize))
+    if (!BeginGroupBoxWithTools(messages::common::cLoop, checkSize))
         return;
 
     BeginBoxTools(checkSize);
@@ -180,10 +180,10 @@ void WaveImportPanel::drawUndecodableSource(const char* header, WaveFile::Encodi
 
     ImGui::BeginDisabled(!info->isLoop);
 
-    RowLabel(messages::wavefile::cLoopStart, labelWidth);
+    RowLabel(messages::common::cStart, labelWidth);
     changed |= SampleField("##LoopStart", &info->loopStartFrame, 0, total > 0 ? total - 1 : 0, 0, info->sampleRate, info->isLoop);
 
-    RowLabel(messages::wavefile::cLoopEnd, labelWidth);
+    RowLabel(messages::common::cEnd, labelWidth);
     changed |= SampleField("##LoopEnd", &info->loopEndFrame, 1, total, total, info->sampleRate, info->isLoop);
 
     ImGui::EndDisabled();
@@ -201,7 +201,7 @@ void WaveImportPanel::drawUndecodableSource(const char* header, WaveFile::Encodi
 void WaveImportPanel::drawColumns(FrameContext& ctx)
 {
     const f32 gap = ImFloor(ImGui::GetFontSize() * cColumnGapEm);
-    const f32 rightLabelWidth = CalcLabelWidth({ messages::import::cWaveTrimStart, messages::import::cWaveTrimEnd, messages::wavefile::cLength });
+    const f32 rightLabelWidth = CalcLabelWidth({ messages::common::cStart, messages::common::cEnd, messages::common::cLength });
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(gap * 0.5f, 0.0f));
 
@@ -234,12 +234,12 @@ void WaveImportPanel::drawColumns(FrameContext& ctx)
 
 void WaveImportPanel::drawFormatBox(FrameContext& ctx)
 {
-    if (!BeginGroupBox(messages::wavefile::cFormat))
+    if (!BeginGroupBox(messages::common::cFormat))
         return;
 
     EndBoxTools();
 
-    const f32 labelWidth = CalcLabelWidth({ messages::wavefile::cEncoding, messages::wavefile::cSampleRate, messages::wavefile::cChannels });
+    const f32 labelWidth = CalcLabelWidth({ messages::common::cEncoding, messages::common::cSampleRate, messages::common::cChannels });
 
     drawEncodingField(ctx.encoding, labelWidth);
     drawSampleRateField(labelWidth);
@@ -295,7 +295,7 @@ void WaveImportPanel::drawProcessingPanels(f32 fill)
 
         if (index == 0)
         {
-            RegionHeader(messages::import::cWavePitchTitle);
+            RegionHeader(messages::common::cPitch);
             DetailTooltip(messages::import::cWavePitchTip);
 
             OffsetPanelBody(ImVec2(offset, topFill));
@@ -320,7 +320,7 @@ void WaveImportPanel::drawProcessingPanels(f32 fill)
 
 void WaveImportPanel::drawEncodingField(WaveFile::Encoding* encoding, f32 labelWidth)
 {
-    RowLabel(messages::wavefile::cEncoding, labelWidth);
+    RowLabel(messages::common::cEncoding, labelWidth);
 
     if (ComboScroll("##Encoding", reinterpret_cast<s32*>(encoding), WaveFile::sEncodingTypes, cWaveEncodingDetails, IM_ARRAYSIZE(cWaveEncodingDetails)))
         mTouched = true;
@@ -346,7 +346,7 @@ void WaveImportPanel::drawSampleRateField(f32 labelWidth)
     char preview[40];
     FormatRate(preview, sizeof(preview), mSettings.targetSampleRate, current == 0);
 
-    RowLabel(messages::wavefile::cSampleRate, labelWidth, messages::import::cWaveSampleRateTip);
+    RowLabel(messages::common::cSampleRate, labelWidth, messages::import::cWaveSampleRateTip);
 
     if (ImGui::BeginCombo("##SampleRate", preview))
     {
@@ -386,7 +386,7 @@ void WaveImportPanel::drawChannelsField(f32 labelWidth)
 
     s32 current = static_cast<s32>(mSettings.channelMode);
 
-    RowLabel(messages::wavefile::cChannels, labelWidth);
+    RowLabel(messages::common::cChannels, labelWidth);
 
     if (ImGui::BeginCombo("##Channels", cModeNames[current]))
     {
@@ -422,10 +422,10 @@ void WaveImportPanel::drawTrimBox(FrameContext& ctx, f32 labelWidth)
     u32 start = ctx.cropStart;
     u32 end = ctx.cropEnd;
 
-    RowLabel(messages::import::cWaveTrimStart, labelWidth, messages::import::cWaveTrimStartTip);
+    RowLabel(messages::common::cStart, labelWidth, messages::import::cWaveTrimStartTip);
     bool fieldsChanged = SampleField("##TrimStart", &start, 0, total > 0 ? total - 1 : 0, 0, rate);
 
-    RowLabel(messages::import::cWaveTrimEnd, labelWidth, messages::import::cWaveTrimEndTip);
+    RowLabel(messages::common::cEnd, labelWidth, messages::import::cWaveTrimEndTip);
     fieldsChanged |= SampleField("##TrimEnd", &end, 1, total, total, rate);
 
     if (fieldsChanged && editable)
@@ -455,7 +455,7 @@ void WaveImportPanel::drawTrimBox(FrameContext& ctx, f32 labelWidth)
     sead::FixedSafeString<32> time;
     FormatSampleTime(&time, keptLength, rate);
 
-    RowLabel(messages::wavefile::cLength, labelWidth);
+    RowLabel(messages::common::cLength, labelWidth);
     ImGui::TextUnformatted(time.cstr());
     ImGui::SameLine(0.0f, ImGui::GetFontSize());
     ImGui::TextDisabled(messages::wavefile::cSamplesFormat, keptLength);
@@ -471,7 +471,7 @@ void WaveImportPanel::drawLoopModeField(FrameContext& ctx, f32 width)
     BeginBoxTools(width);
     ImGui::SetNextItemWidth(width);
 
-    const char* loopModeNames[] = { messages::import::cWaveLoopModeDetect, messages::import::cLoopDisabled, messages::import::cLoopManual };
+    const char* loopModeNames[] = { messages::import::cWaveLoopModeDetect, messages::common::cDisabled, messages::common::cManual };
     s32 loopModeIndex = static_cast<s32>(mSettings.loopMode);
 
     if (ComboScroll("##LoopMode", &loopModeIndex, loopModeNames, cModeDetails, IM_ARRAYSIZE(loopModeNames)))
@@ -502,10 +502,10 @@ void WaveImportPanel::drawLoopRangeFields(FrameContext& ctx, f32 labelWidth)
 
     ImGui::BeginGroup();
 
-    RowLabel(messages::wavefile::cLoopStart, labelWidth, manual ? messages::import::cWaveLoopStartTip : nullptr);
+    RowLabel(messages::common::cStart, labelWidth, manual ? messages::import::cWaveLoopStartTip : nullptr);
     bool fieldsChanged = SampleField("##LoopStart", &start, 0, total > 0 ? total - 1 : 0, ctx.cropStart, rate, hasLoop);
 
-    RowLabel(messages::wavefile::cLoopEnd, labelWidth, manual && !mSettings.curveEnabled ? messages::import::cWaveLoopEndTip : nullptr);
+    RowLabel(messages::common::cEnd, labelWidth, manual && !mSettings.curveEnabled ? messages::import::cWaveLoopEndTip : nullptr);
     fieldsChanged |= SampleField("##LoopEnd", &end, 1, total, ctx.cropEnd, rate, hasLoop);
 
     ImGui::EndGroup();
@@ -538,7 +538,7 @@ void WaveImportPanel::drawCrossfadeKnob(FrameContext& ctx)
     if (KnobF32(messages::import::cWaveCrossfade, &mWaveformState.crossfadeMs, 0.0f, crossfadeMaxMs, "%.0f", sead::Mathf::max(cCrossfadeDragSpeedMin, crossfadeMaxMs / cCrossfadeDragRange), knobSize))
         ctx.changed = true;
 
-    KnobTooltip(messages::import::cWaveCrossfadeFormat, mWaveformState.crossfadeMs);
+    KnobTooltip(messages::common::cMillisecondsFormat, mWaveformState.crossfadeMs);
 }
 
 void WaveImportPanel::drawLoopTools(FrameContext& ctx)
@@ -588,7 +588,7 @@ void WaveImportPanel::drawLoopBox(FrameContext& ctx, f32 labelWidth, f32 fill)
 {
     const f32 modeWidth = ImFloor(ImGui::GetFontSize() * cLoopModeWidthEm);
 
-    if (!BeginGroupBoxWithTools(messages::wavefile::cLoop, modeWidth))
+    if (!BeginGroupBoxWithTools(messages::common::cLoop, modeWidth))
         return;
 
     drawLoopModeField(ctx, modeWidth);

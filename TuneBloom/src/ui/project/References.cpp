@@ -371,7 +371,7 @@ static void FormatInnerVersion(sead::BufferedSafeString* out, u32 version)
 
 void DrawArchiveInfoUI(Item::ItemType itemType)
 {
-    if (!BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Archive", messages::innerfile::cArchive).cstr(), nullptr, nullptr, false, 1, messages::innerfile::cArchiveDetail))
+    if (!BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Archive", messages::common::cArchive).cstr(), nullptr, nullptr, false, 1, messages::innerfile::cArchiveDetail))
         return;
 
     u32 version = 0;
@@ -397,7 +397,7 @@ void DrawArchiveInfoUI(Item::ItemType itemType)
     ImGui::TextUnformatted(sBfsar.getEndian() == sead::Endian::eBig ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian);
 
     FormatInnerVersion(&text, version);
-    PropertyRow(messages::innerfile::cVersion);
+    PropertyRow(messages::common::cVersion);
     ImGui::TextUnformatted(text.cstr());
 
     if (itemType == Item::ItemType::WaveFile)

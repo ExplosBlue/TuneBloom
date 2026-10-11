@@ -53,25 +53,25 @@ struct KeyText
 };
 
 const ActionRow cArchiveRows[] = {
-    { messages::keys::cNewArchive,      Action::NewProject },
-    { messages::keys::cOpenArchive,     Action::OpenProject },
-    { messages::mainmenu::cSave,            Action::SaveProject },
+    { messages::common::cNewArchive,      Action::NewProject },
+    { messages::common::cOpenArchive,     Action::OpenProject },
+    { messages::common::cSave,            Action::SaveProject },
     { messages::mainmenu::cSaveAs,          Action::SaveProjectAs },
     { messages::keys::cCloseFileWindow, Action::CloseFileWindow },
 };
 
 const ActionRow cListRows[] = {
-    { messages::mainmenu::cSelectAll,     Action::SelectAll },
+    { messages::common::cSelectAll,     Action::SelectAll },
     { messages::keys::cPreviousItem,  Action::SelectPrevious },
     { messages::keys::cNextItem,      Action::SelectNext },
-    { messages::keys::cPageUp,        Action::SelectPageUp },
-    { messages::keys::cPageDown,      Action::SelectPageDown },
+    { messages::common::cPageUp,        Action::SelectPageUp },
+    { messages::common::cPageDown,      Action::SelectPageDown },
     { messages::keys::cFirstItem,     Action::SelectFirst },
     { messages::keys::cLastItem,      Action::SelectLast },
     { messages::keys::cShowSelection, Action::ScrollToSelection },
-    { messages::mainmenu::cRename,        Action::RenameSelection },
-    { messages::mainmenu::cDuplicate,     Action::DuplicateSelection },
-    { messages::mainmenu::cDelete,        Action::DeleteSelection },
+    { messages::common::cRename,        Action::RenameSelection },
+    { messages::common::cDuplicate,     Action::DuplicateSelection },
+    { messages::common::cDelete,        Action::DeleteSelection },
 };
 
 const ActionRow cPlaybackRows[] = {
@@ -79,7 +79,7 @@ const ActionRow cPlaybackRows[] = {
 };
 
 const ActionRow cSearchRows[] = {
-    { messages::mainmenu::cFind,        Action::FocusFilter },
+    { messages::common::cFind,        Action::FocusFilter },
     { messages::keys::cClearSearch, Action::CloseFilter },
 };
 
@@ -107,8 +107,8 @@ const KeyText cKeyTexts[] = {
     { "Equal",      "=" },
     { "Minus",      "-" },
     { "Escape",     messages::keys::cKeyEscape },
-    { "PageUp",     messages::keys::cKeyPageUp },
-    { "PageDown",   messages::keys::cKeyPageDown },
+    { "PageUp",     messages::common::cPageUp },
+    { "PageDown",   messages::common::cPageDown },
 };
 
 }
@@ -260,13 +260,13 @@ void DrawShortcutsDialog()
 
         const f32 top = ImGui::GetCursorScreenPos().y;
 
-        if (BeginActionBox(messages::keys::cGroupArchive, cArchiveRows))
+        if (BeginActionBox(messages::common::cArchive, cArchiveRows))
             EndGroupBox();
 
         if (BeginActionBox(messages::keys::cGroupSearch, cSearchRows))
             EndGroupBox();
 
-        if (BeginActionBox(messages::keys::cGroupPlayback, cPlaybackRows))
+        if (BeginActionBox(messages::common::cPlayback, cPlaybackRows))
             EndGroupBox();
 
         if (BeginMouseBox())
@@ -287,9 +287,9 @@ void DrawShortcutsDialog()
 
     ImGui::Dummy(ImVec2(0.0f, ImFloor(em * cFooterGapEm) - ImGui::GetStyle().ItemSpacing.y));
 
-    BeginDialogFooter({messages::dialog::cClose}, false);
+    BeginDialogFooter({messages::common::cClose}, false);
 
-    if (DialogButton(messages::dialog::cClose) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (DialogButton(messages::common::cClose) || ImGui::IsKeyPressed(ImGuiKey_Escape))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();

@@ -285,7 +285,7 @@ bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format, bool showLabel)
     {
         ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(messages::project::cVersion);
+        ImGui::TextUnformatted(messages::common::cVersion);
     }
 
     if (ImGui::BeginItemTooltip())
@@ -314,7 +314,7 @@ bool DrawInnerVersionUI(u32 *versionPtr, u32 versionByteNum)
         u32 version = *versionPtr;
         u32 versionByteOffset = ((versionByteNum - 1) - i) * 0x8;
 
-        const char *label = (i + 1 == versionByteNum) ? messages::innerfile::cVersion : "";
+        const char *label = (i + 1 == versionByteNum) ? messages::common::cVersion : "";
 
         u8 versionByte = (version >> versionByteOffset) & 0xFF;
         if (ImGui::InputScalar(label, ImGuiDataType_U8, &versionByte, &stepU8))
@@ -482,7 +482,7 @@ void InnerFile::drawUI()
     }
 
     {
-        CenteredTextX(messages::innerfile::cVersion);
+        CenteredTextX(messages::common::cVersion);
 
         u32 version = mVersion;
         if (DrawInnerVersionUI(&version, GetArchiveVersionByteCount(mFormat)))

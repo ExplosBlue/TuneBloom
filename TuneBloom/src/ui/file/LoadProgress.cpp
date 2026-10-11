@@ -34,9 +34,9 @@ static constexpr StageInfo cStageInfos[cStageNum] = {
     { messages::project::cRowSequenceFiles, 0.15f  }, // SequenceFiles
     { messages::project::cRowWaveFiles,     1.5f   }, // WaveFiles
     { messages::project::cRowBankFiles,     0.01f  }, // BankFiles
-    { messages::project::cRowSounds,        3.5f   }, // Sounds
+    { messages::common::cSounds,        3.5f   }, // Sounds
     { messages::project::cRowSoundSets,     0.01f  }, // SoundSets
-    { messages::archive::cOpenStageGroupFiles,    0.5f   }, // GroupFiles
+    { messages::common::cGroupFiles,    0.5f   }, // GroupFiles
     { messages::archive::cOpenStageNames,         5.0f   }, // Names
 };
 
@@ -96,7 +96,7 @@ void DrawRows(const char* icon, const char* title, const char* stageText, f32 fr
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
     const f32 width = ImGui::GetContentRegionAvail().x;
-    const sead::FormatFixedSafeString<32> percent(messages::archive::cOpenPercentFormat, static_cast<s32>(fraction * 100.0f));
+    const sead::FormatFixedSafeString<32> percent(messages::common::cPercentFormat, static_cast<s32>(fraction * 100.0f));
 
     // Title
     {

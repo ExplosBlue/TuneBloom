@@ -781,7 +781,7 @@ void StreamTrackImport::drawMainRow()
     ImGui::TextUnformatted(createMainName.cstr());
 
     ImGui::TableNextColumn();
-    ImGui::TextUnformatted(channelCount == 1 ? messages::item::cChannelsMono : messages::item::cChannelsStereo);
+    ImGui::TextUnformatted(channelCount == 1 ? messages::common::cMono : messages::common::cStereo);
 
     ImGui::TableNextColumn();
     ImGui::TextUnformatted(WaveFile::sEncodingTypes[static_cast<s32>(createMainWave->getEncoding())]);
@@ -790,7 +790,7 @@ void StreamTrackImport::drawMainRow()
     ImGui::Text(messages::unit::cHertzFormat, rate);
 
     ImGui::TableNextColumn();
-    ImGui::Text(messages::import::cTrackImportLengthFormat, seconds);
+    ImGui::Text(messages::common::cSecondsFormat, seconds);
 
     if (createMainWave->getIsLoop())
     {
@@ -828,7 +828,7 @@ FileTracks StreamTrackImport::findFileTracks(const std::vector<TrackPlan>& plans
             tracks.last = static_cast<s32>(p);
 
             if (files[index].info.numChannels == 1 && plans[p].count > 1)
-                tracks.side = s == 0 ? messages::wavefile::cLeft : messages::wavefile::cRight;
+                tracks.side = s == 0 ? messages::common::cLeft : messages::common::cRight;
         }
     }
 
@@ -855,7 +855,7 @@ void StreamTrackImport::drawFileRow(u32 index, const FileTracks& tracks, u32 fir
     ImGui::TableNextColumn();
 
     if (info.numChannels <= 2)
-        ImGui::TextUnformatted(info.numChannels == 1 ? messages::item::cChannelsMono : messages::item::cChannelsStereo);
+        ImGui::TextUnformatted(info.numChannels == 1 ? messages::common::cMono : messages::common::cStereo);
     else
         ImGui::Text(messages::stream::cTrackChannelsFormat, info.numChannels);
 
@@ -866,7 +866,7 @@ void StreamTrackImport::drawFileRow(u32 index, const FileTracks& tracks, u32 fir
     ImGui::Text(messages::unit::cHertzFormat, info.sampleRate);
 
     ImGui::TableNextColumn();
-    ImGui::Text(messages::import::cTrackImportLengthFormat, seconds);
+    ImGui::Text(messages::common::cSecondsFormat, seconds);
 
     ImGui::TableNextColumn();
 
@@ -932,12 +932,12 @@ void StreamTrackImport::drawFileTable(const std::vector<TrackPlan>& plans, u32 f
     if (ImGui::BeginTable("##files", 8, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit))
     {
         ImGui::TableSetupColumn("##preview");
-        ImGui::TableSetupColumn(messages::import::cTrackImportColumnFile, ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn(messages::import::cChannelsLabel);
-        ImGui::TableSetupColumn(messages::import::cTrackImportColumnFormat);
-        ImGui::TableSetupColumn(messages::import::cTrackImportSampleRate);
-        ImGui::TableSetupColumn(messages::import::cTrackImportColumnLength);
-        ImGui::TableSetupColumn(messages::import::cTrackImportColumnTrack);
+        ImGui::TableSetupColumn(messages::common::cFile, ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(messages::common::cChannels);
+        ImGui::TableSetupColumn(messages::common::cFormat);
+        ImGui::TableSetupColumn(messages::common::cSampleRate);
+        ImGui::TableSetupColumn(messages::common::cLength);
+        ImGui::TableSetupColumn(messages::common::cTrack);
         ImGui::TableSetupColumn("##actions");
         ImGui::TableHeadersRow();
 
@@ -958,7 +958,7 @@ void StreamTrackImport::drawSampleRateRow(const ImportTarget& target, bool locke
     char preview[32];
     snprintf(preview, sizeof(preview), messages::unit::cHertzFormat, locked ? target.sampleRate : sampleRate);
 
-    DialogRow(messages::import::cTrackImportSampleRate);
+    DialogRow(messages::common::cSampleRate);
 
     if (!ImGui::BeginCombo("##rate", preview))
         return;
@@ -999,21 +999,21 @@ void StreamTrackImport::drawSampleRateRow(const ImportTarget& target, bool locke
 void DrawLoopSampleRow(const char* label, const char* id, u32* value, f32 dragSpeed, u32 min, u32 max)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 unitWidth = ImGui::CalcTextSize(messages::import::cTrackImportSamples).x + style.ItemInnerSpacing.x;
+    const f32 unitWidth = ImGui::CalcTextSize(messages::common::cSamples).x + style.ItemInnerSpacing.x;
 
     DialogRow(label);
     ImGui::SetNextItemWidth(-unitWidth);
     DragField(id, ImGuiDataType_U32, value, dragSpeed, &min, &max);
     ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-    ImGui::TextDisabled("%s", messages::import::cTrackImportSamples);
+    ImGui::TextDisabled("%s", messages::common::cSamples);
 }
 
 void StreamTrackImport::drawLoopRows(const ImportTarget& target, bool locked)
 {
-    const char* loopSourceNames[] = { messages::import::cTrackImportLoopFromFirst, messages::import::cLoopDisabled, messages::import::cLoopManual };
+    const char* loopSourceNames[] = { messages::import::cTrackImportLoopFromFirst, messages::common::cDisabled, messages::common::cManual };
     const u32 longest = longestLength(sampleRate);
 
-    DialogRow(messages::import::cTrackImportLoop);
+    DialogRow(messages::common::cLoop);
 
     if (ComboScroll("##loop", reinterpret_cast<s32*>(&loopSource), loopSourceNames, IM_ARRAYSIZE(loopSourceNames)) && manualLoopEnd == 0)
         manualLoopEnd = longest;
@@ -1045,7 +1045,7 @@ void StreamTrackImport::drawSettings(const ImportTarget& target, bool locked)
 
     WaveFile::Encoding shownEncoding = locked ? target.encoding : encoding;
 
-    DialogRow(messages::wavefile::cEncoding);
+    DialogRow(messages::common::cEncoding);
     ComboScroll("##encoding", reinterpret_cast<s32*>(&shownEncoding), WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
 
     if (!locked)
@@ -1131,7 +1131,7 @@ bool StreamTrackImport::drawBody(const Sound* sound, std::vector<TrackPlan>* pla
     const sead::FormatFixedSafeString<64> addLabel("%s %s", ICON_LC_PLUS, messages::import::cTrackImportAddFiles);
     bool addPressed = false;
 
-    if (BeginGroupBox(isCreate ? messages::import::cTrackImportTracksTitle : messages::import::cTrackImportFilesTitle, isCreate ? addLabel.cstr() : nullptr, &addPressed))
+    if (BeginGroupBox(isCreate ? messages::common::cTracks : messages::common::cFiles, isCreate ? addLabel.cstr() : nullptr, &addPressed))
     {
         DialogRowGap();
         drawFileTable(*plans, existingTracks, isCreate);
@@ -1142,7 +1142,7 @@ bool StreamTrackImport::drawBody(const Sound* sound, std::vector<TrackPlan>* pla
         EndGroupBox();
     }
 
-    if (!isCreate && BeginGroupBox(messages::import::cTrackImportFormatTitle))
+    if (!isCreate && BeginGroupBox(messages::common::cFormat))
     {
         drawSettings(*target, locked);
         EndGroupBox();
@@ -1198,13 +1198,13 @@ void StreamTrackImport::draw(Sound* sound)
 
     const bool canImport = drawBody(sound, &plans, &target);
 
-    BeginDialogFooter({messages::dialog::cImport, messages::dialog::cCancel});
+    BeginDialogFooter({messages::common::cImport, messages::common::cCancel});
 
     ImGui::BeginDisabled(!canImport);
-    const bool importClicked = DialogButton(messages::dialog::cImport);
+    const bool importClicked = DialogButton(messages::common::cImport);
     ImGui::EndDisabled();
 
-    const bool cancelClicked = DialogButton(messages::dialog::cCancel);
+    const bool cancelClicked = DialogButton(messages::common::cCancel);
 
     if (importClicked)
         commit(plans, target);

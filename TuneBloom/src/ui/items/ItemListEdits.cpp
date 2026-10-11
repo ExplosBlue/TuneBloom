@@ -170,9 +170,9 @@ static void DrawAddItemDialog(ItemListContext& ctx, const ImVec2& center)
             ImGui::CloseCurrentPopup();
         }
 
-        BeginDialogFooter({messages::dialog::cAdd, messages::dialog::cCancel});
+        BeginDialogFooter({messages::common::cAdd, messages::common::cCancel});
 
-        if (ctx.disableAddWindow || DialogButton(messages::dialog::cAdd))
+        if (ctx.disableAddWindow || DialogButton(messages::common::cAdd))
         {
             if (!instanciateItemCallback)
             {
@@ -213,7 +213,7 @@ static void DrawAddItemDialog(ItemListContext& ctx, const ImVec2& center)
             }
         }
 
-        const bool cancelClicked = DialogButton(messages::dialog::cCancel);
+        const bool cancelClicked = DialogButton(messages::common::cCancel);
 
         if (WaveImportConfirmCancel(cancelClicked))
         {
@@ -230,16 +230,16 @@ static void DrawReferencesDialog(ItemListContext& ctx, const ImVec2& center)
 {
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ALERT_TRIANGLE " %s###References", messages::popup::cTitleWarning).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ALERT_TRIANGLE " %s###References", messages::common::cWarning).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         if (sDeleteItem)
             ImGui::Text(messages::item::cDeleteReferencedFormat,sDeleteItem->getFormattedName().cstr());
         else
             ImGui::Text("%s", messages::item::cDeleteReferencedMany);
 
-        BeginDialogFooter({messages::dialog::cDelete, messages::dialog::cCancel});
+        BeginDialogFooter({messages::common::cDelete, messages::common::cCancel});
 
-        if (DialogButton(messages::dialog::cDelete))
+        if (DialogButton(messages::common::cDelete))
         {
             if (sDeleteItem)
                 DeleteRequestedItem(ctx);
@@ -249,7 +249,7 @@ static void DrawReferencesDialog(ItemListContext& ctx, const ImVec2& center)
             ImGui::CloseCurrentPopup();
         }
 
-        if (DialogButton(messages::dialog::cCancel))
+        if (DialogButton(messages::common::cCancel))
         {
             sDeleteItem = nullptr;
             sDeleteItems.clear();

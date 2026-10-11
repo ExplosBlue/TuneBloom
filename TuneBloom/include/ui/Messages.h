@@ -11,11 +11,128 @@ struct Message
 
 inline constexpr const char* cNotImplemented = "Not implemented";
 
+namespace common
+{
+
+inline constexpr const char* cSequence = "Sequence";
+inline constexpr const char* cWave = "Wave";
+inline constexpr const char* cStream = "Stream";
+inline constexpr const char* cPlayer = "Player";
+inline constexpr const char* cBank = "Bank";
+inline constexpr const char* cSound = "Sound";
+inline constexpr const char* cGroup = "Group";
+inline constexpr const char* cInstrument = "Instrument";
+inline constexpr const char* cInstruments = "Instruments";
+inline constexpr const char* cItem = "Item";
+inline constexpr const char* cItems = "Items";
+inline constexpr const char* cTrack = "Track";
+inline constexpr const char* cTracks = "Tracks";
+inline constexpr const char* cSounds = "Sounds";
+inline constexpr const char* cWaveFile = "Wave File";
+inline constexpr const char* cBankFile = "Bank File";
+inline constexpr const char* cSequenceFile = "Sequence File";
+inline constexpr const char* cWaveArchive = "Wave Archive";
+inline constexpr const char* cWaveSoundSet = "Wave Sound Set";
+inline constexpr const char* cWaveSound = "Wave Sound";
+inline constexpr const char* cArchive = "Archive";
+inline constexpr const char* cProject = "Project";
+inline constexpr const char* cProjectInfo = "Project Info";
+inline constexpr const char* cFile = "File";
+inline constexpr const char* cFiles = "Files";
+inline constexpr const char* cFolder = "Folder";
+inline constexpr const char* cGroupFiles = "Group Files";
+inline constexpr const char* cBackup = "Backup";
+inline constexpr const char* cBackups = "Backups";
+
+inline constexpr const char* cName = "Name";
+inline constexpr const char* cType = "Type";
+inline constexpr const char* cFormat = "Format";
+inline constexpr const char* cLength = "Length";
+inline constexpr const char* cSize = "Size";
+inline constexpr const char* cSampleRate = "Sample Rate";
+inline constexpr const char* cChannels = "Channels";
+inline constexpr const char* cEncoding = "Encoding";
+inline constexpr const char* cLoop = "Loop";
+inline constexpr const char* cStart = "Start";
+inline constexpr const char* cEnd = "End";
+inline constexpr const char* cVolume = "Volume";
+inline constexpr const char* cPan = "Pan";
+inline constexpr const char* cPitch = "Pitch";
+inline constexpr const char* cSurround = "Surround";
+inline constexpr const char* cFrontBypass = "Front Bypass";
+inline constexpr const char* cFilter = "Filter";
+inline constexpr const char* cLpf = "LPF";
+inline constexpr const char* cPriority = "Priority";
+inline constexpr const char* cProgram = "Program";
+inline constexpr const char* cCurve = "Curve";
+inline constexpr const char* cInterpolation = "Interpolation";
+inline constexpr const char* cLinear = "Linear";
+inline constexpr const char* cHold = "Hold";
+inline constexpr const char* cVersion = "Version";
+inline constexpr const char* cModified = "Modified";
+inline constexpr const char* cLabels = "Labels";
+inline constexpr const char* cNotes = "Notes";
+inline constexpr const char* cOptions = "Options";
+inline constexpr const char* cDevice = "Device";
+inline constexpr const char* cPlayback = "Playback";
+inline constexpr const char* cTheme = "Theme";
+inline constexpr const char* cSystem = "System";
+inline constexpr const char* cRecentFiles = "Recent Files";
+inline constexpr const char* cSamples = "samples";
+
+inline constexpr const char* cUnknown = "Unknown";
+inline constexpr const char* cNone = "None";
+inline constexpr const char* cOff = "Off";
+inline constexpr const char* cOn = "On";
+inline constexpr const char* cDisabled = "Disabled";
+inline constexpr const char* cEmpty = "Empty";
+inline constexpr const char* cMono = "Mono";
+inline constexpr const char* cStereo = "Stereo";
+inline constexpr const char* cLeft = "L";
+inline constexpr const char* cRight = "R";
+inline constexpr const char* cManual = "Manual";
+inline constexpr const char* cAll = "All";
+inline constexpr const char* cNoValue = "-";
+inline constexpr const char* cSilent = "-inf";
+inline constexpr const char* cNull = "(null)";
+
+inline constexpr const char* cAdd = "Add";
+inline constexpr const char* cCancel = "Cancel";
+inline constexpr const char* cClose = "Close";
+inline constexpr const char* cDelete = "Delete";
+inline constexpr const char* cDuplicate = "Duplicate";
+inline constexpr const char* cExport = "Export";
+inline constexpr const char* cImport = "Import";
+inline constexpr const char* cFind = "Find";
+inline constexpr const char* cGoTo = "Go To";
+inline constexpr const char* cHelp = "Help";
+inline constexpr const char* cNewArchive = "New Archive";
+inline constexpr const char* cOpenArchive = "Open Archive";
+inline constexpr const char* cPause = "Pause";
+inline constexpr const char* cPlay = "Play";
+inline constexpr const char* cStop = "Stop";
+inline constexpr const char* cRename = "Rename";
+inline constexpr const char* cReplace = "Replace";
+inline constexpr const char* cReset = "Reset";
+inline constexpr const char* cRestore = "Restore";
+inline constexpr const char* cSave = "Save";
+inline constexpr const char* cSelectAll = "Select All";
+inline constexpr const char* cPageUp = "Page Up";
+inline constexpr const char* cPageDown = "Page Down";
+inline constexpr const char* cWarning = "Warning";
+
+inline constexpr const char* cCountOfFormat = "%d of %d";
+inline constexpr const char* cMillisecondsFormat = "%.0f ms";
+inline constexpr const char* cMegabytesFormat = "%.1f MB";
+inline constexpr const char* cSecondsFormat = "%.2f s";
+inline constexpr const char* cPercentFormat = "%d%%";
+inline constexpr const char* cChannelCountFormat = "%u Channels";
+
+}
+
 namespace param
 {
 
-inline constexpr const char* cVolume     = "Volume";
-inline constexpr const char* cPan        = "Pan";
 inline constexpr const char* cSurroundPan = "S. Pan";
 inline constexpr const char* cCoarse     = "Coarse";
 inline constexpr const char* cFine       = "Fine";
@@ -23,7 +140,6 @@ inline constexpr const char* cSendMain   = "Main";
 inline constexpr const char* cSendFxA    = "FX A";
 inline constexpr const char* cSendFxB    = "FX B";
 inline constexpr const char* cSendFxC    = "FX C";
-inline constexpr const char* cLpf        = "LPF";
 inline constexpr const char* cBiquad     = "Biquad";
 
 }
@@ -32,9 +148,7 @@ namespace panel
 {
 
 inline constexpr const char* cOutput   = "Output";
-inline constexpr const char* cPitch    = "Pitch";
 inline constexpr const char* cEnvelope = "Envelope";
-inline constexpr const char* cFilter   = "Filter";
 inline constexpr const char* cSend     = "Send";
 
 }
@@ -43,7 +157,6 @@ namespace source
 {
 
 inline constexpr const char* cSelectExisting = "Select Existing";
-inline constexpr const char* cNone           = "None";
 
 }
 
@@ -121,10 +234,7 @@ inline constexpr const char* cTrackAddTip = "Add Track";
 inline constexpr const char* cTrackMixerView = "Mixer View";
 inline constexpr const char* cTrackTableView = "Table View";
 inline constexpr const char* cTrackFold = "Minimize";
-inline constexpr const char* cTrackUnfold = "Restore";
 inline constexpr const char* cTrackNoSound = "No Stream Sound Selected";
-inline constexpr const char* cTrackSurroundTitle = "Surround";
-inline constexpr const char* cTrackFrontBypass = "Front Bypass";
 inline constexpr const char* cTrackNone = "No Tracks";
 #ifdef __APPLE__
 inline constexpr const char* cTrackSoloTip = "Cmd+click to solo more than one track";
@@ -181,10 +291,8 @@ inline constexpr const char* cLoopFromWaveFile = "Set by the first track's Wave 
 inline constexpr const char* cExtensionTitle = "Extension";
 inline constexpr const char* cPrefetchLabel  = "Prefetch";
 inline constexpr const char* cTypeLabel      = "Stream Type";
-inline constexpr const char* cLoopLabel      = "Loop";
 inline constexpr const char* cLoopStartLabel = "Loop Start";
 inline constexpr const char* cLoopEndLabel   = "Loop End";
-inline constexpr const char* cTypeInfoLabel  = "Unknown";
 
 inline constexpr const char* cTrackBypass           = "Bypass";
 inline constexpr const char* cTrackBiquadValue      = "Value";
@@ -192,26 +300,18 @@ inline constexpr const char* cTrackMute             = "Mute";
 inline constexpr const char* cTrackSolo             = "Solo";
 inline constexpr const char* cTrackMuteShort        = "M";
 inline constexpr const char* cTrackSoloShort        = "S";
-inline constexpr const char* cTrackWaveFile         = "Wave File";
 inline constexpr const char* cTrackMix              = "Mix";
-inline constexpr const char* cTrackMono             = "Mono";
-inline constexpr const char* cTrackStereo           = "Stereo";
 inline constexpr const char* cTrackChannelsFormat   = "%u ch";
 inline constexpr const char* cTrackNameFormat       = "Track %u";
 
-inline constexpr const char* cTracksWindowTitle = "Tracks";
 
 inline constexpr const char* cRegionsWindowTitle    = "Regions";
-inline constexpr const char* cRegionStart           = "Start";
-inline constexpr const char* cRegionEnd             = "End";
-inline constexpr const char* cRegionLength          = "Length";
 inline constexpr const char* cRegionNone            = "No Regions";
 inline constexpr const char* cRegionNext            = "Next";
 inline constexpr const char* cRegionRange           = "Range";
 inline constexpr const char* cRegionRangeFormat     = "%u to %u";
 inline constexpr const char* cRegionAddTip          = "Add Region";
 inline constexpr const char* cRegionImport          = "Import Regions from WAV";
-inline constexpr const char* cRegionRename          = "Rename";
 inline constexpr const char* cRegionMovingFormat    = "Moving Region %d";
 inline constexpr const char* cRegionDisplayFormat   = "Region %d";
 inline constexpr const char* cRegionShortTipFormat  = "Shorter than the minimum of %u samples";
@@ -228,7 +328,6 @@ inline constexpr const char* cRegionImportedFormat      = "'%s': %u imported";
 inline constexpr const char* cRegionImportOutsideFormat = "'%s': %u imported, %u outside the stream";
 inline constexpr const char* cRegionReplaceTitle        = "Replace Regions";
 inline constexpr const char* cRegionReplaceFormat       = "Regions in '%s': %u\nRegions in the stream: %u\n\nImporting will replace the stream's regions.";
-inline constexpr const char* cRegionReplace             = "Replace";
 
 inline constexpr const char* cRegionsRemovedTitle       = "Regions removed";
 inline constexpr const char* cRegionsRemovedFormat      = "%u past the end of the new Wave File";
@@ -270,10 +369,6 @@ inline constexpr const char* cLoopOffFormat = "Loop off, stops at %s\nClick to t
 inline constexpr const char* cNoLoop = "No loop";
 inline constexpr const char* cSequenceNoEnd = "The sequence has no end";
 inline constexpr const char* cUnknownTime = "--:--.---";
-inline constexpr const char* cDisplayStream = "Stream";
-inline constexpr const char* cDisplayWave = "Wave";
-inline constexpr const char* cDisplaySequence = "Sequence";
-inline constexpr const char* cDisplayWaveFile = "Wave File";
 
 inline constexpr const char* cOverridesPersist = "Changes also apply to other Sounds";
 inline constexpr const char* cParametersOpen = "Playback Parameters";
@@ -297,21 +392,15 @@ inline constexpr const char* cSeqVarUsedTooltipFormat = "%s, used by this sequen
 inline constexpr const char* cSeqVarUnusedTooltipFormat = "%s, not used by this sequence";
 
 inline constexpr const char* cMeterResetTooltip = "Click to reset";
-inline constexpr const char* cMeterStereo = "Stereo";
 inline constexpr const char* cMeterMerged = "Merged";
 
-inline constexpr const char* cWindowTitle = "Player";
 
-inline constexpr const char* cPanelSound       = "Sound";
-inline constexpr const char* cPanelSequence    = "Sequence";
 inline constexpr const char* cPanelTrackVolume = "Track Volume";
 
 inline constexpr const char* cKnobTempo        = "Tempo";
-inline constexpr const char* cKnobVolumeSilent = "-inf";
 inline constexpr const char* cBiquadInherit    = "Inherit";
 
 inline constexpr const char* cSeqVarGlobal      = "Global";
-inline constexpr const char* cSeqVarPlayer      = "Player";
 inline constexpr const char* cSeqVarTrackWidest = "Track 15";
 
 inline constexpr const char* cSeqVarStatusNone         = "No Sequence Sound selected";
@@ -319,10 +408,7 @@ inline constexpr const char* cSeqVarStatusUnusedFormat = "%s uses no variables";
 inline constexpr const char* cSeqVarStatusOneFormat    = "%s uses 1 variable";
 inline constexpr const char* cSeqVarStatusManyFormat   = "%s uses %u variables";
 
-inline constexpr const char* cMeterSilent      = "-inf";
 inline constexpr const char* cMeterMono        = "M";
-inline constexpr const char* cMeterLeft        = "L";
-inline constexpr const char* cMeterRight       = "R";
 
 inline constexpr const char* cTrackNoWaveFileFormat = "Track %u has no Wave File attached";
 inline constexpr const char* cTrackNoChannelsFormat = "Track %u's Wave File has no channels";
@@ -375,22 +461,16 @@ inline constexpr const char* cSegmentFade              = "Fade";
 inline constexpr const char* cSampleRateOriginalFormat = "Original (%u Hz)";
 inline constexpr const char* cFileType                 = "File Type";
 inline constexpr const char* cFileTypeWav              = "WAV, 16-bit";
-inline constexpr const char* cLoop                     = "Loop";
 inline constexpr const char* cLoopRangeFormat          = "%s to %s";
 inline constexpr const char* cLoopNotFound             = "Not found";
-inline constexpr const char* cLoopNumFormat            = "%d of %d";
 inline constexpr const char* cLoopCount                = "Loop Count";
 inline constexpr const char* cLoopCountDetail          = "Times the loop plays before the fade";
 inline constexpr const char* cFadeOut                  = "Fade Out";
 inline constexpr const char* cFadeOutFormat            = "%.1f s";
-inline constexpr const char* cLength                   = "Length";
 inline constexpr const char* cNoEndLengthDetail        = "Used when a sequence has no loop or end";
 inline constexpr const char* cTimeFormat               = "%u:%02u";
 inline constexpr const char* cTimeTenthsFormat         = "%u:%02u.%u";
-inline constexpr const char* cFormatBox                = "Format";
-inline constexpr const char* cSampleRate               = "Sample Rate";
 inline constexpr const char* cSampleRateOriginalDetail = "Rate of the source; 48000 Hz for sequences";
-inline constexpr const char* cFiles                    = "Files";
 inline constexpr const char* cFilesOne                 = "One multi-channel file";
 inline constexpr const char* cFilesOneDetail           = "All tracks as channels of one WAV file";
 inline constexpr const char* cFilesEachTrack           = "One file for each track";
@@ -423,9 +503,6 @@ inline constexpr const char* cBankBundleExported    = "Bank bundle exported.";
 inline constexpr const char* cInstrumentExported    = "Instrument exported.";
 
 inline constexpr const char* cFallbackSoundFormat = "Sound %u";
-inline constexpr const char* cFallbackBank     = "Bank";
-inline constexpr const char* cFallbackSequence = "Sequence";
-inline constexpr const char* cFallbackWave     = "Wave";
 inline constexpr const char* cFormatBankBundle = "bank bundle";
 inline constexpr const char* cFormatInstrument = "instrument";
 inline constexpr const char* cFormatSf2        = "SF2";
@@ -439,16 +516,7 @@ inline constexpr const char* cMidiTrackNumOne            = "1 Track";
 inline constexpr const char* cMidiTrackNumFormat         = "%d Tracks";
 inline constexpr const char* cMidiInstrumentNumOne       = "1 Instrument";
 inline constexpr const char* cMidiInstrumentNumFormat    = "%d Instruments";
-inline constexpr const char* cMidiTracksBox              = "Tracks";
-inline constexpr const char* cMidiInstrumentsBox         = "Instruments";
-inline constexpr const char* cMidiColumnTrack            = "Track";
-inline constexpr const char* cMidiColumnTrackInstruments = "Instruments";
-inline constexpr const char* cMidiColumnInstrument       = "Instrument";
-inline constexpr const char* cMidiColumnProgram          = "Program";
-inline constexpr const char* cMidiColumnNotes            = "Notes";
 inline constexpr const char* cMidiProgramNameFormat      = "Program %u";
-inline constexpr const char* cMidiSelectAll              = "All";
-inline constexpr const char* cMidiSelectNone             = "None";
 inline constexpr const char* cMidiNotesFormat            = "%u of %u notes";
 inline constexpr const char* cMidiNothingSelected        = "No notes are selected";
 inline constexpr const char* cMidiListEmpty              = "No notes";
@@ -468,17 +536,12 @@ inline constexpr const char* cNoFileAttached = "The Bank has no Bank File attach
 inline constexpr const char* cWillHaveNoFile = "This Bank will have no Bank File";
 inline constexpr const char* cOpenFileTip = "Open the Bank File";
 
-inline constexpr const char* cFileLabel = "Bank File";
-inline constexpr const char* cFilesTitle = "Files";
 
 inline constexpr const char* cNoRegionSelected = "Select a Region";
 inline constexpr const char* cIgnoreNoteOff = "Ignore Note Off";
 inline constexpr const char* cCoarseTooltipFormat = "%+.0f semitones (pitch ratio %.4f)";
 inline constexpr const char* cFineTooltipFormat = "%+.0f cents (pitch ratio %.4f)";
-inline constexpr const char* cNoValue = "-";
 inline constexpr const char* cProgramNumber = "Program Number";
-inline constexpr const char* cEnvelopeTimeMsecFormat = "%.0f ms";
-inline constexpr const char* cEnvelopeTimeSecFormat = "%.2f s";
 inline constexpr const char* cEnvelopeTimeTooltipFormat = "%s: %s";
 inline constexpr const char* cEnvelopeLevelTooltipFormat = "%s: %.1f dB";
 inline constexpr const char* cEnvelopeCurveTooltipFormat = "Attack %s, Hold %s, Decay %s, Sustain %.1f dB, Release %s";
@@ -489,7 +552,6 @@ inline constexpr const char* cFileModeCreateNew = "Create New";
 inline constexpr const char* cInstrumentWaveLinkFailedFormat = "Instrument %u: the Wave File could not be linked";
 
 inline constexpr const char* cKnobAttack  = "Attack";
-inline constexpr const char* cKnobHold    = "Hold";
 inline constexpr const char* cKnobDecay   = "Decay";
 inline constexpr const char* cKnobSustain = "Sustain";
 inline constexpr const char* cKnobRelease = "Release";
@@ -501,9 +563,7 @@ inline constexpr const char* cKeyGroup      = "Key Group";
 
 inline constexpr const char* cPanelSample   = "Sample";
 
-inline constexpr const char* cInterpolation          = "Interpolation";
 inline constexpr const char* cInterpolationPolyphase = "Polyphase (4-point)";
-inline constexpr const char* cInterpolationLinear    = "Linear";
 
 inline constexpr const char* cPanCenter      = "C";
 inline constexpr const char* cPanLeftFormat  = "L%d";
@@ -528,11 +588,9 @@ inline constexpr const char* cKeyRegionNoVelocityRegionFormat = "Instrument %u: 
 inline constexpr const char* cVelocityRegionNoWaveFileFormat = "Instrument %u: a Velocity Region has no Wave File attached";
 
 inline constexpr const char* cDoubleClickToAdd = "Double-click to add";
-inline constexpr const char* cRegionNoWaveFile = "(null)";
 inline constexpr const char* cNoInstrumentSelected = "Select an Instrument";
 
 inline constexpr const char* cInstrumentNameFormat = "Instrument %d";
-inline constexpr const char* cInstrumentNameLabel = "Name";
 inline constexpr const char* cNextProgramNumberTooltip = "Use the next free program number";
 
 
@@ -576,14 +634,12 @@ inline constexpr const char* cNoBanks = "No Bank";
 inline constexpr const char* cBanksMoreFormat = "%s +%u";
 inline constexpr const char* cFollowOffButton = "Follow: Off";
 inline constexpr const char* cFollowTrackButtonFormat = "Follow: Track %d";
-inline constexpr const char* cFollowOffItem = "Off";
 inline constexpr const char* cFollowTip = "Scroll to the playing line of a track";
 inline constexpr const char* cTrailLabel = "Trail";
 inline constexpr const char* cCompileButton = "Compile";
 inline constexpr const char* cStateCompiled = "Compiled";
 inline constexpr const char* cStateNotCompiled = "Not compiled";
 inline constexpr const char* cStateError = "Error";
-inline constexpr const char* cManualTooltip = "Manual";
 inline constexpr const char* cFoldAllTooltip = "Fold all labels";
 inline constexpr const char* cUnfoldAllTooltip = "Unfold all labels";
 inline constexpr const char* cNoInstrument = "no instrument";
@@ -599,17 +655,12 @@ inline constexpr const char* cMinimapLabel = "Minimap";
 inline constexpr const char* cSuggestLabel = "Suggest While Typing";
 inline constexpr const char* cHintsLabel = "Parameter Hints";
 
-inline constexpr const char* cFindHint = "Find";
-inline constexpr const char* cReplaceHint = "Replace";
-inline constexpr const char* cFindCountFormat = "%d of %d";
 inline constexpr const char* cFindNoResults = "No results";
 inline constexpr const char* cFindPrevious = "Previous match (Shift+F3)";
 inline constexpr const char* cFindNext = "Next match (F3)";
 inline constexpr const char* cFindClose = "Close (Escape)";
 inline constexpr const char* cShowReplace = "Show Replace";
 inline constexpr const char* cHideReplace = "Hide Replace";
-inline constexpr const char* cReplaceOne = "Replace";
-inline constexpr const char* cReplaceAll = "All";
 
 inline constexpr const char* cGoToLineHint = "Line or line:column";
 inline constexpr const char* cGoToLineCountFormat = "of %d";
@@ -620,7 +671,6 @@ inline constexpr const char* cStatusPositionFormat = "Line %d, Column %d";
 inline constexpr const char* cStatusSelectedFormat = "%d selected";
 inline constexpr const char* cStatusSelectedLinesFormat = "%d lines, %d selected";
 inline constexpr const char* cStatusOverwrite = "Overwrite";
-inline constexpr const char* cStatusLabels = "Labels";
 inline constexpr const char* cStatusPositionTooltip = "Go to line (Ctrl+G)";
 inline constexpr const char* cStatusLabelsTooltip = "Go to label (Ctrl+Shift+O)";
 
@@ -629,10 +679,7 @@ inline constexpr const char* cMenuCut = "Cut";
 inline constexpr const char* cMenuCopy = "Copy";
 inline constexpr const char* cMenuPaste = "Paste";
 inline constexpr const char* cMenuToggleComment = "Toggle Comment";
-inline constexpr const char* cMenuSelectAll = "Select All";
 
-inline constexpr const char* cLanguageName = "Sequence";
-inline constexpr const char* cOptionsMenu = "Options";
 inline constexpr const char* cBankSlotFormat = "Bank %u";
 inline constexpr const char* cErrorAtLineFormat = "Error at line %d:";
 inline constexpr const char* cFoldedLinesFormat = "  ... %d lines";
@@ -839,18 +886,12 @@ inline constexpr const char* cCompileFirst = "Compile the sequence first";
 namespace sound
 {
 
-inline constexpr const char* cPlayerLabel = "Player";
-inline constexpr const char* cTypeLabel = "Type";
-inline constexpr const char* cTypeWave = "Wave";
-inline constexpr const char* cTypeStream = "Stream";
-inline constexpr const char* cTypeSequence = "Sequence";
 inline constexpr const char* c3DApplyTitle = "Apply To";
 inline constexpr const char* c3DDistanceTitle = "Distance";
 inline constexpr const char* cWaveFileMenuTip = "Wave File actions";
 inline constexpr const char* cWaveFileGoTo = "Go to Wave File";
 inline constexpr const char* cPanelEnableDetail = "Off: the sound uses the default values";
 
-inline constexpr const char* cWaveFileLabel = "Wave File";
 inline constexpr const char* cWaveSourceImport = "Import WAV";
 inline constexpr const char* cBrowseLabel = "Browse...";
 inline constexpr const char* cNoImportFile = "No WAV file selected";
@@ -862,9 +903,6 @@ inline constexpr const char* cWillHaveNoTracks = "This Sound will have no Tracks
 inline constexpr const char* cImportFileCountFormat = "%u WAV files";
 inline constexpr const char* cStreamNewPathDetail = "Created on save, in the archive's folder";
 
-inline constexpr const char* cSequenceLabel = "Sequence";
-inline constexpr const char* cSequenceFileLabel = "Sequence File";
-inline constexpr const char* cBankLabel = "Bank";
 
 inline constexpr const char* cCreateNoPlayer = "Select a Player, or add one first.";
 inline constexpr const char* cCreateNoImportFile = "Select a WAV file to import.";
@@ -921,21 +959,16 @@ inline constexpr const char* cRemoteFilterDetail = "Muffles the sound on the Wii
 inline constexpr const char* cRemoteFilterNoCtr  = "Not used on 3DS";
 inline constexpr const char* cFrontBypassDetail  = "Plays the front channels without surround";
 
-inline constexpr const char* cKnobPriority     = "Priority";
 inline constexpr const char* cKnobDecayRatio   = "Decay Ratio";
 inline constexpr const char* cKnobDoppler      = "Doppler";
 inline constexpr const char* cKnobRemoteFilter = "Remote Filter";
 
-inline constexpr const char* cBiquadTypeLabel = "Type";
-inline constexpr const char* cBiquadOff       = "Off";
-inline constexpr const char* cBiquadLpf       = "LPF";
 inline constexpr const char* cBiquadHpf       = "HPF";
 inline constexpr const char* cBiquadBpf512    = "BPF 512";
 inline constexpr const char* cBiquadBpf1024   = "BPF 1024";
 inline constexpr const char* cBiquadBpf2048   = "BPF 2048";
 
 
-inline constexpr const char* cPanelPan        = "Pan";
 inline constexpr const char* cPanelStartLabel = "Start Label";
 
 inline constexpr const char* cStartOfFile              = "(Start of File)";
@@ -952,25 +985,17 @@ inline constexpr const char* cPanModeLabel   = "Mode";
 inline constexpr const char* cPanModeDual    = "Dual";
 inline constexpr const char* cPanModeBalance = "Balance";
 
-inline constexpr const char* cPanCurveLabel          = "Curve";
 inline constexpr const char* cPanCurveSqrt           = "Sqrt";
 inline constexpr const char* cPanCurveSqrt0Db        = "Sqrt0Db";
 inline constexpr const char* cPanCurveSqrt0DbClamp   = "Sqrt0DbClamp";
 inline constexpr const char* cPanCurveSinCos         = "SinCos";
 inline constexpr const char* cPanCurveSinCos0Db      = "SinCos0Db";
 inline constexpr const char* cPanCurveSinCos0DbClamp = "SinCos0DbClamp";
-inline constexpr const char* cPanCurveLinear         = "Linear";
 inline constexpr const char* cPanCurveLinear0Db      = "Linear0Db";
 inline constexpr const char* cPanCurveLinear0DbClamp = "Linear0DbClamp";
 
-inline constexpr const char* c3DVolume      = "Volume";
-inline constexpr const char* c3DPriority    = "Priority";
-inline constexpr const char* c3DPan         = "Pan";
-inline constexpr const char* c3DSurround    = "Surround";
-inline constexpr const char* c3DFilter      = "Filter";
 inline constexpr const char* c3DDecayCurve  = "Decay Curve";
 inline constexpr const char* c3DDecayLog    = "Logarithmic";
-inline constexpr const char* c3DDecayLinear = "Linear";
 
 inline constexpr const char* cActorPlayer  = "Actor Player";
 inline constexpr const char* cFixAtRelease = "Fix At Release";
@@ -979,9 +1004,6 @@ inline constexpr const char* cUnknownOptions  = "Unknown Options";
 inline constexpr const char* cOptionBitFormat = "Option Bit %u";
 inline constexpr const char* cUserParamFormat = "Param %u";
 
-inline constexpr const char* cFrontBypass       = "Front Bypass";
-inline constexpr const char* cFrontBypassOff    = "Off";
-inline constexpr const char* cFrontBypassOn     = "On";
 
 inline constexpr const char* cTagLabel = "Tag";
 
@@ -1003,7 +1025,6 @@ inline constexpr const char* cInvalidWaveFile = "The Wave File is invalid";
 
 inline constexpr const char* cWaveSoundNeedsSoundSet = "A Wave Sound must be in a Sound Set";
 inline constexpr const char* cWaveSoundNeedsWaveSoundSet = "A Wave Sound must be in a Wave Sound Set";
-inline constexpr const char* cUnknown = "Unknown";
 inline constexpr const char* cSharedStreamTrackCountFormat = "Shares its stream path with '%s'\nBoth must have the same number of Tracks";
 inline constexpr const char* cSharedStreamWaveFileFormat = "Shares its stream path with '%s'\nTracks must use the same Wave File";
 inline constexpr const char* cSharedStreamTracksIdenticalFormat = "Shares its stream path with '%s'\nTracks must be identical";
@@ -1039,7 +1060,6 @@ inline constexpr const char* cMetadataWarningDetail =
     "instrument, wave and sequence names will not be saved.";
 inline constexpr const char* cMetadataWarningCheckbox = "Save the names for this archive";
 
-inline constexpr const char* cNewTitle           = "New Archive";
 inline constexpr const char* cIncludeStringTable = "Include String Table";
 
 inline constexpr const char* cNotArchive = "Not a valid sound archive";
@@ -1047,9 +1067,7 @@ inline constexpr const char* cBfsarVersionUnsupportedFormat = "Sound archive ver
 inline constexpr const char* cOpenFailed = "The selected file could not be opened";
 
 inline constexpr const char* cOpenProgressFormat     = "Opening %s";
-inline constexpr const char* cOpenPercentFormat      = "%d%%";
 inline constexpr const char* cOpenStageFile          = "Reading the file";
-inline constexpr const char* cOpenStageGroupFiles    = "Group Files";
 inline constexpr const char* cOpenStageNames         = "Names";
 inline constexpr const char* cCmpbinDecompressFailed = "The cmpbin file could not be decompressed";
 inline constexpr const char* cBlockNotFoundFormat = "%s: the %s block could not be found";
@@ -1104,7 +1122,6 @@ inline constexpr const char* cStreamNoTracksSkippedFormat = "The Stream Sound '%
 namespace project
 {
 
-inline constexpr const char* cOptionsLabel = "Options";
 
 inline constexpr const char* cPlatformTitle = "Platform";
 
@@ -1112,9 +1129,6 @@ inline constexpr const char* cLimitSequenceTitle = "Sequence Limits";
 inline constexpr const char* cLimitStreamTitle = "Stream Limits";
 inline constexpr const char* cLimitWaveTitle = "Wave Limits";
 
-inline constexpr const char* cLimitSounds = "Sounds";
-inline constexpr const char* cLimitTracks = "Tracks";
-inline constexpr const char* cLimitChannels = "Channels";
 inline constexpr const char* cLimitBufferTimes = "Buffer Times";
 
 inline constexpr const char* cLimitTracksDetail      = "Maximum tracks playing at once";
@@ -1123,12 +1137,7 @@ inline constexpr const char* cLimitBufferTimesDetail = "Stream buffer size multi
 inline constexpr const char* cStringTableDetail      = "Names the game uses to find items";
 inline constexpr const char* cOptionsDetail          = "Reserved flags, no known use";
 
-inline constexpr const char* cRowProjectInfo    = "Project Info";
-inline constexpr const char* cRowSounds         = "Sounds";
 inline constexpr const char* cRowSoundSets      = "Sound Sets";
-inline constexpr const char* cRowStream         = "Stream";
-inline constexpr const char* cRowWave           = "Wave";
-inline constexpr const char* cRowSequence       = "Sequence";
 inline constexpr const char* cRowBanks          = "Banks";
 inline constexpr const char* cRowWaveArchives   = "Wave Archives";
 inline constexpr const char* cRowGroups         = "Groups";
@@ -1138,11 +1147,9 @@ inline constexpr const char* cRowSequenceFiles  = "Sequence Files";
 inline constexpr const char* cRowBankFiles      = "Bank Files";
 inline constexpr const char* cRowFileStatistics = "File Statistics";
 
-inline constexpr const char* cWindowTitle           = "Project";
 inline constexpr const char* cInfoWindowTitle       = "Info";
 inline constexpr const char* cPropertiesWindowTitle = "Properties";
 
-inline constexpr const char* cVersion            = "Version";
 inline constexpr const char* cStringTable        = "String Table";
 inline constexpr const char* cVersionRangeFormat = "Valid range: %s";
 inline constexpr const char* cVersionEditDetail  = "Drag to adjust, double-click to type";
@@ -1169,7 +1176,6 @@ inline constexpr const char* cNativeDeviceUnavailable = "The native file device 
 inline constexpr const char* cReimportWriteFailed = "A temporary WAV file for the reimport could not be written";
 inline constexpr const char* cReimportDecodeFailed = "This Wave File could not be decoded for the reimport";
 
-inline constexpr const char* cReplaceMenuLabel = "Replace";
 inline constexpr const char* cReimportMenuLabel = "Reimport";
 inline constexpr const char* cReplaceWaveFileMenuLabel = "Replace Wave File";
 inline constexpr const char* cReimportWaveFileMenuLabel = "Reimport Wave File";
@@ -1199,11 +1205,6 @@ inline constexpr const char* cTrackImportTrimOneFormat = "%u file will be trimme
 inline constexpr const char* cTrackImportChannelLimitFormat = "Streams can have up to %u channels";
 inline constexpr const char* cTrackImportFailedFormat = "'%s' could not be imported as a Track";
 
-inline constexpr const char* cTrackImportFilesTitle  = "Files";
-inline constexpr const char* cTrackImportFormatTitle = "Format";
-inline constexpr const char* cTrackImportSampleRate  = "Sample Rate";
-inline constexpr const char* cTrackImportSamples     = "samples";
-inline constexpr const char* cTrackImportTracksTitle = "Tracks";
 inline constexpr const char* cTrackImportAddFiles    = "Add WAV";
 inline constexpr const char* cTrackImportEditTip     = "Change this file's import settings";
 inline constexpr const char* cTrackImportFollowsFirst = "Tracks after Track 0 follow its encoding, sample rate, length and loop";
@@ -1212,24 +1213,18 @@ inline constexpr const char* cTrackImportLayoutPerFileDetail = "Files with over 
 inline constexpr const char* cTrackImportLayoutPairMonoDetail = "Two adjacent mono files become L and R";
 
 inline constexpr const char* cSampleRateLabel = "Sample rate";
-inline constexpr const char* cChannelsLabel = "Channels";
 inline constexpr const char* cChannelsMono = "mono";
 inline constexpr const char* cChannelsStereo = "stereo";
 inline constexpr const char* cLoopStart = "Loop start";
 inline constexpr const char* cLoopEnd = "Loop end";
-inline constexpr const char* cLoopDisabled = "Disabled";
-inline constexpr const char* cLoopManual = "Manual";
 inline constexpr const char* cWaveDiscardTitle = "Cancel import?";
 inline constexpr const char* cWaveDiscardQuestion = "Cancel importing this file?";
 inline constexpr const char* cWaveRegionTitle = "Import Wave File";
 inline constexpr const char* cWaveRateSourceFormat = "%u Hz (source)";
 inline constexpr const char* cWaveSourceSummaryFormat = "%u Hz  -  %s  -  %s";
-inline constexpr const char* cWaveChannelCountFormat = "%u Channels";
 inline constexpr const char* cWaveNoPreview = "No waveform for this sample format";
-inline constexpr const char* cWaveNoValue = "-";
 inline constexpr const char* cWaveLoopReadoutPeriodsFormat = "Loop %s  -  %u samples  -  %.2f periods";
 inline constexpr const char* cWaveLoopReadoutFormat = "Loop %s  -  %u samples";
-inline constexpr const char* cWavePreviewPause = "Pause";
 inline constexpr const char* cWavePreviewResume = "Resume";
 inline constexpr const char* cWavePreviewPlay = "Play preview";
 inline constexpr const char* cWaveLoopPlaybackOn = "Loop: on";
@@ -1242,10 +1237,7 @@ inline constexpr const char* cWaveChannelsLeft = "Left only (mono)";
 inline constexpr const char* cWaveChannelsRight = "Right only (mono)";
 inline constexpr const char* cWaveChannelsMix = "Mix to mono";
 inline constexpr const char* cWaveTrimTitle = "Trim";
-inline constexpr const char* cWaveTrimStart = "Start";
-inline constexpr const char* cWaveTrimEnd = "End";
 inline constexpr const char* cWaveTrimSilence = "Trim Silence";
-inline constexpr const char* cWavePitchTitle = "Pitch";
 inline constexpr const char* cWavePitchTip = "Changes pitch and length together";
 inline constexpr const char* cWaveNormalize = "Normalize";
 inline constexpr const char* cWaveNormalizeTip = "Scales the peak to this level";
@@ -1259,10 +1251,8 @@ inline constexpr const char* cWaveSnapLoopTip = "Snaps to 14-sample frames and w
 inline constexpr const char* cWaveLoopStartTip = "Left-click the waveform to set it";
 inline constexpr const char* cWaveLoopEndTip = "Right-click the waveform to set it";
 inline constexpr const char* cWaveCrossfade = "Crossfade";
-inline constexpr const char* cWaveCrossfadeFormat = "%.0f ms";
 inline constexpr const char* cWaveEqualPower = "Equal Power";
 inline constexpr const char* cWaveEqualPowerTip = "Constant loudness through the crossfade";
-inline constexpr const char* cWaveCurve = "Curve";
 inline constexpr const char* cWaveCurveTip = "Volume curve; right-click adds a point";
 inline constexpr const char* cWaveCurveLevelTipFormat = "Level: %.1f dB";
 inline constexpr const char* cWaveCurveSilentTip = "Level: -inf dB";
@@ -1271,24 +1261,16 @@ inline constexpr const char* cWaveCurveDeletePoint = "Delete Point";
 inline constexpr const char* cWaveCurveEndPointReason = "The first and last points cannot be deleted";
 inline constexpr const char* cWaveCurveSingle = "Single Curve";
 inline constexpr const char* cWaveCurveDouble = "Double Curve";
-inline constexpr const char* cWaveCurveHold = "Hold";
 inline constexpr const char* cWaveCurveStairs = "Stairs";
 inline constexpr const char* cWaveCurveSmoothStairs = "Smooth Stairs";
 inline constexpr const char* cWaveCurvePulse = "Pulse";
-inline constexpr const char* cWaveCurveWave = "Wave";
 inline constexpr const char* cWaveCurveHalfSine = "Half Sine";
 
-inline constexpr const char* cTrackImportColumnFile = "File";
-inline constexpr const char* cTrackImportColumnFormat = "Format";
-inline constexpr const char* cTrackImportColumnLength = "Length";
-inline constexpr const char* cTrackImportColumnTrack = "Track";
 inline constexpr const char* cTrackImportRemoveTip = "Remove the file from this import";
 inline constexpr const char* cTrackImportBitsFloatFormat = "%u-bit float";
 inline constexpr const char* cTrackImportBitsFormat = "%u-bit";
-inline constexpr const char* cTrackImportLengthFormat = "%.2f s";
 inline constexpr const char* cTrackImportTrackRangeFormat = "Tracks %u-%u";
 inline constexpr const char* cTrackImportTrackSideFormat = "Track %u (%s)";
-inline constexpr const char* cTrackImportLoop = "Loop";
 inline constexpr const char* cTrackImportLoopFromFirst = "From first file";
 inline constexpr const char* cTrackImportLayout = "Layout";
 inline constexpr const char* cTrackImportLayoutPerFile = "One Track per file";
@@ -1298,14 +1280,12 @@ inline constexpr const char* cTrackImportLayoutPerChannel = "One mono Track per 
 inline constexpr const char* cInstrumentReplaceTitle   = "Replace Instrument";
 inline constexpr const char* cInstrumentImportTitle    = "Import Instrument";
 inline constexpr const char* cInstrumentReplacingFormat = "Replacing: Program %d";
-inline constexpr const char* cNameLabel                = "Name";
 inline constexpr const char* cWavesToImportFormat      = "Waves to import: %u";
 
 
 inline constexpr const char* cWaveHeaderFormat        = "Import '%s'";
 inline constexpr const char* cWaveReplaceHeaderFormat = "Replace with '%s'";
 inline constexpr const char* cWaveRegionHeaderFormat  = "Import '%s' onto velocity region";
-inline constexpr const char* cReplaceButton           = "Replace";
 inline constexpr const char* cWaveImportFailed        = "The WAV file could not be imported";
 inline constexpr const char* cWaveDropNeedsRegion     = "Drop a WAV onto a velocity region to import it";
 
@@ -1317,14 +1297,9 @@ namespace browser
 inline constexpr const char* cTitleFormat = "Select %s";
 inline constexpr const char* cAutoPlay    = "Auto Play";
 inline constexpr const char* cSelect      = "Select";
-inline constexpr const char* cCancel      = "Cancel";
-inline constexpr const char* cNone        = "None";
 inline constexpr const char* cNoMatch     = "No items match the search";
 inline constexpr const char* cNoSelection = "No Wave File selected";
 inline constexpr const char* cBrowseTip   = "Click to choose from a list";
-inline constexpr const char* cEncoding    = "Encoding";
-inline constexpr const char* cSampleRate  = "Sample Rate";
-inline constexpr const char* cChannels    = "Channels";
 inline constexpr const char* cSamples     = "Samples";
 inline constexpr const char* cUsedBy      = "Used By";
 
@@ -1335,17 +1310,7 @@ namespace item
 
 inline constexpr const char* cModifiedTooltip = "Edited since the last save";
 
-inline constexpr const char* cTypeItem         = "Item";
-inline constexpr const char* cTypeSound        = "Sound";
 inline constexpr const char* cTypeSoundSet     = "Sound Set";
-inline constexpr const char* cTypeBank         = "Bank";
-inline constexpr const char* cTypeWaveArchive  = "Wave Archive";
-inline constexpr const char* cTypeGroup        = "Group";
-inline constexpr const char* cTypePlayer       = "Player";
-inline constexpr const char* cTypeWaveFile     = "Wave File";
-inline constexpr const char* cTypeSequenceFile = "Sequence File";
-inline constexpr const char* cTypeBankFile     = "Bank File";
-inline constexpr const char* cTypeInstrument   = "Instrument";
 
 inline constexpr const char* cSearchHint     = "Search by name or ID...";
 inline constexpr const char* cCaseSensitive  = "Match case";
@@ -1367,9 +1332,6 @@ inline constexpr const char* cNoDuplicates      = "No duplicate Wave Files were 
 inline constexpr const char* cStatsTotalOneFormat = "%s in %u Wave File";
 inline constexpr const char* cStatsTotalFormat  = "%s in %u Wave Files";
 inline constexpr const char* cStatsEmpty        = "No matching Wave Files";
-inline constexpr const char* cStatsUseStream     = "Stream";
-inline constexpr const char* cStatsUseWaveSound  = "Wave Sound";
-inline constexpr const char* cStatsUseInstrument = "Instrument";
 inline constexpr const char* cStatsUseUnused     = "Unused";
 inline constexpr const char* cStatsUseOnlyFormat = "(%s only)";
 inline constexpr const char* cStatsFilesOneFormat = "%u file";
@@ -1377,46 +1339,21 @@ inline constexpr const char* cStatsFilesFormat   = "%u files";
 inline constexpr const char* cStatsShareFormat   = "%.1f%%";
 inline constexpr const char* cStatsShareDetailFormat = "%.2f%%";
 inline constexpr const char* cStatsShare         = "Share";
-inline constexpr const char* cCountFormat    = "%d of %d";
 inline constexpr const char* cCountOneFormat = "%d %s";
 inline constexpr const char* cCountAllFormat = "%d %ss";
 inline constexpr const char* cNoItemsFormat  = "No %ss";
 
 inline constexpr const char* cColumnId          = "ID";
-inline constexpr const char* cColumnProgram     = "Program";
-inline constexpr const char* cColumnName        = "Name";
-inline constexpr const char* cColumnLength      = "Length";
 inline constexpr const char* cColumnRate        = "Rate";
-inline constexpr const char* cColumnChannels    = "Channels";
-inline constexpr const char* cColumnLoop        = "Loop";
 inline constexpr const char* cLoopTooltip       = "Loops";
 inline constexpr const char* cLoopStartTooltipFormat = "Loops from %u:%06.3f";
-inline constexpr const char* cColumnSize        = "Size";
-inline constexpr const char* cColumnLabels      = "Labels";
-inline constexpr const char* cColumnInstruments = "Instruments";
 inline constexpr const char* cColumnWaves       = "Waves";
-inline constexpr const char* cColumnSounds      = "Sounds";
 inline constexpr const char* cColumnIds         = "IDs";
-inline constexpr const char* cColumnItems       = "Items";
-inline constexpr const char* cColumnPlayer      = "Player";
-inline constexpr const char* cColumnTracks      = "Tracks";
-inline constexpr const char* cColumnWaveFile    = "Wave File";
-inline constexpr const char* cColumnSequence    = "Sequence File";
 inline constexpr const char* cColumnUses        = "Uses";
-inline constexpr const char* cColumnType        = "Type";
-inline constexpr const char* cColumnEncoding    = "Encoding";
-inline constexpr const char* cColumnBankFile    = "Bank File";
-inline constexpr const char* cSoundTypeStream   = "Stream";
-inline constexpr const char* cSoundTypeWave     = "Wave";
-inline constexpr const char* cSoundTypeSequence = "Sequence";
 inline constexpr const char* cSizeAllColumns   = "Size all columns to fit###SizeAll";
-inline constexpr const char* cChannelsMono      = "Mono";
-inline constexpr const char* cChannelsStereo    = "Stereo";
 
 inline constexpr const char* cMoreTooltipFormat        = "+%u more";
 
-inline constexpr const char* cNameFieldLabel = "Name";
-inline constexpr const char* cCreateFileLabel = "File";
 inline constexpr const char* cNameInvalidDetail =
     "Names can only use letters, numbers and underscores,\nand cannot start with a number.";
 inline constexpr const char* cNameDuplicated = "The name is already in use";
@@ -1438,9 +1375,7 @@ inline constexpr const char* cSelectorInvalid = "Invalid";
 inline constexpr const char* cNoItemSelected = "No Item Selected";
 
 inline constexpr const char* cTypeStreamSound      = "Stream Sound";
-inline constexpr const char* cTypeWaveSound        = "Wave Sound";
 inline constexpr const char* cTypeSequenceSound    = "Sequence Sound";
-inline constexpr const char* cTypeWaveSoundSet     = "Wave Sound Set";
 inline constexpr const char* cTypeSequenceSoundSet = "Sequence Sound Set";
 
 inline constexpr const char* cMergeTitle          = "Confirm Merge";
@@ -1450,7 +1385,6 @@ inline constexpr const char* cMergeDetailFormat   = "References will point to th
 inline constexpr const char* cMergeRemovedFormat  = "Removed: [%u] %s";
 inline constexpr const char* cMergeResultFormat   = "%u duplicate Wave Files were removed (~%s).";
 inline constexpr const char* cMergeResultOneFormat = "%u duplicate Wave File was removed (~%s).";
-inline constexpr const char* cMergeSizeMbFormat   = "%.1f MB";
 inline constexpr const char* cMergeSizeKbFormat   = "%llu KB";
 inline constexpr const char* cStatsFilesSample = "0000 files";
 inline constexpr const char* cStatsShareSample = "100.0%";
@@ -1467,8 +1401,6 @@ inline constexpr const char* cStickyEditDetail = "ID edits also move the adjacen
 inline constexpr const char* cEmptyDetail = "No sounds and no ID range";
 
 inline constexpr const char* cSoundTypeLabel   = "Sound Type";
-inline constexpr const char* cWaveArchiveLabel = "Wave Archive";
-inline constexpr const char* cEmptyLabel       = "Empty";
 inline constexpr const char* cStartIdLabel     = "Start ID";
 inline constexpr const char* cEndIdLabel       = "End ID";
 inline constexpr const char* cIdRangeTitle     = "ID Range";
@@ -1480,8 +1412,6 @@ inline constexpr const char* cErrorEndExceedsCount    = "The End ID is above the
 inline constexpr const char* cErrorSoundInOtherSetFormat = "The Sound '%s' is already in the Sound Set '%s'";
 
 inline constexpr const char* cNoneSelected = "No Set Selected";
-inline constexpr const char* cTypeWave     = "Wave";
-inline constexpr const char* cTypeSequence = "Sequence";
 
 }
 
@@ -1520,13 +1450,10 @@ inline constexpr const char* cGroupFileDeletedTitle  = "Deleted unused group fil
 
 inline constexpr const char* cLocateHeadOne            = "1 group file could not be found. Without it the archive cannot be saved";
 inline constexpr const char* cLocateHeadManyFormat     = "%u group files could not be found. Without them the archive cannot be saved";
-inline constexpr const char* cLocateBox                = "Group Files";
 inline constexpr const char* cLocateSearchFolder       = "Search Folder";
 inline constexpr const char* cLocateSearchFolderDetail = "Finds the files by group name in a folder";
 inline constexpr const char* cLocateSearchFolderTitle  = "Select the Folder with the Group Files";
 inline constexpr const char* cLocateBrowseTitleFormat  = "Select the Group File of '%s'";
-inline constexpr const char* cLocateColumnGroup        = "Group";
-inline constexpr const char* cLocateColumnFile         = "File";
 inline constexpr const char* cLocateNotSelected        = "Not selected";
 inline constexpr const char* cLocateUnreadable         = "The file could not be read";
 inline constexpr const char* cLocateOtherArchive       = "Belongs to another archive";
@@ -1538,20 +1465,13 @@ inline constexpr const char* cLocateLoadDisabled       = "No group file is selec
 inline constexpr const char* cLocateSkip               = "Skip";
 inline constexpr const char* cLocateSkipDetail         = "Leaves these groups with no items";
 
-inline constexpr const char* cDisabledLabel  = "Disabled";
 inline constexpr const char* cItemTypeLabel  = "Item Type";
-inline constexpr const char* cItemLabel      = "Item";
 inline constexpr const char* cLoadItemsLabel = "Load Items";
 inline constexpr const char* cItemDisabled   = "(disabled)";
 
-inline constexpr const char* cLoadAll                       = "All";
 inline constexpr const char* cLoadSequenceAndBank           = "Sequence and Bank";
 inline constexpr const char* cLoadSequenceAndWaveArchive    = "Sequence and Wave Archive";
 inline constexpr const char* cLoadBankAndWaveArchive        = "Bank and Wave Archive";
-inline constexpr const char* cLoadSequence                  = "Sequence";
-inline constexpr const char* cLoadBank                      = "Bank";
-inline constexpr const char* cLoadWaveArchive               = "Wave Archive";
-inline constexpr const char* cLoadWaveSoundSet              = "Wave Sound Set";
 inline constexpr const char* cLoadSequenceSetAndBank        = "Sequence Set and Bank";
 inline constexpr const char* cLoadSequenceSetAndWaveArchive = "Sequence Set and Wave Archive";
 inline constexpr const char* cLoadSequenceSet               = "Sequence Set";
@@ -1569,7 +1489,6 @@ inline constexpr const char* cErrorSequenceLoadDetail =
     "Select 'All', 'Bank and Wave Archive' or 'Sequence'\nwhen the Sequence Sound's Bank uses an automatic Wave Archive";
 inline constexpr const char* cErrorAutomaticLoadAllDetail = "Select 'All' for an automatic Wave Archive";
 
-inline constexpr const char* cItemNull = "(null)";
 
 inline constexpr const char* cNoneSelected   = "No Group Selected";
 inline constexpr const char* cAddItem        = "Add Item";
@@ -1590,22 +1509,13 @@ inline constexpr const char* cLoadIndividually = "Load Individually";
 namespace wavefile
 {
 
-inline constexpr const char* cFormat           = "Format";
-inline constexpr const char* cEncoding         = "Encoding";
 inline constexpr const char* cPcm8Detail       = "8 bits per sample, uncompressed";
 inline constexpr const char* cPcm16Detail      = "16 bits per sample, uncompressed";
 inline constexpr const char* cDspAdpcmDetail   = "Compressed to about 4.6 bits per sample";
-inline constexpr const char* cSampleRate       = "Sample Rate";
-inline constexpr const char* cLength           = "Length";
 inline constexpr const char* cSamplesFormat    = "%u samples";
-inline constexpr const char* cChannels         = "Channels";
 inline constexpr const char* cTimeFormat       = "%u:%06.3f";
 
 inline constexpr const char* cWaveform         = "Waveform";
-inline constexpr const char* cPlay             = "Play";
-inline constexpr const char* cStop             = "Stop";
-inline constexpr const char* cLeft             = "L";
-inline constexpr const char* cRight            = "R";
 inline constexpr const char* cPlayLeft         = "Play the left channel";
 inline constexpr const char* cPlayRight        = "Play the right channel";
 inline constexpr const char* cTooLong          = "Too long to show as a waveform";
@@ -1613,10 +1523,6 @@ inline constexpr const char* cNoData           = "No sample data";
 inline constexpr const char* cLoopReadoutFormat      = "Loop %u:%06.3f";
 inline constexpr const char* cLoopDirtyReadoutFormat = "Loop %u:%06.3f  -  rebuilt on play or save";
 
-inline constexpr const char* cLoop        = "Loop";
-inline constexpr const char* cLoopStart   = "Start";
-inline constexpr const char* cLoopEnd     = "End";
-inline constexpr const char* cLoopSamples = "samples";
 
 inline constexpr const char* cEncodingPcm8 = "Pcm8";
 inline constexpr const char* cEncodingPcm16 = "Pcm16";
@@ -1631,7 +1537,6 @@ inline constexpr const char* cLoopInvalidFormat = "The loop starts after it ends
 inline constexpr const char* cDataBlockDamaged = "The Wave File's data block is damaged";
 inline constexpr const char* cSampleOffsetInvalidFormat = "Channel %d points outside the audio data";
 
-inline constexpr const char* cEncodingWarningTitle = "Warning";
 inline constexpr const char* cEncodingWarningDetail = "Changing the Wave File encoding can reduce audio quality.\nConvert anyway?";
 
 inline constexpr const char* cWavOpenFailedFormat = "The file could not be opened\n%s";
@@ -1652,12 +1557,10 @@ namespace innerfile
 inline constexpr const char* cNoNameHint         = "No name";
 inline constexpr const char* cReferences         = "References";
 inline constexpr const char* cNoReferences       = "No references";
-inline constexpr const char* cArchive            = "Archive";
 inline constexpr const char* cArchiveDetail      = "Set by the archive, read only";
 inline constexpr const char* cByteOrder          = "Byte Order";
 inline constexpr const char* cBigEndian          = "Big Endian";
 inline constexpr const char* cLittleEndian       = "Little Endian";
-inline constexpr const char* cVersion            = "Version";
 inline constexpr const char* cStreamVersion      = "Stream Version";
 
 }
@@ -1669,12 +1572,7 @@ inline constexpr const char* cEmpty = "No recent files";
 inline constexpr const char* cClear = "Clear Recent Files";
 
 inline constexpr const char* cPinnedTitle = "Pinned";
-inline constexpr const char* cRecentTitle = "Recent Files";
 
-inline constexpr const char* cSortName = "Name";
-inline constexpr const char* cSortFolder = "Folder";
-inline constexpr const char* cColumnModified = "Modified";
-inline constexpr const char* cColumnSize = "Size";
 
 inline constexpr const char* cPin = "Pin";
 inline constexpr const char* cUnpin = "Unpin";
@@ -1694,10 +1592,6 @@ inline constexpr const char* cNotFoundFormat = "Not found: %s";
 namespace start
 {
 
-inline constexpr const char* cStartTitle  = "Start";
-inline constexpr const char* cHelpTitle   = "Help";
-inline constexpr const char* cNewArchive  = "New Archive";
-inline constexpr const char* cOpenArchive = "Open Archive";
 inline constexpr const char* cEmptyDetail = "Recently opened archives will appear here.";
 
 }
@@ -1705,7 +1599,6 @@ inline constexpr const char* cEmptyDetail = "Recently opened archives will appea
 namespace date
 {
 
-inline constexpr const char* cUnknown         = "Unknown";
 inline constexpr const char* cTodayFormat     = "Today %s";
 inline constexpr const char* cYesterdayFormat = "Yesterday %s";
 inline constexpr const char* cThisYearFormat  = "%s %d, %s";
@@ -1733,33 +1626,25 @@ inline constexpr const char* cMonths[] = { "Jan", "Feb", "Mar", "Apr", "May", "J
 namespace preferences
 {
 
-inline constexpr const char* cClose = "Close";
 inline constexpr const char* cRefreshDevices = "Refresh Devices";
 
-inline constexpr const char* cPageFile       = "File";
 inline constexpr const char* cPageAudio      = "Audio";
 inline constexpr const char* cPageMidi       = "MIDI Input";
 inline constexpr const char* cPageAppearance = "Appearance";
 inline constexpr const char* cPageInterface  = "Interface";
 inline constexpr const char* cPageAdvanced   = "Advanced";
 
-inline constexpr const char* cBoxBackup       = "Backup";
 inline constexpr const char* cBoxSaving       = "Saving";
 inline constexpr const char* cBoxOpening      = "Opening";
-inline constexpr const char* cBoxOutputDevice = "Device";
-inline constexpr const char* cBoxPlayback     = "Playback";
-inline constexpr const char* cBoxTheme        = "Theme";
 inline constexpr const char* cBoxColors       = "Colors";
 inline constexpr const char* cBoxMotion       = "Motion";
 inline constexpr const char* cBoxDisplay      = "Display";
 inline constexpr const char* cBoxDebug        = "Debug";
 inline constexpr const char* cBoxSettings     = "Settings";
-inline constexpr const char* cBoxSystem       = "System";
 
 inline constexpr const char* cOpenFolder = "Open Folder";
 
 inline constexpr const char* cBackupLabel = "Automatic Backup";
-inline constexpr const char* cBackupOff = "Off";
 inline constexpr const char* cBackupMinute = "Every Minute";
 inline constexpr const char* cBackup5Minutes = "Every 5 Minutes";
 inline constexpr const char* cBackup10Minutes = "Every 10 Minutes";
@@ -1769,9 +1654,6 @@ inline constexpr const char* cBackupCountLabel = "Maximum Backups";
 inline constexpr const char* cBackupCountDisabled = "Automatic Backup is off";
 inline constexpr const char* cBackupFolderLabel = "Backup Folder";
 inline constexpr const char* cBackupUsageFormat = "%zu %s, %s";
-inline constexpr const char* cBackupSingular = "Backup";
-inline constexpr const char* cBackupPlural = "Backups";
-inline constexpr const char* cBackupUsageNone = "Empty";
 
 inline constexpr const char* cMetadataLabel = "Archive Metadata";
 inline constexpr const char* cMetadataDetail = "Saves names the archive cannot store";
@@ -1786,18 +1668,14 @@ inline constexpr const char* cUnusedGroupFilesDelete = "Delete When Saving";
 inline constexpr const char* cUnusedGroupFilesDetail = "Files of groups that are no longer external";
 
 inline constexpr const char* cIgnoredLabel = "Ignored Warnings";
-inline constexpr const char* cIgnoredNone = "None";
 inline constexpr const char* cIgnoredCountFormat = "%zu %s";
-inline constexpr const char* cIgnoredArchiveSingular = "Archive";
 inline constexpr const char* cIgnoredArchivePlural = "Archives";
-inline constexpr const char* cIgnoredReset = "Reset";
 inline constexpr const char* cIgnoredDetail = "Archives with hidden opening warnings";
 
 inline constexpr const char* cStartupLabel = "On Startup";
 inline constexpr const char* cStartupStartPage = "Start Page";
 inline constexpr const char* cStartupStartPageDetail = "Shows recent files and links";
 inline constexpr const char* cStartupLastArchive = "Last Archive";
-inline constexpr const char* cRecentCountLabel = "Recent Files";
 
 inline constexpr const char* cAssociationLabel = "File Association";
 inline constexpr const char* cAssociationNone = "Not Associated";
@@ -1809,24 +1687,15 @@ inline constexpr const char* cAssociationFailed = "The file association could no
 
 inline constexpr const char* cDeviceLabel = "Playback Device";
 inline constexpr const char* cDeviceEmpty = "No playback device found";
-inline constexpr const char* cSampleRateLabel = "Sample Rate";
-inline constexpr const char* cOutputMeterLabel = "Audio Meter Window";
 inline constexpr const char* cOutputInfoFormat = "%s, %u Hz, %u ms buffer";
-inline constexpr const char* cOutputMono = "Mono";
-inline constexpr const char* cOutputStereo = "Stereo";
-inline constexpr const char* cOutputChannelsFormat = "%u Channels";
 inline constexpr const char* cOutputModeLabel = "Output Mode";
-inline constexpr const char* cInterpolationLabel = "Interpolation";
 inline constexpr const char* cInterpolationDetail = "Resampling method of Wave Sounds";
 
-inline constexpr const char* cMidiColumnOn = "On";
-inline constexpr const char* cMidiColumnDevice = "Device";
 inline constexpr const char* cMidiColumnStatus = "Status";
 inline constexpr const char* cMidiConnected = "Connected";
 inline constexpr const char* cMidiNotFound = "Not Found";
 inline constexpr const char* cMidiNotFoundDetail = "Uncheck to remove this device";
 inline constexpr const char* cMidiEmpty = "No MIDI input devices found";
-inline constexpr const char* cBoxNotes = "Notes";
 inline constexpr const char* cVelocityLabel = "Velocity";
 inline constexpr const char* cVelocityDevice = "From Device";
 inline constexpr const char* cVelocityFixed = "Fixed";
@@ -1846,7 +1715,6 @@ inline constexpr const char* cAnimationsDetail = "Fades windows, menus and hover
 inline constexpr const char* cSmoothScrollLabel = "Smooth Scrolling";
 inline constexpr const char* cScrollSpeedLabel = "Scroll Speed";
 inline constexpr const char* cUIScaleLabel = "UI Scale";
-inline constexpr const char* cUIScaleFormat = "%d%%";
 inline constexpr const char* cUIScaleRestart = "Restart to apply";
 inline constexpr const char* cShadowsLabel = "Window Shadows";
 inline constexpr const char* cTimeFormatLabel = "Time Format";
@@ -1862,9 +1730,7 @@ inline constexpr const char* cSettingsFolderLabel = "Settings Folder";
 inline constexpr const char* cResetAll = "Reset All Settings";
 inline constexpr const char* cResetAllQuestion = "Reset all settings to their defaults?";
 inline constexpr const char* cResetAllDetail = "Volume, recent files, MIDI devices and layout are kept.";
-inline constexpr const char* cResetAllConfirm = "Reset";
 
-inline constexpr const char* cSystemWindowTitle = "System";
 inline constexpr const char* cProcessMeterLabel = "ProcessMeter";
 
 inline constexpr const char* cDeviceSystemDefault = "System Default";
@@ -1874,11 +1740,8 @@ inline constexpr const char* cDeviceSystemDefault = "System Default";
 namespace menu
 {
 
-inline constexpr const char* cAdd                  = "Add";
 inline constexpr const char* cInsertAfter          = "Insert After";
-inline constexpr const char* cDuplicate            = "Duplicate";
 inline constexpr const char* cDuplicateItemsFormat = "Duplicate %zu Items";
-inline constexpr const char* cDelete               = "Delete";
 inline constexpr const char* cDeleteItemsFormat    = "Delete %zu Items";
 inline constexpr const char* cDeleteFromArchive    = "Delete from Archive";
 inline constexpr const char* cDeleteItemsFromArchiveFormat = "Delete %zu Items from Archive";
@@ -1886,9 +1749,6 @@ inline constexpr const char* cRemoveFromGroup      = "Remove from Group";
 inline constexpr const char* cRemoveItemsFromGroupFormat = "Remove %zu Items from Group";
 inline constexpr const char* cDeleteTrack          = "Delete Track";
 inline constexpr const char* cDeleteRegion         = "Delete Region";
-inline constexpr const char* cGoTo                 = "Go To";
-inline constexpr const char* cImport               = "Import";
-inline constexpr const char* cExport               = "Export";
 inline constexpr const char* cExportWav            = "Export WAV";
 inline constexpr const char* cExportMidi           = "Export MIDI";
 inline constexpr const char* cExportGroupFile      = "Export Group File";
@@ -1930,27 +1790,19 @@ inline constexpr const char* cPathCutMark = "...";
 inline constexpr const char* cRestoreHeadFormat   = "Backups of %s";
 inline constexpr const char* cRestoreDetail       = "The file on disk only changes when you save.";
 inline constexpr const char* cRestoreEmpty        = "This archive has no backups yet";
-inline constexpr const char* cRestore             = "Restore";
 inline constexpr const char* cCountFormat         = "%zu Backups, %s";
 inline constexpr const char* cCountOneFormat      = "1 Backup, %s";
 inline constexpr const char* cRestoreAnyway       = "Restore Anyway";
 inline constexpr const char* cRestoreDiscards     = "The open archive has an error, so its unsaved changes will be lost";
 inline constexpr const char* cColumnDate          = "Date";
-inline constexpr const char* cColumnType          = "Type";
-inline constexpr const char* cColumnSize          = "Size";
 inline constexpr const char* cKindAuto            = "Automatic";
 inline constexpr const char* cKindSave            = "Before Save";
 inline constexpr const char* cKindRestore         = "Before Restore";
-inline constexpr const char* cKindManual          = "Manual";
 inline constexpr const char* cSizeKbFormat        = "%.0f KB";
-inline constexpr const char* cSizeMbFormat        = "%.1f MB";
 inline constexpr const char* cUntitled            = "Untitled";
 
 inline constexpr const char* cRecoverTitle    = "Recover Unsaved Work?";
 inline constexpr const char* cRecoverDetail   = "TuneBloom did not close correctly.\nA backup with unsaved changes is available.";
-inline constexpr const char* cRecoverArchive  = "Archive";
-inline constexpr const char* cRecoverFolder   = "Folder";
-inline constexpr const char* cRecoverBackup   = "Backup";
 inline constexpr const char* cRecoverNoFolder = "Not saved yet";
 inline constexpr const char* cRecover         = "Recover";
 inline constexpr const char* cDiscard         = "Discard";
@@ -1976,24 +1828,16 @@ namespace dialog
 {
 
 inline constexpr const char* cOk               = "OK";
-inline constexpr const char* cCancel           = "Cancel";
 inline constexpr const char* cYes              = "Yes";
 inline constexpr const char* cNo               = "No";
-inline constexpr const char* cGoTo             = "Go To";
-inline constexpr const char* cSave             = "Save";
 inline constexpr const char* cSaveAnyway       = "Save Anyway";
 inline constexpr const char* cTryAgain         = "Try Again";
 inline constexpr const char* cUpdate           = "Update";
 inline constexpr const char* cLater            = "Later";
 inline constexpr const char* cRemoveAllAndSave = "Remove All And Save";
 inline constexpr const char* cCreate           = "Create";
-inline constexpr const char* cExport           = "Export";
-inline constexpr const char* cImport           = "Import";
-inline constexpr const char* cAdd              = "Add";
-inline constexpr const char* cDelete           = "Delete";
 inline constexpr const char* cMerge            = "Merge";
 inline constexpr const char* cConvert          = "Convert";
-inline constexpr const char* cClose            = "Close";
 
 }
 
@@ -2017,15 +1861,11 @@ inline constexpr const char* cGroupErrors = "Errors";
 inline constexpr const char* cGroupWarnings = "Warnings";
 
 inline constexpr const char* cSeverityCountFormat = "%s %zu %s";
-inline constexpr const char* cItemSingular = "Item";
-inline constexpr const char* cItemPlural = "Items";
 
 inline constexpr const char* cIgnoreWarnings = "Do not show these warnings again";
 inline constexpr const char* cIgnoreWarningsDetail = "New warnings still show; reset in Preferences";
 
-inline constexpr const char* cTitleWarning = "Warning";
 inline constexpr const char* cItemInvalidFormat = "Item '%s' is invalid:";
-inline constexpr const char* cUnknownError = "Unknown";
 
 }
 
@@ -2034,15 +1874,11 @@ namespace unsaved
 
 inline constexpr const char* cTitle        = "Unsaved Changes";
 
-inline constexpr const char* cColumnType   = "Type";
 inline constexpr const char* cColumnChange = "Change";
 
 inline constexpr const char* cAdded        = "Added";
-inline constexpr const char* cModified     = "Modified";
 inline constexpr const char* cRemoved      = "Removed";
 
-inline constexpr const char* cProjectInfo  = "Project Info";
-inline constexpr const char* cTypeProject  = "Project";
 
 inline constexpr const char* cCountFormat  = "%d Changes";
 inline constexpr const char* cCountOneFormat = "%d Change";
@@ -2096,7 +1932,6 @@ inline constexpr const char* cSystemWiiU   = "Wii U";
 inline constexpr const char* cSystem3ds    = "3DS";
 inline constexpr const char* cSystemSwitch = "Switch";
 
-inline constexpr const char* cInnerFileUnknown = "Unknown";
 
 }
 
@@ -2189,28 +2024,21 @@ inline constexpr const char* cDockShiftTip = "Hold Shift to dock";
 namespace mainmenu
 {
 
-inline constexpr const char* cFile        = "File";
 inline constexpr const char* cNew         = "New";
 inline constexpr const char* cOpen        = "Open";
 inline constexpr const char* cOpenRecent  = "Open Recent";
-inline constexpr const char* cSave        = "Save";
 inline constexpr const char* cSaveAs      = "Save As";
-inline constexpr const char* cClose       = "Close";
 inline constexpr const char* cExit        = "Exit";
 inline constexpr const char* cPreferences = "Preferences";
-inline constexpr const char* cHelp        = "Help";
 inline constexpr const char* cAbout       = "About";
 inline constexpr const char* cUnsaved     = "Unsaved";
 inline constexpr const char* cSaved       = "Saved";
 
 inline constexpr const char* cShowUnsaved      = "Show Unsaved Changes";
-inline constexpr const char* cBackups          = "Backups";
 inline constexpr const char* cCreateBackup     = "Create Backup";
 inline constexpr const char* cShowBackupFolder = "Show Backup Folder";
 inline constexpr const char* cCopyPath         = "Copy Path";
 
-inline constexpr const char* cImport            = "Import";
-inline constexpr const char* cExport            = "Export";
 inline constexpr const char* cInnerFileFormat   = "%s File";
 inline constexpr const char* cBankBundle        = "Bank Bundle";
 inline constexpr const char* cExportWav         = "WAV Audio";
@@ -2220,25 +2048,15 @@ inline constexpr const char* cExportDls         = "Downloadable Sounds (DLS)";
 inline constexpr const char* cExportNoSelection = "Select a Sound or a file to export";
 
 inline constexpr const char* cEdit      = "Edit";
-inline constexpr const char* cRename    = "Rename";
-inline constexpr const char* cDuplicate = "Duplicate";
-inline constexpr const char* cSelectAll = "Select All";
-inline constexpr const char* cFind      = "Find";
-inline constexpr const char* cDelete    = "Delete";
 
 inline constexpr const char* cView         = "View";
 inline constexpr const char* cOutputMeter  = "Output Meter";
 inline constexpr const char* cSystemWindow = "System Window";
-inline constexpr const char* cTheme        = "Theme";
 inline constexpr const char* cThemeDark    = "Dark";
 inline constexpr const char* cThemeLight   = "Light";
 inline constexpr const char* cResetLayout  = "Reset Layout";
 
 inline constexpr const char* cTransport = "Transport";
-inline constexpr const char* cPlay      = "Play";
-inline constexpr const char* cPause     = "Pause";
-inline constexpr const char* cStop      = "Stop";
-inline constexpr const char* cLoop      = "Loop";
 
 inline constexpr const char* cShortcuts   = "Keyboard Shortcuts";
 inline constexpr const char* cRepository  = "GitHub Repository";
@@ -2251,21 +2069,15 @@ namespace keys
 {
 
 
-inline constexpr const char* cGroupArchive  = "Archive";
 inline constexpr const char* cGroupLists    = "Item Lists";
 inline constexpr const char* cGroupSearch   = "Search";
-inline constexpr const char* cGroupPlayback = "Playback";
 inline constexpr const char* cGroupPiano    = "Piano Keyboard";
 inline constexpr const char* cGroupMouse    = "Mouse";
 
-inline constexpr const char* cNewArchive      = "New Archive";
-inline constexpr const char* cOpenArchive     = "Open Archive";
 inline constexpr const char* cCloseFileWindow = "Close File Window";
 
 inline constexpr const char* cPreviousItem   = "Previous Item";
 inline constexpr const char* cNextItem       = "Next Item";
-inline constexpr const char* cPageUp         = "Page Up";
-inline constexpr const char* cPageDown       = "Page Down";
 inline constexpr const char* cFirstItem      = "First Item";
 inline constexpr const char* cLastItem       = "Last Item";
 inline constexpr const char* cShowSelection  = "Scroll to Selection";
@@ -2291,8 +2103,6 @@ inline constexpr const char* cKeyCtrl     = "Ctrl";
 inline constexpr const char* cKeyShift    = "Shift";
 inline constexpr const char* cKeyAlt      = "Alt";
 inline constexpr const char* cKeyEscape   = "Esc";
-inline constexpr const char* cKeyPageUp   = "Page Up";
-inline constexpr const char* cKeyPageDown = "Page Down";
 inline constexpr const char* cKeyClick    = "Click";
 inline constexpr const char* cKeyWheel    = "Wheel";
 

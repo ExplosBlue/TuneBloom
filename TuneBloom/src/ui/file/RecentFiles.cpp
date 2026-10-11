@@ -713,8 +713,8 @@ static void DrawRecentHeader(f32 width, f32 nameWidth)
     const f32 folderLeft = nameLeft + nameWidth + em * cRecentFolderGapEm;
     const f32 folderCellLeft = folderLeft - ImFloor(style.ItemSpacing.x * 0.5f);
 
-    DrawRecentHeaderCell("##sortName", messages::recent::cSortName, RecentSort::Name, pos.x, nameLeft, folderCellLeft - style.ItemSpacing.x);
-    DrawRecentHeaderCell("##sortFolder", messages::recent::cSortFolder, RecentSort::Folder, folderCellLeft, folderLeft, pos.x + width);
+    DrawRecentHeaderCell("##sortName", messages::common::cName, RecentSort::Name, pos.x, nameLeft, folderCellLeft - style.ItemSpacing.x);
+    DrawRecentHeaderCell("##sortFolder", messages::common::cFolder, RecentSort::Folder, folderCellLeft, folderLeft, pos.x + width);
 
     ImGui::Dummy(ImVec2(width, em));
 }
@@ -841,7 +841,7 @@ bool DrawRecentFilesList(std::string* outPath)
         drawRow(path, true);
 
     if (!pinned.empty() && !recent.empty())
-        ImGui::SeparatorText(messages::recent::cRecentTitle);
+        ImGui::SeparatorText(messages::common::cRecentFiles);
 
     if (!recent.empty())
     {
@@ -1061,9 +1061,9 @@ static bool BeginRecentTable(const char* id, bool pinned, ItemColumn* columns, s
         }
     }
 
-    columns[0] = { "Folder", messages::recent::cSortFolder, samples[0].c_str(), nullptr, nullptr, cItemColumnFlag_Text | cItemColumnFlag_TextEnd, nullptr };
-    columns[1] = { "Modified", messages::recent::cColumnModified, samples[1].c_str(), nullptr, nullptr, cItemColumnFlag_Text, nullptr };
-    columns[2] = { "Size", messages::recent::cColumnSize, samples[2].c_str(), nullptr, nullptr, cItemColumnFlag_None, nullptr };
+    columns[0] = { "Folder", messages::common::cFolder, samples[0].c_str(), nullptr, nullptr, cItemColumnFlag_Text | cItemColumnFlag_TextEnd, nullptr };
+    columns[1] = { "Modified", messages::common::cModified, samples[1].c_str(), nullptr, nullptr, cItemColumnFlag_Text, nullptr };
+    columns[2] = { "Size", messages::common::cSize, samples[2].c_str(), nullptr, nullptr, cItemColumnFlag_None, nullptr };
     columns[3] = { "Pin", "", "", nullptr, nullptr, cItemColumnFlag_None, nullptr };
 
     bool shown[4];
@@ -1084,7 +1084,7 @@ static bool BeginRecentTable(const char* id, bool pinned, ItemColumn* columns, s
     if (!open)
         return false;
 
-    ImGui::TableSetupColumn(messages::recent::cSortName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
+    ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
     ImGui::TableSetupColumn(columns[0].title, columnFlags(0, ImGuiTableColumnFlags_WidthFixed), widths[0]);
     ImGui::TableSetupColumn(columns[1].title, columnFlags(1, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending), widths[1]);
     ImGui::TableSetupColumn(columns[2].title, columnFlags(2, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending), widths[2]);

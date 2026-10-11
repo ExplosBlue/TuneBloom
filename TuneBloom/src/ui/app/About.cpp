@@ -216,9 +216,9 @@ static void DrawTuneBloomSplash()
     DrawAboutButton(ICON_LC_MESSAGE_CIRCLE, messages::about::cDiscord, cDiscordUrl);
     ImGui::SameLine();
 
-    BeginDialogFooter({ messages::dialog::cClose }, false);
+    BeginDialogFooter({ messages::common::cClose }, false);
 
-    if (DialogButton(messages::dialog::cClose))
+    if (DialogButton(messages::common::cClose))
         ImGui::CloseCurrentPopup();
 
     if (ImGui::IsKeyPressed(ImGuiKey_Escape))

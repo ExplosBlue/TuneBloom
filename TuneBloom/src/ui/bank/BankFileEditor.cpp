@@ -24,7 +24,7 @@ static constexpr f32 cRegionPanelPadXEm    = 0.5f;
 static constexpr f32 cRegionPanelPadYEm    = 0.3f;
 
 static const char* cRegionPitchKnobs[]  = { messages::param::cCoarse, messages::param::cFine };
-static const char* cRegionOutputKnobs[] = { messages::param::cVolume, messages::param::cPan };
+static const char* cRegionOutputKnobs[] = { messages::common::cVolume, messages::common::cPan };
 
 static const char* cRegionKeyRangeLabel      = messages::bank::cKeyRange;
 static const char* cRegionVelocityRangeLabel = messages::bank::cVelocityRange;
@@ -54,7 +54,7 @@ static void NextRegionGroup(const char* label, s32 fieldNum)
 static sead::FixedSafeString<24> FormatKeyName(s32 key)
 {
     if (key < 0 || key >= static_cast<s32>(MmlCommandNote::sKeysNum))
-        return sead::FixedSafeString<24>(messages::bank::cNoValue);
+        return sead::FixedSafeString<24>(messages::common::cNoValue);
 
     const char* s = MmlCommandNote::sKeys[key];
     char letter = s[0];
@@ -128,7 +128,7 @@ void BankFile::VelocityRegion::drawMappingUI()
 
 void BankFile::VelocityRegion::drawSampleUI()
 {
-    static const char* cInterpolationLabel = messages::bank::cInterpolation;
+    static const char* cInterpolationLabel = messages::common::cInterpolation;
 
     RegionHeader(messages::bank::cPanelSample);
 
@@ -180,7 +180,7 @@ void BankFile::VelocityRegion::drawSampleUI()
     {
         static const char* sInterpolationTypes[] = {
             messages::bank::cInterpolationPolyphase,
-            messages::bank::cInterpolationLinear,
+            messages::common::cLinear,
         };
 
         u32 interpolationType = sead::Mathu::min(getInterpolationType(), IM_ARRAYSIZE(sInterpolationTypes) - 1);
@@ -196,7 +196,7 @@ void BankFile::VelocityRegion::drawSampleUI()
 
 void BankFile::VelocityRegion::drawPitchUI()
 {
-    RegionHeader(messages::panel::cPitch);
+    RegionHeader(messages::common::cPitch);
     CenterRegionKnobs(CalcKnobRowWidth(cRegionPitchKnobs, IM_ARRAYSIZE(cRegionPitchKnobs)));
 
     f32 pitch = getPitch();
@@ -224,7 +224,7 @@ void BankFile::VelocityRegion::drawOutputUI()
     {
         u8 volume = getVolume();
         SetNextKnobReset(cRegionVolumeDefault);
-        if (KnobU8(messages::param::cVolume, &volume, cU8Min, cVolumeMax, knobSize))
+        if (KnobU8(messages::common::cVolume, &volume, cU8Min, cVolumeMax, knobSize))
         {
             setVolume(volume);
             SetUnsavedChanges(true);
@@ -237,7 +237,7 @@ void BankFile::VelocityRegion::drawOutputUI()
     {
         u8 pan = getPan();
         SetNextKnobText(FormatPanText(pan, cPanCenter).cstr());
-        if (KnobU8(messages::param::cPan, &pan, cU8Min, cPanMax, cPanCenter, knobSize))
+        if (KnobU8(messages::common::cPan, &pan, cU8Min, cPanMax, cPanCenter, knobSize))
         {
             setPan(pan);
             SetUnsavedChanges(true);
@@ -403,7 +403,7 @@ static void DrawEmptyRegionField(const char* id)
 
     s32 value = 0;
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * cRegionMappingFieldEm);
-    SetNextKnobText(messages::bank::cNoValue);
+    SetNextKnobText(messages::common::cNoValue);
     DragField(id, ImGuiDataType_S32, &value, 0.0f, &cZero, &cZero, "%d", ImGuiSliderFlags_AlwaysClamp);
 }
 
@@ -454,8 +454,8 @@ void DrawRegionPanels(BankFile::Instrument* instrument)
     const ImVec2 padding(ImFloor(em * cRegionPanelPadXEm), ImFloor(em * cRegionPanelPadYEm));
     const f32 panelHeight = ImGui::GetFrameHeight() + style.ItemSpacing.y + CalcRegionStripHeight() + padding.y * 2.0f;
 
-    const f32 interpolationWidth = std::max(ImGui::CalcTextSize(messages::bank::cInterpolationPolyphase).x, ImGui::CalcTextSize(messages::bank::cInterpolationLinear).x) + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
-    const f32 sampleWidth = ImGui::CalcTextSize(messages::bank::cInterpolation).x + style.ItemSpacing.x + interpolationWidth;
+    const f32 interpolationWidth = std::max(ImGui::CalcTextSize(messages::bank::cInterpolationPolyphase).x, ImGui::CalcTextSize(messages::common::cLinear).x) + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+    const f32 sampleWidth = ImGui::CalcTextSize(messages::common::cInterpolation).x + style.ItemSpacing.x + interpolationWidth;
     const f32 pitchWidth = CalcKnobRowWidth(cRegionPitchKnobs, IM_ARRAYSIZE(cRegionPitchKnobs));
     const f32 outputWidth = CalcKnobRowWidth(cRegionOutputKnobs, IM_ARRAYSIZE(cRegionOutputKnobs));
     const f32 envelopeWidth = CalcAdshrEditorWidth(false);
@@ -604,7 +604,7 @@ InstanciateItemCallback CreateInstrumentFunc(bool clear)
     if (sCurrentEditBank)
     {
         ImGui::SetNextItemWidth(240.0f);
-        ImGui::InputText(messages::bank::cInstrumentNameLabel,sAddName.getBuffer(), sAddName.getBufferSize());
+        ImGui::InputText(messages::common::cName,sAddName.getBuffer(), sAddName.getBufferSize());
 
         s16 progStep = 1;
         s16 progStepFast = 10;
@@ -757,7 +757,7 @@ static void InstrumentContextMenuFunc(Item* item)
     if (!sCurrentEditBank)
         return;
 
-    if (item && ContextMenuItem(ICON_LC_COPY, messages::menu::cDuplicate))
+    if (item && ContextMenuItem(ICON_LC_COPY, messages::common::cDuplicate))
         DuplicateInstrument(sCurrentEditBank, static_cast<BankFile::Instrument*>(item));
 
     // Edit
@@ -768,7 +768,7 @@ static void InstrumentContextMenuFunc(Item* item)
         const std::vector<Item*> targets = IsItemMultiSelected(item) ? sMultiSelectedItems : std::vector<Item*>{item};
         const bool canAutoName = std::any_of(targets.begin(), targets.end(), CanAutoNameInstrument);
 
-        if (ContextMenuItem(ICON_LC_REPLACE, messages::import::cReplaceMenuLabel))
+        if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace))
             RequestReplaceInstrument(item, sCurrentEditBank);
 
         if (ContextMenuItem(ICON_LC_WAND_SPARKLES, messages::menu::cAutoName, canAutoName, messages::menu::cAutoNameNoWaveFile))
@@ -784,10 +784,10 @@ static void InstrumentContextMenuFunc(Item* item)
     // Files
     ContextMenuSeparator();
 
-    if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::menu::cImport))
+    if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::common::cImport))
         RequestImportInstrument(sCurrentEditBank);
 
-    if (item && ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::menu::cExport))
+    if (item && ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::common::cExport))
         RequestExportInstrument(item);
 }
 
@@ -807,7 +807,7 @@ void BankFile::drawFileUI()
     const f32 topHeight = std::max(ImGui::GetFrameHeight(), totalHeight - sKeyboardHeight - splitterFootprint);
 
     if (ImGui::BeginChild("Instruments", ImVec2(0.0f, topHeight)))
-        DrawAllItemsUI("Instrument", messages::item::cTypeInstrument,mInstrumentList, &CreateInstrumentFunc, nullptr, &InstrumentContextMenuFunc);
+        DrawAllItemsUI("Instrument", messages::common::cInstrument,mInstrumentList, &CreateInstrumentFunc, nullptr, &InstrumentContextMenuFunc);
 
     ImGui::EndChild();
 

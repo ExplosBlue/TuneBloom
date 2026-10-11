@@ -221,7 +221,7 @@ void DrawTrackListMenu(const TrackContext& ctx, TrackEdit* edit)
 
     const sead::FormatFixedSafeString<64> limit(messages::stream::cTrackLimitFormat, cStrmTrackNum);
 
-    if (ContextMenuItem(ICON_LC_PLUS, messages::menu::cAdd, ctx.canAdd, limit.cstr()))
+    if (ContextMenuItem(ICON_LC_PLUS, messages::common::cAdd, ctx.canAdd, limit.cstr()))
         edit->add = true;
 
     if (ContextMenuItem(ICON_LC_IMPORT, messages::import::cTrackImportMenuLabel, ctx.canAdd, limit.cstr()))
@@ -407,7 +407,7 @@ void DrawTrackParam(const TrackContext& ctx, s32 index, TrackParam param, f32 wi
                 SetUnsavedChanges(true);
             }
 
-            ImGui::SetItemTooltip("%s", messages::stream::cTrackFrontBypass);
+            ImGui::SetItemTooltip("%s", messages::common::cFrontBypass);
             break;
         }
 

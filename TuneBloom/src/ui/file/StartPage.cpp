@@ -67,8 +67,8 @@ static void OpenDiscord()
 }
 
 static const StartRow cFileRows[] = {
-    { ICON_LC_FILE,        messages::start::cNewArchive,  GetNewArchiveShortcut,  RequestNewFileFormat },
-    { ICON_LC_FOLDER_OPEN, messages::start::cOpenArchive, GetOpenArchiveShortcut, OpenArchive },
+    { ICON_LC_FILE,        messages::common::cNewArchive,  GetNewArchiveShortcut,  RequestNewFileFormat },
+    { ICON_LC_FOLDER_OPEN, messages::common::cOpenArchive, GetOpenArchiveShortcut, OpenArchive },
 };
 
 static const StartRow cHelpRows[] = {
@@ -134,17 +134,17 @@ static void DrawStartSide(f32 width, bool stacked)
 
     if (!stacked || width < ImGui::GetFontSize() * cStartBoxRowEm)
     {
-        DrawStartCard("##FileRows", messages::start::cStartTitle, cFileRows, IM_ARRAYSIZE(cFileRows), width);
+        DrawStartCard("##FileRows", messages::common::cStart, cFileRows, IM_ARRAYSIZE(cFileRows), width);
         DrawStartGap(gap);
-        DrawStartCard("##HelpRows", messages::start::cHelpTitle, cHelpRows, IM_ARRAYSIZE(cHelpRows), width);
+        DrawStartCard("##HelpRows", messages::common::cHelp, cHelpRows, IM_ARRAYSIZE(cHelpRows), width);
         return;
     }
 
     const f32 boxWidth = ImFloor((width - gap) * 0.5f);
 
-    DrawStartCard("##FileRows", messages::start::cStartTitle, cFileRows, IM_ARRAYSIZE(cFileRows), boxWidth);
+    DrawStartCard("##FileRows", messages::common::cStart, cFileRows, IM_ARRAYSIZE(cFileRows), boxWidth);
     ImGui::SameLine(0.0f, gap);
-    DrawStartCard("##HelpRows", messages::start::cHelpTitle, cHelpRows, IM_ARRAYSIZE(cHelpRows), width - boxWidth - gap);
+    DrawStartCard("##HelpRows", messages::common::cHelp, cHelpRows, IM_ARRAYSIZE(cHelpRows), width - boxWidth - gap);
 }
 
 static bool BeginStartChild(const char* id, const ImVec2& size)
@@ -173,7 +173,7 @@ static bool DrawStartRecent(const ImVec2& size, std::string* outPath)
             DrawStartGap(ImFloor(ImGui::GetFontSize() * cStartGapEm));
         }
 
-        DrawSectionTitle(messages::recent::cRecentTitle, width);
+        DrawSectionTitle(messages::common::cRecentFiles, width);
         open |= DrawRecentFilesTable(outPath);
     }
     ImGui::EndChild();

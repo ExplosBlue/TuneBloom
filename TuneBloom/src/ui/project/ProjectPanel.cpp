@@ -23,16 +23,16 @@ struct ProjectRow
 };
 
 static const ProjectRow cProjectRows[] = {
-    { UIType::ProjectInfo,       ICON_LC_INFO,           messages::project::cRowProjectInfo,    0, false, false },
+    { UIType::ProjectInfo,       ICON_LC_INFO,           messages::common::cProjectInfo,    0, false, false },
 
-    { UIType::AllSounds,         ICON_LC_LIST_MUSIC,     messages::project::cRowSounds,         1, true,  true  },
-    { UIType::StreamSounds,      ICON_LC_DISC_3,         messages::project::cRowStream,         1, false, true  },
-    { UIType::WaveSounds,        ICON_LC_AUDIO_LINES,    messages::project::cRowWave,           1, false, true  },
-    { UIType::SequenceSounds,    ICON_LC_MUSIC_3,        messages::project::cRowSequence,       1, false, true  },
+    { UIType::AllSounds,         ICON_LC_LIST_MUSIC,     messages::common::cSounds,         1, true,  true  },
+    { UIType::StreamSounds,      ICON_LC_DISC_3,         messages::common::cStream,         1, false, true  },
+    { UIType::WaveSounds,        ICON_LC_AUDIO_LINES,    messages::common::cWave,           1, false, true  },
+    { UIType::SequenceSounds,    ICON_LC_MUSIC_3,        messages::common::cSequence,       1, false, true  },
 
     { UIType::AllSoundSets,      ICON_LC_MUSIC_4,        messages::project::cRowSoundSets,      2, true,  true  },
-    { UIType::WaveSoundSets,     ICON_LC_AUDIO_WAVEFORM, messages::project::cRowWave,           2, false, true  },
-    { UIType::SequenceSoundSets, ICON_LC_MUSIC_2,        messages::project::cRowSequence,       2, false, true  },
+    { UIType::WaveSoundSets,     ICON_LC_AUDIO_WAVEFORM, messages::common::cWave,           2, false, true  },
+    { UIType::SequenceSoundSets, ICON_LC_MUSIC_2,        messages::common::cSequence,       2, false, true  },
 
     { UIType::Banks,             ICON_LC_PIANO,          messages::project::cRowBanks,          3, false, true  },
     { UIType::WaveArchives,      ICON_LC_ARCHIVE,        messages::project::cRowWaveArchives,   3, false, true  },
@@ -187,7 +187,7 @@ static bool DrawProjectRow(const ProjectRow& row, s32 count, f32 indent)
 
 void DrawProjectUI()
 {
-    if (ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER " %s###ProjectWindow", messages::project::cWindowTitle).cstr()))
+    if (ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER " %s###ProjectWindow", messages::common::cProject).cstr()))
     {
         bool selected = false;
 

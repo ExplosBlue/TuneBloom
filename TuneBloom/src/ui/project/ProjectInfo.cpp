@@ -144,7 +144,7 @@ static void DrawProjectFormatBox(f32 em, bool stackRows)
     {
         u32 version = sBfsar.getVersion();
 
-        DrawProjectRow(messages::project::cVersion, stackRows);
+        DrawProjectRow(messages::common::cVersion, stackRows);
         if (DrawVersionUI(&version, sBfsar.getFormat(), false))
         {
             sBfsar.setVersion(version);
@@ -168,7 +168,7 @@ static void DrawProjectFormatBox(f32 em, bool stackRows)
     }
 
     {
-        DrawProjectRow(messages::project::cOptionsLabel, stackRows);
+        DrawProjectRow(messages::common::cOptions, stackRows);
         DetailTooltip(messages::project::cOptionsDetail);
 
         const bool optionsChanged = ImGui::InputScalar("##Options", ImGuiDataType_U32, &sBfsar.getSoundArchivePlayerInfo().options);
@@ -191,9 +191,9 @@ static LimitLayout CalcLimitLayout(f32 em)
     layout.hasBufferTimes = sBfsar.isStreamPrefetchAvailable();
 
     layout.playerInfo = &sBfsar.getSoundArchivePlayerInfo();
-    layout.labels[0] = messages::project::cLimitSounds;
-    layout.labels[1] = messages::project::cLimitTracks;
-    layout.labels[2] = messages::project::cLimitChannels;
+    layout.labels[0] = messages::common::cSounds;
+    layout.labels[1] = messages::common::cTracks;
+    layout.labels[2] = messages::common::cChannels;
     layout.labels[3] = messages::project::cLimitBufferTimes;
     layout.labelNum = layout.hasBufferTimes ? 4 : 3;
 
@@ -249,20 +249,20 @@ static void DrawLimitPanel(const LimitLayout& layout, LimitPanel panel, f32 offs
             RegionHeader(messages::project::cLimitSequenceTitle);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
 
-            DrawLimitSlot(layout, messages::project::cLimitSounds, messages::player::cSoundLimitDetail, playerInfo.sequenceSoundMax, 0, cProjectLimitMax);
+            DrawLimitSlot(layout, messages::common::cSounds, messages::player::cSoundLimitDetail, playerInfo.sequenceSoundMax, 0, cProjectLimitMax);
             NextLimitSlot(layout);
-            DrawLimitSlot(layout, messages::project::cLimitTracks, messages::project::cLimitTracksDetail, playerInfo.sequenceTrackMax, 0, cProjectLimitMax);
+            DrawLimitSlot(layout, messages::common::cTracks, messages::project::cLimitTracksDetail, playerInfo.sequenceTrackMax, 0, cProjectLimitMax);
             break;
 
         case LimitPanel::Stream:
             RegionHeader(messages::project::cLimitStreamTitle);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
 
-            DrawLimitSlot(layout, messages::project::cLimitSounds, messages::player::cSoundLimitDetail, playerInfo.streamSoundMax, 0, cProjectLimitMax);
+            DrawLimitSlot(layout, messages::common::cSounds, messages::player::cSoundLimitDetail, playerInfo.streamSoundMax, 0, cProjectLimitMax);
             NextLimitSlot(layout);
-            DrawLimitSlot(layout, messages::project::cLimitTracks, messages::project::cLimitTracksDetail, playerInfo.streamTrackMax, 0, cProjectLimitMax);
+            DrawLimitSlot(layout, messages::common::cTracks, messages::project::cLimitTracksDetail, playerInfo.streamTrackMax, 0, cProjectLimitMax);
             NextLimitSlot(layout);
-            DrawLimitSlot(layout, messages::project::cLimitChannels, messages::project::cLimitChannelsDetail, playerInfo.streamChannelMax, 0, cProjectStreamChannelMax);
+            DrawLimitSlot(layout, messages::common::cChannels, messages::project::cLimitChannelsDetail, playerInfo.streamChannelMax, 0, cProjectStreamChannelMax);
 
             if (layout.hasBufferTimes)
             {
@@ -279,9 +279,9 @@ static void DrawLimitPanel(const LimitLayout& layout, LimitPanel panel, f32 offs
             RegionHeader(messages::project::cLimitWaveTitle);
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
 
-            DrawLimitSlot(layout, messages::project::cLimitSounds, messages::player::cSoundLimitDetail, playerInfo.waveSoundMax, 0, cProjectLimitMax);
+            DrawLimitSlot(layout, messages::common::cSounds, messages::player::cSoundLimitDetail, playerInfo.waveSoundMax, 0, cProjectLimitMax);
             NextLimitSlot(layout);
-            DrawLimitSlot(layout, messages::project::cLimitTracks, messages::project::cLimitTracksDetail, playerInfo.waveTrackMax, 0, cProjectLimitMax);
+            DrawLimitSlot(layout, messages::common::cTracks, messages::project::cLimitTracksDetail, playerInfo.waveTrackMax, 0, cProjectLimitMax);
             break;
     }
 

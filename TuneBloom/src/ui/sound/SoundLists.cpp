@@ -156,7 +156,7 @@ void DrawAllSoundsUI()
 
     SetNextItemListAction(&SoundRowActionFunc);
 
-    DrawAllItemsUI("Sound", messages::item::cTypeSound, sBfsar.getSoundList(),
+    DrawAllItemsUI("Sound", messages::common::cSound, sBfsar.getSoundList(),
         &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback()
     );
 }
@@ -233,7 +233,7 @@ static void DrawTypedSoundsUI(const char* id, const char* title, CreateItemCallb
 
 void DrawWaveSoundsUI()
 {
-    DrawTypedSoundsUI<Sound::SoundType::Wave>("Wave Sound", messages::item::cTypeWaveSound, &CreateWaveSoundFunc);
+    DrawTypedSoundsUI<Sound::SoundType::Wave>("Wave Sound", messages::common::cWaveSound, &CreateWaveSoundFunc);
 }
 
 void DrawSequenceSoundsUI()
@@ -273,10 +273,10 @@ InstanciateItemCallback CreateSoundSetFunc(bool clear)
 
         if (!item && !validate)
         {
-            DialogRow(messages::sound::cTypeLabel);
-            ImGui::RadioButton(messages::soundset::cTypeWave, &sSoundSetType, 0);
+            DialogRow(messages::common::cType);
+            ImGui::RadioButton(messages::common::cWave, &sSoundSetType, 0);
             ImGui::SameLine();
-            ImGui::RadioButton(messages::soundset::cTypeSequence, &sSoundSetType, 1);
+            ImGui::RadioButton(messages::common::cSequence, &sSoundSetType, 1);
         }
         else if (!validate)
         {
@@ -633,7 +633,7 @@ static void DrawSoundSetScopedSoundsUI(SoundSet* viewedSet)
 
     InstanciateItemCallback (*create)(bool) = viewedSet->getSoundSetType() == SoundSet::SoundSetType::Seq ? &CreateSequenceSoundFunc : &CreateWaveSoundFunc;
 
-    DrawAllItemsUI("Sound", messages::item::cTypeSound, sBfsar.getSoundList(), create, nullptr, &SoundContextMenuFunc,
+    DrawAllItemsUI("Sound", messages::common::cSound, sBfsar.getSoundList(), create, nullptr, &SoundContextMenuFunc,
         &SoundInScopedSetFilter,
         false, &ScopedSoundInsertHook, &RemoveSoundWithCascade
     );
@@ -700,7 +700,7 @@ void DrawWaveSoundSetsUI()
 {
     static SoundSet* sViewedSet = nullptr;
 
-    DrawSoundSetSplitView("Wave Sound Set", messages::item::cTypeWaveSoundSet,&CreateWaveSoundSetFunc, nullptr, nullptr, &WaveSoundSetListFilter,
+    DrawSoundSetSplitView("Wave Sound Set", messages::common::cWaveSoundSet,&CreateWaveSoundSetFunc, nullptr, nullptr, &WaveSoundSetListFilter,
         true, SoundSet::SoundSetType::Wave, sViewedSet);
 }
 

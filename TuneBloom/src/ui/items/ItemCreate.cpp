@@ -107,7 +107,7 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
 
     ImGui::Dummy(ImVec2(ImFloor(em * cCreateDialogWidthEm), 0.0f));
 
-    DialogRow(messages::item::cNameFieldLabel);
+    DialogRow(messages::common::cName);
 
     if (!sEnableName)
         ImGui::BeginDisabled();

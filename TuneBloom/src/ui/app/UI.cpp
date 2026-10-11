@@ -153,7 +153,7 @@ static void DrawSystemWindow()
 {
     if (sShowSystemWindow)
     {
-        if (ImGui::Begin(sead::FormatFixedSafeString<64>("%s###SystemWindow", messages::preferences::cSystemWindowTitle).cstr(), &sShowSystemWindow))
+        if (ImGui::Begin(sead::FormatFixedSafeString<64>("%s###SystemWindow", messages::common::cSystem).cstr(), &sShowSystemWindow))
         {
             HeapInfo();
 
@@ -293,7 +293,7 @@ static void DrawSubInfoUI()
     if (!IsStreamPanelShown())
         return;
 
-    const TabRowTitle title = { ICON_LC_LAYERS, messages::stream::cTracksWindowTitle, "###SubInfoWindow", 1 };
+    const TabRowTitle title = { ICON_LC_LAYERS, messages::common::cTracks, "###SubInfoWindow", 1 };
 
     Sound* streamSound = GetSelectedStreamSound();
     const s32 trackNum = streamSound ? static_cast<s32>(streamSound->getStreamSoundInfo().getTrackList().size()) : -1;

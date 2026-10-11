@@ -108,11 +108,11 @@ static void SetupRegionColumns(f32 edgeInset)
     ImGui::TableSetupScrollFreeze(0, 1);
     SetupItemActionColumn();
     ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize(cRegionNumberWidest).x);
-    ImGui::TableSetupColumn(messages::item::cColumnName, ImGuiTableColumnFlags_WidthStretch, cRegionNameWeight);
+    ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch, cRegionNameWeight);
     ImGui::TableSetupColumn(messages::stream::cRegionRange, ImGuiTableColumnFlags_WidthStretch | (showRange ? 0 : ImGuiTableColumnFlags_Disabled), cRegionRangeWeight);
-    ImGui::TableSetupColumn(messages::stream::cRegionStart, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
-    ImGui::TableSetupColumn(messages::stream::cRegionEnd, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
-    ImGui::TableSetupColumn(messages::stream::cRegionLength, ImGuiTableColumnFlags_WidthFixed, positionWidth + edgeInset);
+    ImGui::TableSetupColumn(messages::common::cStart, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
+    ImGui::TableSetupColumn(messages::common::cEnd, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
+    ImGui::TableSetupColumn(messages::common::cLength, ImGuiTableColumnFlags_WidthFixed, positionWidth + edgeInset);
 }
 
 static void DrawRegionCellText(const char* text, const ImVec4& color, RegionAlign align, f32 rightInset = 0.0f)
@@ -276,7 +276,7 @@ static void DrawRegionRowMenu(const RegionTable& view, s32 regionNo, RegionEdit*
         edit->insertAfter = regionNo;
     }
 
-    if (ContextMenuItem(ICON_LC_TEXT_CURSOR_INPUT, messages::stream::cRegionRename, !view.editReason && view.layout->canStoreRegionNames(), renameReason))
+    if (ContextMenuItem(ICON_LC_TEXT_CURSOR_INPUT, messages::common::cRename, !view.editReason && view.layout->canStoreRegionNames(), renameReason))
         BeginRowRename(&region, view.tableId, region.name.cstr());
 
     ContextMenuSeparator();
@@ -368,7 +368,7 @@ static void DrawRegionListMenu(const RegionTable& view, RegionEdit* edit)
     if (!BeginWindowContextMenu("RegionListMenu"))
         return;
 
-    if (ContextMenuItem(ICON_LC_PLUS, messages::menu::cAdd, !view.addReason, view.addReason))
+    if (ContextMenuItem(ICON_LC_PLUS, messages::common::cAdd, !view.addReason, view.addReason))
         edit->add = true;
 
     if (ContextMenuItem(ICON_LC_IMPORT, messages::stream::cRegionImport, !view.editReason, view.editReason))

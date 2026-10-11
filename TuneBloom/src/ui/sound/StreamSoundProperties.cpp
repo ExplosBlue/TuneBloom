@@ -240,7 +240,7 @@ static void DrawStreamLoopRows(Sound::StreamSoundInfo& strmSoundInfo)
 
     ImGui::BeginDisabled(fromWaveFile);
 
-    PropertyRow(messages::stream::cLoopLabel);
+    PropertyRow(messages::common::cLoop);
 
     if (ImGui::Checkbox("##isLoop", &isLoop))
     {
@@ -308,7 +308,7 @@ void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
 
     if (sBfsar.isV3Bfsar())
     {
-        PropertyRow(messages::stream::cTypeInfoLabel);
+        PropertyRow(messages::common::cUnknown);
         DetailTooltip(messages::stream::cTypeInfoDetail);
 
         u16 typeInfoUpper = strmSoundInfo.getStreamTypeInfoUpper();

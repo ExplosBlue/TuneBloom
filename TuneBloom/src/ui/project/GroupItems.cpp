@@ -27,10 +27,10 @@ struct GroupAddType
 }
 
 static const GroupAddType cGroupAddTypes[] = {
-    { Item::ItemType::Sound,       ICON_LC_LIST_MUSIC, messages::item::cTypeSound },
+    { Item::ItemType::Sound,       ICON_LC_LIST_MUSIC, messages::common::cSound },
     { Item::ItemType::SoundSet,    ICON_LC_MUSIC_4,    messages::item::cTypeSoundSet },
-    { Item::ItemType::Bank,        ICON_LC_PIANO,      messages::item::cTypeBank },
-    { Item::ItemType::WaveArchive, ICON_LC_ARCHIVE,    messages::item::cTypeWaveArchive },
+    { Item::ItemType::Bank,        ICON_LC_PIANO,      messages::common::cBank },
+    { Item::ItemType::WaveArchive, ICON_LC_ARCHIVE,    messages::common::cWaveArchive },
 };
 
 static Item::ItemType sGroupAddType = Item::ItemType::Invalid;
@@ -111,7 +111,7 @@ static void DrawGroupItemAdd(Group* group)
     const sead::FormatFixedSafeString<64> title(messages::group::cAddTitleFormat, GetItemTypeName(sGroupAddType));
 
     Item* item = nullptr;
-    if (DrawItemBrowser(cBrowserId, list, &item, false, title.cstr(), messages::dialog::cAdd) && item)
+    if (DrawItemBrowser(cBrowserId, list, &item, false, title.cstr(), messages::common::cAdd) && item)
         AddGroupItem(group, item);
 }
 
@@ -175,7 +175,7 @@ void DrawGroupsUI()
         [&]()
         {
             DrawTabFilterBar();
-            DrawAllItemsUI("Group", messages::item::cTypeGroup, sBfsar.getGroupList(), &CreateGroupFunc, nullptr, &DrawGroupContextMenu, GetItemFilterCallback());
+            DrawAllItemsUI("Group", messages::common::cGroup, sBfsar.getGroupList(), &CreateGroupFunc, nullptr, &DrawGroupContextMenu, GetItemFilterCallback());
             HandleGroupFileRequests();
         },
         []()
@@ -196,7 +196,7 @@ void DrawGroupsUI()
             SetNextItemListNote(sNote.cstr());
             SetNextItemListRemoveText(messages::menu::cRemoveFromGroup, messages::menu::cRemoveItemsFromGroupFormat, false);
 
-            DrawAllItemsUI("Item", messages::item::cTypeItem, group->getItemInfoList(), nullptr, &GroupItemPrefixFunc, &GroupItemContextMenuFunc, GetDetailFilterCallback(), false, nullptr, nullptr, true);
+            DrawAllItemsUI("Item", messages::common::cItem, group->getItemInfoList(), nullptr, &GroupItemPrefixFunc, &GroupItemContextMenuFunc, GetDetailFilterCallback(), false, nullptr, nullptr, true);
             DrawGroupItemAdd(group);
         });
 }

@@ -62,7 +62,7 @@ void DrawSequenceFilesUI()
 
     SetNextItemListAction(&SequenceFileRowActionFunc);
 
-    DrawAllItemsUI("Sequence File", messages::item::cTypeSequenceFile,sBfsar.getSequenceFileList(),
+    DrawAllItemsUI("Sequence File", messages::common::cSequenceFile,sBfsar.getSequenceFileList(),
         &CreateSequenceFileFunc, nullptr, &SequenceFileContextMenuFunc, GetItemFilterCallback(), true
     );
 }
@@ -95,7 +95,7 @@ void DrawBankFilesUI()
     SetNextItemListAction(&BankFileRowActionFunc);
     DrawAllItemsUI(
         "Bank File",
-        messages::item::cTypeBankFile,
+        messages::common::cBankFile,
         sBfsar.getBankFileList(),
         &CreateBankFileFunc,
         nullptr,
@@ -109,7 +109,7 @@ void SequenceFileContextMenuFunc(Item* item)
 {
     ContextMenuSeparator();
 
-    if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::menu::cImport))
+    if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::common::cImport))
         RequestImportSequenceFile();
 
     if (!item)
@@ -117,7 +117,7 @@ void SequenceFileContextMenuFunc(Item* item)
 
     const bool isCompiled = static_cast<SequenceFile*>(item)->isValid();
 
-    if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::menu::cExport, isCompiled, messages::sequence::cNotCompiled))
+    if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::common::cExport, isCompiled, messages::sequence::cNotCompiled))
         RequestExportSequenceFiles(CollectForAction<SequenceFile>(item));
 }
 

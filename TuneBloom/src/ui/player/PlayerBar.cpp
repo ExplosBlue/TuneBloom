@@ -177,16 +177,16 @@ const Item* ResolveDisplayItem()
 static const char* GetDisplayTypeName(const Item* item)
 {
     if (item->getItemType() == Item::ItemType::WaveFile)
-        return messages::playback::cDisplayWaveFile;
+        return messages::common::cWaveFile;
 
     switch (static_cast<const Sound*>(item)->getSoundType())
     {
     case Sound::SoundType::Seq:
-        return messages::playback::cDisplaySequence;
+        return messages::common::cSequence;
     case Sound::SoundType::Strm:
-        return messages::playback::cDisplayStream;
+        return messages::common::cStream;
     case Sound::SoundType::Wave:
-        return messages::playback::cDisplayWave;
+        return messages::common::cWave;
     default:
         return "";
     }
@@ -936,7 +936,7 @@ static void UpdatePlayerBarHeight(f32 transportHeight, f32 drawerHeight)
 
 static void DrawTransportWindow()
 {
-    if (ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_MUSIC " %s###PlayerWindow", messages::playback::cWindowTitle).cstr(), nullptr,ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+    if (ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_MUSIC " %s###PlayerWindow", messages::common::cPlayer).cstr(), nullptr,ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
     {
         ImGuiWindow* win = ImGui::GetCurrentWindow();
         if (win && win->DockNode)

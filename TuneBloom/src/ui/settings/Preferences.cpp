@@ -111,7 +111,7 @@ static constexpr f32 cGradientMax      = 3.0f;
 static const ImVec4 cMidiConnectedColor  = ImVec4(0.45f, 0.85f, 0.50f, 1.00f);
 static const ImVec4 cMidiNotFoundColor   = ImVec4(0.82f, 0.56f, 0.30f, 1.00f);
 static const BackupPreset cBackupPresets[] = {
-    { messages::preferences::cBackupOff,       0  },
+    { messages::common::cOff,       0  },
     { messages::preferences::cBackupMinute,    1  },
     { messages::preferences::cBackup5Minutes,  5  },
     { messages::preferences::cBackup10Minutes, 10 },
@@ -363,10 +363,10 @@ static void DrawBackupFolderRow()
     char size[32];
     backup::FormatSize(sBackupSize, size, sizeof(size));
 
-    const sead::FormatFixedSafeString<64> usage(messages::preferences::cBackupUsageFormat, sBackupCount, sBackupCount == 1 ? messages::preferences::cBackupSingular : messages::preferences::cBackupPlural, size);
+    const sead::FormatFixedSafeString<64> usage(messages::preferences::cBackupUsageFormat, sBackupCount, sBackupCount == 1 ? messages::common::cBackup : messages::common::cBackups, size);
     const bool empty = sBackupCount == 0;
 
-    if (DrawValueButtonRow(messages::preferences::cBackupFolderLabel, empty ? messages::preferences::cBackupUsageNone : usage.cstr(), empty, messages::preferences::cOpenFolder, sBackupFolderFound))
+    if (DrawValueButtonRow(messages::preferences::cBackupFolderLabel, empty ? messages::common::cEmpty : usage.cstr(), empty, messages::preferences::cOpenFolder, sBackupFolderFound))
         OpenFolder(backup::GetRootFolder());
 }
 
@@ -474,7 +474,7 @@ static void DrawOpeningRows()
     }
 
     // Recent files
-    if (DrawCountSliderRow(messages::preferences::cRecentCountLabel, "##RecentCount", &settings.recentFileCount, cRecentFileCountMin, cRecentFileCountMax, cRecentFileCountDefault))
+    if (DrawCountSliderRow(messages::common::cRecentFiles, "##RecentCount", &settings.recentFileCount, cRecentFileCountMin, cRecentFileCountMax, cRecentFileCountDefault))
     {
         SaveStartupConfig();
         TrimRecentFiles();
@@ -485,18 +485,18 @@ static void DrawOpeningRows()
         PopupMgr* popupMgr = PopupMgr::instance();
 
         const size_t count = popupMgr->getIgnoredWarningArchiveCount();
-        const sead::FormatFixedSafeString<64> text(messages::preferences::cIgnoredCountFormat, count, count == 1 ? messages::preferences::cIgnoredArchiveSingular : messages::preferences::cIgnoredArchivePlural);
+        const sead::FormatFixedSafeString<64> text(messages::preferences::cIgnoredCountFormat, count, count == 1 ? messages::common::cArchive : messages::preferences::cIgnoredArchivePlural);
 
-        if (DrawValueButtonRow(messages::preferences::cIgnoredLabel, count == 0 ? messages::preferences::cIgnoredNone : text.cstr(), count == 0, messages::preferences::cIgnoredReset, count != 0, messages::preferences::cIgnoredDetail))
+        if (DrawValueButtonRow(messages::preferences::cIgnoredLabel, count == 0 ? messages::common::cNone : text.cstr(), count == 0, messages::common::cReset, count != 0, messages::preferences::cIgnoredDetail))
             popupMgr->clearIgnoredWarnings();
     }
 }
 
 static void DrawFilePage()
 {
-    DrawPageHeader(ICON_LC_FILE, messages::preferences::cPageFile, nullptr);
+    DrawPageHeader(ICON_LC_FILE, messages::common::cFile, nullptr);
 
-    if (BeginGroupBox(messages::preferences::cBoxBackup))
+    if (BeginGroupBox(messages::common::cBackup))
     {
         DrawBackupRows();
         EndGroupBox();
@@ -554,7 +554,7 @@ static void DrawOutputDeviceRows()
                 selected = i;
         }
 
-        DrawRowLabel(messages::preferences::cSampleRateLabel);
+        DrawRowLabel(messages::common::cSampleRate);
         if (ComboScroll("##SampleRate", &selected, labels, IM_ARRAYSIZE(cSampleRates)))
         {
             GetAudioSettings().outputSampleRate = cSampleRates[selected].rate;
@@ -570,7 +570,7 @@ static void DrawPlaybackRows()
 
     // Output mode
     {
-        const char* labels[] = { messages::preferences::cOutputStereo, messages::preferences::cOutputMono };
+        const char* labels[] = { messages::common::cStereo, messages::common::cMono };
         s32 selected = settings.monoOutput ? 1 : 0;
 
         DrawRowLabel(messages::preferences::cOutputModeLabel);
@@ -584,10 +584,10 @@ static void DrawPlaybackRows()
 
     // Interpolation
     {
-        const char* labels[] = { messages::bank::cInterpolationPolyphase, messages::bank::cInterpolationLinear };
+        const char* labels[] = { messages::bank::cInterpolationPolyphase, messages::common::cLinear };
         s32 selected = settings.linearInterpolation ? 1 : 0;
 
-        DrawRowLabel(messages::preferences::cInterpolationLabel);
+        DrawRowLabel(messages::common::cInterpolation);
         if (ComboScroll("##Interpolation", &selected, labels, IM_ARRAYSIZE(labels)))
         {
             settings.linearInterpolation = selected == 1;
@@ -602,7 +602,7 @@ static void DrawPlaybackRows()
     {
         bool visible = IsOutputMeterWindowVisible();
 
-        if (DrawCheckRow(messages::preferences::cOutputMeterLabel, "##OutputMeter", &visible))
+        if (DrawCheckRow(messages::mainmenu::cOutputMeter, "##OutputMeter", &visible))
             SetOutputMeterWindowVisible(visible);
     }
 }
@@ -619,11 +619,11 @@ static void FormatOutputInfo(sead::BufferedSafeString* text)
     sead::FixedSafeString<32> channels;
 
     if (info.channelCount == 1)
-        channels = messages::preferences::cOutputMono;
+        channels = messages::common::cMono;
     else if (info.channelCount == 2)
-        channels = messages::preferences::cOutputStereo;
+        channels = messages::common::cStereo;
     else
-        channels.format(messages::preferences::cOutputChannelsFormat, info.channelCount);
+        channels.format(messages::common::cChannelCountFormat, info.channelCount);
 
     text->format(messages::preferences::cOutputInfoFormat, channels.cstr(), info.sampleRate, info.bufferMsec);
 }
@@ -636,13 +636,13 @@ static void DrawAudioPage()
     sead::FixedSafeString<64> outputInfo;
     FormatOutputInfo(&outputInfo);
 
-    if (BeginGroupBoxWithStatus(messages::preferences::cBoxOutputDevice, outputInfo.cstr()))
+    if (BeginGroupBoxWithStatus(messages::common::cDevice, outputInfo.cstr()))
     {
         DrawOutputDeviceRows();
         EndGroupBox();
     }
 
-    if (BeginGroupBox(messages::preferences::cBoxPlayback))
+    if (BeginGroupBox(messages::common::cPlayback))
     {
         DrawPlaybackRows();
         EndGroupBox();
@@ -704,7 +704,7 @@ static void DrawMidiNotesBox()
 {
     MidiSettings& settings = GetMidiSettings();
 
-    if (!BeginGroupBox(messages::preferences::cBoxNotes))
+    if (!BeginGroupBox(messages::common::cNotes))
         return;
 
     // Velocity
@@ -742,8 +742,8 @@ static void DrawMidiDeviceTable(f32 height)
     }
 
     ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn(messages::preferences::cMidiColumnOn, ImGuiTableColumnFlags_WidthFixed, sead::Mathf::max(ImGui::GetFrameHeight(), ImGui::CalcTextSize(messages::preferences::cMidiColumnOn).x));
-    ImGui::TableSetupColumn(messages::preferences::cMidiColumnDevice, ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn(messages::common::cOn, ImGuiTableColumnFlags_WidthFixed, sead::Mathf::max(ImGui::GetFrameHeight(), ImGui::CalcTextSize(messages::common::cOn).x));
+    ImGui::TableSetupColumn(messages::common::cDevice, ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupColumn(messages::preferences::cMidiColumnStatus, ImGuiTableColumnFlags_WidthFixed, statusWidth + style.ItemSpacing.x);
     ImGui::TableHeadersRow();
 
@@ -960,7 +960,7 @@ static void DrawAppearancePage()
 
     DrawPageHeader(ICON_LC_PALETTE, messages::preferences::cPageAppearance, nullptr);
 
-    if (BeginGroupBox(messages::preferences::cBoxTheme))
+    if (BeginGroupBox(messages::common::cTheme))
     {
         DrawThemeCards(&changed, &done);
         EndGroupBox();
@@ -1044,7 +1044,7 @@ static bool DrawUIScaleRow(f32* scale)
 
     for (s32 i = 0; i < IM_ARRAYSIZE(cUIScales); i++)
     {
-        texts[i].format(messages::preferences::cUIScaleFormat, static_cast<s32>(cUIScales[i] * 100.0f + 0.5f));
+        texts[i].format(messages::common::cPercentFormat, static_cast<s32>(cUIScales[i] * 100.0f + 0.5f));
         labels[i] = texts[i].cstr();
 
         if (ImFabs(cUIScales[i] - *scale) < ImFabs(cUIScales[selected] - *scale))
@@ -1108,15 +1108,15 @@ static void DrawResetAllDialog()
     ImGui::TextColored(GetItemValueColor(), "%s", messages::preferences::cResetAllDetail);
     EndDialogMessage();
 
-    BeginDialogFooter({messages::preferences::cResetAllConfirm, messages::dialog::cCancel});
+    BeginDialogFooter({messages::common::cReset, messages::common::cCancel});
 
-    if (DialogButton(messages::preferences::cResetAllConfirm))
+    if (DialogButton(messages::common::cReset))
     {
         sResetAllRequested = true;
         ImGui::CloseCurrentPopup();
     }
 
-    if (DialogButton(messages::dialog::cCancel))
+    if (DialogButton(messages::common::cCancel))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();
@@ -1148,7 +1148,7 @@ static void DrawAdvancedPage()
         EndGroupBox();
     }
 
-    if (fileassoc::IsSupported() && BeginGroupBox(messages::preferences::cBoxSystem))
+    if (fileassoc::IsSupported() && BeginGroupBox(messages::common::cSystem))
     {
         DrawAssociationRow();
         EndGroupBox();
@@ -1161,7 +1161,7 @@ static void DrawAdvancedPage()
 }
 
 static const PageInfo cPages[] = {
-    { PreferencesPage::File,       ICON_LC_FILE,       messages::preferences::cPageFile,       DrawFilePage       },
+    { PreferencesPage::File,       ICON_LC_FILE,       messages::common::cFile,       DrawFilePage       },
     { PreferencesPage::Audio,      ICON_LC_VOLUME_2,   messages::preferences::cPageAudio,      DrawAudioPage      },
     { PreferencesPage::Midi,       ICON_LC_PIANO,      messages::preferences::cPageMidi,       DrawMidiPage       },
     { PreferencesPage::Appearance, ICON_LC_PALETTE,    messages::preferences::cPageAppearance, DrawAppearancePage },
@@ -1296,7 +1296,7 @@ void DrawPreferencesWindow()
 
     ImGui::SetCursorScreenPos(ImVec2(origin.x + size.x - closeWidth, ImGui::GetCursorScreenPos().y + ImFloor(em * cFooterGapEm)));
 
-    if (ImGui::Button(messages::preferences::cClose, ImVec2(closeWidth, 0.0f)) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+    if (ImGui::Button(messages::common::cClose, ImVec2(closeWidth, 0.0f)) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();

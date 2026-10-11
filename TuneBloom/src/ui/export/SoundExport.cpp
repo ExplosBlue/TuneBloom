@@ -390,10 +390,10 @@ static f64 DrawExportTimelineBox(const SoundExportSummary& summary, s32 count)
 
     // Loop
     if (!single || summary.loopNum > 0 || summary.noEndNum > 0)
-        GroupBoxRowLabel(messages::exporting::cLoop, labelWidth);
+        GroupBoxRowLabel(messages::common::cLoop, labelWidth);
 
     if (!single)
-        ImGui::TextColored(valueColor, messages::exporting::cLoopNumFormat, summary.loopNum, count);
+        ImGui::TextColored(valueColor, messages::common::cCountOfFormat, summary.loopNum, count);
     else if (summary.loopNum > 0)
         ImGui::TextColored(valueColor, messages::exporting::cLoopRangeFormat, FormatExportTime(summary.introSec).cstr(), FormatExportTime(summary.introSec + summary.loopSec).cstr());
     else if (summary.noEndNum > 0)
@@ -419,7 +419,7 @@ static f64 DrawExportTimelineBox(const SoundExportSummary& summary, s32 count)
     // Length
     if (summary.noEndNum > 0)
     {
-        GroupBoxRowLabel(messages::exporting::cLength, labelWidth);
+        GroupBoxRowLabel(messages::common::cLength, labelWidth);
         ImGui::SetNextItemWidth(fieldWidth);
         SetNextKnobReset(cExportNoEndSecsDefault);
         SetNextKnobText(FormatExportTime(sSettings.noEndSecs, false).cstr());
@@ -444,7 +444,7 @@ static u32 CalcExportFileSize(const SoundExportSummary& summary, f64 totalSec)
 
 static void DrawExportFormatBox(const SoundExportSummary& summary, bool single, bool hasStream, bool hasSequence, f64 totalSec)
 {
-    if (!BeginGroupBox(messages::exporting::cFormatBox))
+    if (!BeginGroupBox(messages::common::cFormat))
         return;
 
     const f32 em = ImGui::GetFontSize();
@@ -462,13 +462,13 @@ static void DrawExportFormatBox(const SoundExportSummary& summary, bool single, 
     GroupBoxRowLabel(messages::exporting::cFileType, labelWidth);
     ImGui::TextColored(GetItemValueColor(), "%s", messages::exporting::cFileTypeWav);
 
-    GroupBoxRowLabel(messages::exporting::cSampleRate, labelWidth);
+    GroupBoxRowLabel(messages::common::cSampleRate, labelWidth);
     ImGui::SetNextItemWidth(ImFloor(em * cExportListWidthEm));
     ComboScroll("##SampleRate", &sSettings.sampleRateIndex, sampleRateItems, sSampleRateDetails, IM_ARRAYSIZE(sSampleRateItems));
 
     if (hasStream || (hasSequence && (!single || summary.trackNum > 1)))
     {
-        GroupBoxRowLabel(messages::exporting::cFiles, labelWidth);
+        GroupBoxRowLabel(messages::common::cFiles, labelWidth);
 
         if (hasStream)
             ComboScroll("##Files", &sSettings.filesIndex, sExportFilesItems, sExportFilesDetails, IM_ARRAYSIZE(sExportFilesItems));
@@ -543,12 +543,12 @@ static void DrawSoundExportOptions(s32 seqCount, s32 strmCount, s32 waveCount)
     DrawShowExportedFilesCheck();
     ImGui::SameLine();
 
-    BeginDialogFooter({messages::dialog::cExport, messages::dialog::cCancel}, false);
+    BeginDialogFooter({messages::common::cExport, messages::common::cCancel}, false);
 
-    const bool doExport = DialogButton(messages::dialog::cExport);
+    const bool doExport = DialogButton(messages::common::cExport);
     ImGui::SetItemDefaultFocus();
 
-    const bool doCancel = DialogButton(messages::dialog::cCancel);
+    const bool doCancel = DialogButton(messages::common::cCancel);
 
     if (doExport && StartSoundExport(sPendingSounds, MakeSoundExportOptions()))
     {

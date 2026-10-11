@@ -91,7 +91,7 @@ static void DrawBankFileExportItems(const std::vector<BankFile*>& bankFiles)
 
 void DrawImportMenu()
 {
-    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_INPUT " %s", messages::mainmenu::cImport).cstr()))
+    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_INPUT " %s", messages::common::cImport).cstr()))
         return;
 
     if (MenuBarIconItem(ICON_LC_FILE_INPUT, GetInnerFileLabel(InnerFileKind::Sequence).cstr()))
@@ -105,7 +105,7 @@ void DrawImportMenu()
 
 void DrawExportMenu()
 {
-    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_OUTPUT " %s", messages::mainmenu::cExport).cstr()))
+    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_OUTPUT " %s", messages::common::cExport).cstr()))
         return;
 
     Item* item = sBfsar.isOpen() ? GetActiveSelection() : nullptr;

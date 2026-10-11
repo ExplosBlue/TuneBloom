@@ -75,7 +75,7 @@ static void DrawSeverityCount(const char* icon, size_t count, const ImVec4& colo
         return;
 
     ImGui::PushStyleColor(ImGuiCol_Text, color);
-    ImGui::TextUnformatted(sead::FormatFixedSafeString<64>(messages::popup::cSeverityCountFormat, icon, count, count == 1 ? messages::popup::cItemSingular : messages::popup::cItemPlural).cstr());
+    ImGui::TextUnformatted(sead::FormatFixedSafeString<64>(messages::popup::cSeverityCountFormat, icon, count, count == 1 ? messages::common::cItem : messages::common::cItems).cstr());
     ImGui::PopStyleColor();
 }
 
@@ -249,7 +249,7 @@ void PopupMgr::update()
     {
         CenterNextDialog();
 
-        if (BeginDialog(sead::FormatFixedSafeString<32>(ICON_LC_ALERT_TRIANGLE " %s%s", messages::popup::cTitleWarning, cMessagePopupId).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (BeginDialog(sead::FormatFixedSafeString<32>(ICON_LC_ALERT_TRIANGLE " %s%s", messages::common::cWarning, cMessagePopupId).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             Item* item = info.item;
             if (item)
@@ -261,7 +261,7 @@ void PopupMgr::update()
 
             ImGui::Text("%s", info.text.cstr());
 
-            const sead::FormatFixedSafeString<32> goToLabel("%s %s", ICON_LC_EXTERNAL_LINK, messages::dialog::cGoTo);
+            const sead::FormatFixedSafeString<32> goToLabel("%s %s", ICON_LC_EXTERNAL_LINK, messages::common::cGoTo);
 
             if (item)
                 BeginDialogFooter({messages::dialog::cOk, goToLabel.cstr()});
@@ -340,7 +340,7 @@ void PopupMgr::pushCurrentItemMessage(const sead::SafeString& text, const char* 
     const char* str = text.cstr();
     if (text.isEmpty())
     {
-        str = messages::popup::cUnknownError;
+        str = messages::common::cUnknown;
     }
 
     mProcessedErrors[mCurrentProcessItem].push_back({str, detail ? detail : "", severity});

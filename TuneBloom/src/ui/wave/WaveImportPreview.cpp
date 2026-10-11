@@ -103,7 +103,7 @@ void WaveImportPanel::drawWaveformBox(FrameContext& ctx)
     const f32 groupGap = ImFloor(em * cToolGroupGapEm);
     const f32 fitAllWidth = ImGui::CalcTextSize(messages::import::cWaveFitAll).x + style.FramePadding.x * 2.0f;
     const f32 fitLoopWidth = ImGui::CalcTextSize(messages::import::cWaveFitLoop).x + style.FramePadding.x * 2.0f;
-    const f32 curveWidth = ImGui::CalcTextSize(messages::import::cWaveCurve).x + style.FramePadding.x * 2.0f;
+    const f32 curveWidth = ImGui::CalcTextSize(messages::common::cCurve).x + style.FramePadding.x * 2.0f;
     const f32 toolsWidth = buttonSize * 3.0f + style.ItemSpacing.x * 3.0f + groupGap * 2.0f + curveWidth + fitAllWidth + fitLoopWidth;
 
     if (!BeginGroupBoxWithTools(messages::wavefile::cWaveform, toolsWidth))
@@ -135,7 +135,7 @@ void WaveImportPanel::drawWaveformTools(FrameContext& ctx, f32 groupGap)
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, gAccentColor);
     }
 
-    if (ImGui::Button(messages::import::cWaveCurve))
+    if (ImGui::Button(messages::common::cCurve))
     {
         mSettings.curveEnabled = !mSettings.curveEnabled;
 
@@ -233,7 +233,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
     }
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", previewPlaying ? messages::import::cWavePreviewPause : previewPaused ? messages::import::cWavePreviewResume : messages::import::cWavePreviewPlay);
+        ImGui::SetTooltip("%s", previewPlaying ? messages::common::cPause : previewPaused ? messages::import::cWavePreviewResume : messages::import::cWavePreviewPlay);
 
     ImGui::SameLine();
     if (ImGui::Button(ICON_LC_SQUARE "###Stop", size))
@@ -243,7 +243,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
     }
 
     if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", messages::wavefile::cStop);
+        ImGui::SetTooltip("%s", messages::common::cStop);
 
     ImGui::SameLine();
     ImGui::BeginDisabled(!ctx.loopActive);

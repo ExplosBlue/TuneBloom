@@ -14,10 +14,10 @@ inline constexpr f32 cTrackSilentAlpha   = 0.55f;
 inline const ImVec4 cTrackMuteColor = ImVec4(0.88f, 0.36f, 0.28f, 1.00f);
 inline const ImVec4 cTrackSoloColor = ImVec4(0.93f, 0.74f, 0.18f, 1.00f);
 
-inline constexpr const char* cTrackMixLabels[]    = { messages::param::cVolume, messages::param::cPan, messages::param::cSurroundPan, messages::stream::cTrackBypass };
+inline constexpr const char* cTrackMixLabels[]    = { messages::common::cVolume, messages::common::cPan, messages::param::cSurroundPan, messages::stream::cTrackBypass };
 inline constexpr const char* cTrackSendLabels[]   = { messages::param::cSendMain, messages::param::cSendFxA, messages::param::cSendFxB, messages::param::cSendFxC };
-inline constexpr const char* cTrackFilterLabels[] = { messages::param::cLpf, messages::param::cBiquad, messages::stream::cTrackBiquadValue };
-inline constexpr const char* cTrackWaveLabel      = messages::stream::cTrackWaveFile;
+inline constexpr const char* cTrackFilterLabels[] = { messages::common::cLpf, messages::param::cBiquad, messages::stream::cTrackBiquadValue };
+inline constexpr const char* cTrackWaveLabel      = messages::common::cWaveFile;
 
 enum class TrackParam
 {

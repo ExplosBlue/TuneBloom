@@ -60,7 +60,7 @@ void DrawPlayersUI()
 {
     DrawTabFilterBar();
 
-    DrawAllItemsUI("Player", messages::item::cTypePlayer,sBfsar.getPlayerList(),
+    DrawAllItemsUI("Player", messages::common::cPlayer,sBfsar.getPlayerList(),
                    &CreatePlayerFunc, nullptr, nullptr, GetItemFilterCallback());
 }
 

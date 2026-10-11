@@ -205,7 +205,7 @@ static void DrawList()
 {
     bool searchPressed = false;
 
-    if (!BeginGroupBox(messages::group::cLocateBox, messages::group::cLocateSearchFolder, &searchPressed))
+    if (!BeginGroupBox(messages::common::cGroupFiles, messages::group::cLocateSearchFolder, &searchPressed))
         return;
 
     DetailTooltip(messages::group::cLocateSearchFolderDetail);
@@ -213,7 +213,7 @@ static void DrawList()
     if (searchPressed)
         SearchFolder();
 
-    const char* const titles[] = { "##State", messages::group::cLocateColumnGroup, messages::group::cLocateColumnFile, "##Browse" };
+    const char* const titles[] = { "##State", messages::common::cGroup, messages::common::cFile, "##Browse" };
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 browseWidth = ImGui::CalcTextSize(messages::group::cLocateBrowse).x + style.FramePadding.x * 2.0f;
     const s32 rowNum = ImClamp(static_cast<s32>(sRows.size()), cListRowMin, cListRowMax);

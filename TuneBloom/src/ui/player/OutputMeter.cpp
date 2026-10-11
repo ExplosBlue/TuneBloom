@@ -295,7 +295,7 @@ static const char* FormatPeakDb(char* buffer, size_t size, const OutputMeter::Ch
     const f32 db = ToDbfs(channel.peakHold);
 
     if (db <= cFloorDb)
-        std::snprintf(buffer, size, "%s", messages::playback::cMeterSilent);
+        std::snprintf(buffer, size, "%s", messages::common::cSilent);
     else
         std::snprintf(buffer, size, "%.1f", db);
 
@@ -475,7 +475,7 @@ static void DrawScaleRow(ImDrawList* drawList, f32 x0, f32 x1, f32 y0, f32 y1, b
 static void DrawVerticalMeter(ImDrawList* drawList, const ImVec2& pos, const ImVec2& avail, const OutputMeter::ChannelState& left, const OutputMeter::ChannelState& right, bool mono)
 {
     const OutputMeter::ChannelState* channels[] = { &left, &right };
-    const char* names[] = { mono ? messages::playback::cMeterMono : messages::playback::cMeterLeft, messages::playback::cMeterRight };
+    const char* names[] = { mono ? messages::playback::cMeterMono : messages::common::cLeft, messages::common::cRight };
     const s32 barNum = mono ? 1 : 2;
 
     const f32 readoutHeight = CalcPeakReadoutSize().y;
@@ -504,7 +504,7 @@ static void DrawVerticalMeter(ImDrawList* drawList, const ImVec2& pos, const ImV
 static void DrawHorizontalMeter(ImDrawList* drawList, const ImVec2& pos, const ImVec2& avail, const OutputMeter::ChannelState& left, const OutputMeter::ChannelState& right, bool mono)
 {
     const OutputMeter::ChannelState* channels[] = { &left, &right };
-    const char* names[] = { mono ? messages::playback::cMeterMono : messages::playback::cMeterLeft, messages::playback::cMeterRight };
+    const char* names[] = { mono ? messages::playback::cMeterMono : messages::common::cLeft, messages::common::cRight };
     const s32 barNum = mono ? 1 : 2;
 
     const f32 nameWidth = ImGui::CalcTextSize(messages::playback::cMeterMono).x + cNamePadX;
@@ -569,7 +569,7 @@ static void DrawOutputMeter(const ImVec2& avail)
 
     if (BeginItemContextMenu("##MeterMenu"))
     {
-        if (ContextMenuCheckItem(messages::playback::cMeterStereo, !sMergeChannels))
+        if (ContextMenuCheckItem(messages::common::cStereo, !sMergeChannels))
             SetMergeChannels(false);
 
         if (ContextMenuCheckItem(messages::playback::cMeterMerged, sMergeChannels))

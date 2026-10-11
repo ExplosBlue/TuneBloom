@@ -246,9 +246,9 @@ struct SoundTypeEntry
 };
 
 static const SoundTypeEntry cSoundTypes[] = {
-    { Sound::SoundType::Wave, ICON_LC_AUDIO_LINES, messages::sound::cTypeWave },
-    { Sound::SoundType::Strm, ICON_LC_DISC_3, messages::sound::cTypeStream },
-    { Sound::SoundType::Seq, ICON_LC_MUSIC_3, messages::sound::cTypeSequence },
+    { Sound::SoundType::Wave, ICON_LC_AUDIO_LINES, messages::common::cWave },
+    { Sound::SoundType::Strm, ICON_LC_DISC_3, messages::common::cStream },
+    { Sound::SoundType::Seq, ICON_LC_MUSIC_3, messages::common::cSequence },
 };
 
 static sead::FormatFixedSafeString<64> FormatSoundTypeLabel(const SoundTypeEntry& entry)
@@ -287,7 +287,7 @@ static bool BeginSourceBox(const char* title)
 
     const f32 typeWidth = CalcSoundTypeWidth();
 
-    if (!BeginGroupBoxWithTools(messages::sound::cTypeLabel, typeWidth))
+    if (!BeginGroupBoxWithTools(messages::common::cType, typeWidth))
         return false;
 
     ImGui::SameLine();
@@ -315,12 +315,12 @@ static void DrawSourceChoiceUI(s32* source)
     ImGui::SameLine();
     ImGui::RadioButton(messages::source::cSelectExisting, source, cSourceExisting);
     ImGui::SameLine();
-    ImGui::RadioButton(messages::source::cNone, source, cSourceNone);
+    ImGui::RadioButton(messages::common::cNone, source, cSourceNone);
 }
 
 static void DrawWaveSourceUI()
 {
-    if (!BeginSourceBox(messages::sound::cWaveFileLabel))
+    if (!BeginSourceBox(messages::common::cWaveFile))
         return;
 
     DialogRowGap();
@@ -328,7 +328,7 @@ static void DrawWaveSourceUI()
 
     if (sWaveSource == cSourceExisting)
     {
-        ItemSelectorDialogRow(messages::item::cCreateFileLabel, sBfsar.getWaveFileList(), &sWaveFile, false);
+        ItemSelectorDialogRow(messages::common::cFile, sBfsar.getWaveFileList(), &sWaveFile, false);
         EndSourceBox(2);
         return;
     }
@@ -423,10 +423,10 @@ static void DrawStreamMainImportDialog()
 
     DrawWaveImportInfo(&sStreamMainEncoding, &sStreamMainInfo, sead::FormatFixedSafeString<560>(messages::import::cWaveHeaderFormat, sStreamMainName.cstr()).cstr());
 
-    BeginDialogFooter({messages::dialog::cImport, messages::dialog::cCancel}, false);
+    BeginDialogFooter({messages::common::cImport, messages::common::cCancel}, false);
 
-    const bool importClicked = DialogButton(messages::dialog::cImport);
-    const bool cancelClicked = DialogButton(messages::dialog::cCancel);
+    const bool importClicked = DialogButton(messages::common::cImport);
+    const bool cancelClicked = DialogButton(messages::common::cCancel);
 
     if (importClicked)
     {
@@ -588,18 +588,18 @@ static void DrawStreamSourceUI()
 
 static void DrawSequenceSourceUI()
 {
-    if (!BeginSourceBox(messages::sound::cSequenceLabel))
+    if (!BeginSourceBox(messages::common::cSequence))
         return;
 
-    ItemSelectorDialogRow(messages::sound::cSequenceFileLabel, sBfsar.getSequenceFileList(), &sSequenceFile, true);
-    ItemSelectorDialogRow(messages::sound::cBankLabel, sBfsar.getBankList(), &sBank, true);
+    ItemSelectorDialogRow(messages::common::cSequenceFile, sBfsar.getSequenceFileList(), &sSequenceFile, true);
+    ItemSelectorDialogRow(messages::common::cBank, sBfsar.getBankList(), &sBank, true);
 
     EndSourceBox(2);
 }
 
 static void DrawSoundCreateUI()
 {
-    ItemSelectorDialogRow(messages::sound::cPlayerLabel, sBfsar.getPlayerList(), &sPlayer, false);
+    ItemSelectorDialogRow(messages::common::cPlayer, sBfsar.getPlayerList(), &sPlayer, false);
 
     DialogRowGap();
 

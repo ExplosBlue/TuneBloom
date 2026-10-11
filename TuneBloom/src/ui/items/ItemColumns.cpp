@@ -72,7 +72,7 @@ u32 GetItemListId(const Item* item)
 
 static const char* GetItemIdColumnTitle(Item::ItemType itemType)
 {
-    return itemType == Item::ItemType::BankFileInstrument ? messages::item::cColumnProgram : messages::item::cColumnId;
+    return itemType == Item::ItemType::BankFileInstrument ? messages::common::cProgram : messages::item::cColumnId;
 }
 
 f32 GetItemIdColumnWidth(Item::ItemType itemType)
@@ -140,7 +140,7 @@ void FormatItemListName(const Item* item, sead::BufferedSafeString* out)
 {
     if (item->getItemType() == Item::ItemType::BankFileInstrument)
     {
-        out->copy(item->isNameValid() ? item->getName().cstr() : messages::item::cTypeInstrument);
+        out->copy(item->isNameValid() ? item->getName().cstr() : messages::common::cInstrument);
         return;
     }
 
@@ -657,7 +657,7 @@ void DrawItemCount(s32 shown, s32 total, const char* typeName, const char* note)
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().CellPadding.x);
 
     if (shown != total)
-        ImGui::TextDisabled(messages::item::cCountFormat, shown, total);
+        ImGui::TextDisabled(messages::common::cCountOfFormat, shown, total);
     else
         ImGui::TextDisabled(shown == 1 ? messages::item::cCountOneFormat : messages::item::cCountAllFormat, shown, typeName);
 

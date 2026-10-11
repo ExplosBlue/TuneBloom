@@ -292,18 +292,18 @@ static void DrawWaveDetails()
     sead::FixedSafeString<24> size;
     FormatItemSize(&size, wave.getFileSize());
 
-    DetailRow(messages::item::cColumnLength, length.cstr());
+    DetailRow(messages::common::cLength, length.cstr());
     DetailRow(messages::browser::cSamples, sead::FormatFixedSafeString<24>("%u", wave.getSampleCount()).cstr());
-    DetailRow(messages::browser::cSampleRate, sead::FormatFixedSafeString<24>(messages::unit::cHertzFormat, wave.getSampleRate()).cstr());
-    DetailRow(messages::browser::cChannels, channels.cstr());
-    DetailRow(messages::browser::cEncoding, WaveFile::sEncodingTypes[static_cast<s32>(wave.getEncoding())]);
+    DetailRow(messages::common::cSampleRate, sead::FormatFixedSafeString<24>(messages::unit::cHertzFormat, wave.getSampleRate()).cstr());
+    DetailRow(messages::common::cChannels, channels.cstr());
+    DetailRow(messages::common::cEncoding, WaveFile::sEncodingTypes[static_cast<s32>(wave.getEncoding())]);
 
     if (wave.getIsLoop())
-        DetailRow(messages::item::cColumnLoop, sead::FormatFixedSafeString<48>("%u - %u", wave.getOriginalLoopStartFrame(), wave.getOriginalLoopEndFrame()).cstr());
+        DetailRow(messages::common::cLoop, sead::FormatFixedSafeString<48>("%u - %u", wave.getOriginalLoopStartFrame(), wave.getOriginalLoopEndFrame()).cstr());
     else
-        DetailRow(messages::item::cColumnLoop, "-");
+        DetailRow(messages::common::cLoop, "-");
 
-    DetailRow(messages::item::cColumnSize, size.cstr());
+    DetailRow(messages::common::cSize, size.cstr());
     DetailRow(messages::browser::cUsedBy, sead::FormatFixedSafeString<24>("%d", wave.getReferences().size()).cstr());
 }
 
@@ -333,7 +333,7 @@ static bool BeginBrowserTable(const Item::List& list, Item::ItemType itemType, c
 
     ImGui::TableSetupScrollFreeze(0, 1);
     SetupItemIdColumn(itemType);
-    ImGui::TableSetupColumn(messages::item::cColumnName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
+    ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
     SetupItemColumns(table->columns, table->columnCount);
 
     for (u32 i = 0; i < table->columnCount; i++)
@@ -599,7 +599,7 @@ static void DrawBrowserFooter(const Item::List& list, Item::ItemType itemType, s
 
     if (allowNone)
     {
-        if (ImGui::Button(messages::browser::cNone, ImVec2(buttonWidth, 0.0f)))
+        if (ImGui::Button(messages::common::cNone, ImVec2(buttonWidth, 0.0f)))
             result->acceptNone = true;
 
         ImGui::SameLine();
@@ -611,7 +611,7 @@ static void DrawBrowserFooter(const Item::List& list, Item::ItemType itemType, s
     ImGui::EndDisabled();
 
     ImGui::SameLine();
-    if (ImGui::Button(messages::browser::cCancel, ImVec2(buttonWidth, 0.0f)))
+    if (ImGui::Button(messages::common::cCancel, ImVec2(buttonWidth, 0.0f)))
         result->close = true;
 }
 

@@ -55,7 +55,7 @@ void WarningPopup(const char* name, const char* content)
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (BeginDialog(sead::FormatFixedSafeString<32>(ICON_LC_ALERT_TRIANGLE " %s%s", messages::popup::cTitleWarning, name).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (BeginDialog(sead::FormatFixedSafeString<32>(ICON_LC_ALERT_TRIANGLE " %s%s", messages::common::cWarning, name).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("%s", content);
 
@@ -78,7 +78,7 @@ void ApplyRenameShortcut()
 
 void DrawItemNameRow(Item* item)
 {
-    PropertyRow(messages::item::cColumnName);
+    PropertyRow(messages::common::cName);
 
     sead::FixedSafeString<256> shown(item->isEnableName() ? item->getName().cstr() : "");
     sead::FixedSafeString<256> name(shown);
@@ -101,11 +101,11 @@ void DrawItemPropertiesUI(bool labelLeft)
         ImGui::BeginDisabled();
 
     if (labelLeft)
-        PropertyRow(messages::item::cNameFieldLabel);
+        PropertyRow(messages::common::cName);
 
     sead::FixedSafeString<256> name(item->getName());
     ApplyRenameShortcut();
-    if (ImGui::InputText(labelLeft ? "##Name" : messages::item::cNameFieldLabel,name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
+    if (ImGui::InputText(labelLeft ? "##Name" : messages::common::cName,name.getBuffer(), name.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue) || ImGui::IsItemDeactivatedAfterEdit())
         OpenRenamePopup(RenameItem(item, name));
 
     if (!enableName)

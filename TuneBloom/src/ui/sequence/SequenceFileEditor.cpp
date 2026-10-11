@@ -495,7 +495,7 @@ static void DrawFollowTool(SeqToolbarState& bar)
 
     if (BeginContextMenu("##SeqFollow"))
     {
-        if (ContextMenuCheckItem(messages::sequence::cFollowOffItem, !settings.follow))
+        if (ContextMenuCheckItem(messages::common::cOff, !settings.follow))
         {
             settings.follow = false;
             bar.followChanged = true;
@@ -539,7 +539,7 @@ void SequenceFile::drawViewTools_(const SeqToolbarState& bar)
         settings.showManual = !settings.showManual;
         ImGui::MarkIniSettingsDirty();
     }
-    ImGui::SetItemTooltip("%s", messages::sequence::cManualTooltip);
+    ImGui::SetItemTooltip("%s", messages::common::cManual);
 
     ImGui::SameLine();
 
@@ -562,7 +562,7 @@ void SequenceFile::drawViewTools_(const SeqToolbarState& bar)
         ImGui::OpenPopup("##SeqOptions");
 
     if (!ImGui::IsPopupOpen("##SeqOptions"))
-        ImGui::SetItemTooltip("%s", messages::sequence::cOptionsMenu);
+        ImGui::SetItemTooltip("%s", messages::common::cOptions);
 
     SetNextToolMenuPos();
 }

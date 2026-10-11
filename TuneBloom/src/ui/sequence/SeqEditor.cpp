@@ -147,7 +147,7 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
         ImGui::SameLine(0.0f, 0.0f);
 
         SearchFieldExtra findExtra;
-        findExtra.hint = messages::sequence::cFindHint;
+        findExtra.hint = messages::common::cFind;
         findExtra.wholeWord = &wholeWord;
         findExtra.enterPressed = &findEnter;
 
@@ -169,7 +169,7 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
             ImGui::AlignTextToFramePadding();
 
             if (matchNum > 0)
-                ImGui::TextDisabled(messages::sequence::cFindCountFormat, editor.GetSearchCurrentMatch() + 1, matchNum);
+                ImGui::TextDisabled(messages::common::cCountOfFormat, editor.GetSearchCurrentMatch() + 1, matchNum);
             else if (sFindBuffer[0] != '\0')
                 ImGui::TextDisabled("%s", messages::sequence::cFindNoResults);
         }
@@ -194,11 +194,11 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
             bool replaceEnter = false;
 
             SearchFieldExtra replaceExtra;
-            replaceExtra.hint = messages::sequence::cReplaceHint;
+            replaceExtra.hint = messages::common::cReplace;
             replaceExtra.icon = ICON_LC_CORNER_DOWN_RIGHT;
             replaceExtra.enterPressed = &replaceEnter;
 
-            const f32 replaceButtonsWidth = ImGui::CalcTextSize(messages::sequence::cReplaceOne).x + ImGui::CalcTextSize(messages::sequence::cReplaceAll).x + style.FramePadding.x * 4.0f + gap * 3.0f;
+            const f32 replaceButtonsWidth = ImGui::CalcTextSize(messages::common::cReplace).x + ImGui::CalcTextSize(messages::common::cAll).x + style.FramePadding.x * 4.0f + gap * 3.0f;
             const f32 replaceWidth = ImMin(fieldWidth, ImGui::GetContentRegionAvail().x - button - replaceButtonsWidth);
 
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + button);
@@ -208,12 +208,12 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
 
             ImGui::BeginDisabled(matchNum == 0);
 
-            if (ImGui::Button(messages::sequence::cReplaceOne) || (replaceEnter && matchNum > 0))
+            if (ImGui::Button(messages::common::cReplace) || (replaceEnter && matchNum > 0))
                 editor.ReplaceCurrent(sReplaceBuffer);
 
             ImGui::SameLine(0.0f, gap);
 
-            if (ImGui::Button(messages::sequence::cReplaceAll))
+            if (ImGui::Button(messages::common::cAll))
                 editor.ReplaceAll(sReplaceBuffer);
 
             ImGui::EndDisabled();
@@ -450,7 +450,7 @@ static void DrawEditMenu(TextEditor& editor)
         used = true;
     }
 
-    if (ContextMenuItem(ICON_LC_TEXT_SELECT, messages::sequence::cMenuSelectAll))
+    if (ContextMenuItem(ICON_LC_TEXT_SELECT, messages::common::cSelectAll))
     {
         editor.SelectAll();
         used = true;
@@ -542,7 +542,7 @@ static void DrawStatusLine(TextEditor& editor, f32 padY, bool& openGoTo, bool& o
             path += symbols[local].mName;
 
         if (global < 0 && local < 0)
-            path += messages::sequence::cStatusLabels;
+            path += messages::common::cLabels;
 
         const f32 pathWidth = ImMin(ImGui::CalcTextSize(path.c_str()).x + padX * 2.0f, leftWidth);
 

@@ -51,12 +51,12 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
 
     if (!item && !validate)
     {
-        DialogRow(messages::item::cTypeWaveArchive);
+        DialogRow(messages::common::cWaveArchive);
         WaveArchiveSelector("##WaveArchive", &sWarcType, &sWarcItem, sBfsar.getWaveArchiveList());
 
         DialogRowGap();
 
-        if (!BeginGroupBox(messages::bank::cFileLabel))
+        if (!BeginGroupBox(messages::common::cBankFile))
             return;
 
         DialogRowGap();
@@ -65,7 +65,7 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
         ImGui::SameLine();
         ImGui::RadioButton(messages::source::cSelectExisting, &sBankFileMode, cBankFileModeSelectExisting);
         ImGui::SameLine();
-        ImGui::RadioButton(messages::source::cNone, &sBankFileMode, cBankFileModeNone);
+        ImGui::RadioButton(messages::common::cNone, &sBankFileMode, cBankFileModeNone);
 
         if (sBankFileMode == cBankFileModeNone)
         {
@@ -76,7 +76,7 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
         else
         {
             ImGui::BeginDisabled(sBankFileMode != cBankFileModeSelectExisting);
-            ItemSelectorDialogRow(messages::item::cCreateFileLabel,sBfsar.getBankFileList(), &sBankFileItem, true);
+            ItemSelectorDialogRow(messages::common::cFile,sBfsar.getBankFileList(), &sBankFileItem, true);
             ImGui::EndDisabled();
         }
 
@@ -130,7 +130,7 @@ void DrawBanksUI()
 
     SetNextItemListAction(&BankRowActionFunc);
 
-    DrawAllItemsUI("Bank", messages::item::cTypeBank,sBfsar.getBankList(),
+    DrawAllItemsUI("Bank", messages::common::cBank,sBfsar.getBankList(),
                    &CreateBankFunc, nullptr, &BankContextMenuFunc, GetItemFilterCallback());
 }
 
@@ -141,11 +141,11 @@ void DrawBankPropertiesUI()
     if (!BeginPropertyBox("BankFiles"))
         return;
 
-    RegionHeader(messages::bank::cFilesTitle);
+    RegionHeader(messages::common::cFiles);
 
     {
         Item* file = bank->getFileRef().getItem();
-        PropertyRow(messages::bank::cFileLabel);
+        PropertyRow(messages::common::cBankFile);
         if (ItemSelector("##BankFile", sBfsar.getBankFileList(), &file, true))
         {
             bank->getFileRef().attach(file);
@@ -156,7 +156,7 @@ void DrawBankPropertiesUI()
     {
         Item* warc = bank->getWaveArchiveRef().getItem();
         WaveArchiveType warcType = bank->getWaveArchiveType();
-        PropertyRow(messages::item::cTypeWaveArchive);
+        PropertyRow(messages::common::cWaveArchive);
         if (WaveArchiveSelector("##WaveArchive", &warcType, &warc, sBfsar.getWaveArchiveList()))
         {
             bank->getWaveArchiveRef().attach(warc);

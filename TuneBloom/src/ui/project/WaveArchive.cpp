@@ -53,7 +53,7 @@ InstanciateItemCallback CreateWaveArchiveFunc(bool clear)
 void DrawWaveArchivesUI()
 {
     DrawTabFilterBar();
-    DrawAllItemsUI("Wave Archive", messages::item::cTypeWaveArchive,sBfsar.getWaveArchiveList(),
+    DrawAllItemsUI("Wave Archive", messages::common::cWaveArchive,sBfsar.getWaveArchiveList(),
         &CreateWaveArchiveFunc, nullptr, nullptr, GetItemFilterCallback()
     );
 }

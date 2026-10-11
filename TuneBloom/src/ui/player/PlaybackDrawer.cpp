@@ -37,9 +37,9 @@ constexpr f32 cSeqVarDotRadiusEm    = 0.075f;
 constexpr s32 cSeqVarNum            = 16;
 constexpr s32 cSeqVarVisibleRows    = 5;
 
-static const char* cDrawerKnobs[] = { messages::param::cVolume, messages::param::cCoarse, messages::param::cFine, messages::param::cPan, messages::param::cLpf, messages::param::cBiquad, messages::playback::cKnobTempo };
-static const char* cDrawerBiquadLabel = messages::sound::cBiquadTypeLabel;
-static const char* cDrawerBiquadTypes[] = { messages::playback::cBiquadInherit, messages::sound::cBiquadOff, messages::sound::cBiquadLpf, messages::sound::cBiquadHpf, messages::sound::cBiquadBpf512, messages::sound::cBiquadBpf1024, messages::sound::cBiquadBpf2048 };
+static const char* cDrawerKnobs[] = { messages::common::cVolume, messages::param::cCoarse, messages::param::cFine, messages::common::cPan, messages::common::cLpf, messages::param::cBiquad, messages::playback::cKnobTempo };
+static const char* cDrawerBiquadLabel = messages::common::cType;
+static const char* cDrawerBiquadTypes[] = { messages::playback::cBiquadInherit, messages::common::cOff, messages::common::cLpf, messages::sound::cBiquadHpf, messages::sound::cBiquadBpf512, messages::sound::cBiquadBpf1024, messages::sound::cBiquadBpf2048 };
 
 static bool sShowPlaybackDrawer = false;
 static PlaybackDrawerView sPlaybackDrawerView = PlaybackDrawerView::Parameters;
@@ -83,7 +83,7 @@ PlaybackDrawerLayout CalcPlaybackDrawerLayout()
 
     layout.panelWidths[PlaybackPanel_Sound] = layout.knobSize.x * 4.0f + layout.knobGap * 3.0f;
     layout.panelWidths[PlaybackPanel_Filter] = layout.knobSize.x * 2.0f + layout.knobGap + ImFloor(em * cDrawerListGapEm) + ImGui::CalcTextSize(cDrawerBiquadLabel).x + style.ItemSpacing.x + layout.listWidth;
-    layout.panelWidths[PlaybackPanel_Sequence] = sead::Mathf::max(layout.knobSize.x, ImGui::CalcTextSize(messages::playback::cPanelSequence).x + style.ItemSpacing.x + ImFloor(em * cDrawerTitleLineEm));
+    layout.panelWidths[PlaybackPanel_Sequence] = sead::Mathf::max(layout.knobSize.x, ImGui::CalcTextSize(messages::common::cSequence).x + style.ItemSpacing.x + ImFloor(em * cDrawerTitleLineEm));
     layout.panelWidths[PlaybackPanel_Tracks] = layout.trackPitch * SoundPlayer::cMaxTracks - ImFloor(em * cTrackVolumeGapEm);
 
     layout.parametersWidth = 1.0f;
@@ -176,7 +176,7 @@ static bool DrawVolumeDbKnob(const char* label, f32* volume, f32 maxDb, f32 maxV
     if (*volume > 0.0f)
         db = sead::Mathf::clamp2(cDrawerVolumeMinDb, roundf(20.0f * log10f(*volume) * scale) / scale + 0.0f, maxDb);
 
-    const char* format = db <= cDrawerVolumeMinDb ? messages::playback::cKnobVolumeSilent :!tenths || fabsf(db) >= cDrawerVolumeShortDb ? "%.0f" : "%.1f";
+    const char* format = db <= cDrawerVolumeMinDb ? messages::common::cSilent :!tenths || fabsf(db) >= cDrawerVolumeShortDb ? "%.0f" : "%.1f";
 
     if (!KnobF32(label, &db, cDrawerVolumeMinDb, maxDb, 0.0f, format, speed, size))
         return false;
@@ -193,7 +193,7 @@ static void DrawVolumeKnob(const PlaybackDrawerLayout& layout)
 {
     f32 volume = sSoundPlayer.getVolume();
 
-    if (DrawVolumeDbKnob(messages::param::cVolume,&volume, cDrawerVolumeMaxDb, cDrawerVolumeMax, true, cDrawerVolumeDbSpeed, layout.knobSize))
+    if (DrawVolumeDbKnob(messages::common::cVolume,&volume, cDrawerVolumeMaxDb, cDrawerVolumeMax, true, cDrawerVolumeDbSpeed, layout.knobSize))
         sSoundPlayer.setVolume(volume);
 
     if (DrawOverrideTooltip(volume != cDrawerDefaultRatio, sead::FormatFixedSafeString<64>(messages::playback::cVolumeFormat, FormatVolumeDb(volume).cstr()).cstr()))
@@ -202,7 +202,7 @@ static void DrawVolumeKnob(const PlaybackDrawerLayout& layout)
 
 static void DrawSoundPanel(const PlaybackDrawerLayout& layout)
 {
-    BeginPlaybackPanel(messages::playback::cPanelSound,layout.panelWidths[PlaybackPanel_Sound], layout.panelWidths[PlaybackPanel_Sound]);
+    BeginPlaybackPanel(messages::common::cSound,layout.panelWidths[PlaybackPanel_Sound], layout.panelWidths[PlaybackPanel_Sound]);
 
     DrawVolumeKnob(layout);
 
@@ -221,7 +221,7 @@ static void DrawSoundPanel(const PlaybackDrawerLayout& layout)
     ImGui::SameLine(0.0f, layout.knobGap);
 
     f32 pan = roundf(sSoundPlayer.getPan() * 100.0f) + 0.0f;
-    if (KnobF32(messages::param::cPan,&pan, -cDrawerPanMax * 100.0f, cDrawerPanMax * 100.0f, 0.0f, "%.0f", cDrawerPercentSpeed, layout.knobSize))
+    if (KnobF32(messages::common::cPan,&pan, -cDrawerPanMax * 100.0f, cDrawerPanMax * 100.0f, 0.0f, "%.0f", cDrawerPercentSpeed, layout.knobSize))
         sSoundPlayer.setPan(pan / 100.0f);
 
     sead::FixedSafeString<64> panText(messages::playback::cPanOffsetNone);
@@ -234,16 +234,16 @@ static void DrawSoundPanel(const PlaybackDrawerLayout& layout)
 
 static void DrawFilterPanel(const PlaybackDrawerLayout& layout)
 {
-    BeginPlaybackPanel(messages::panel::cFilter,layout.panelWidths[PlaybackPanel_Filter], layout.panelWidths[PlaybackPanel_Filter]);
+    BeginPlaybackPanel(messages::common::cFilter,layout.panelWidths[PlaybackPanel_Filter], layout.panelWidths[PlaybackPanel_Filter]);
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 origin = ImGui::GetCursorPos();
 
     f32 lpfFreq = roundf(sSoundPlayer.getLpfFreq() * 100.0f) + 0.0f;
-    if (KnobF32(messages::param::cLpf,&lpfFreq, -100.0f, 0.0f, 0.0f, "%.0f", cDrawerPercentSpeed, layout.knobSize))
+    if (KnobF32(messages::common::cLpf,&lpfFreq, -100.0f, 0.0f, 0.0f, "%.0f", cDrawerPercentSpeed, layout.knobSize))
         sSoundPlayer.setLpfFreq(lpfFreq / 100.0f);
 
-    if (DrawOverrideTooltip(lpfFreq != 0.0f, sead::FormatFixedSafeString<64>(messages::playback::cParameterFormat, messages::param::cLpf,lpfFreq / 100.0f).cstr()))
+    if (DrawOverrideTooltip(lpfFreq != 0.0f, sead::FormatFixedSafeString<64>(messages::playback::cParameterFormat, messages::common::cLpf,lpfFreq / 100.0f).cstr()))
         sSoundPlayer.setLpfFreq(0.0f);
 
     ImGui::SameLine(0.0f, layout.knobGap);
@@ -271,7 +271,7 @@ static void DrawFilterPanel(const PlaybackDrawerLayout& layout)
 
 static void DrawSequencePanel(const PlaybackDrawerLayout& layout)
 {
-    BeginPlaybackPanel(messages::playback::cPanelSequence,layout.panelWidths[PlaybackPanel_Sequence], layout.knobSize.x);
+    BeginPlaybackPanel(messages::common::cSequence,layout.panelWidths[PlaybackPanel_Sequence], layout.knobSize.x);
 
     ImGui::BeginDisabled(sSoundPlayer.isActive() && !sSoundPlayer.isCurrentPlayerSequence());
 
@@ -523,7 +523,7 @@ static bool IsSeqVarTrackRowShown(s32 trackNo, const SeqVarUse* use)
 static void DrawSeqVarRows(const SeqVarUse* use)
 {
     DrawSeqVarRow(messages::playback::cSeqVarGlobal, SoundPlayer::SeqVarScope::Global, 0, use ? use->global : 0);
-    DrawSeqVarRow(messages::playback::cSeqVarPlayer, SoundPlayer::SeqVarScope::Player, 0, use ? use->player : 0);
+    DrawSeqVarRow(messages::common::cPlayer, SoundPlayer::SeqVarScope::Player, 0, use ? use->player : 0);
 
     for (s32 trackNo = 0; trackNo < SequenceSoundPlayer::cTrackNumPerPlayer; trackNo++)
     {
@@ -543,7 +543,7 @@ static void DrawSeqVarStatus(const SeqVarUse* use)
     }
 
     const Item* item = ResolveDisplayItem();
-    const char* name = item ? item->getName().cstr() : messages::playback::cDisplaySequence;
+    const char* name = item ? item->getName().cstr() : messages::common::cSequence;
     const u32 count = use->count();
 
     if (count == 0)

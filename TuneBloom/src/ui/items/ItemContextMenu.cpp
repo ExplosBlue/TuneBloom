@@ -29,7 +29,7 @@ bool DrawItemContextMenu(ItemListContext& ctx, Item* item)
     bool add = false;
 
     // Create
-    if (createCallback && ContextMenuItem(ICON_LC_PLUS, messages::menu::cAdd))
+    if (createCallback && ContextMenuItem(ICON_LC_PLUS, messages::common::cAdd))
     {
         SetInsertAfterItem(nullptr);
         sMultiSelectedItems.clear();
@@ -45,7 +45,7 @@ bool DrawItemContextMenu(ItemListContext& ctx, Item* item)
 
     if (item && item->getItemType() == Item::ItemType::Sound)
     {
-        sead::FixedSafeString<64> label(messages::menu::cDuplicate);
+        sead::FixedSafeString<64> label(messages::common::cDuplicate);
 
         if (multiActive)
             label.format(messages::menu::cDuplicateItemsFormat, sMultiSelectedItems.size());

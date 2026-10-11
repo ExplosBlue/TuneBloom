@@ -8,7 +8,7 @@ void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)
 {
     {
         Item* waveFile = waveSoundInfo.getWaveFileRef().getItem();
-        if (ItemSelectorRow(messages::sound::cWaveFileLabel,sBfsar.getWaveFileList(), &waveFile, false, TrailingButtonsWidth(1)))
+        if (ItemSelectorRow(messages::common::cWaveFile,sBfsar.getWaveFileList(), &waveFile, false, TrailingButtonsWidth(1)))
         {
             waveSoundInfo.getWaveFileRef().attach(waveFile);
             SetUnsavedChanges(true);
@@ -33,7 +33,7 @@ void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)
 
             ContextMenuSeparator();
 
-            if (ContextMenuItem(ICON_LC_REPLACE, messages::import::cReplaceMenuLabel))
+            if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace))
                 RequestWaveFileReplace(static_cast<WaveFile*>(waveFile));
 
             ImGui::SetItemTooltip("%s", messages::import::cReplaceWaveFileTip);

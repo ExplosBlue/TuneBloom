@@ -48,7 +48,7 @@ static const char* GetKindLabel(Kind kind)
         return messages::backup::cKindRestore;
 
     case Kind::Manual:
-        return messages::backup::cKindManual;
+        return messages::common::cManual;
 
     default:
         return messages::backup::cKindAuto;
@@ -62,7 +62,7 @@ void FormatSize(u64 size, char* buffer, size_t bufferSize)
     if (kb < 1024.0)
         std::snprintf(buffer, bufferSize, messages::backup::cSizeKbFormat, kb);
     else
-        std::snprintf(buffer, bufferSize, messages::backup::cSizeMbFormat, kb / 1024.0);
+        std::snprintf(buffer, bufferSize, messages::common::cMegabytesFormat, kb / 1024.0);
 }
 
 static void DrawRestoreHead()
@@ -153,8 +153,8 @@ static bool DrawRestoreTable()
     {
         ImGui::TableSetupScrollFreeze(0, 1);
         ImGui::TableSetupColumn(messages::backup::cColumnDate, ImGuiTableColumnFlags_WidthStretch, 2.0f);
-        ImGui::TableSetupColumn(messages::backup::cColumnType, ImGuiTableColumnFlags_WidthStretch, 1.5f);
-        ImGui::TableSetupColumn(messages::backup::cColumnSize, ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(messages::common::cType, ImGuiTableColumnFlags_WidthStretch, 1.5f);
+        ImGui::TableSetupColumn(messages::common::cSize, ImGuiTableColumnFlags_WidthStretch, 1.0f);
         ImGui::TableHeadersRow();
 
         restore = DrawRestoreRows();
@@ -197,9 +197,9 @@ static void DrawRestoreFooter(bool restore)
 {
     const s32 count = static_cast<s32>(sDialogSnapshots.size());
     const bool hasSelection = sDialogSelected >= 0 && sDialogSelected < count;
-    const char* restoreLabel = sDialogConfirmDiscard ? messages::backup::cRestoreAnyway : messages::backup::cRestore;
+    const char* restoreLabel = sDialogConfirmDiscard ? messages::backup::cRestoreAnyway : messages::common::cRestore;
 
-    BeginDialogFooter({restoreLabel, messages::recent::cShowInFileManager, messages::dialog::cCancel}, false);
+    BeginDialogFooter({restoreLabel, messages::recent::cShowInFileManager, messages::common::cCancel}, false);
 
     ImGui::BeginDisabled(!hasSelection);
 
@@ -211,7 +211,7 @@ static void DrawRestoreFooter(bool restore)
 
     ImGui::EndDisabled();
 
-    if (DialogButton(messages::dialog::cCancel))
+    if (DialogButton(messages::common::cCancel))
         ImGui::CloseCurrentPopup();
 
     if (!restore || !hasSelection)
@@ -295,13 +295,13 @@ static void DrawRecoverRows(const Snapshot& snapshot)
                                                                  : fs::path(snapshot.originalPath).parent_path().string();
         const std::string shortFolder = CutPathStart(folder, cRecoverFolderMax);
 
-        DrawRecoverRow(messages::backup::cRecoverArchive, snapshot.archiveName.c_str());
-        DrawRecoverRow(messages::backup::cRecoverFolder, shortFolder.c_str());
+        DrawRecoverRow(messages::common::cArchive, snapshot.archiveName.c_str());
+        DrawRecoverRow(messages::common::cFolder, shortFolder.c_str());
 
         if (shortFolder != folder && IsItemHoveredForDetail())
             ImGui::SetTooltip("%s", folder.c_str());
 
-        DrawRecoverRow(messages::backup::cRecoverBackup, backupText.cstr());
+        DrawRecoverRow(messages::common::cBackup, backupText.cstr());
 
         ImGui::EndTable();
     }

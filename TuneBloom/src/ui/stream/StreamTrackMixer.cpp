@@ -23,7 +23,7 @@ static constexpr f32 cTrackMeterBarEm        = 0.25f;
 static constexpr f32 cTrackMeterGapEm        = 0.2f;
 static constexpr f32 cTrackMeterBarGap       = 2.0f;
 
-static constexpr const char* cTrackSurroundLabels[] = { messages::param::cPan, messages::stream::cTrackBypass };
+static constexpr const char* cTrackSurroundLabels[] = { messages::common::cPan, messages::stream::cTrackBypass };
 
 static const TrackParam cTrackWaveParams[] = { TrackParam::WaveFile };
 
@@ -172,23 +172,23 @@ static void DrawTrackDetail(const TrackContext& ctx, s32 index, f32 width)
     if (ImGui::BeginTable("TrackDetailPanels", columnNum, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_NoHostExtendX))
     {
         if (ctx.enableFilter)
-            ImGui::TableSetupColumn(messages::panel::cFilter, ImGuiTableColumnFlags_WidthFixed, layout.filterWidth);
+            ImGui::TableSetupColumn(messages::common::cFilter, ImGuiTableColumnFlags_WidthFixed, layout.filterWidth);
 
         if (ctx.enableSend)
             ImGui::TableSetupColumn(messages::panel::cSend, ImGuiTableColumnFlags_WidthFixed, layout.sendWidth);
 
-        ImGui::TableSetupColumn(messages::stream::cTrackSurroundTitle, ImGuiTableColumnFlags_WidthFixed, surroundSlots.calcWidth());
+        ImGui::TableSetupColumn(messages::common::cSurround, ImGuiTableColumnFlags_WidthFixed, surroundSlots.calcWidth());
 
         ImGui::PushID(track);
         ImGui::TableNextRow(ImGuiTableRowFlags_None, ImGui::GetContentRegionAvail().y - layout.cellPadding.x * 2.0f - 1.0f);
 
         if (ctx.enableFilter)
-            DrawTrackDetailPanel(ctx, index, messages::panel::cFilter, layout.filterSlots, cTrackFilterParams);
+            DrawTrackDetailPanel(ctx, index, messages::common::cFilter, layout.filterSlots, cTrackFilterParams);
 
         if (ctx.enableSend)
             DrawTrackDetailPanel(ctx, index, messages::panel::cSend, layout.sendSlots, cTrackSendParams);
 
-        DrawTrackDetailPanel(ctx, index, messages::stream::cTrackSurroundTitle, surroundSlots, cTrackMixParams + cTrackSurroundFirst);
+        DrawTrackDetailPanel(ctx, index, messages::common::cSurround, surroundSlots, cTrackMixParams + cTrackSurroundFirst);
 
         ImGui::PopID();
         ImGui::EndTable();

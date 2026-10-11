@@ -257,7 +257,7 @@ void WaveFileContextMenuFunc(Item* item)
         const std::vector<WaveFile*> waves = CollectForAction<WaveFile>(item);
         const bool single = waves.size() == 1;
 
-        if (ContextMenuItem(ICON_LC_REPLACE, messages::import::cReplaceMenuLabel, single, messages::menu::cSelectOneWaveFile))
+        if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace, single, messages::menu::cSelectOneWaveFile))
             RequestWaveFileReplace(wave);
 
         if (ContextMenuItem(ICON_LC_SLIDERS_HORIZONTAL, messages::import::cReimportMenuLabel, single, messages::menu::cSelectOneWaveFile))
@@ -265,7 +265,7 @@ void WaveFileContextMenuFunc(Item* item)
 
         ContextMenuSeparator();
 
-        if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::menu::cExport))
+        if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::common::cExport))
             RequestExportWaveFiles(waves);
 
         if (ContextMenuItem(ICON_LC_FILE_AUDIO, messages::menu::cExportWav))
@@ -296,7 +296,7 @@ static sead::FixedSafeString<32> FormatByteSize(u64 bytes)
     sead::FixedSafeString<32> out;
 
     if (bytes >= 1024 * 1024)
-        out.format(messages::item::cMergeSizeMbFormat, bytes / (1024.0 * 1024.0));
+        out.format(messages::common::cMegabytesFormat, bytes / (1024.0 * 1024.0));
     else
         out.format(messages::item::cMergeSizeKbFormat, (unsigned long long)(bytes / 1024));
     
@@ -318,10 +318,10 @@ static WaveImportResult DrawWaveImportBody(const char* header, WaveFile::Encodin
 
     DrawWaveImportInfo(encoding, info, header);
 
-    BeginDialogFooter({commitLabel, messages::dialog::cCancel}, false);
+    BeginDialogFooter({commitLabel, messages::common::cCancel}, false);
 
     const bool commit = DialogButton(commitLabel);
-    const bool cancelClicked = DialogButton(messages::dialog::cCancel);
+    const bool cancelClicked = DialogButton(messages::common::cCancel);
 
     if (commit)
         return WaveImportResult::Commit;
@@ -409,7 +409,7 @@ static void DrawMergeDuplicatesDialog(std::vector<Bfsar::WaveDuplicateGroup>* gr
 
     DrawDuplicateGroupList(*groups);
 
-    BeginDialogFooter({messages::dialog::cMerge, messages::dialog::cCancel}, false);
+    BeginDialogFooter({messages::dialog::cMerge, messages::common::cCancel}, false);
 
     bool nothingToMerge = groups->empty();
 
@@ -428,7 +428,7 @@ static void DrawMergeDuplicatesDialog(std::vector<Bfsar::WaveDuplicateGroup>* gr
         SetDisabledTooltip(messages::exporting::cNothingToMerge);
     }
 
-    if (DialogButton(messages::dialog::cCancel))
+    if (DialogButton(messages::common::cCancel))
     {
         groups->clear();
         ImGui::CloseCurrentPopup();
@@ -469,7 +469,7 @@ void DrawWaveFilesUI()
 
     SetNextItemListAction(&WaveFileRowActionFunc);
 
-    DrawAllItemsUI("Wave File", messages::item::cTypeWaveFile, sBfsar.getWaveFileList(),
+    DrawAllItemsUI("Wave File", messages::common::cWaveFile, sBfsar.getWaveFileList(),
         &CreateWaveFileFunc, nullptr, &WaveFileContextMenuFunc, &WaveFilesFilter
     );
 }
@@ -488,7 +488,7 @@ void DrawWaveFileReplacePopup()
     {
         const WaveImportResult result = DrawWaveImportBody(
             sead::FormatFixedSafeString<560>(messages::import::cWaveReplaceHeaderFormat, sWavFileName.cstr()).cstr(),
-            &sEncoding, &sRiffWaveInfo, messages::import::cReplaceButton);
+            &sEncoding, &sRiffWaveInfo, messages::common::cReplace);
 
         if (result == WaveImportResult::Commit)
         {
@@ -557,7 +557,7 @@ void DrawWavRegionDropImport()
     {
         const WaveImportResult result = DrawWaveImportBody(
             sead::FormatFixedSafeString<560>(messages::import::cWaveRegionHeaderFormat, sDropName.cstr()).cstr(),
-            &sDropEncoding, &sDropInfo, messages::dialog::cImport);
+            &sDropEncoding, &sDropInfo, messages::common::cImport);
 
         if (result == WaveImportResult::Commit)
         {

@@ -11,14 +11,14 @@ static constexpr ImU8 cVolumeMax         = 255;
 static constexpr f32  cSoundStartLabelEm = 12.0f;
 static constexpr u8   cSoundPanCenter    = 64;
 
-static const char* cSoundOutputKnobs[] = { messages::param::cVolume };
+static const char* cSoundOutputKnobs[] = { messages::common::cVolume };
 static const char* cSoundPitchKnobs[]  = { messages::param::cCoarse, messages::param::cFine };
-static const char* cSoundPanKnobs[]    = { messages::param::cPan, messages::param::cSurroundPan };
+static const char* cSoundPanKnobs[]    = { messages::common::cPan, messages::param::cSurroundPan };
 static const char* cSoundSendKnobs[]   = { messages::param::cSendMain, messages::param::cSendFxA, messages::param::cSendFxB, messages::param::cSendFxC };
-static const char* cSoundFilterKnobs[] = { messages::param::cLpf, messages::param::cBiquad };
-static const char* cSoundBiquadLabel   = messages::sound::cBiquadTypeLabel;
+static const char* cSoundFilterKnobs[] = { messages::common::cLpf, messages::param::cBiquad };
+static const char* cSoundBiquadLabel   = messages::common::cType;
 
-static const char* cBiquadTypes[] = { messages::sound::cBiquadOff, messages::sound::cBiquadLpf, messages::sound::cBiquadHpf, messages::sound::cBiquadBpf512, messages::sound::cBiquadBpf1024, messages::sound::cBiquadBpf2048 };
+static const char* cBiquadTypes[] = { messages::common::cOff, messages::common::cLpf, messages::sound::cBiquadHpf, messages::sound::cBiquadBpf512, messages::sound::cBiquadBpf1024, messages::sound::cBiquadBpf2048 };
 static const char* cBiquadDetails[] = {
     nullptr,
     messages::sound::cBiquadLpfDetail,
@@ -219,7 +219,7 @@ static void DrawWaveSoundPanel(SoundPanel panel, Sound::WaveSoundInfo& waveSound
         case SoundPanel::Pitch:
         {
             bool enablePitch = waveSoundInfo.isEnablePitch();
-            if (DrawSoundPanelHeader(messages::panel::cPitch,&enablePitch))
+            if (DrawSoundPanelHeader(messages::common::cPitch,&enablePitch))
             {
                 waveSoundInfo.setEnablePitch(enablePitch);
                 SetUnsavedChanges(true);
@@ -235,7 +235,7 @@ static void DrawWaveSoundPanel(SoundPanel panel, Sound::WaveSoundInfo& waveSound
         case SoundPanel::Pan:
         {
             bool enablePan = waveSoundInfo.isEnablePan();
-            if (DrawSoundPanelHeader(messages::sound::cPanelPan,&enablePan))
+            if (DrawSoundPanelHeader(messages::common::cPan,&enablePan))
             {
                 waveSoundInfo.setEnablePan(enablePan);
                 SetUnsavedChanges(true);
@@ -267,7 +267,7 @@ static void DrawWaveSoundPanel(SoundPanel panel, Sound::WaveSoundInfo& waveSound
         case SoundPanel::Filter:
         {
             bool enableFilter = waveSoundInfo.isEnableFilter();
-            if (DrawSoundPanelHeader(messages::panel::cFilter,&enableFilter))
+            if (DrawSoundPanelHeader(messages::common::cFilter,&enableFilter))
             {
                 waveSoundInfo.setEnableFilter(enableFilter);
                 SetUnsavedChanges(true);
@@ -349,7 +349,7 @@ void DrawSoundMixPanels(Sound* sound)
         }
         else if (panels[index] == SoundPanel::Pitch)
         {
-            RegionHeader(messages::panel::cPitch);
+            RegionHeader(messages::common::cPitch);
             OffsetSoundPanelBody(offset);
             DrawSoundPitchKnobs(sound->getStreamSoundInfo());
         }

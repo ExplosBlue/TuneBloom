@@ -103,13 +103,13 @@ static MidiExportRequest sMidiExport;
 
 static constexpr MidiListColumns cMidiTrackColumns = {
     "##Tracks",
-    { "", messages::exporting::cMidiColumnTrack, messages::exporting::cMidiColumnTrackInstruments, messages::exporting::cMidiColumnNotes },
+    { "", messages::common::cTrack, messages::common::cInstruments, messages::common::cNotes },
     cMidiTrackWidthEm,
     0.0f
 };
 static constexpr MidiListColumns cMidiInstrumentColumns = {
     "##Instruments",
-    { "", messages::exporting::cMidiColumnInstrument, messages::exporting::cMidiColumnProgram, messages::exporting::cMidiColumnNotes },
+    { "", messages::common::cInstrument, messages::common::cProgram, messages::common::cNotes },
     0.0f,
     cMidiProgramWidthEm
 };
@@ -458,7 +458,7 @@ static void DrawMidiListBox(const char* title, const MidiListColumns& columns, s
 
     bool pressed = false;
 
-    if (!BeginGroupBox(title, allEnabled ? messages::exporting::cMidiSelectNone : messages::exporting::cMidiSelectAll, &pressed))
+    if (!BeginGroupBox(title, allEnabled ? messages::common::cNone : messages::common::cAll, &pressed))
         return;
 
     if (pressed)
@@ -520,8 +520,8 @@ static void DrawMidiExportLists()
 {
     bool changed = false;
 
-    DrawMidiListBox(messages::exporting::cMidiTracksBox, cMidiTrackColumns, &sMidiExport.tracks, &changed);
-    DrawMidiListBox(messages::exporting::cMidiInstrumentsBox, cMidiInstrumentColumns, &sMidiExport.instruments, &changed);
+    DrawMidiListBox(messages::common::cTracks, cMidiTrackColumns, &sMidiExport.tracks, &changed);
+    DrawMidiListBox(messages::common::cInstruments, cMidiInstrumentColumns, &sMidiExport.instruments, &changed);
 
     if (changed)
         UpdateSelectedNotes();
@@ -552,11 +552,11 @@ static void DrawMidiExportFooter()
     ImGui::TextDisabled(messages::exporting::cMidiNotesFormat, sMidiExport.selectedNoteNum, sMidiExport.noteNum);
     ImGui::SameLine();
 
-    BeginDialogFooter({messages::dialog::cExport, messages::dialog::cCancel}, false);
+    BeginDialogFooter({messages::common::cExport, messages::common::cCancel}, false);
 
     ImGui::BeginDisabled(!canExport);
 
-    if (DialogButton(messages::dialog::cExport))
+    if (DialogButton(messages::common::cExport))
     {
         sMidiExport.confirmed = true;
         ImGui::CloseCurrentPopup();
@@ -567,7 +567,7 @@ static void DrawMidiExportFooter()
     if (!canExport)
         SetDisabledTooltip(messages::exporting::cMidiNothingSelected);
 
-    if (DialogButton(messages::dialog::cCancel))
+    if (DialogButton(messages::common::cCancel))
     {
         sMidiExport.clear();
         ImGui::CloseCurrentPopup();

@@ -126,7 +126,7 @@ inline constexpr InnerFileFormatInfo cInnerFileFormatTable[] = {
 };
 
 inline constexpr InnerFileFormatInfo cUnknownInnerFileFormat = {
-    ArchiveFormat::BFSAR, InnerFileKind::SoundArchive, "????", "bin", messages::format::cInnerFileUnknown
+    ArchiveFormat::BFSAR, InnerFileKind::SoundArchive, "????", "bin", messages::common::cUnknown
 };
 
 inline const InnerFileFormatInfo& GetInnerFileFormat(ArchiveFormat format, InnerFileKind kind)

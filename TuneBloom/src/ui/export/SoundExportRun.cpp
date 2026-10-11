@@ -304,9 +304,9 @@ static bool DrawExportProgressRows(const char* fileName, s32 fileNo, s32 fileNum
 
     loadprogress::DrawRows(ICON_LC_FILE_AUDIO, title.cstr(), stage.cstr(), fraction);
 
-    BeginDialogFooter({messages::dialog::cCancel});
+    BeginDialogFooter({messages::common::cCancel});
 
-    return DialogButton(messages::dialog::cCancel);
+    return DialogButton(messages::common::cCancel);
 }
 
 void DrawSoundExportProgressPreview(f32 fraction)

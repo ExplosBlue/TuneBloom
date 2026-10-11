@@ -25,7 +25,7 @@ static void DrawGoToContextMenu(Item* target, const char* disabledReason)
     if (!BeginItemContextMenu())
         return;
 
-    if (ContextMenuItem(ICON_LC_EXTERNAL_LINK, messages::menu::cGoTo, target != nullptr, disabledReason))
+    if (ContextMenuItem(ICON_LC_EXTERNAL_LINK, messages::common::cGoTo, target != nullptr, disabledReason))
         SelectItem(target);
 
     EndContextMenu();

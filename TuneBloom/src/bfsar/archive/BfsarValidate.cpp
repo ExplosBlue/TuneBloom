@@ -104,7 +104,7 @@ static bool ValidateItem(const BfsarValidateContext& ctx, const Item* item)
         return true;
 
     if (error.isEmpty())
-        error = messages::validation::cUnknown;
+        error = messages::common::cUnknown;
 
     return ctx.refuse(error, problemItem, IsPartOfItem(problemItem) ? item : nullptr);
 }

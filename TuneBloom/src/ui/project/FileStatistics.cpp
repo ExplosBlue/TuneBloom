@@ -87,9 +87,9 @@ static const char* cTileFilesSample = messages::item::cStatsFilesSample;
 static const char* cTileShareSample = messages::item::cStatsShareSample;
 
 static const char* const cUseNames[cUseNum] = {
-    messages::item::cStatsUseStream,
-    messages::item::cStatsUseWaveSound,
-    messages::item::cStatsUseInstrument,
+    messages::common::cStream,
+    messages::common::cWaveSound,
+    messages::common::cInstrument,
     messages::item::cStatsUseUnused
 };
 

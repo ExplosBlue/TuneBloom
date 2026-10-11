@@ -13,7 +13,7 @@ void DrawSequenceSoundUI(Sound::SequenceSoundInfo& seqSoundInfo)
 {
     {
         Item* seqFile = seqSoundInfo.getSequenceFileRef().getItem();
-        if (ItemSelectorRow(messages::sound::cSequenceFileLabel,sBfsar.getSequenceFileList(), &seqFile, false, TrailingButtonsWidth(1)))
+        if (ItemSelectorRow(messages::common::cSequenceFile,sBfsar.getSequenceFileList(), &seqFile, false, TrailingButtonsWidth(1)))
         {
             seqSoundInfo.getSequenceFileRef().attach(seqFile);
             SetUnsavedChanges(true);

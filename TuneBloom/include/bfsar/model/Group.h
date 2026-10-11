@@ -98,7 +98,7 @@ public:
             }
             else
             {
-                name.append(messages::group::cItemNull);
+                name.append(messages::common::cNull);
             }
 
             return name;

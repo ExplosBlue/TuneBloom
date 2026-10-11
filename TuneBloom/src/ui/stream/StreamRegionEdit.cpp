@@ -318,16 +318,16 @@ void DrawStreamRegionImportDialog()
 
     ImGui::Text(messages::stream::cRegionReplaceFormat, import.fileName.cstr(), static_cast<u32>(import.regions.size()), static_cast<u32>(import.wave->getStreamFileLayout().regions.size()));
 
-    BeginDialogFooter({ messages::stream::cRegionReplace, messages::dialog::cCancel });
+    BeginDialogFooter({ messages::common::cReplace, messages::common::cCancel });
 
-    if (DialogButton(messages::stream::cRegionReplace))
+    if (DialogButton(messages::common::cReplace))
     {
         SetImportedRegions(import.wave, import);
         import.wave = nullptr;
         ImGui::CloseCurrentPopup();
     }
 
-    if (DialogButton(messages::dialog::cCancel))
+    if (DialogButton(messages::common::cCancel))
     {
         import.wave = nullptr;
         ImGui::CloseCurrentPopup();

@@ -315,8 +315,8 @@ bool DrawCurvePointMenu(LoopWaveformState& state)
 {
     static const char* const cShapeNames[] =
     {
-        messages::import::cWaveCurveSingle, messages::import::cWaveCurveDouble, messages::import::cWaveCurveHold, messages::import::cWaveCurveStairs,
-        messages::import::cWaveCurveSmoothStairs, messages::import::cWaveCurvePulse, messages::import::cWaveCurveWave, messages::import::cWaveCurveHalfSine,
+        messages::import::cWaveCurveSingle, messages::import::cWaveCurveDouble, messages::common::cHold, messages::import::cWaveCurveStairs,
+        messages::import::cWaveCurveSmoothStairs, messages::import::cWaveCurvePulse, messages::common::cWave, messages::import::cWaveCurveHalfSine,
     };
 
     if (!BeginContextMenu("##curvePoint"))

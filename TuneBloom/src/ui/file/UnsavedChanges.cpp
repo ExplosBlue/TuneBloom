@@ -69,8 +69,8 @@ struct ChangeRow
 }
 
 static const ItemColumn cColumns[] = {
-    { "Type",   messages::unsaved::cColumnType,   messages::item::cTypeSequenceFile, nullptr, nullptr, cItemColumnFlag_Text, nullptr },
-    { "Change", messages::unsaved::cColumnChange, messages::unsaved::cModified,      nullptr, nullptr, cItemColumnFlag_Text, nullptr }
+    { "Type",   messages::common::cType,   messages::common::cSequenceFile, nullptr, nullptr, cItemColumnFlag_Text, nullptr },
+    { "Change", messages::unsaved::cColumnChange, messages::common::cModified,      nullptr, nullptr, cItemColumnFlag_Text, nullptr }
 };
 
 static std::vector<SavedItem> sSavedItems;
@@ -127,7 +127,7 @@ static void CollectChanges()
         return;
 
     if (sBfsar.isInfoModified())
-        sRows.push_back({ nullptr, Item::ItemType::Invalid, 0, messages::unsaved::cProjectInfo, ChangeKind::Modified, true });
+        sRows.push_back({ nullptr, Item::ItemType::Invalid, 0, messages::common::cProjectInfo, ChangeKind::Modified, true });
 
     std::unordered_set<u64> present;
 
@@ -164,13 +164,13 @@ static const char* GetKindText(ChangeKind kind)
             break;
     }
 
-    return messages::unsaved::cModified;
+    return messages::common::cModified;
 }
 
 static const char* GetTypeText(const ChangeRow& row)
 {
     if (row.isProjectInfo)
-        return messages::unsaved::cTypeProject;
+        return messages::common::cProject;
 
     return GetItemTypeName(row.itemType);
 }
@@ -387,7 +387,7 @@ void DrawUnsavedChangesDialog()
     if (ImGui::BeginTable("UnsavedTable", 4, tableFlags, ImVec2(0.0f, -(CalcDialogFooterHeight() + footerGap))))
     {
         ImGui::TableSetupColumn(messages::item::cColumnId, ImGuiTableColumnFlags_WidthFixed, GetItemIdColumnWidth(Item::ItemType::Sound), static_cast<ImGuiID>(ChangeColumn::Id));
-        ImGui::TableSetupColumn(messages::item::cColumnName, ImGuiTableColumnFlags_WidthStretch, 0.0f, static_cast<ImGuiID>(ChangeColumn::Name));
+        ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch, 0.0f, static_cast<ImGuiID>(ChangeColumn::Name));
         ImGui::TableSetupColumn(cColumns[0].title, ImGuiTableColumnFlags_WidthFixed, GetItemColumnWidth(cColumns[0]), static_cast<ImGuiID>(ChangeColumn::Type));
         ImGui::TableSetupColumn(cColumns[1].title, ImGuiTableColumnFlags_WidthFixed, GetItemColumnWidth(cColumns[1]), static_cast<ImGuiID>(ChangeColumn::Change));
         ImGui::TableSetupScrollFreeze(0, 1);
@@ -422,13 +422,13 @@ void DrawUnsavedChangesDialog()
     ImGui::TextDisabled(rowNum == 1 ? messages::unsaved::cCountOneFormat : messages::unsaved::cCountFormat, rowNum);
     ImGui::SameLine();
 
-    const sead::FormatFixedSafeString<32> goToLabel("%s %s", ICON_LC_EXTERNAL_LINK, messages::dialog::cGoTo);
+    const sead::FormatFixedSafeString<32> goToLabel("%s %s", ICON_LC_EXTERNAL_LINK, messages::common::cGoTo);
 
-    BeginDialogFooter({messages::dialog::cSave, goToLabel.cstr(), messages::dialog::cClose}, false);
+    BeginDialogFooter({messages::common::cSave, goToLabel.cstr(), messages::common::cClose}, false);
 
     bool close = false;
 
-    if (DialogButton(messages::dialog::cSave))
+    if (DialogButton(messages::common::cSave))
     {
         RequestSaveFile();
         close = true;
@@ -444,7 +444,7 @@ void DrawUnsavedChangesDialog()
     if (!canGoTo)
         SetDisabledTooltip(hasSelection ? messages::unsaved::cRemovedReason : messages::unsaved::cNoRowReason);
 
-    if (DialogButton(messages::dialog::cClose) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (DialogButton(messages::common::cClose) || ImGui::IsKeyPressed(ImGuiKey_Escape))
         close = true;
 
     if (goTo && hasSelection && GoToRow(sRows[sSelectedRow]))

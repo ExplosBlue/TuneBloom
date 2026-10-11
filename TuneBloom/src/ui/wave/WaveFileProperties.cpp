@@ -232,9 +232,9 @@ static bool DrawWaveFormatBox(const WaveFile& wave, WaveFile::Encoding* outEncod
     if (!BeginPropertyBox("WaveFormat"))
         return false;
 
-    RegionHeader(messages::wavefile::cFormat);
+    RegionHeader(messages::common::cFormat);
 
-    PropertyRow(messages::wavefile::cEncoding);
+    PropertyRow(messages::common::cEncoding);
     ImGui::SetNextItemWidth(-FLT_MIN);
 
     s32 encoding = static_cast<s32>(wave.getEncoding());
@@ -245,14 +245,14 @@ static bool DrawWaveFormatBox(const WaveFile& wave, WaveFile::Encoding* outEncod
         encodingChanged = true;
     }
 
-    PropertyRow(messages::wavefile::cSampleRate);
+    PropertyRow(messages::common::cSampleRate);
     ImGui::Text(messages::unit::cHertzFormat, wave.getSampleRate());
 
     u32 minutes = 0;
     f64 seconds = 0.0;
     SplitSampleTime(wave.getSampleCount(), wave.getSampleRate(), &minutes, &seconds);
 
-    PropertyRow(messages::wavefile::cLength);
+    PropertyRow(messages::common::cLength);
     ImGui::Text(messages::wavefile::cTimeFormat, minutes, seconds);
     ImGui::SameLine(0.0f, ImGui::GetFontSize());
     ImGui::TextDisabled(messages::wavefile::cSamplesFormat, wave.getSampleCount());
@@ -260,7 +260,7 @@ static bool DrawWaveFormatBox(const WaveFile& wave, WaveFile::Encoding* outEncod
     sead::FixedSafeString<24> channels;
     FormatWaveFileChannels(&wave, &channels);
 
-    PropertyRow(messages::wavefile::cChannels);
+    PropertyRow(messages::common::cChannels);
     ImGui::TextUnformatted(channels.cstr());
 
     EndPropertyBox();
@@ -293,11 +293,11 @@ static void DrawWavePlayButtons(const WaveFile& wave, bool playing, f32 buttonSi
             sSoundPlayer.playWaveFile(wave);
     }
 
-    buttonTooltip(playing ? messages::wavefile::cStop : messages::wavefile::cPlay);
+    buttonTooltip(playing ? messages::common::cStop : messages::common::cPlay);
 
     for (u32 i = 0; channelNum > 1 && i < channelNum; i++)
     {
-        static const char* const sChannelLabels[snd::cWaveChannelMax] = { messages::wavefile::cLeft, messages::wavefile::cRight };
+        static const char* const sChannelLabels[snd::cWaveChannelMax] = { messages::common::cLeft, messages::common::cRight };
         static const char* const sChannelTips[snd::cWaveChannelMax] = { messages::wavefile::cPlayLeft, messages::wavefile::cPlayRight };
 
         ImGui::SameLine();
@@ -392,8 +392,8 @@ static void DrawWaveLoopFields(const WaveFile& wave, WaveFileView& view, WaveLoo
     const u32 sampleCount = edit.sampleCount;
     const u32 sampleRate = wave.getSampleRate();
 
-    const f32 labelWidth = sead::Mathf::max(ImGui::CalcTextSize(messages::wavefile::cLoopStart).x, ImGui::CalcTextSize(messages::wavefile::cLoopEnd).x);
-    const f32 unitWidth = style.ItemSpacing.x + ImGui::CalcTextSize(messages::wavefile::cLoopSamples).x;
+    const f32 labelWidth = sead::Mathf::max(ImGui::CalcTextSize(messages::common::cStart).x, ImGui::CalcTextSize(messages::common::cEnd).x);
+    const f32 unitWidth = style.ItemSpacing.x + ImGui::CalcTextSize(messages::common::cSamples).x;
     const f32 groupGap = ImFloor(em * cWaveLoopGroupGapEm);
     const f32 avail = ImGui::GetContentRegionAvail().x;
     const f32 fieldMin = ImFloor(em * cWaveLoopFieldMinEm);
@@ -403,7 +403,7 @@ static void DrawWaveLoopFields(const WaveFile& wave, WaveFileView& view, WaveLoo
 
     bool commit = false;
 
-    if (DrawWaveLoopField(messages::wavefile::cLoopStart, "##LoopStart", oneLine ? ImGui::CalcTextSize(messages::wavefile::cLoopStart).x : labelWidth, fieldWidth, &view.loopStartFrame, 0, sampleCount > 0 ? sampleCount - 1 : 0, sampleRate, &commit))
+    if (DrawWaveLoopField(messages::common::cStart, "##LoopStart", oneLine ? ImGui::CalcTextSize(messages::common::cStart).x : labelWidth, fieldWidth, &view.loopStartFrame, 0, sampleCount > 0 ? sampleCount - 1 : 0, sampleRate, &commit))
         view.fieldPending = true;
 
     if (commit)
@@ -415,7 +415,7 @@ static void DrawWaveLoopFields(const WaveFile& wave, WaveFileView& view, WaveLoo
     if (oneLine)
         ImGui::SameLine(0.0f, groupGap);
 
-    if (DrawWaveLoopField(messages::wavefile::cLoopEnd, "##LoopEnd", oneLine ? ImGui::CalcTextSize(messages::wavefile::cLoopEnd).x : labelWidth, fieldWidth, &view.loopEndFrame, 1, sead::Mathu::max(sampleCount, 1u), sampleRate, &commit))
+    if (DrawWaveLoopField(messages::common::cEnd, "##LoopEnd", oneLine ? ImGui::CalcTextSize(messages::common::cEnd).x : labelWidth, fieldWidth, &view.loopEndFrame, 1, sead::Mathu::max(sampleCount, 1u), sampleRate, &commit))
         view.fieldPending = true;
 
     if (commit)
@@ -425,14 +425,14 @@ static void DrawWaveLoopFields(const WaveFile& wave, WaveFileView& view, WaveLoo
     }
 
     ImGui::SameLine();
-    ImGui::TextDisabled("%s", messages::wavefile::cLoopSamples);
+    ImGui::TextDisabled("%s", messages::common::cSamples);
 }
 
 static void DrawWaveLoopSection(const WaveFile& wave, WaveFileView& view, WaveLoopEdit& edit)
 {
     bool isLoop = edit.isLoop;
     bool toggled = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Loop", messages::wavefile::cLoop).cstr(), &isLoop, &toggled);
+    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Loop", messages::common::cLoop).cstr(), &isLoop, &toggled);
 
     if (toggled)
         SetWaveLoopFlag(edit, isLoop);
@@ -479,11 +479,11 @@ void WaveFile::drawUI()
     ImVec2 center = ImGui::GetMainViewport()->GetCenter();
     ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 
-    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ALERT_TRIANGLE " %s###ENCODING", messages::wavefile::cEncodingWarningTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ALERT_TRIANGLE " %s###ENCODING", messages::common::cWarning).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::Text("%s", messages::wavefile::cEncodingWarningDetail);
 
-        BeginDialogFooter({messages::dialog::cConvert, messages::dialog::cCancel});
+        BeginDialogFooter({messages::dialog::cConvert, messages::common::cCancel});
 
         if (DialogButton(messages::dialog::cConvert))
         {
@@ -504,7 +504,7 @@ void WaveFile::drawUI()
             ImGui::CloseCurrentPopup();
         }
 
-        if (DialogButton(messages::dialog::cCancel))
+        if (DialogButton(messages::common::cCancel))
         {
             ImGui::CloseCurrentPopup();
         }

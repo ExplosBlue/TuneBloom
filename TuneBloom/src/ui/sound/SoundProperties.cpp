@@ -17,7 +17,7 @@ static constexpr f32 cSoundDecayRatioDefault = 0.5f;
 static const char* cSoundDecayKnobs[]    = { messages::sound::cKnobDecayRatio };
 static const char* cSoundDopplerKnobs[]  = { messages::sound::cKnobDoppler };
 static const char* cSoundRemoteKnobs[]   = { messages::sound::cKnobRemoteFilter };
-static const char* cSoundSectionKnobs[]  = { messages::sound::cKnobPriority, messages::sound::cKnobDecayRatio, messages::sound::cKnobDoppler, messages::sound::cKnobRemoteFilter };
+static const char* cSoundSectionKnobs[]  = { messages::common::cPriority, messages::sound::cKnobDecayRatio, messages::sound::cKnobDoppler, messages::sound::cKnobRemoteFilter };
 
 static const char* cSoundPanModes[]       = { messages::sound::cPanModeDual, messages::sound::cPanModeBalance };
 static const char* cSoundPanCurves[]      = {
@@ -27,12 +27,12 @@ static const char* cSoundPanCurves[]      = {
     messages::sound::cPanCurveSinCos,
     messages::sound::cPanCurveSinCos0Db,
     messages::sound::cPanCurveSinCos0DbClamp,
-    messages::sound::cPanCurveLinear,
+    messages::common::cLinear,
     messages::sound::cPanCurveLinear0Db,
     messages::sound::cPanCurveLinear0DbClamp
 };
-static const char* cSoundDecayCurves[]    = { messages::sound::c3DDecayLog, messages::sound::c3DDecayLinear };
-static const char* cSoundFrontBypasses[]  = { messages::sound::cFrontBypassOff, messages::sound::cFrontBypassOn };
+static const char* cSoundDecayCurves[]    = { messages::sound::c3DDecayLog, messages::common::cLinear };
+static const char* cSoundFrontBypasses[]  = { messages::common::cOff, messages::common::cOn };
 
 static const char* cSoundPanModeDetails[] = { messages::sound::cPanModeDualDetail, messages::sound::cPanModeBalanceDetail };
 static const char* cSoundPanCurveDetails[] = {
@@ -151,7 +151,7 @@ static void DrawSoundPanModeSection(Sound* sound)
         SetUnsavedChanges(true);
     }
 
-    PropertyRow(messages::sound::cPanCurveLabel);
+    PropertyRow(messages::common::cCurve);
 
     s32 panCurve = static_cast<s32>(sound->getPanCurve());
     if (ComboScroll("##panCurve", &panCurve, cSoundPanCurves, cSoundPanCurveDetails, IM_ARRAYSIZE(cSoundPanCurves)))
@@ -173,11 +173,11 @@ static void DrawSound3DSection(Sound* sound)
     };
 
     static const Flag sFlags[] = {
-        { messages::sound::c3DVolume,   Sound::Sound3DInfo::Flags::Volume,   messages::sound::c3DVolumeDetail },
-        { messages::sound::c3DPriority, Sound::Sound3DInfo::Flags::Priority, messages::sound::c3DPriorityDetail },
-        { messages::sound::c3DPan,      Sound::Sound3DInfo::Flags::Pan,      messages::sound::c3DPanDetail },
-        { messages::sound::c3DSurround, Sound::Sound3DInfo::Flags::SPan,     messages::sound::c3DSurroundDetail },
-        { messages::sound::c3DFilter,   Sound::Sound3DInfo::Flags::Filter,   messages::sound::c3DFilterDetail }
+        { messages::common::cVolume,   Sound::Sound3DInfo::Flags::Volume,   messages::sound::c3DVolumeDetail },
+        { messages::common::cPriority, Sound::Sound3DInfo::Flags::Priority, messages::sound::c3DPriorityDetail },
+        { messages::common::cPan,      Sound::Sound3DInfo::Flags::Pan,      messages::sound::c3DPanDetail },
+        { messages::common::cSurround, Sound::Sound3DInfo::Flags::SPan,     messages::sound::c3DSurroundDetail },
+        { messages::common::cFilter,   Sound::Sound3DInfo::Flags::Filter,   messages::sound::c3DFilterDetail }
     };
 
     bool enableSound3DInfo = sound->isEnableSound3DInfo();
@@ -279,7 +279,7 @@ static void DrawPlayerPrioritySection(Sound* sound)
 
     u8 playerPriority = sound->getPlayerPriority();
     SetNextKnobReset(cSoundPriorityDefault);
-    if (KnobU8(sead::FormatFixedSafeString<32>("%s###PlayerPriority", messages::sound::cKnobPriority).cstr(),&playerPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
+    if (KnobU8(sead::FormatFixedSafeString<32>("%s###PlayerPriority", messages::common::cPriority).cstr(),&playerPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
     {
         sound->setPlayerPriority(playerPriority);
         SetUnsavedChanges(true);
@@ -327,7 +327,7 @@ static void DrawChannelPrioritySection(SoundInfo& soundInfo)
 
     u8 channelPriority = soundInfo.getChannelPriority();
     SetNextKnobReset(cSoundPriorityDefault);
-    if (KnobU8(sead::FormatFixedSafeString<32>("%s###ChannelPriority", messages::sound::cKnobPriority).cstr(),&channelPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
+    if (KnobU8(sead::FormatFixedSafeString<32>("%s###ChannelPriority", messages::common::cPriority).cstr(),&channelPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
     {
         soundInfo.setChannelPriority(channelPriority);
         SetUnsavedChanges(true);
@@ -363,9 +363,9 @@ static void DrawSoundPrioritySections(Sound* sound)
 static void DrawSoundTypeUI(Sound* sound)
 {
     static const char* sSoundTypes[] = {
-        messages::sound::cTypeSequence,
-        messages::sound::cTypeStream,
-        messages::sound::cTypeWave
+        messages::common::cSequence,
+        messages::common::cStream,
+        messages::common::cWave
     };
 
     static const char* sSoundTypeDetails[] = {
@@ -391,7 +391,7 @@ static void DrawSoundTypeUI(Sound* sound)
         const ImVec2 headerPos = ImGui::GetCursorScreenPos();
         const f32 comboX = headerPos.x + ImGui::GetContentRegionAvail().x - comboWidth;
 
-        RegionHeader(messages::sound::cTypeLabel,comboWidth + ImGui::GetStyle().ItemSpacing.x);
+        RegionHeader(messages::common::cType,comboWidth + ImGui::GetStyle().ItemSpacing.x);
 
         ImGui::SameLine();
         ImGui::SetCursorScreenPos(ImVec2(comboX, headerPos.y));
@@ -501,7 +501,7 @@ static void DrawSoundOtherSection(Sound* sound)
     {
         s32 frontBypass = sound->isEnableIsFrontBypass() && sound->getIsFrontBypass() ? 1 : 0;
 
-        if (DrawSoundSideCombo(messages::sound::cFrontBypass,messages::sound::cFrontBypassDetail, &frontBypass, cSoundFrontBypasses, cSoundFrontBypassDetails, IM_ARRAYSIZE(cSoundFrontBypasses), stripHeight))
+        if (DrawSoundSideCombo(messages::common::cFrontBypass,messages::sound::cFrontBypassDetail, &frontBypass, cSoundFrontBypasses, cSoundFrontBypassDetails, IM_ARRAYSIZE(cSoundFrontBypasses), stripHeight))
         {
             if (frontBypass == 1)
                 sound->setEnableIsFrontBypass(true);
@@ -523,7 +523,7 @@ void DrawSoundPropertiesUI()
 
     {
         Item* player = sound->getPlayerRef().getItem();
-        if (ItemSelectorRow(messages::sound::cPlayerLabel,sBfsar.getPlayerList(), &player))
+        if (ItemSelectorRow(messages::common::cPlayer,sBfsar.getPlayerList(), &player))
         {
             sound->getPlayerRef().attach(player);
             SetUnsavedChanges(true);

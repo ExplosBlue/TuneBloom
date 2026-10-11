@@ -592,7 +592,7 @@ void ExportPendingBankBundles()
 {
     const sead::FormatFixedSafeString<64> filterName(cBankBundleType.filterNameFormat, cBankBundleType.extension);
 
-    ExportItemsToFiles(&sPendingBankBundleExports, { cBankBundleType.extension, filterName.cstr(), messages::exporting::cFallbackBank, messages::exporting::cSelectFolder },
+    ExportItemsToFiles(&sPendingBankBundleExports, { cBankBundleType.extension, filterName.cstr(), messages::common::cBank, messages::exporting::cSelectFolder },
         [](BankFile* bank, const sead::SafeString& path)
         {
             sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
@@ -848,7 +848,7 @@ void DrawInstrumentImportDialog()
     }
 
     ImGui::SetNextItemWidth(240.0f);
-    ImGui::InputText(messages::import::cNameLabel, sInstrumentImport.nameEdit.getBuffer(), sInstrumentImport.nameEdit.getBufferSize());
+    ImGui::InputText(messages::common::cName, sInstrumentImport.nameEdit.getBuffer(), sInstrumentImport.nameEdit.getBufferSize());
 
     s16 progStep = 1;
     s16 progStepFast = 10;
@@ -861,16 +861,16 @@ void DrawInstrumentImportDialog()
 
     ImGui::Text(messages::import::cWavesToImportFormat, sInstrumentImport.waveCount);
 
-    BeginDialogFooter({messages::dialog::cImport, messages::dialog::cCancel});
+    BeginDialogFooter({messages::common::cImport, messages::common::cCancel});
 
-    if (DialogButton(messages::dialog::cImport))
+    if (DialogButton(messages::common::cImport))
     {
         CommitInstrumentImport();
         CloseInstrumentImport();
         ImGui::CloseCurrentPopup();
     }
 
-    if (DialogButton(messages::dialog::cCancel))
+    if (DialogButton(messages::common::cCancel))
     {
         CloseInstrumentImport();
         ImGui::CloseCurrentPopup();
@@ -972,13 +972,13 @@ bool DrawBankBundleImportDialog()
     bool failed = false;
 
     ImGui::SetNextItemWidth(240.0f);
-    ImGui::InputText(messages::import::cNameLabel, sBankBundleImport.nameEdit.getBuffer(), sBankBundleImport.nameEdit.getBufferSize());
+    ImGui::InputText(messages::common::cName, sBankBundleImport.nameEdit.getBuffer(), sBankBundleImport.nameEdit.getBufferSize());
 
     ImGui::Text(messages::import::cWavesToImportFormat, sBankBundleImport.waveCount);
 
-    BeginDialogFooter({messages::dialog::cImport, messages::dialog::cCancel});
+    BeginDialogFooter({messages::common::cImport, messages::common::cCancel});
 
-    if (DialogButton(messages::dialog::cImport))
+    if (DialogButton(messages::common::cImport))
     {
         if (const char* error = CommitBankBundleImport())
         {
@@ -990,7 +990,7 @@ bool DrawBankBundleImportDialog()
         ImGui::CloseCurrentPopup();
     }
 
-    if (!failed && DialogButton(messages::dialog::cCancel))
+    if (!failed && DialogButton(messages::common::cCancel))
     {
         CloseBankBundleImport();
         ImGui::CloseCurrentPopup();

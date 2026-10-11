@@ -720,7 +720,7 @@ static void DrawKeyRegionGaps(KeyMapFrame& frame, const KeyRegionSpan& span)
 
 static void DrawVelocityRegionName(const KeyMapFrame& frame, BankFile::VelocityRegion* velRegion, const ImVec2& p0, const ImVec2& p1, ImU32 nameColor)
 {
-    const char* name = messages::bank::cRegionNoWaveFile;
+    const char* name = messages::common::cNull;
     if (velRegion->getWaveFileRef().isAttached())
     {
         name = velRegion->getWaveFileRef().getItem()->getName().cstr();

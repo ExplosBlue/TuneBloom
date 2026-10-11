@@ -205,7 +205,7 @@ static void DrawSaveChangesDialog()
         DialogNamedText(messages::saving::cSaveQuestionFormat, backup::GetArchiveName().c_str());
         EndDialogMessage();
 
-        BeginDialogFooter({messages::dialog::cYes, messages::dialog::cNo, messages::dialog::cCancel});
+        BeginDialogFooter({messages::dialog::cYes, messages::dialog::cNo, messages::common::cCancel});
 
         if (DialogButton(messages::dialog::cYes))
         {
@@ -231,7 +231,7 @@ static void DrawSaveChangesDialog()
             ImGui::CloseCurrentPopup();
         }
 
-        if (DialogButton(messages::dialog::cCancel))
+        if (DialogButton(messages::common::cCancel))
         {
             ImGui::CloseCurrentPopup();
 
@@ -272,9 +272,9 @@ static void DrawMetadataWarningDialog()
             if (saveMeta != sBfsar.getSaveMetadata())
                 sBfsar.setSaveMetadata(saveMeta);
 
-            BeginDialogFooter({messages::dialog::cSave, messages::dialog::cCancel});
+            BeginDialogFooter({messages::common::cSave, messages::common::cCancel});
 
-            if (DialogButton(messages::dialog::cSave))
+            if (DialogButton(messages::common::cSave))
             {
                 if (SaveFile())
                 {
@@ -287,7 +287,7 @@ static void DrawMetadataWarningDialog()
                 ImGui::CloseCurrentPopup();
             }
 
-            if (DialogButton(messages::dialog::cCancel))
+            if (DialogButton(messages::common::cCancel))
             {
                 sPendingFileAction = nullptr;
                 sDroppedFilePath.clear();
@@ -376,7 +376,7 @@ static void DrawSaveInUseDialog()
 
             ImGui::Checkbox(messages::saving::cInUseAlwaysSave, &sSaveInUseRemember);
 
-            BeginDialogFooter({messages::dialog::cSaveAnyway, messages::dialog::cTryAgain, messages::dialog::cCancel});
+            BeginDialogFooter({messages::dialog::cSaveAnyway, messages::dialog::cTryAgain, messages::common::cCancel});
 
             if (DialogButton(messages::dialog::cSaveAnyway))
             {
@@ -410,7 +410,7 @@ static void DrawSaveInUseDialog()
                 }
             }
 
-            if (DialogButton(messages::dialog::cCancel))
+            if (DialogButton(messages::common::cCancel))
             {
                 sBfsar.cancelPendingSaveFinalize();
                 ImGui::CloseCurrentPopup();
@@ -479,7 +479,7 @@ static void DrawNewFileFormatDialog()
     {
         CenterNextDialog();
 
-        if (BeginDialog(sead::FormatFixedSafeString<64>("%s###NewFileFormat", messages::archive::cNewTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (BeginDialog(sead::FormatFixedSafeString<64>("%s###NewFileFormat", messages::common::cNewArchive).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             static int sSelected = 0;
             static u32 sVersion = 0;
@@ -512,11 +512,11 @@ static void DrawNewFileFormatDialog()
             ImGui::Checkbox(messages::archive::cIncludeStringTable, &sIncludeStringTable);
             DetailTooltip(messages::project::cStringTableDetail);
 
-            BeginDialogFooter({messages::dialog::cCreate, messages::dialog::cCancel});
+            BeginDialogFooter({messages::dialog::cCreate, messages::common::cCancel});
 
             bool create = DialogButton(messages::dialog::cCreate);
 
-            if (DialogButton(messages::dialog::cCancel))
+            if (DialogButton(messages::common::cCancel))
                 ImGui::CloseCurrentPopup();
 
             if (create)

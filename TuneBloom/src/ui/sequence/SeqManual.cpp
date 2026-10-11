@@ -568,7 +568,7 @@ const TextEditor::LanguageDefinition& GetSeqLanguageDefinition()
 
     sInited = true;
 
-    sLangDef.mName = messages::sequence::cLanguageName;
+    sLangDef.mName = messages::common::cSequence;
     sLangDef.mTokenize = &TokenizeSeq;
     sLangDef.mDescribe = &DescribeSeqWord;
     sLangDef.mIsFoldHeader = &IsSeqFoldHeader;

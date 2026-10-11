@@ -411,9 +411,9 @@ static void FormatWaveFileRateColumn(const Item* item, sead::BufferedSafeString*
 static void FormatChannelCount(sead::BufferedSafeString* out, s64 channels)
 {
     if (channels == 1)
-        out->copy(messages::item::cChannelsMono);
+        out->copy(messages::common::cMono);
     else if (channels == 2)
-        out->copy(messages::item::cChannelsStereo);
+        out->copy(messages::common::cStereo);
     else
         FormatCount(out, channels);
 }
@@ -475,15 +475,15 @@ static void FormatSoundTypeColumn(const Item* item, sead::BufferedSafeString* ou
     switch (static_cast<const Sound*>(item)->getSoundType())
     {
         case Sound::SoundType::Strm:
-            out->copy(messages::item::cSoundTypeStream);
+            out->copy(messages::common::cStream);
             return;
 
         case Sound::SoundType::Wave:
-            out->copy(messages::item::cSoundTypeWave);
+            out->copy(messages::common::cWave);
             return;
 
         case Sound::SoundType::Seq:
-            out->copy(messages::item::cSoundTypeSequence);
+            out->copy(messages::common::cSequence);
             return;
 
         default:
@@ -616,39 +616,39 @@ static void DrawWaveFileLoopTooltip(const Item* item)
 }
 
 static const ItemColumn cSoundColumns[] = {
-    { "Type",messages::item::cColumnType,   "PLAYER_SE_OBJ_ENAB", &FormatSoundTypeColumn,   &GetSoundTypeKey,   cItemColumnFlag_Text | cItemColumnFlag_Hidden },
-    { "Player", messages::item::cColumnPlayer, "PLAYER_SE_OBJ_ENAB", &FormatSoundPlayerColumn, &GetSoundPlayerKey, cItemColumnFlag_Text | cItemColumnFlag_Hidden }
+    { "Type",messages::common::cType,   "PLAYER_SE_OBJ_ENAB", &FormatSoundTypeColumn,   &GetSoundTypeKey,   cItemColumnFlag_Text | cItemColumnFlag_Hidden },
+    { "Player", messages::common::cPlayer, "PLAYER_SE_OBJ_ENAB", &FormatSoundPlayerColumn, &GetSoundPlayerKey, cItemColumnFlag_Text | cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cStreamSoundColumns[] = {
-    { "Tracks",   messages::item::cColumnTracks,   "0",                             &FormatSoundTracksColumn,    &GetSoundTracksKey,    cItemColumnFlag_Hidden },
-    { "Channels", messages::item::cColumnChannels, messages::item::cChannelsStereo, &FormatStreamChannelsColumn, &GetStreamChannelsKey, cItemColumnFlag_Hidden },
-    { "Length",   messages::item::cColumnLength,   cLoopLengthSample,               &FormatStreamLengthColumn,   &GetStreamLengthKey,   cItemColumnFlag_None, &DrawStreamLoopTooltip },
-    { "Player",   messages::item::cColumnPlayer,   "PLAYER_SE_OBJ_ENAB",            &FormatSoundPlayerColumn,    &GetSoundPlayerKey,    cItemColumnFlag_Text | cItemColumnFlag_Hidden }
+    { "Tracks",   messages::common::cTracks,   "0",                             &FormatSoundTracksColumn,    &GetSoundTracksKey,    cItemColumnFlag_Hidden },
+    { "Channels", messages::common::cChannels, messages::common::cStereo, &FormatStreamChannelsColumn, &GetStreamChannelsKey, cItemColumnFlag_Hidden },
+    { "Length",   messages::common::cLength,   cLoopLengthSample,               &FormatStreamLengthColumn,   &GetStreamLengthKey,   cItemColumnFlag_None, &DrawStreamLoopTooltip },
+    { "Player",   messages::common::cPlayer,   "PLAYER_SE_OBJ_ENAB",            &FormatSoundPlayerColumn,    &GetSoundPlayerKey,    cItemColumnFlag_Text | cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cWaveSoundColumns[] = {
-    { "Length",    messages::item::cColumnLength,   cLoopLengthSample,    &FormatWaveSoundLengthColumn,   &GetWaveSoundLengthKey,   cItemColumnFlag_None, &DrawWaveSoundLoopTooltip },
-    { "Wave File", messages::item::cColumnWaveFile, "PLAYER_SE_OBJ_ENAB", &FormatWaveSoundWaveFileColumn, &GetWaveSoundWaveFileKey, cItemColumnFlag_Text | cItemColumnFlag_TextEnd | cItemColumnFlag_Hidden },
-    { "Player",    messages::item::cColumnPlayer,   "PLAYER_SE_OBJ_ENAB", &FormatSoundPlayerColumn,       &GetSoundPlayerKey,       cItemColumnFlag_Text | cItemColumnFlag_Hidden }
+    { "Length",    messages::common::cLength,   cLoopLengthSample,    &FormatWaveSoundLengthColumn,   &GetWaveSoundLengthKey,   cItemColumnFlag_None, &DrawWaveSoundLoopTooltip },
+    { "Wave File", messages::common::cWaveFile, "PLAYER_SE_OBJ_ENAB", &FormatWaveSoundWaveFileColumn, &GetWaveSoundWaveFileKey, cItemColumnFlag_Text | cItemColumnFlag_TextEnd | cItemColumnFlag_Hidden },
+    { "Player",    messages::common::cPlayer,   "PLAYER_SE_OBJ_ENAB", &FormatSoundPlayerColumn,       &GetSoundPlayerKey,       cItemColumnFlag_Text | cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cSequenceSoundColumns[] = {
-    { "Sequence File", messages::item::cColumnSequence, "PLAYER_SE_OBJ_ENAB", &FormatSoundSequenceFileColumn, &GetSoundSequenceFileKey, cItemColumnFlag_Text | cItemColumnFlag_Hidden },
-    { "Player",        messages::item::cColumnPlayer,   "PLAYER_SE_OBJ_ENAB", &FormatSoundPlayerColumn,       &GetSoundPlayerKey,       cItemColumnFlag_Text | cItemColumnFlag_Hidden }
+    { "Sequence File", messages::common::cSequenceFile, "PLAYER_SE_OBJ_ENAB", &FormatSoundSequenceFileColumn, &GetSoundSequenceFileKey, cItemColumnFlag_Text | cItemColumnFlag_Hidden },
+    { "Player",        messages::common::cPlayer,   "PLAYER_SE_OBJ_ENAB", &FormatSoundPlayerColumn,       &GetSoundPlayerKey,       cItemColumnFlag_Text | cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cSoundSetColumns[] = {
-    { "Sounds", messages::item::cColumnSounds, "0000",      &FormatSoundSetSoundsColumn, &GetSoundSetSoundsKey },
+    { "Sounds", messages::common::cSounds, "0000",      &FormatSoundSetSoundsColumn, &GetSoundSetSoundsKey },
     { "IDs",    messages::item::cColumnIds,    "0000-0000", &FormatSoundSetIdsColumn,    &GetSoundSetIdsKey, cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cGroupColumns[] = {
-    { "Items", messages::item::cColumnItems, "0000", &FormatGroupItemsColumn, &GetGroupItemsKey }
+    { "Items", messages::common::cItems, "0000", &FormatGroupItemsColumn, &GetGroupItemsKey }
 };
 
 static const ItemColumn cPlayerColumns[] = {
-    { "Sounds",      messages::item::cColumnSounds, "0000", &FormatSoundRefsColumn,   &GetSoundRefsKey, cItemColumnFlag_WarnZero },
+    { "Sounds",      messages::common::cSounds, "0000", &FormatSoundRefsColumn,   &GetSoundRefsKey, cItemColumnFlag_WarnZero },
     { "Sound Limit", messages::player::cSoundLimit,  "000",  &FormatPlayerLimitColumn, &GetPlayerLimitKey, cItemColumnFlag_Hidden }
 };
 
@@ -658,33 +658,33 @@ static const ItemColumn cWaveArchiveColumns[] = {
 
 static const ItemColumn cWaveFileColumns[] = {
     { "Uses",     messages::item::cColumnUses,     "0000",     &FormatRefsColumn,             &GetRefsKey, cItemColumnFlag_WarnZero | cItemColumnFlag_Hidden },
-    { "Length",   messages::item::cColumnLength,   cLoopLengthSample, &FormatWaveFileLengthColumn, &GetWaveFileLengthKey, cItemColumnFlag_None, &DrawWaveFileLoopTooltip },
-    { "Channels", messages::item::cColumnChannels, messages::item::cChannelsStereo, &FormatWaveFileChannels,      &GetWaveFileChannelsKey, cItemColumnFlag_Hidden },
+    { "Length",   messages::common::cLength,   cLoopLengthSample, &FormatWaveFileLengthColumn, &GetWaveFileLengthKey, cItemColumnFlag_None, &DrawWaveFileLoopTooltip },
+    { "Channels", messages::common::cChannels, messages::common::cStereo, &FormatWaveFileChannels,      &GetWaveFileChannelsKey, cItemColumnFlag_Hidden },
     { "Rate",     messages::item::cColumnRate,     messages::unit::cHertzSample, &FormatWaveFileRateColumn,    &GetWaveFileRateKey,     cItemColumnFlag_Hidden },
-    { "Encoding", messages::item::cColumnEncoding, messages::wavefile::cEncodingDspAdpcm, &FormatWaveFileEncodingColumn, &GetWaveFileEncodingKey, cItemColumnFlag_Hidden },
-    { "Size",     messages::item::cColumnSize,     messages::unit::cKilobytesSample, &FormatWaveFileSizeColumn,   &GetWaveFileSizeKey,     cItemColumnFlag_Hidden }
+    { "Encoding", messages::common::cEncoding, messages::wavefile::cEncodingDspAdpcm, &FormatWaveFileEncodingColumn, &GetWaveFileEncodingKey, cItemColumnFlag_Hidden },
+    { "Size",     messages::common::cSize,     messages::unit::cKilobytesSample, &FormatWaveFileSizeColumn,   &GetWaveFileSizeKey,     cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cSequenceFileColumns[] = {
-    { "Sounds", messages::item::cColumnSounds, "0000",      &FormatSoundRefsColumn,      &GetSoundRefsKey, cItemColumnFlag_WarnZero },
-    { "Labels", messages::item::cColumnLabels, "0000",      &FormatSequenceLabelsColumn, &GetSequenceLabelsKey, cItemColumnFlag_Hidden, &DrawSequenceLabelsTooltip },
-    { "Size",   messages::item::cColumnSize,   messages::unit::cSizeSample, &FormatSequenceSizeColumn,  &GetSequenceSizeKey, cItemColumnFlag_Hidden }
+    { "Sounds", messages::common::cSounds, "0000",      &FormatSoundRefsColumn,      &GetSoundRefsKey, cItemColumnFlag_WarnZero },
+    { "Labels", messages::common::cLabels, "0000",      &FormatSequenceLabelsColumn, &GetSequenceLabelsKey, cItemColumnFlag_Hidden, &DrawSequenceLabelsTooltip },
+    { "Size",   messages::common::cSize,   messages::unit::cSizeSample, &FormatSequenceSizeColumn,  &GetSequenceSizeKey, cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cBankFileColumns[] = {
-    { "Instruments", messages::item::cColumnInstruments, "0000", &FormatBankFileInstrumentsColumn, &GetBankFileInstrumentsKey, cItemColumnFlag_None, &DrawBankFileInstrumentsTooltip },
+    { "Instruments", messages::common::cInstruments, "0000", &FormatBankFileInstrumentsColumn, &GetBankFileInstrumentsKey, cItemColumnFlag_None, &DrawBankFileInstrumentsTooltip },
     { "Waves",       messages::item::cColumnWaves,       "0000", &FormatBankFileWavesColumn,       &GetBankFileWavesKey, cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cBankColumns[] = {
-    { "Sounds",      messages::item::cColumnSounds,      "0000", &FormatSoundRefsColumn,       &GetSoundRefsKey, cItemColumnFlag_WarnZero },
-    { "Instruments", messages::item::cColumnInstruments, "0000", &FormatBankInstrumentsColumn, &GetBankInstrumentsKey, cItemColumnFlag_Hidden },
-    { "Bank File",   messages::item::cColumnBankFile,    "PLAYER_SE_OBJ_ENAB", &FormatBankFileColumn, &GetBankFileKey, cItemColumnFlag_Text | cItemColumnFlag_Hidden }
+    { "Sounds",      messages::common::cSounds,      "0000", &FormatSoundRefsColumn,       &GetSoundRefsKey, cItemColumnFlag_WarnZero },
+    { "Instruments", messages::common::cInstruments, "0000", &FormatBankInstrumentsColumn, &GetBankInstrumentsKey, cItemColumnFlag_Hidden },
+    { "Bank File",   messages::common::cBankFile,    "PLAYER_SE_OBJ_ENAB", &FormatBankFileColumn, &GetBankFileKey, cItemColumnFlag_Text | cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cInstrumentColumns[] = {
     { "Waves",     messages::item::cColumnWaves,    "0000",               &FormatInstrumentWavesColumn,    &GetInstrumentWavesKey, cItemColumnFlag_WarnZero | cItemColumnFlag_Hidden },
-    { "Wave File", messages::item::cColumnWaveFile, "PLAYER_SE_OBJ_ENAB", &FormatInstrumentWaveFileColumn, &GetInstrumentWaveFileKey, cItemColumnFlag_Text | cItemColumnFlag_TextEnd }
+    { "Wave File", messages::common::cWaveFile, "PLAYER_SE_OBJ_ENAB", &FormatInstrumentWaveFileColumn, &GetInstrumentWaveFileKey, cItemColumnFlag_Text | cItemColumnFlag_TextEnd }
 };
 
 const char* GetItemTypeName(Item::ItemType itemType)
@@ -692,40 +692,40 @@ const char* GetItemTypeName(Item::ItemType itemType)
     switch (itemType)
     {
         case Item::ItemType::Sound:
-            return messages::item::cTypeSound;
+            return messages::common::cSound;
 
         case Item::ItemType::SoundSet:
             return messages::item::cTypeSoundSet;
 
         case Item::ItemType::Bank:
-            return messages::item::cTypeBank;
+            return messages::common::cBank;
 
         case Item::ItemType::WaveArchive:
-            return messages::item::cTypeWaveArchive;
+            return messages::common::cWaveArchive;
 
         case Item::ItemType::Group:
-            return messages::item::cTypeGroup;
+            return messages::common::cGroup;
 
         case Item::ItemType::Player:
-            return messages::item::cTypePlayer;
+            return messages::common::cPlayer;
 
         case Item::ItemType::WaveFile:
-            return messages::item::cTypeWaveFile;
+            return messages::common::cWaveFile;
 
         case Item::ItemType::SequenceFile:
-            return messages::item::cTypeSequenceFile;
+            return messages::common::cSequenceFile;
 
         case Item::ItemType::BankFile:
-            return messages::item::cTypeBankFile;
+            return messages::common::cBankFile;
 
         case Item::ItemType::BankFileInstrument:
-            return messages::item::cTypeInstrument;
+            return messages::common::cInstrument;
 
         default:
             break;
     }
 
-    return messages::item::cTypeItem;
+    return messages::common::cItem;
 }
 
 const ItemColumn* GetItemColumns(Item::ItemType itemType, u32* outCount)

@@ -142,6 +142,38 @@ bool DrawNavRow(const char* icon, const char* name, bool selected, const char* v
     return pressed;
 }
 
+f32 CalcNavRowGap()
+{
+    return ImFloor(ImGui::GetFontSize() * cProjectRowGapEm);
+}
+
+ImVec2 CalcNavBoxPadding(bool roomy)
+{
+    const f32 em = ImGui::GetFontSize();
+
+    return ImVec2(ImFloor(em * cProjectBoxPadXEm), roomy ? ImFloor(CalcNavRowGap() * 0.5f) + 1.0f : ImFloor(em * cProjectBoxPadYEm));
+}
+
+bool BeginNavBox(const char* id, const ImVec2& padding, bool border, f32 width)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, border ? padding : ImVec2(padding.x + 1.0f, 0.0f));
+
+    if (!ImGui::BeginTable(id, 1, border ? ImGuiTableFlags_BordersOuter : ImGuiTableFlags_PadOuterX, ImVec2(width, 0.0f)))
+    {
+        ImGui::PopStyleVar();
+        return false;
+    }
+
+    ImGui::TableNextColumn();
+    return true;
+}
+
+void EndNavBox()
+{
+    ImGui::EndTable();
+    ImGui::PopStyleVar();
+}
+
 static bool DrawProjectRow(const ProjectRow& row, s32 count, f32 indent)
 {
     const sead::FormatFixedSafeString<16> text("%d", count);
@@ -168,12 +200,12 @@ void DrawProjectUI()
         const s32 rowNum = static_cast<s32>(IM_ARRAYSIZE(cProjectRows));
         const s32 groupNum = cProjectRows[rowNum - 1].group + 1;
 
-        const f32 rowGap = ImFloor(em * cProjectRowGapEm);
-        const f32 roomyPadY = ImFloor(rowGap * 0.5f) + 1.0f;
+        const f32 rowGap = CalcNavRowGap();
+        const f32 roomyPadY = CalcNavBoxPadding(true).y;
         const f32 roomyHeight = rowNum * em + (rowNum - groupNum) * rowGap + groupNum * roomyPadY * 2.0f + (groupNum - 1) * rowGap;
         const bool roomy = ImGui::GetContentRegionAvail().y >= roomyHeight;
 
-        const ImVec2 boxPad(ImFloor(em * cProjectBoxPadXEm), roomy ? roomyPadY : ImFloor(em * cProjectBoxPadYEm));
+        const ImVec2 boxPad = CalcNavBoxPadding(roomy);
         const f32 childIndent = ImFloor(em * cProjectChildIndentEm);
         s32 group = -1;
         f32 indent = 0.0f;
@@ -185,8 +217,7 @@ void DrawProjectUI()
             if (group < 0)
                 return;
 
-            ImGui::EndTable();
-            ImGui::PopStyleVar();
+            EndNavBox();
             group = -1;
         };
 
@@ -196,18 +227,11 @@ void DrawProjectUI()
             {
                 endGroup();
 
-                const bool border = roomy || row.counted;
-                ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, border ? boxPad : ImVec2(boxPad.x + 1.0f, 0.0f));
-
-                if (!ImGui::BeginTable(sead::FormatFixedSafeString<16>("##Group%d", row.group).cstr(), 1, border ? ImGuiTableFlags_BordersOuter : ImGuiTableFlags_PadOuterX))
-                {
-                    ImGui::PopStyleVar();
+                if (!BeginNavBox(sead::FormatFixedSafeString<16>("##Group%d", row.group).cstr(), boxPad, roomy || row.counted))
                     break;
-                }
 
                 group = row.group;
                 indent = 0.0f;
-                ImGui::TableNextColumn();
             }
 
             if (DrawProjectRow(row, counts[static_cast<size_t>(row.type)], indent))

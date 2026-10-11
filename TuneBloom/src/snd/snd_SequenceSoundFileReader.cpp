@@ -57,7 +57,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::DataBlock* dataBlock = header->GetDataBlock();
     if (!dataBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cDataBlockNotFoundFormat,seqFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, seqFmt, "DATA").cstr());
         return;
     }
 
@@ -69,7 +69,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::LabelBlock* labelBlock = header->GetLabelBlock();
     if (!labelBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cLablBlockNotFoundFormat,seqFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, seqFmt, "LABL").cstr());
         return;
     }
 

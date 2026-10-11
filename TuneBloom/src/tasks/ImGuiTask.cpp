@@ -241,5 +241,5 @@ static void SetupImGuiStyle()
     LoadInterfaceConfig();
     ApplyInterfaceConfig();
     ApplyThemeFromAccent(gAccentColor);
-    OpenLastArchiveAtStartup();
+    RunStartupAction();
 }

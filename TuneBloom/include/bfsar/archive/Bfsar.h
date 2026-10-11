@@ -467,7 +467,6 @@ public:
 
     struct WaveMergeResult
     {
-        u32 groups = 0;
         u32 duplicatesRemoved = 0;
         u64 bytesSaved = 0;
     };

@@ -3,6 +3,7 @@
 #include <ui/settings/ConfigFile.h>
 #include <core/TestHooks.h>
 #include <ui/settings/Theme.h>
+#include <ui/widgets/TimeUtil.h>
 #include <ui/widgets/WindowAnimation.h>
 
 #include <imgui/imgui_custom.h>
@@ -283,6 +284,7 @@ void SaveInterfaceConfig()
     section.setFloat("tooltipDelay", sInterfaceSettings.tooltipDelay);
     section.setFloat("scrollSpeed", sInterfaceSettings.scrollSpeed);
     section.setFloat("uiScale", sInterfaceSettings.uiScale);
+    section.setBool("twelveHourClock", sInterfaceSettings.twelveHourClock);
 
     SaveConfigSection(cSettingsFile, cInterfaceSection, section);
 }
@@ -298,6 +300,7 @@ void LoadInterfaceConfig()
     sInterfaceSettings.tooltipDelay = sead::Mathf::clamp2(cTooltipDelayMin, section.getFloat("tooltipDelay", sInterfaceSettings.tooltipDelay), cTooltipDelayMax);
     sInterfaceSettings.scrollSpeed = sead::Mathf::clamp2(cScrollSpeedMin, section.getFloat("scrollSpeed", sInterfaceSettings.scrollSpeed), cScrollSpeedMax);
     sInterfaceSettings.uiScale = sead::Mathf::clamp2(cUIScaleMin, section.getFloat("uiScale", sInterfaceSettings.uiScale), cUIScaleMax);
+    sInterfaceSettings.twelveHourClock = section.getBool("twelveHourClock", sInterfaceSettings.twelveHourClock);
 }
 
 void ApplyInterfaceConfig()
@@ -310,6 +313,7 @@ void ApplyInterfaceConfig()
     ImGui::SetWheelScrollSpeed(sInterfaceSettings.scrollSpeed);
     ImGui::GetStyle().HoverDelayNormal = sInterfaceSettings.tooltipDelay;
     SetWindowShadows(sInterfaceSettings.windowShadows);
+    timeutil::SetTwelveHourClock(sInterfaceSettings.twelveHourClock);
 }
 
 void InitUIScale()
@@ -333,13 +337,31 @@ StartupSettings& GetStartupSettings()
     return sStartupSettings;
 }
 
+static constexpr const char* cStartupActionKeys[] = { "startPage", "lastArchive" };
+
+static StartupAction ReadStartupAction(const json::Value& startup)
+{
+    const std::string* key = startup.findString("action");
+
+    if (!key)
+        return startup.getBool("reopenLastArchive", false) ? StartupAction::LastArchive : StartupAction::StartPage;
+
+    for (s32 i = 0; i < IM_ARRAYSIZE(cStartupActionKeys); i++)
+    {
+        if (*key == cStartupActionKeys[i])
+            return static_cast<StartupAction>(i);
+    }
+
+    return StartupAction::StartPage;
+}
+
 void SaveStartupConfig()
 {
     if (testhooks::IsEnabled())
         return;
 
     json::Value startup;
-    startup.setBool("reopenLastArchive", sStartupSettings.reopenLastArchive);
+    startup.setString("action", cStartupActionKeys[static_cast<s32>(sStartupSettings.action)]);
     startup.setInt("recentFileCount", sStartupSettings.recentFileCount);
 
     SaveConfigSection(cSettingsFile, cStartupSection, startup);
@@ -350,7 +372,7 @@ void LoadStartupConfig()
     json::Value startup;
     LoadConfigSection(cSettingsFile, cStartupSection, &startup);
 
-    sStartupSettings.reopenLastArchive = startup.getBool("reopenLastArchive", sStartupSettings.reopenLastArchive);
+    sStartupSettings.action = ReadStartupAction(startup);
     sStartupSettings.recentFileCount = sead::Mathi::clamp2(cRecentFileCountMin, startup.getInt("recentFileCount", sStartupSettings.recentFileCount), cRecentFileCountMax);
 
     json::Value session;

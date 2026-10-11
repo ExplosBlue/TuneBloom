@@ -8,7 +8,8 @@ f32 CalcPropertyLabelWidth();
 void PropertyRow(const char* label, const char* help = nullptr);
 bool PropertyToggleRow(const char* label, bool* enabled);
 
-bool BeginPropertySection(const char* title, bool* enabled = nullptr, bool* changed = nullptr, bool defaultOpen = true, s32 columnNum = 1, const char* detail = nullptr, const char* value = nullptr);
+void DrawSectionTitle(const char* title, f32 width);
+bool BeginPropertySection(const char* title, bool* enabled = nullptr, bool* changed = nullptr, bool defaultOpen = true, s32 columnNum = 1, const char* detail = nullptr, const char* value = nullptr, const char* enableDetail = nullptr);
 void EndPropertySection();
 void RegisterPropertySettings();
 

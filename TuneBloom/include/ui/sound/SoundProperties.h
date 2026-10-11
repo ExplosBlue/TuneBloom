@@ -8,6 +8,7 @@ f32 TrailingButtonsWidth(s32 count);
 bool TrailingButton(const char* label);
 bool ItemSelectorRow(const char* label, const Item::List& list, Item** item, bool allowNone = false, f32 trailingWidth = 0.0f);
 bool DrawSoundPanelHeader(const char* title, bool* enabled);
+bool BeginSoundSection(const char* title, bool* enabled, bool* changed, const char* detail = nullptr);
 
 template <typename DrawFn>
 void DrawSoundSideField(const char* label, const char* detail, f32 fieldWidth, f32 knobHeight, DrawFn draw)

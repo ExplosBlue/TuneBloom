@@ -870,7 +870,7 @@ void BankFile::drawFileUI()
             ImGui::SameLine();
             if (ImGui::SmallButton(ICON_LC_KEYBOARD "###KeyboardHelp"))
                 ImGui::OpenPopup("Keyboard Help");
-            ImGui::SetItemTooltip("%s", messages::bank::cComputerKeysTooltip);
+            ImGui::SetItemTooltip("%s", messages::keyboard::cHelpTitle);
             if (ImGui::BeginPopup("Keyboard Help"))
             {
                 ImGui::TextUnformatted(messages::keyboard::cHelpTitle);

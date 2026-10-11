@@ -530,7 +530,7 @@ static void DrawSeqVarRows(const SeqVarUse* use)
         if (!IsSeqVarTrackRowShown(trackNo, use))
             continue;
 
-        DrawSeqVarRow(sead::FormatFixedSafeString<16>(messages::playback::cSeqVarTrackFormat, trackNo).cstr(), SoundPlayer::SeqVarScope::Track, trackNo, use ? use->track[trackNo] : 0);
+        DrawSeqVarRow(sead::FormatFixedSafeString<16>(messages::stream::cTrackNameFormat, trackNo).cstr(), SoundPlayer::SeqVarScope::Track, trackNo, use ? use->track[trackNo] : 0);
     }
 }
 

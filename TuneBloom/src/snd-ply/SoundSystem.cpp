@@ -18,7 +18,6 @@
 #include <heap/seadHeapMgr.h>
 #include <thread/seadThreadUtil.h>
 
-#include <atomic>
 #include <cmath>
 #include <cstring>
 
@@ -376,33 +375,6 @@ static void InitDevice()
     ma_device_start(&device);
 }
 
-static constexpr f32 cTestToneHz         = 440.0f;
-static constexpr f32 cTestToneGain        = 0.25f;
-static constexpr u32 cTestToneSamples     = internal::driver::HardwareMgr::cSampleRate;
-static constexpr u32 cTestToneFadeSamples = internal::driver::HardwareMgr::cSampleRate / 100;
-
-static std::atomic<bool> sTestToneRequest{false};
-static u32 sTestTonePos = cTestToneSamples;
-
-static void MixTestTone(f32** data, u32 sampleCount, u32 channelCount)
-{
-    if (sTestToneRequest.exchange(false))
-        sTestTonePos = 0;
-
-    const f32 volume = internal::driver::HardwareMgr::instance()->getMasterVolume() * cTestToneGain * 32767.0f;
-    const f32 step = 2.0f * sead::Mathf::pi() * cTestToneHz / internal::driver::HardwareMgr::cSampleRate;
-
-    for (u32 i = 0; i < sampleCount && sTestTonePos < cTestToneSamples; i++, sTestTonePos++)
-    {
-        const u32 edge = sead::Mathu::min(sTestTonePos, cTestToneSamples - sTestTonePos);
-        const f32 fade = sead::Mathf::min(static_cast<f32>(edge) / cTestToneFadeSamples, 1.0f);
-        const f32 sample = std::sin(step * sTestTonePos) * volume * fade;
-
-        for (u32 ch = 0; ch < channelCount; ch++)
-            data[ch][i] += sample;
-    }
-}
-
 static void DataCallback(ma_device* pDevice, void* pOutput, const void*, ma_uint32 frameCount)
 {
     const u32 cChannelCount   = internal::driver::HardwareMgr::cChannelCount;
@@ -413,7 +385,6 @@ static void DataCallback(ma_device* pDevice, void* pOutput, const void*, ma_uint
     f32* dataBuffers[cChannelCount] = { internal::driver::HardwareMgr::sLeftDataBuffer, internal::driver::HardwareMgr::sRightDataBuffer };
 
     internal::driver::HardwareMgr::resetFinalMixCallbackData();
-    MixTestTone(dataBuffers, cInternalFrames, cChannelCount);
     internal::driver::HardwareMgr::processFinalMixCallback(dataBuffers, cInternalFrames, cChannelCount);
 
     f32* outData = (f32*)pOutput;
@@ -583,11 +554,6 @@ SoundSystem::OutputInfo SoundSystem::getOutputInfo()
         info.bufferMsec = device.playback.internalPeriodSizeInFrames * device.playback.internalPeriods * 1000 / info.sampleRate;
 
     return info;
-}
-
-void SoundSystem::playTestTone()
-{
-    sTestToneRequest.store(true);
 }
 
 void SoundSystem::setOutputMode(OutputMode mode)

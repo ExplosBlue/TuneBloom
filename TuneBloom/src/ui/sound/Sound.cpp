@@ -225,7 +225,7 @@ static bool ValidateStreamTracks(const Sound::StreamSoundInfo& strmInfo, sead::B
         {
             if (track.getChannels_().isEmpty())
             {
-                error.format(messages::stream::cTrackNoWaveFileFormat, i);
+                error.format(messages::playback::cTrackNoWaveFileFormat, i);
                 return false;
             }
 

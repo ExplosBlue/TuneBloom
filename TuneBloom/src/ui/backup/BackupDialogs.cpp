@@ -7,6 +7,7 @@
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>
 #include <ui/file/UnsavedChanges.h>
+#include <ui/widgets/TimeUtil.h>
 #include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
@@ -14,7 +15,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <ctime>
 
 namespace backup
 {
@@ -53,40 +53,6 @@ static const char* GetKindLabel(Kind kind)
     default:
         return messages::backup::cKindAuto;
     }
-}
-
-static void FormatDate(s64 time, char* buffer, size_t size)
-{
-    const std::time_t stamp = static_cast<std::time_t>(time);
-    const std::time_t now = std::time(nullptr);
-
-    const std::tm* dayPtr = std::localtime(&stamp);
-    if (!dayPtr)
-    {
-        std::snprintf(buffer, size, "%s", messages::backup::cDateUnknown);
-        return;
-    }
-
-    std::tm day = *dayPtr;
-    std::tm today = *std::localtime(&now);
-
-    char clock[16];
-    std::strftime(clock, sizeof(clock), "%H:%M", &day);
-
-    std::tm dayStart = day;
-    dayStart.tm_hour = dayStart.tm_min = dayStart.tm_sec = 0;
-
-    std::tm todayStart = today;
-    todayStart.tm_hour = todayStart.tm_min = todayStart.tm_sec = 0;
-
-    const f64 days = std::difftime(std::mktime(&todayStart), std::mktime(&dayStart)) / (60.0 * 60.0 * 24.0);
-
-    if (days < 0.5 && days > -0.5)
-        std::snprintf(buffer, size, messages::backup::cTodayFormat, clock);
-    else if (days > 0.5 && days < 1.5)
-        std::snprintf(buffer, size, messages::backup::cYesterdayFormat, clock);
-    else
-        std::strftime(buffer, size, messages::backup::cDateFormat, &day);
 }
 
 void FormatSize(u64 size, char* buffer, size_t bufferSize)
@@ -132,7 +98,7 @@ static bool DrawRestoreRows()
         const Snapshot& snapshot = sDialogSnapshots[i];
 
         char date[48];
-        FormatDate(snapshot.time, date, sizeof(date));
+        timeutil::FormatDate(date, sizeof(date), snapshot.time);
 
         char size[32];
         FormatSize(snapshot.size, size, sizeof(size));
@@ -319,7 +285,7 @@ static void DrawRecoverRows(const Snapshot& snapshot)
         ImGui::TableSetupColumn("##Value", ImGuiTableColumnFlags_WidthFixed);
 
         char date[48];
-        FormatDate(snapshot.time, date, sizeof(date));
+        timeutil::FormatDate(date, sizeof(date), snapshot.time);
 
         char size[32];
         FormatSize(snapshot.size, size, sizeof(size));

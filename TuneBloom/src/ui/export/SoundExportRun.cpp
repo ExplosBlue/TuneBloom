@@ -61,7 +61,6 @@ static sead::FixedSafeString<256> sExportOriginalTitle;
 void DrawShowExportedFilesCheck()
 {
     ImGui::Checkbox(messages::exporting::cShowFiles, &sShowExportedFiles);
-    DetailTooltip(messages::exporting::cShowFilesDetail);
 }
 
 void ShowExportedFiles(const sead::SafeString& path)

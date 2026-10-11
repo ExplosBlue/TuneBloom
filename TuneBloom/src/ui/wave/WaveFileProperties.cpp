@@ -235,12 +235,11 @@ static bool DrawWaveFormatBox(const WaveFile& wave, WaveFile::Encoding* outEncod
     RegionHeader(messages::wavefile::cFormat);
 
     PropertyRow(messages::wavefile::cEncoding);
-    DetailTooltip(messages::wavefile::cEncodingDetail);
     ImGui::SetNextItemWidth(-FLT_MIN);
 
     s32 encoding = static_cast<s32>(wave.getEncoding());
 
-    if (ComboScroll("##Encoding", &encoding, WaveFile::sEncodingTypes, cWaveEncodingDetails, IM_ARRAYSIZE(WaveFile::sEncodingTypes), messages::wavefile::cEncodingDetail) && encoding != static_cast<s32>(wave.getEncoding()))
+    if (ComboScroll("##Encoding", &encoding, WaveFile::sEncodingTypes, cWaveEncodingDetails, IM_ARRAYSIZE(WaveFile::sEncodingTypes)) && encoding != static_cast<s32>(wave.getEncoding()))
     {
         *outEncoding = static_cast<WaveFile::Encoding>(encoding);
         encodingChanged = true;
@@ -433,7 +432,7 @@ static void DrawWaveLoopSection(const WaveFile& wave, WaveFileView& view, WaveLo
 {
     bool isLoop = edit.isLoop;
     bool toggled = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Loop", messages::wavefile::cLoop).cstr(), &isLoop, &toggled, true, 1, messages::wavefile::cLoopDetail);
+    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Loop", messages::wavefile::cLoop).cstr(), &isLoop, &toggled);
 
     if (toggled)
         SetWaveLoopFlag(edit, isLoop);

@@ -60,13 +60,13 @@ GroupFileReader::GroupFileReader(const void* groupFile)
 
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cInfoBlockNotFoundFormat,grpFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, grpFmt, "INFO").cstr());
         return;
     }
 
     if (!fileBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cFileBlockNotFoundFormat,grpFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, grpFmt, "FILE").cstr());
         return;
     }
 

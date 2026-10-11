@@ -799,7 +799,7 @@ void StreamTrackImport::drawMainRow()
     }
 
     ImGui::TableNextColumn();
-    ImGui::Text(messages::import::cTrackImportTrackFormat, 0);
+    ImGui::Text(messages::stream::cTrackNameFormat, 0);
 
     ImGui::TableNextColumn();
 
@@ -875,7 +875,7 @@ void StreamTrackImport::drawFileRow(u32 index, const FileTracks& tracks, u32 fir
     else if (tracks.side)
         ImGui::Text(messages::import::cTrackImportTrackSideFormat, firstTrackIndex + tracks.first, tracks.side);
     else
-        ImGui::Text(messages::import::cTrackImportTrackFormat, firstTrackIndex + tracks.first);
+        ImGui::Text(messages::stream::cTrackNameFormat, firstTrackIndex + tracks.first);
 
     ImGui::TableNextColumn();
     ImGui::BeginDisabled(index == 0);
@@ -1062,12 +1062,11 @@ void StreamTrackImport::drawSettings(const ImportTarget& target, bool locked)
 void StreamTrackImport::drawLayoutRow()
 {
     const char* layoutNames[] = { messages::import::cTrackImportLayoutPerFile, messages::import::cTrackImportLayoutPairMono, messages::import::cTrackImportLayoutPerChannel };
-    const char* layoutDetails[] = { messages::import::cTrackImportLayoutPerFileDetail, messages::import::cTrackImportLayoutPairMonoDetail, messages::import::cTrackImportLayoutPerChannelDetail };
+    const char* layoutDetails[] = { messages::import::cTrackImportLayoutPerFileDetail, messages::import::cTrackImportLayoutPairMonoDetail, nullptr };
 
     DialogRow(messages::import::cTrackImportLayout);
-    DetailTooltip(messages::import::cTrackImportLayoutDetail);
     ImGui::SetNextItemWidth(-FLT_MIN);
-    ComboScroll("##layout", reinterpret_cast<s32*>(&layout), layoutNames, layoutDetails, IM_ARRAYSIZE(layoutNames), messages::import::cTrackImportLayoutDetail);
+    ComboScroll("##layout", reinterpret_cast<s32*>(&layout), layoutNames, layoutDetails, IM_ARRAYSIZE(layoutNames));
 }
 
 void StreamTrackImport::drawNotes(const ImportTarget& target, bool locked, bool isCreate) const

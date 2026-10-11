@@ -65,6 +65,7 @@ void SetItemTableEdge(s32 column, f32 inset);
 void SetItemTableNameMin(f32 width);
 void DrawItemHeadersRow(const ItemColumn* columns, u32 columnCount, const f32* widths = nullptr);
 bool EndItemTable(const ItemColumn* columns, u32 columnCount, const std::vector<Item*>& rows, const f32* autoWidths, f32* nameWidth = nullptr);
+void DrawItemValueCell(const char* text, u32 flags, s32 index = -1, bool unused = false);
 void DrawItemColumnCells(const Item* item, const ItemColumn* columns, u32 columnCount, bool rowHovered = false);
 void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* text, ImU32 color, bool alignRight = false);
 bool IsItemNotLoaded(const Item* item);

@@ -78,13 +78,13 @@ WaveFileReader::WaveFileReader(const void* waveFile, s8 waveType)
 
             if (!infoBlock)
             {
-                PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cInfoBlockNotFoundFormat,waveFmt).cstr());
+                PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, waveFmt, "INFO").cstr());
                 return;
             }
 
             if (!dataBlock)
             {
-                PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cDataBlockNotFoundFormat,waveFmt).cstr());
+                PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, waveFmt, "DATA").cstr());
                 return;
             }
 

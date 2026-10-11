@@ -37,5 +37,5 @@ void WarningPopup(const char* name, const char* content);
 
 inline void DupeNamePopup(const char* name = "###Dupe")
 {
-    WarningPopup(name, messages::item::cDuplicateNameDetail);
+    WarningPopup(name, messages::item::cNameDuplicated);
 }

@@ -28,16 +28,36 @@ void ShowInFileManager(const std::string& path)
 
     const std::string args = "/select,\"" + file + "\"";
     ShellExecuteA(nullptr, "open", "explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+#elif defined(SEAD_PLATFORM_MACOSX)
+    if (path.find('\'') != std::string::npos)
+        return;
+
+    const std::string command = "open -R '" + path + "'";
+    system(command.c_str());
+#else
+    const size_t separator = path.find_last_of("/\\");
+    OpenFolder(separator == std::string::npos ? std::string() : path.substr(0, separator));
+#endif
+}
+
+void OpenFolder(const std::string& path)
+{
+    if (testhooks::IsEnabled() || path.empty())
+        return;
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    std::string folder = path;
+    std::replace(folder.begin(), folder.end(), '/', '\\');
+
+    ShellExecuteA(nullptr, "open", folder.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #else
     if (path.find('\'') != std::string::npos)
         return;
 
 #if defined(SEAD_PLATFORM_MACOSX)
-    const std::string command = "open -R '" + path + "'";
+    const std::string command = "open '" + path + "'";
 #else
-    const size_t separator = path.find_last_of("/\\");
-    const std::string folder = separator == std::string::npos ? std::string() : path.substr(0, separator);
-    const std::string command = "xdg-open '" + folder + "'";
+    const std::string command = "xdg-open '" + path + "'";
 #endif
     system(command.c_str());
 #endif

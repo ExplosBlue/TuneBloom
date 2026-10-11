@@ -68,8 +68,6 @@ bool DrawBiquadTypeCombo(u8* biquadType, f32 width)
 
         ImGui::EndCombo();
     }
-    else
-        DetailTooltip(messages::sound::cBiquadTypeDetail);
 
     return changed;
 }
@@ -203,7 +201,7 @@ static void DrawSoundFilterKnobs(Sound::WaveSoundInfo& waveSoundInfo)
     KnobTooltip("%.3f", static_cast<f32>(biquadValue) / 127.0f);
     DetailTooltip(messages::sound::cBiquadDetail);
 
-    DrawSoundSideField(cSoundBiquadLabel, messages::sound::cBiquadTypeDetail, CalcBiquadTypeWidth(), stripHeight, [&]
+    DrawSoundSideField(cSoundBiquadLabel, nullptr, CalcBiquadTypeWidth(), stripHeight, [&]
     {
         u8 biquadType = waveSoundInfo.getBiquadType();
         if (DrawBiquadTypeCombo(&biquadType, CalcBiquadTypeWidth()))

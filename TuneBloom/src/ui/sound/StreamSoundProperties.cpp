@@ -223,11 +223,61 @@ static void DrawStreamPathUI(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo
     DrawStreamReloadSummary(sound, strmSoundInfo);
 }
 
+static void LoopRowTooltip(bool fromWaveFile)
+{
+    if (fromWaveFile)
+        SetDisabledTooltip(messages::stream::cLoopFromWaveFile);
+}
+
+static void DrawStreamLoopRows(Sound::StreamSoundInfo& strmSoundInfo)
+{
+    const bool fromWaveFile = strmSoundInfo.getStreamType() != Sound::StreamSoundInfo::StreamType::Adts;
+    const WaveFile* mainWave = fromWaveFile ? strmSoundInfo.getMainWave() : nullptr;
+
+    bool isLoop = mainWave ? mainWave->getIsLoop() : strmSoundInfo.getIsLoop();
+    u32 loopStartFrame = mainWave ? mainWave->getOriginalLoopStartFrame() : strmSoundInfo.getLoopStartFrame();
+    u32 loopEndFrame = mainWave ? mainWave->getOriginalLoopEndFrame() : strmSoundInfo.getLoopEndFrame();
+
+    ImGui::BeginDisabled(fromWaveFile);
+
+    PropertyRow(messages::stream::cLoopLabel);
+
+    if (ImGui::Checkbox("##isLoop", &isLoop))
+    {
+        strmSoundInfo.setIsLoop(isLoop);
+        SetUnsavedChanges(true);
+    }
+
+    LoopRowTooltip(fromWaveFile);
+
+    PropertyRow(messages::stream::cLoopStartLabel);
+
+    if (ImGui::InputScalar("##loopStart", ImGuiDataType_U32, &loopStartFrame))
+    {
+        strmSoundInfo.setLoopStartFrame(loopStartFrame);
+        SetUnsavedChanges(true);
+    }
+
+    LoopRowTooltip(fromWaveFile);
+
+    PropertyRow(messages::stream::cLoopEndLabel);
+
+    if (ImGui::InputScalar("##loopEnd", ImGuiDataType_U32, &loopEndFrame))
+    {
+        strmSoundInfo.setLoopEndFrame(loopEndFrame);
+        SetUnsavedChanges(true);
+    }
+
+    LoopRowTooltip(fromWaveFile);
+
+    ImGui::EndDisabled();
+}
+
 void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
 {
     bool enableStreamSoundExtension = strmSoundInfo.isEnableStreamSoundExtension();
     bool changed = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Extension", messages::stream::cExtensionTitle).cstr(),&enableStreamSoundExtension, &changed, true, 1, messages::stream::cExtensionDetail);
+    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Extension", messages::stream::cExtensionTitle).cstr(), &enableStreamSoundExtension, &changed);
 
     if (changed)
     {
@@ -246,62 +296,15 @@ void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
         u32 streamTypeCount = sBfsar.isV3Bfsar() || streamType + 1 == Sound::StreamSoundInfo::StreamType::Opus ? IM_ARRAYSIZE(streamTypeLabels) : IM_ARRAYSIZE(streamTypeLabels) - 1;
 
         PropertyRow(messages::stream::cTypeLabel);
-        DetailTooltip(messages::stream::cTypeDetail);
 
-        if (ComboScroll("##streamType", (s32 *)&streamType, streamTypeLabels, streamTypeDetails, streamTypeCount, messages::stream::cTypeDetail))
+        if (ComboScroll("##streamType", (s32 *)&streamType, streamTypeLabels, streamTypeDetails, streamTypeCount))
         {
             strmSoundInfo.setStreamType(static_cast<Sound::StreamSoundInfo::StreamType>(streamType + 1));
             SetUnsavedChanges(true);
         }
     }
 
-    {
-        const bool isNative = strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary;
-        const sead::FormatFixedSafeString<64> loopDetail(messages::stream::cLoopNativeDetailFormat, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream));
-
-        PropertyRow(messages::stream::cLoopLabel);
-
-        if (isNative)
-            DetailTooltip(loopDetail.cstr());
-
-        bool isLoop = strmSoundInfo.getIsLoop();
-        if (ImGui::Checkbox("##isLoop", &isLoop))
-        {
-            strmSoundInfo.setIsLoop(isLoop);
-            SetUnsavedChanges(true);
-        }
-
-        if (isNative)
-            DetailTooltip(loopDetail.cstr());
-    }
-
-    {
-        PropertyRow(messages::stream::cLoopStartLabel);
-        DetailTooltip(messages::stream::cLoopStartDetail);
-
-        u32 loopStartFrame = strmSoundInfo.getLoopStartFrame();
-        if (ImGui::InputScalar("##loopStart", ImGuiDataType_U32, &loopStartFrame))
-        {
-            strmSoundInfo.setLoopStartFrame(loopStartFrame);
-            SetUnsavedChanges(true);
-        }
-
-        DetailTooltip(messages::stream::cLoopStartDetail);
-    }
-
-    {
-        PropertyRow(messages::stream::cLoopEndLabel);
-        DetailTooltip(messages::stream::cLoopEndDetail);
-
-        u32 loopEndFrame = strmSoundInfo.getLoopEndFrame();
-        if (ImGui::InputScalar("##loopEnd", ImGuiDataType_U32, &loopEndFrame))
-        {
-            strmSoundInfo.setLoopEndFrame(loopEndFrame);
-            SetUnsavedChanges(true);
-        }
-
-        DetailTooltip(messages::stream::cLoopEndDetail);
-    }
+    DrawStreamLoopRows(strmSoundInfo);
 
     if (sBfsar.isV3Bfsar())
     {

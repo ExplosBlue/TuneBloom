@@ -236,12 +236,12 @@ namespace opusstream
                 p += 8;
 
                 if (packetLength == 0 || packetLength > end - p)
-                    return fail(messages::opus::cPacketFramingCorrupt);
+                    return fail(messages::opus::cAudioDataDamaged);
 
                 int frames = opus_packet_get_nb_samples(base + p, packetLength, sampleRate);
 
                 if (frames < 0)
-                    return fail(messages::opus::cPacketInvalid);
+                    return fail(messages::opus::cAudioDataDamaged);
 
                 totalFrames += frames;
                 p += packetLength;
@@ -294,7 +294,7 @@ namespace opusstream
                 if (frames < 0)
                 {
                     cleanup();
-                    return fail(messages::opus::cDecodeError);
+                    return fail(messages::opus::cDecodeFailed);
                 }
 
                 p += packetLength;
@@ -446,7 +446,7 @@ namespace opusstream
 
                 if (globalChannelIndex < 0 || static_cast<u32>(globalChannelIndex) >= channelBuffers.size())
                 {
-                    sead::FormatFixedSafeString<1024> msg(messages::opus::cTrackNoChannelsFormat, trackNo);
+                    sead::FormatFixedSafeString<1024> msg(messages::playback::cTrackNoChannelsFormat, trackNo);
                     PopupMgr::instance()->addPopup({msg, sound});
                     continue;
                 }
@@ -536,7 +536,7 @@ namespace opusstream
         };
 
         if (tracks.isEmpty())
-            return fail(messages::opus::cEncodeNoTracks);
+            return fail(messages::stream::cTrackNone);
 
         const WaveFile *waves[8] = {};
         u32 waveCount = 0;
@@ -547,7 +547,7 @@ namespace opusstream
             const Sound::StreamSoundInfo::Track &track = *static_cast<const Sound::StreamSoundInfo::Track *>(tracks.nth(i)->val());
 
             if (!track.getWaveFileRef().isAttached())
-                return fail(messages::opus::cEncodeTrackNoWaveFile);
+                return fail(sead::FormatFixedSafeString<64>(messages::playback::cTrackNoWaveFileFormat, i).cstr());
 
             const WaveFile *wave = static_cast<const WaveFile *>(track.getWaveFileRef().getItem());
             waves[waveCount++] = wave;
@@ -569,14 +569,14 @@ namespace opusstream
         for (u32 i = 0; i < waveCount; i++)
         {
             if (waves[i]->getSampleRate() != sampleRate)
-                return fail(messages::opus::cEncodeTracksSampleRate);
+                return fail(messages::stream::cTracksSameSampleRate);
 
             if (waves[i]->getSampleCount() > sampleCount)
                 sampleCount = waves[i]->getSampleCount();
         }
 
         if (sampleCount == 0)
-            return fail(messages::opus::cEncodeNoSampleData);
+            return fail(messages::wavefile::cNoData);
 
         std::vector<const std::vector<float> *> channels;
         std::vector<DecodedPcm> decoded(waveCount);

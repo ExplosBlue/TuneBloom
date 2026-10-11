@@ -77,7 +77,7 @@ static const char* sExportFilesItems[] = {
 };
 static const char* sExportFilesDetails[] = {
     messages::exporting::cFilesOneDetail,
-    messages::exporting::cFilesEachTrackDetail
+    nullptr
 };
 static const char* sExportSeqFilesItems[] = {
     messages::exporting::cFilesSeqOne,
@@ -414,7 +414,6 @@ static f64 DrawExportTimelineBox(const SoundExportSummary& summary, s32 count)
         ImGui::SetNextItemWidth(fieldWidth);
         SetNextKnobReset(cExportFadeSecDefault);
         DragField("##FadeOut", ImGuiDataType_Float, &sSettings.fadeSec, cPropertyDragSpeed, &cExportFadeSecMin, &cExportFadeSecMax, messages::exporting::cFadeOutFormat);
-        DetailTooltip(messages::exporting::cFadeOutDetail);
     }
 
     // Length

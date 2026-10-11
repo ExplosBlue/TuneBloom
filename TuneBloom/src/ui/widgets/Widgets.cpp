@@ -345,6 +345,32 @@ void CenteredText(const char* text, const ImVec2& sizeArg)
     ImGui::Text("%s", text);
 }
 
+void CenteredTextWrapped(const char* text, f32 width)
+{
+    const f32 left = ImGui::GetCursorPosX();
+    const char* end = text + strlen(text);
+    ImFont* font = ImGui::GetFont();
+    const f32 scale = ImGui::GetFontSize() / font->FontSize;
+
+    while (text < end)
+    {
+        const char* lineEnd = font->CalcWordWrapPositionA(scale, text, end, width);
+        if (lineEnd == text)
+            lineEnd++;
+
+        const char* textEnd = lineEnd;
+        while (textEnd > text && textEnd[-1] == ' ')
+            textEnd--;
+
+        ImGui::SetCursorPosX(left + ImFloor((width - ImGui::CalcTextSize(text, textEnd).x) * 0.5f));
+        ImGui::TextUnformatted(text, textEnd);
+
+        text = lineEnd;
+        while (text < end && *text == ' ')
+            text++;
+    }
+}
+
 std::string CutPathStart(const std::string& path, size_t maxLength)
 {
     const size_t markLength = strlen(messages::backup::cPathCutMark);

@@ -351,7 +351,7 @@ static void MergeDuplicateWaves(std::vector<Bfsar::WaveDuplicateGroup>* groups)
         SetUnsavedChanges(true);
 
         sead::FixedSafeString<128> msg;
-        msg.format(messages::item::cMergeResultFormat,r.duplicatesRemoved, r.groups, FormatByteSize(r.bytesSaved).cstr());
+        msg.format(r.duplicatesRemoved == 1 ? messages::item::cMergeResultOneFormat : messages::item::cMergeResultFormat, r.duplicatesRemoved, FormatByteSize(r.bytesSaved).cstr());
         notify::Add(notify::Kind::Success, msg.cstr());
     }
 }
@@ -399,7 +399,7 @@ static void DrawMergeDuplicatesDialog(std::vector<Bfsar::WaveDuplicateGroup>* gr
             saved += d->getFileSize();
     }
 
-    ImGui::Text(messages::item::cMergeQuestionFormat, removeCount);
+    ImGui::Text(removeCount == 1 ? messages::item::cMergeQuestionOneFormat : messages::item::cMergeQuestionFormat, removeCount);
 
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextDisabled(messages::item::cMergeDetailFormat,FormatByteSize(saved).cstr());

@@ -14,6 +14,7 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/project/ProjectViews.h>
 #include <ui/widgets/Properties.h>
+#include <ui/widgets/TimeUtil.h>
 #include <ui/file/RecentFiles.h>
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>
@@ -31,6 +32,7 @@
 #include <snd/SoundSystem.h>
 
 #include <cstring>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -365,7 +367,7 @@ static void DrawBackupFolderRow()
     const bool empty = sBackupCount == 0;
 
     if (DrawValueButtonRow(messages::preferences::cBackupFolderLabel, empty ? messages::preferences::cBackupUsageNone : usage.cstr(), empty, messages::preferences::cOpenFolder, sBackupFolderFound))
-        ShowInFileManager(backup::GetRootFolder());
+        OpenFolder(backup::GetRootFolder());
 }
 
 static void DrawBackupRows()
@@ -442,12 +444,9 @@ static void DrawSavingRows()
 static void DrawAssociationRow()
 {
     const bool associated = sAssociation == fileassoc::State::ThisCopy;
-    const bool otherCopy = sAssociation == fileassoc::State::OtherCopy;
+    const char* text = associated ? messages::preferences::cAssociationOn : messages::preferences::cAssociationNone;
 
-    const char* text = associated ? messages::preferences::cAssociationOn : otherCopy ? messages::preferences::cAssociationOther : messages::preferences::cAssociationNone;
-    const char* detail = otherCopy ? messages::preferences::cAssociationOtherDetail : messages::preferences::cAssociationDetail;
-
-    if (!DrawValueButtonRow(messages::preferences::cAssociationLabel, text, sAssociation == fileassoc::State::None, associated ? messages::preferences::cAssociationRemove : messages::preferences::cAssociationAdd, true, detail))
+    if (!DrawValueButtonRow(messages::preferences::cAssociationLabel, text, !associated, associated ? messages::preferences::cAssociationRemove : messages::preferences::cAssociationAdd, true, messages::preferences::cAssociationDetail))
         return;
 
     if (!(associated ? fileassoc::Remove() : fileassoc::Register()))
@@ -460,9 +459,19 @@ static void DrawOpeningRows()
 {
     StartupSettings& settings = GetStartupSettings();
 
-    // Reopen last archive
-    if (DrawCheckRow(messages::preferences::cReopenLabel, "##Reopen", &settings.reopenLastArchive, messages::preferences::cReopenDetail))
-        SaveStartupConfig();
+    // Startup
+    {
+        const char* labels[] = { messages::preferences::cStartupStartPage, messages::preferences::cStartupLastArchive };
+        const char* details[] = { messages::preferences::cStartupStartPageDetail, nullptr };
+        s32 selected = static_cast<s32>(settings.action);
+
+        DrawRowLabel(messages::preferences::cStartupLabel);
+        if (ComboScroll("##Startup", &selected, labels, details, IM_ARRAYSIZE(labels)))
+        {
+            settings.action = static_cast<StartupAction>(selected);
+            SaveStartupConfig();
+        }
+    }
 
     // Recent files
     if (DrawCountSliderRow(messages::preferences::cRecentCountLabel, "##RecentCount", &settings.recentFileCount, cRecentFileCountMin, cRecentFileCountMax, cRecentFileCountDefault))
@@ -562,11 +571,10 @@ static void DrawPlaybackRows()
     // Output mode
     {
         const char* labels[] = { messages::preferences::cOutputStereo, messages::preferences::cOutputMono };
-        const char* details[] = { messages::preferences::cOutputStereoDetail, messages::preferences::cOutputMonoDetail };
         s32 selected = settings.monoOutput ? 1 : 0;
 
         DrawRowLabel(messages::preferences::cOutputModeLabel);
-        if (ComboScroll("##OutputMode", &selected, labels, details, IM_ARRAYSIZE(labels), messages::preferences::cOutputModeDetail))
+        if (ComboScroll("##OutputMode", &selected, labels, IM_ARRAYSIZE(labels)))
         {
             settings.monoOutput = selected == 1;
             snd::SoundSystem::setOutputMode(settings.monoOutput ? snd::OutputMode::Mono : snd::OutputMode::Stereo);
@@ -594,7 +602,7 @@ static void DrawPlaybackRows()
     {
         bool visible = IsOutputMeterWindowVisible();
 
-        if (DrawCheckRow(messages::preferences::cOutputMeterLabel, "##OutputMeter", &visible, messages::preferences::cOutputMeterDetail))
+        if (DrawCheckRow(messages::preferences::cOutputMeterLabel, "##OutputMeter", &visible))
             SetOutputMeterWindowVisible(visible);
     }
 }
@@ -634,17 +642,11 @@ static void DrawAudioPage()
         EndGroupBox();
     }
 
-    bool testTone = false;
-
-    if (BeginGroupBox(messages::preferences::cBoxPlayback, messages::preferences::cTestTone, &testTone))
+    if (BeginGroupBox(messages::preferences::cBoxPlayback))
     {
-        DrawDetailTooltip(messages::preferences::cTestToneDetail);
         DrawPlaybackRows();
         EndGroupBox();
     }
-
-    if (testTone)
-        snd::SoundSystem::playTestTone();
 }
 
 static bool IsMidiDevicePresent(const char* name)
@@ -708,11 +710,10 @@ static void DrawMidiNotesBox()
     // Velocity
     {
         const char* labels[] = { messages::preferences::cVelocityDevice, messages::preferences::cVelocityFixed };
-        const char* details[] = { messages::preferences::cVelocityDeviceDetail, messages::preferences::cVelocityFixedDetail };
         s32 selected = settings.fixedVelocity ? 1 : 0;
 
         DrawRowLabel(messages::preferences::cVelocityLabel);
-        if (ComboScroll("##Velocity", &selected, labels, details, IM_ARRAYSIZE(labels), messages::preferences::cVelocityDetail))
+        if (ComboScroll("##Velocity", &selected, labels, IM_ARRAYSIZE(labels)))
         {
             settings.fixedVelocity = selected == 1;
             SaveMidiConfig();
@@ -1011,6 +1012,30 @@ static bool DrawTooltipDelayRow(f32* seconds)
     return true;
 }
 
+static bool DrawTimeFormatRow(bool* twelveHour)
+{
+    const s64 now = static_cast<s64>(std::time(nullptr));
+    sead::FixedSafeString<32> texts[2];
+
+    for (s32 i = 0; i < 2; i++)
+    {
+        char clock[16];
+        timeutil::FormatTimeOfDay(clock, sizeof(clock), now, i == 1);
+        texts[i].format(i == 1 ? messages::preferences::cTimeFormat12Format : messages::preferences::cTimeFormat24Format, clock);
+    }
+
+    const char* labels[] = { texts[0].cstr(), texts[1].cstr() };
+    s32 selected = *twelveHour ? 1 : 0;
+
+    DrawRowLabel(messages::preferences::cTimeFormatLabel);
+
+    if (!ComboScroll("##TimeFormat", &selected, labels, IM_ARRAYSIZE(labels)))
+        return false;
+
+    *twelveHour = selected == 1;
+    return true;
+}
+
 static bool DrawUIScaleRow(f32* scale)
 {
     sead::FixedSafeString<8> texts[IM_ARRAYSIZE(cUIScales)];
@@ -1030,8 +1055,6 @@ static bool DrawUIScaleRow(f32* scale)
 
     const bool changed = ComboScroll("##UIScale", &selected, labels, IM_ARRAYSIZE(cUIScales));
 
-    DrawDetailTooltip(messages::preferences::cUIScaleDetail);
-
     if (changed)
         *scale = cUIScales[selected];
 
@@ -1050,8 +1073,8 @@ static void DrawInterfacePage()
     if (BeginGroupBox(messages::preferences::cBoxMotion))
     {
         selected |= DrawCheckRow(messages::preferences::cAnimationsLabel, "##Animations", &settings.animations, messages::preferences::cAnimationsDetail);
-        selected |= DrawCheckRow(messages::preferences::cSmoothScrollLabel, "##SmoothScroll", &settings.smoothScrolling, messages::preferences::cSmoothScrollDetail);
-        dragged |= DrawAmountSliderRow(messages::preferences::cScrollSpeedLabel, "##ScrollSpeed", &settings.scrollSpeed, cScrollSpeedMin, cScrollSpeedMax, cScrollSpeedDefault, messages::preferences::cScrollSpeedDetail, &released);
+        selected |= DrawCheckRow(messages::preferences::cSmoothScrollLabel, "##SmoothScroll", &settings.smoothScrolling);
+        dragged |= DrawAmountSliderRow(messages::preferences::cScrollSpeedLabel, "##ScrollSpeed", &settings.scrollSpeed, cScrollSpeedMin, cScrollSpeedMax, cScrollSpeedDefault, nullptr, &released);
         EndGroupBox();
     }
 
@@ -1060,8 +1083,9 @@ static void DrawInterfacePage()
     if (restart ? BeginGroupBoxWithStatus(messages::preferences::cBoxDisplay, messages::preferences::cUIScaleRestart) : BeginGroupBox(messages::preferences::cBoxDisplay))
     {
         selected |= DrawUIScaleRow(&settings.uiScale);
-        selected |= DrawCheckRow(messages::preferences::cShadowsLabel, "##Shadows", &settings.windowShadows, messages::preferences::cShadowsDetail);
+        selected |= DrawCheckRow(messages::preferences::cShadowsLabel, "##Shadows", &settings.windowShadows);
         selected |= DrawTooltipDelayRow(&settings.tooltipDelay);
+        selected |= DrawTimeFormatRow(&settings.twelveHourClock);
         EndGroupBox();
     }
 
@@ -1119,7 +1143,7 @@ static void DrawAdvancedPage()
         const std::string folder = GetConfigDir();
 
         if (DrawValueButtonRow(messages::preferences::cSettingsFolderLabel, CutPathStart(folder, cFolderTextMax).c_str(), false, messages::preferences::cOpenFolder, true))
-            ShowInFileManager(folder);
+            OpenFolder(folder);
 
         EndGroupBox();
     }

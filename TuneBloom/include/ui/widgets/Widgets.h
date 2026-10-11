@@ -29,6 +29,7 @@ bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format, bool showLabel = true)
 bool DrawInnerVersionUI(u32 *versionPtr, u32 versionByteNum = 3);
 
 void CenteredText(const char* text, const ImVec2& sizeArg = ImGui::GetWindowSize());
+void CenteredTextWrapped(const char* text, f32 width);
 
 inline void CenteredTextX(const char* text, f32 sizeX = ImGui::GetWindowSize().x)
 {

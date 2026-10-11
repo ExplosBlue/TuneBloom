@@ -273,7 +273,30 @@ static constexpr f32 cPropertySectionBandPadEm = 0.15f;
 static constexpr f32 cPropertySectionPadXEm    = 0.5f;
 static constexpr f32 cPropertySectionPadYEm    = 0.4f;
 
-bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool defaultOpen, s32 columnNum, const char* detail, const char* value)
+static void DrawSectionBand(const ImVec2& min, const ImVec2& max, ImU32 fill)
+{
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const ImVec2 bandMax(max.x + 1.0f, max.y);
+
+    draw->AddRectFilled(min, bandMax, fill);
+    draw->AddRect(min, bandMax, ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
+}
+
+void DrawSectionTitle(const char* title, f32 width)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 bandPad = ImFloor(ImGui::GetFontSize() * cPropertySectionBandPadEm);
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const ImVec2 max(pos.x + width, pos.y + ImGui::GetFrameHeight() + bandPad * 2.0f);
+
+    DrawSectionBand(pos, max, ImGui::GetColorU32(ImGuiCol_FrameBg));
+    ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + bandPad + style.FramePadding.x, pos.y + bandPad + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), title);
+
+    ImGui::Dummy(ImVec2(width, max.y - pos.y));
+    ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y - 1.0f));
+}
+
+bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool defaultOpen, s32 columnNum, const char* detail, const char* value, const char* enableDetail)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
@@ -284,7 +307,6 @@ bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool 
     const f32 checkArea = enabled ? frameHeight + bandPad * 2.0f : 0.0f;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const ImVec2 max(pos.x + width, pos.y + height);
-    const ImVec2 bandMax(max.x + 1.0f, max.y);
 
     const char* key = strstr(title, "###");
     bool* fold = FindPropertyFoldState(key ? key + 3 : title, defaultOpen);
@@ -300,8 +322,7 @@ bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool 
     DetailTooltip(detail);
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    draw->AddRectFilled(pos, bandMax, ImGui::GetHoverColorU32(ImGui::GetID("##fold") + 1, hovered, held, ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgActive));
-    draw->AddRect(pos, bandMax, ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
+    DrawSectionBand(pos, max, ImGui::GetHoverColorU32(ImGui::GetID("##fold") + 1, hovered, held, ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgActive));
 
     const ImU32 textColor = ImGui::GetColorU32(on ? ImGuiCol_Text : ImGuiCol_TextDisabled);
     const ImVec2 arrowPos(pos.x + bandPad + style.FramePadding.x, pos.y + bandPad + style.FramePadding.y);
@@ -321,8 +342,8 @@ bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool 
         enableChanged = ImGui::Checkbox("##enable", enabled);
         ImGui::PopStyleColor();
 
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", messages::sound::cPanelEnableDetail);
+        if (enableDetail && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("%s", enableDetail);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y));
         ImGui::Dummy(ImVec2(0.0f, 0.0f));

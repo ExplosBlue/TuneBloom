@@ -5,6 +5,7 @@
 #include <ui/widgets/Knob.h>
 #include <ui/Messages.h>
 #include <ui/settings/Theme.h>
+#include <ui/widgets/TimeUtil.h>
 #include <ui/widgets/WindowAnimation.h>
 
 #include <libs/IconsLucide.h>
@@ -414,8 +415,6 @@ static void DrawList()
         }
         else
         {
-            const f32 timeWidth = ImGui::CalcTextSize("00:00").x;
-
             ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, ImFloor(em * cListMaxHeightEm)));
 
             if (ImGui::BeginChild("##List", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY))
@@ -430,14 +429,16 @@ static void DrawList()
 
                     const ImVec2 start = ImGui::GetCursorPos();
 
+                    char text[16];
+                    timeutil::FormatTimeOfDay(text, sizeof(text), static_cast<s64>(entry.time));
+
+                    const f32 timeWidth = ImGui::CalcTextSize(text).x;
+
                     DrawEntryText(entry, timeWidth + style.ItemSpacing.x);
 
                     const ImVec2 end = ImGui::GetCursorPos();
 
-                    char text[16];
-                    std::strftime(text, sizeof(text), "%H:%M", std::localtime(&entry.time));
-
-                    ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize(text).x, start.y));
+                    ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - timeWidth, start.y));
                     ImGui::TextDisabled("%s", text);
 
                     ImGui::SetCursorPos(end);

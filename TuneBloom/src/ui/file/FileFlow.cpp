@@ -429,7 +429,7 @@ static void DrawRemoveUnusedFilesDialog()
 
         if (BeginDialog(sead::FormatFixedSafeString<64>("%s###RemoveUnusedFiles", messages::saving::cUnusedTitle).cstr(), nullptr, ImGuiWindowFlags_NoResize))
         {
-            ImGui::Text(messages::saving::cUnusedCountFormat, sPendingUnusedWaves.size());
+            ImGui::Text(sPendingUnusedWaves.size() == 1 ? messages::saving::cUnusedCountOneFormat : messages::saving::cUnusedCountFormat, sPendingUnusedWaves.size());
 
             ImGui::Separator();
             ImGui::BeginChild("UnusedList", ImVec2(0.0f, -CalcDialogFooterHeight()), true);

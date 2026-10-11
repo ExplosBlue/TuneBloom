@@ -505,7 +505,7 @@ static void DrawFollowTool(SeqToolbarState& bar)
 
         for (s32 i = 0; i < SequenceSoundPlayer::cTrackNumPerPlayer; i++)
         {
-            if (ContextMenuCheckItem(sead::FormatFixedSafeString<32>(messages::sequence::cFollowTrackItemFormat, i).cstr(), settings.follow && settings.followTrack == i))
+            if (ContextMenuCheckItem(sead::FormatFixedSafeString<32>(messages::stream::cTrackNameFormat, i).cstr(), settings.follow && settings.followTrack == i))
             {
                 settings.follow = true;
                 settings.followTrack = i;

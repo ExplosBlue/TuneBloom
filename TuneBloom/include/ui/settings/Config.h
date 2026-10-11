@@ -42,6 +42,7 @@ struct InterfaceSettings
     f32 tooltipDelay = cTooltipDelayDefault;
     f32 scrollSpeed = cScrollSpeedDefault;
     f32 uiScale = cUIScaleDefault;
+    bool twelveHourClock = false;
 };
 
 struct MidiSettings
@@ -50,9 +51,15 @@ struct MidiSettings
     s32 velocity = cMidiVelocityDefault;
 };
 
+enum class StartupAction
+{
+    StartPage,
+    LastArchive,
+};
+
 struct StartupSettings
 {
-    bool reopenLastArchive = false;
+    StartupAction action = StartupAction::StartPage;
     s32 recentFileCount = cRecentFileCountDefault;
     std::string lastArchive;
 };

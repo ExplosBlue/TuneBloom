@@ -56,7 +56,7 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
     const WaveSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cInfoBlockNotFoundFormat,wsdFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, wsdFmt, "INFO").cstr());
         return;
     }
 

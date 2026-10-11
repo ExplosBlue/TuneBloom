@@ -8,6 +8,7 @@
 #include <ui/file/FileFlow.h>
 #include <ui/project/FileLists.h>
 #include <ui/file/FileWindow.h>
+#include <ui/file/StartPage.h>
 #include <ui/items/ItemList.h>
 #include <ui/project/ItemViews.h>
 #include <ui/widgets/Knob.h>
@@ -169,13 +170,13 @@ static void DrawSystemWindow()
 
 static void DrawInfoUI()
 {
-    bool notProjUI = sSelectedUIType != UIType::ProjectInfo;
+    bool notProjUI = sBfsar.isOpen() && sSelectedUIType != UIType::ProjectInfo;
     if (notProjUI)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     }
 
-    bool windowOpen = ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_PEN " %s###InfoWindow", messages::project::cInfoWindowTitle).cstr(), nullptr, sSelectedUIType == UIType::ProjectInfo ? ImGuiWindowFlags_NoScrollbar : 0);
+    bool windowOpen = ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_PEN " %s###InfoWindow", messages::project::cInfoWindowTitle).cstr(), nullptr, notProjUI ? 0 : ImGuiWindowFlags_NoScrollbar);
 
     if (notProjUI)
     {
@@ -186,7 +187,7 @@ static void DrawInfoUI()
     {
         if (!sBfsar.isOpen())
         {
-            CenteredText(messages::item::cNoFileOpen);
+            DrawStartPage();
 
             ImGui::End();
             return;

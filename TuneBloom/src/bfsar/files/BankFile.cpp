@@ -126,13 +126,11 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
     }
     else if (!waveId)
     {
-        sead::FormatFixedSafeString<256> msg(messages::bank::cInstrumentWaveIdNullFormat,instrumentId, u32(waveIdTable.GetCount()), u32(velocityRegionInfo->waveIdTableIndex));
-        PopupMgr::instance()->pushCurrentItemError(msg);
+        PushInstrumentError(messages::bank::cInstrumentWaveIdNullFormat, instrumentId);
     }
     else
     {
-        sead::FormatFixedSafeString<256> msg(messages::bank::cInstrumentPatchFailedFormat, instrumentId, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Bank), u32(waveId->waveArchiveId));
-        PopupMgr::instance()->pushCurrentItemError(msg);
+        PushInstrumentError(messages::bank::cInstrumentWaveLinkFailedFormat, instrumentId);
     }
 
     setRootKey(velocityRegionInfo->GetRootKey());
@@ -206,7 +204,7 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
             if (directChunk.toRegion.typeId != nw::snd::internal::ElementType_BankFile_VelocityRegionInfo ||
                 directChunk.toRegion.offset == nw::snd::internal::Util::Reference::INVALID_OFFSET)
             {
-                PushInstrumentError(messages::bank::cVelocityRegionDirectErrorFormat, instrumentId);
+                PushInstrumentError(messages::bank::cVelocityRegionInvalidFormat, instrumentId);
                 break;
             }
 
@@ -218,7 +216,7 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
         {
             const nw::snd::internal::RangeChunk& rangeChunk = keyRegionInfo->GetRangeChunk();
 
-            readVelocityRegions_(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cVelocityRegionRangeErrorFormat, waveIdTable, instrumentId);
+            readVelocityRegions_(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cVelocityRegionInvalidFormat, waveIdTable, instrumentId);
             break;
         }
 
@@ -227,13 +225,13 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
             const nw::snd::internal::IndexChunk& indexChunk = keyRegionInfo->GetIndexChunk();
             if (!IsIndexChunkRangeValid(indexChunk))
             {
-                PushInstrumentError(messages::bank::cVelocityRegionIndexErrorFormat, instrumentId);
+                PushInstrumentError(messages::bank::cVelocityRegionInvalidFormat, instrumentId);
                 break;
             }
 
-            const std::vector<u8> borders = CollectIndexChunkBorders(indexChunk, messages::bank::cVelocityRegionIndexErrorFormat, instrumentId);
+            const std::vector<u8> borders = CollectIndexChunkBorders(indexChunk, messages::bank::cVelocityRegionInvalidFormat, instrumentId);
 
-            readVelocityRegions_(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cVelocityRegionIndexErrorFormat, waveIdTable, instrumentId);
+            readVelocityRegions_(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cVelocityRegionInvalidFormat, waveIdTable, instrumentId);
             break;
         }
 
@@ -298,7 +296,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
             if (directChunk.toRegion.typeId != nw::snd::internal::ElementType_BankFile_KeyRegionInfo ||
                 directChunk.toRegion.offset == nw::snd::internal::Util::Reference::INVALID_OFFSET)
             {
-                PushInstrumentError(messages::bank::cKeyRegionDirectErrorFormat, mId);
+                PushInstrumentError(messages::bank::cKeyRegionInvalidFormat, mId);
                 break;
             }
 
@@ -310,7 +308,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
         {
             const nw::snd::internal::RangeChunk& rangeChunk = instrumentInfo->GetRangeChunk();
 
-            readKeyRegions_(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cKeyRegionRangeErrorFormat, waveIdTable);
+            readKeyRegions_(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cKeyRegionInvalidFormat, waveIdTable);
             break;
         }
 
@@ -319,13 +317,13 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
             const nw::snd::internal::IndexChunk& indexChunk = instrumentInfo->GetIndexChunk();
             if (!IsIndexChunkRangeValid(indexChunk))
             {
-                PushInstrumentError(messages::bank::cKeyRegionIndexErrorFormat, mId);
+                PushInstrumentError(messages::bank::cKeyRegionInvalidFormat, mId);
                 break;
             }
 
-            const std::vector<u8> borders = CollectIndexChunkBorders(indexChunk, messages::bank::cKeyRegionIndexErrorFormat, mId);
+            const std::vector<u8> borders = CollectIndexChunkBorders(indexChunk, messages::bank::cKeyRegionInvalidFormat, mId);
 
-            readKeyRegions_(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cKeyRegionIndexErrorFormat, waveIdTable);
+            readKeyRegions_(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cKeyRegionInvalidFormat, waveIdTable);
             break;
         }
 

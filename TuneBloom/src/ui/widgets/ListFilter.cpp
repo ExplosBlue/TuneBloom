@@ -197,7 +197,7 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
         }
 
         ImGui::PopStyleColor();
-        ImGui::SetItemTooltip("%s", messages::item::cClearSearch);
+        ImGui::SetItemTooltip("%s", messages::keys::cClearSearch);
     }
 
     if (caseSensitive && DrawSearchToggle(ICON_LC_CASE_SENSITIVE "##Case", messages::item::cCaseSensitive, caseSensitive, height))

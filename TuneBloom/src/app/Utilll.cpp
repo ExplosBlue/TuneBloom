@@ -10,6 +10,14 @@ static sead::FixedSafeString<512> sLastTitlePath;
 
 namespace util {
 
+#if defined(COMMIT_SHA)
+const sead::SafeString cAppVersion(COMMIT_SHA);
+const bool cIsCommitBuild = true;
+#else
+const sead::SafeString cAppVersion("1.01");
+const bool cIsCommitBuild = false;
+#endif
+
 sead::Framework* getFramework()
 {
     return sFramework;

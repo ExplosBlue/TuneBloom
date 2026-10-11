@@ -134,7 +134,7 @@ static void DrawTrackDetailTitle(const TrackContext& ctx, s32 index, f32 padX)
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 bandHeight = ImGui::GetFrameHeight();
 
-    const sead::FormatFixedSafeString<32> title(messages::stream::cTrackTitleFormat, index);
+    const sead::FormatFixedSafeString<32> title(messages::stream::cTrackNameFormat, index);
     const Item* waveFile = ctx.tracks[index]->getWaveFileRef().getItem();
     const ImVec2 min = ImGui::GetCursorScreenPos();
     const ImVec2 max(min.x + sead::Mathf::max(ImGui::GetContentRegionAvail().x, CalcTrackDetailWidth(ctx)), min.y + bandHeight);

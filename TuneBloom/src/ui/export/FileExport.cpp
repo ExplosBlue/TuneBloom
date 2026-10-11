@@ -173,7 +173,7 @@ static void ExportPendingWavesToWav()
         [](s32, s32 failureCount)
         {
             if (failureCount > 0)
-                PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::exporting::cWavsWriteFailedFormat, failureCount), nullptr });
+                PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cWavsWriteFailedOneFormat : messages::exporting::cWavsWriteFailedFormat, failureCount), nullptr });
         });
 }
 

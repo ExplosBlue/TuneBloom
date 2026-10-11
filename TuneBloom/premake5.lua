@@ -48,7 +48,9 @@ links {
 }
 
 if os.getenv("COMMIT_SHA") then
+    filter "files:src/app/Utilll.cpp"
     defines { "COMMIT_SHA=\"" .. string.sub(os.getenv("COMMIT_SHA"), 1, 7) .. "\"" }
+    filter {}
 end
 
 filter "system:windows"

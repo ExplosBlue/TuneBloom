@@ -21,6 +21,7 @@ workspace "TuneBloom"
 
     startproject "TuneBloom"
 
+    multiprocessorcompile "on"
     toolset "clang"
     stl "libc++"
 

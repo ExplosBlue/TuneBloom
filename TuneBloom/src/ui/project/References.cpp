@@ -404,7 +404,6 @@ void DrawArchiveInfoUI(Item::ItemType itemType)
     {
         FormatInnerVersion(&text, sBfsar.getVersionForBfstm());
         PropertyRow(messages::innerfile::cStreamVersion);
-        DetailTooltip(messages::innerfile::cStreamVersionDetail);
         ImGui::TextUnformatted(text.cstr());
     }
 

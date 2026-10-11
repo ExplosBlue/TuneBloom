@@ -52,6 +52,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxext-dev libgl1-mesa-dev
 
+      - if: matrix.os != 'windows'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}
+          max-size: 500M
+
       - if: matrix.os == 'windows'
         uses: microsoft/setup-msbuild@v2
 
@@ -66,7 +72,7 @@ jobs:
         run: |
           chmod +x .premake/premake5
           premake5 gmake
-          make -j"$(getconf _NPROCESSORS_ONLN)" config=${{ matrix.config }}
+          make -j"$(getconf _NPROCESSORS_ONLN)" config=${{ matrix.config }} CC="ccache clang" CXX="ccache clang++"
 
       - name: Package
         shell: bash

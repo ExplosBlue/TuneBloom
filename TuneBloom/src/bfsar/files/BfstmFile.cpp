@@ -820,21 +820,21 @@ bool StreamWaveReader::checkTrackLoop_(const WaveFile& wave, u32 trackNo) const
 
     if (wave.mLoopStartFrame >= wave.mLoopEndFrame)
     {
-        sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopInvalidFormat, trackNo, wave.mLoopStartFrame, wave.mLoopEndFrame);
+        sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopInvalidFormat, trackNo);
         PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         isLoopValid = false;
     }
 
     if (wave.getLoopStartFrame(true) != mStreamSoundInfo.loopStart)
     {
-        sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopStartMismatchFormat, trackNo, wave.getLoopStartFrame(true), static_cast<u32>(mStreamSoundInfo.loopStart));
+        sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopStartMismatchFormat, trackNo);
         PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         isLoopValid = false;
     }
 
     if (wave.getLoopEndFrame(true) != mStreamSoundInfo.frameCount)
     {
-        sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopEndMismatchFormat, trackNo, wave.getLoopEndFrame(true), static_cast<u32>(mStreamSoundInfo.frameCount));
+        sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopEndMismatchFormat, trackNo);
         PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         isLoopValid = false;
     }

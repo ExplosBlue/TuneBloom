@@ -26,7 +26,7 @@ static bool CheckBlockBounds(const nw::ut::BinaryFileHeader& fileHeader, const n
     if (blockSize >= sizeof(nw::ut::BinaryBlockHeader) && offset <= fileSize && blockSize <= fileSize - offset)
         return true;
 
-    PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<128>(messages::sequence::cDataBlockSizeFormat, blockName, blockSize));
+    PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<128>(messages::archive::cCorruptBlockFormat, blockName));
     return false;
 }
 
@@ -56,7 +56,7 @@ static bool CheckLabelInfo(const SequenceSoundFile::LabelBlockBody& body, u32 bo
 
     if (!inData)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<128>(messages::sequence::cDataLabelOffsetFormat, index, static_cast<u32>(seqOffset)));
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<128>(messages::sequence::cDataLabelOffsetFormat, index));
         return false;
     }
 
@@ -83,7 +83,7 @@ bool CheckSequenceFileLayout(SeqFileLayout& layout, const SequenceSoundFileReade
 
     if (bodySize < sizeof(nw::ut::ResU32) || labelNum > (bodySize - sizeof(nw::ut::ResU32)) / sizeof(nw::snd::internal::Util::Reference))
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<128>(messages::sequence::cDataLabelTableFormat, labelNum));
+        PopupMgr::instance()->pushCurrentItemError(messages::sequence::cDataLabelTable);
         return false;
     }
 
@@ -159,8 +159,7 @@ bool DecompileSequenceFile(std::vector<std::string>& outLines, std::unordered_ma
     {
         if (commands.find(it.first) == commands.end() && it.first != endOffset)
         {
-            sead::FormatFixedSafeString<256> msg(messages::sequence::cDataLabelNotVisitedFormat,
-                it.first, endOffset, commands.size(), labelCache.size());
+            sead::FormatFixedSafeString<64> msg(messages::sequence::cDataLabelNotVisitedFormat, it.first);
             PopupMgr::instance()->pushCurrentItemError(msg);
 
             DeleteCommands(commands);

@@ -31,6 +31,7 @@ static constexpr f32 cAboutGlowLight   = 0.12f;
 static constexpr f32 cAboutFooterGapEm = 0.8f;
 static constexpr f32 cAboutChipPadXEm  = 0.7f;
 static constexpr f32 cAboutChipPadYEm  = 0.15f;
+static constexpr f32 cAboutLogoSize    = 130.0f;
 
 static void AboutGap(f32 heightEm)
 {
@@ -98,7 +99,25 @@ static void DrawAboutButton(const char* icon, const char* label, const char* url
         ImGui::SetTooltip("%s", url);
 }
 
-static void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
+void DrawAppIcon(float size)
+{
+    sead::TextureGL* tex = util::getIcon() ? sead::DynamicCast<sead::TextureGL>(util::getIcon()) : nullptr;
+
+    if (!tex)
+    {
+        ImGui::Dummy(ImVec2(size, size));
+        return;
+    }
+
+    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(tex->getID())), ImVec2(size, size));
+}
+
+const char* GetAppVersionFormat()
+{
+    return util::cIsCommitBuild ? messages::about::cBuildFormat : messages::about::cVersionFormat;
+}
+
+static void DrawTuneBloomSplash()
 {
     ImGuiIO& io = ImGui::GetIO();
     const ImGuiStyle& style = ImGui::GetStyle();
@@ -154,8 +173,8 @@ static void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
 
     // Logo
     AboutGap(0.4f);
-    AboutCenter(logoSize.x);
-    ImGui::Image(logoTex, logoSize);
+    AboutCenter(cAboutLogoSize);
+    DrawAppIcon(cAboutLogoSize);
     AboutGap(0.5f);
 
     // Name
@@ -165,11 +184,7 @@ static void DrawTuneBloomSplash(ImTextureID logoTex, ImVec2 logoSize)
     AboutGap(0.4f);
 
     // Version
-#if defined(COMMIT_SHA)
-    DrawAboutChip(sead::FormatFixedSafeString<64>(messages::about::cBuildFormat, util::cAppVersion.cstr()).cstr());
-#else
-    DrawAboutChip(sead::FormatFixedSafeString<64>(messages::about::cVersionFormat, util::cAppVersion.cstr()).cstr());
-#endif
+    DrawAboutChip(sead::FormatFixedSafeString<64>(GetAppVersionFormat(), util::cAppVersion.cstr()).cstr());
     AboutGap(1.2f);
 
     DrawAboutText(messages::about::cTagline, ImGui::GetStyleColorVec4(ImGuiCol_Text));
@@ -221,17 +236,5 @@ void DrawAboutPopup()
     }
 
     if (ImGui::IsPopupOpen("##TuneBloomSplash"))
-    {
-        ImTextureID icon = 0;
-        if (util::getIcon())
-        {
-            sead::TextureGL* tex = sead::DynamicCast<sead::TextureGL>(util::getIcon());
-            if (tex)
-            {
-                icon = reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(tex->getID()));
-            }
-        }
-
-        DrawTuneBloomSplash(icon, ImVec2(130, 130));
-    }
+        DrawTuneBloomSplash();
 }

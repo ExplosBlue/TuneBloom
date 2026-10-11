@@ -165,7 +165,7 @@ static void AddEntryRows(const MidiSoundEntry& entry)
 
         MidiTrackRow row;
         row.trackNo = static_cast<u8>(trackNo);
-        row.name = sead::FormatFixedSafeString<32>(messages::exporting::cMidiTrackFormat, trackNo).cstr();
+        row.name = sead::FormatFixedSafeString<32>(messages::stream::cTrackNameFormat, trackNo).cstr();
         sMidiExport.tracks.push_back(row);
     }
 
@@ -362,7 +362,7 @@ static void ExportMidiSoundsToFolder()
     }
 
     if (failureCount > 0)
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::exporting::cMidisExportFailedFormat, failureCount), nullptr });
+        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cMidisExportFailedOneFormat : messages::exporting::cMidisExportFailedFormat, failureCount), nullptr });
 
     ShowExportedFiles(dirPath);
 }

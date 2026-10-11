@@ -81,7 +81,7 @@ static bool ReadRiffHeader(RiffReadContext& context)
 
     if (sead::MemUtil::compare(riff, "RIFF", 4) != 0)
     {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavInvalidRiff });
+        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
         return false;
     }
 
@@ -92,7 +92,7 @@ static bool ReadRiffHeader(RiffReadContext& context)
 
     if (sead::MemUtil::compare(wave, "WAVE", 4) != 0)
     {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavInvalidWave });
+        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
         return false;
     }
 
@@ -120,7 +120,7 @@ static bool FindRiffFmtChunk(RiffReadContext& context, u32* fmtChunkSize)
     {
         if (context.stream.isEOF())
         {
-            PopupMgr::instance()->addPopup({ messages::wavefile::cWavInvalidFmt });
+            PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
             return false;
         }
 
@@ -139,7 +139,7 @@ static bool FindRiffFmtChunk(RiffReadContext& context, u32* fmtChunkSize)
 
     if (*fmtChunkSize < cRiffFmtSize)
     {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavInvalidFmt });
+        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
         return false;
     }
 
@@ -186,7 +186,7 @@ static bool ReadRiffFmtChunk(RiffReadContext& context, u32 fmtChunkSize)
 
     if (out->sampleRate == 0)
     {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavInvalidFmt });
+        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
         return false;
     }
 

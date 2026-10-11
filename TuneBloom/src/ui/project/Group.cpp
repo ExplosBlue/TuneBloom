@@ -119,7 +119,7 @@ void DrawGroupPropertiesUI()
         ImGui::BeginDisabled(isLocked);
 
         s32 outputType = static_cast<s32>(group->getOutputType());
-        if (DrawPanelHeaderCombo(messages::group::cOutputTypeLabel, "##OutputType", &outputType, sOutputTypes, sOutputTypeDetails, IM_ARRAYSIZE(sOutputTypes), messages::group::cOutputTypeDetail, isExternal))
+        if (DrawPanelHeaderCombo(messages::group::cOutputTypeLabel, "##OutputType", &outputType, sOutputTypes, sOutputTypeDetails, IM_ARRAYSIZE(sOutputTypes), nullptr, isExternal))
         {
             group->setOutputType(static_cast<Group::OutputType>(outputType));
             SetUnsavedChanges(true);
@@ -227,7 +227,6 @@ void Group::ItemInfo::drawUI()
         }
 
         PropertyRow(messages::group::cLoadItemsLabel);
-        DetailTooltip(messages::group::cLoadItemsDetail);
 
         if (ComboScroll("##LoadItems", (s32 *)&loadItem, items, itemCount))
         {

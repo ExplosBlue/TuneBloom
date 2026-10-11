@@ -4,6 +4,7 @@
 #include <string>
 
 void ShowInFileManager(const std::string& path);
+void OpenFolder(const std::string& path);
 void OpenURL(const char* url);
 
 std::filesystem::path GetExecutablePath();

@@ -15,11 +15,8 @@ void setIcon_(sead::Texture* icon);
 
 inline const sead::SafeString cAppName("TuneBloom");
 
-#if defined(COMMIT_SHA)
-inline const sead::SafeString cAppVersion(COMMIT_SHA);
-#else
-inline const sead::SafeString cAppVersion("1.01");
-#endif
+extern const sead::SafeString cAppVersion;
+extern const bool cIsCommitBuild;
 
 bool updateTitle(const char* path, bool dirty = false);
 void refreshTitleDirty(bool dirty);

@@ -300,7 +300,7 @@ bool WaveFile::doRead(const void* fileAddr)
 
     if (mLoopStartFrame >= mLoopEndFrame)
     {
-        sead::FormatFixedSafeString<1024> msg(messages::wavefile::cLoopInvalidFormat,mLoopStartFrame, mLoopEndFrame);
+        sead::FormatFixedSafeString<1024> msg(messages::wavefile::cLoopInvalidFormat);
         PopupMgr::instance()->pushCurrentItemError(msg);
     }
 

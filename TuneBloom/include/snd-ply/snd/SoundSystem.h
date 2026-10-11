@@ -107,7 +107,6 @@ public:
     };
 
     static OutputInfo getOutputInfo();
-    static void playTestTone();
 
     static void setOutputMode(OutputMode mode);
     static OutputMode getOutputMode();

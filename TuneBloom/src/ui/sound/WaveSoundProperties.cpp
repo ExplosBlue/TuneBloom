@@ -52,7 +52,7 @@ void DrawWaveEnvelopeSection(Sound::WaveSoundInfo& waveSoundInfo)
 {
     bool enableEnvelope = waveSoundInfo.isEnableEnvelope();
     bool changed = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Envelope", messages::panel::cEnvelope).cstr(),&enableEnvelope, &changed);
+    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Envelope", messages::panel::cEnvelope).cstr(), &enableEnvelope, &changed);
 
     if (changed)
     {

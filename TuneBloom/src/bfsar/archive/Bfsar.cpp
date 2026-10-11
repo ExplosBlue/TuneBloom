@@ -833,8 +833,6 @@ Bfsar::WaveMergeResult Bfsar::mergeDuplicateWaves(const std::vector<WaveDuplicat
         if (!group.keep || group.remove.empty())
             continue;
 
-        result.groups++;
-
         for (WaveFile *dup : group.remove)
         {
             std::vector<ItemReference *> refs;

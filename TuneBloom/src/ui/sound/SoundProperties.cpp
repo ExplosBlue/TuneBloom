@@ -32,7 +32,7 @@ static const char* cSoundPanCurves[]      = {
     messages::sound::cPanCurveLinear0DbClamp
 };
 static const char* cSoundDecayCurves[]    = { messages::sound::c3DDecayLog, messages::sound::c3DDecayLinear };
-static const char* cSoundFrontBypasses[]  = { messages::sound::cFrontBypassNotSet, messages::sound::cFrontBypassOff, messages::sound::cFrontBypassOn };
+static const char* cSoundFrontBypasses[]  = { messages::sound::cFrontBypassOff, messages::sound::cFrontBypassOn };
 
 static const char* cSoundPanModeDetails[] = { messages::sound::cPanModeDualDetail, messages::sound::cPanModeBalanceDetail };
 static const char* cSoundPanCurveDetails[] = {
@@ -47,7 +47,7 @@ static const char* cSoundPanCurveDetails[] = {
     messages::sound::cPanCurveClampDetail
 };
 static const char* cSoundDecayCurveDetails[]   = { messages::sound::c3DDecayLogDetail, messages::sound::c3DDecayLinearDetail };
-static const char* cSoundFrontBypassDetails[]  = { messages::sound::cFrontBypassNotSetDetail, nullptr, nullptr };
+static const char* cSoundFrontBypassDetails[]  = { nullptr, nullptr };
 
 f32 TrailingButtonsWidth(s32 count)
 {
@@ -84,6 +84,11 @@ bool ItemSelectorRow(const char* label, const Item::List& list, Item** item, boo
 bool DrawSoundPanelHeader(const char* title, bool* enabled)
 {
     return DrawPanelHeader(title, enabled, messages::sound::cPanelEnableDetail);
+}
+
+bool BeginSoundSection(const char* title, bool* enabled, bool* changed, const char* detail)
+{
+    return BeginPropertySection(title, enabled, changed, true, 1, detail, nullptr, messages::sound::cPanelEnableDetail);
 }
 
 static f32 CalcSoundComboWidth(const char* const* items, s32 itemNum)
@@ -126,7 +131,7 @@ static void DrawSoundPanModeSection(Sound* sound)
 {
     bool enablePanParam = sound->isEnablePanParam();
     bool changed = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Pan Mode", messages::sound::cSectionPanMode).cstr(),&enablePanParam, &changed, true, 1, messages::sound::cPanModeSectionDetail);
+    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Pan Mode", messages::sound::cSectionPanMode).cstr(), &enablePanParam, &changed);
 
     if (changed)
     {
@@ -138,20 +143,18 @@ static void DrawSoundPanModeSection(Sound* sound)
         return;
 
     PropertyRow(messages::sound::cPanModeLabel);
-    DetailTooltip(messages::sound::cPanModeDetail);
 
     s32 panMode = static_cast<s32>(sound->getPanMode());
-    if (ComboScroll("##panMode", &panMode, cSoundPanModes, cSoundPanModeDetails, IM_ARRAYSIZE(cSoundPanModes), messages::sound::cPanModeDetail))
+    if (ComboScroll("##panMode", &panMode, cSoundPanModes, cSoundPanModeDetails, IM_ARRAYSIZE(cSoundPanModes)))
     {
         sound->setPanMode(static_cast<snd::PanMode>(panMode));
         SetUnsavedChanges(true);
     }
 
     PropertyRow(messages::sound::cPanCurveLabel);
-    DetailTooltip(messages::sound::cPanCurveDetail);
 
     s32 panCurve = static_cast<s32>(sound->getPanCurve());
-    if (ComboScroll("##panCurve", &panCurve, cSoundPanCurves, cSoundPanCurveDetails, IM_ARRAYSIZE(cSoundPanCurves), messages::sound::cPanCurveDetail))
+    if (ComboScroll("##panCurve", &panCurve, cSoundPanCurves, cSoundPanCurveDetails, IM_ARRAYSIZE(cSoundPanCurves)))
     {
         sound->setPanCurve(static_cast<snd::PanCurve>(panCurve));
         SetUnsavedChanges(true);
@@ -179,7 +182,7 @@ static void DrawSound3DSection(Sound* sound)
 
     bool enableSound3DInfo = sound->isEnableSound3DInfo();
     bool changed = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###3D", messages::sound::cSection3D).cstr(),&enableSound3DInfo, &changed, true, 1, messages::sound::c3DSectionDetail);
+    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###3D", messages::sound::cSection3D).cstr(), &enableSound3DInfo, &changed, messages::sound::c3DSectionDetail);
 
     if (changed)
     {
@@ -246,7 +249,7 @@ static void DrawSound3DSection(Sound* sound)
         DetailTooltip(messages::sound::c3DDopplerDetail);
 
         s32 decayCurve = static_cast<s32>(sound3DInfo.getDecayCurve()) - 1;
-        if (DrawSoundSideCombo(messages::sound::c3DDecayCurve,messages::sound::c3DDecayCurveDetail, &decayCurve, cSoundDecayCurves, cSoundDecayCurveDetails, IM_ARRAYSIZE(cSoundDecayCurves), stripHeight))
+        if (DrawSoundSideCombo(messages::sound::c3DDecayCurve, nullptr, &decayCurve, cSoundDecayCurves, cSoundDecayCurveDetails, IM_ARRAYSIZE(cSoundDecayCurves), stripHeight))
         {
             sound3DInfo.setDecayCurve(decayCurve + 1);
             SetUnsavedChanges(true);
@@ -260,7 +263,7 @@ static void DrawPlayerPrioritySection(Sound* sound)
 {
     bool enablePlayerParam = sound->isEnablePlayerParam();
     bool changed = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Player Priority", messages::sound::cSectionPlayerPriority).cstr(),&enablePlayerParam, &changed, true, 1, messages::sound::cPlayerPrioritySectionDetail);
+    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Player Priority", messages::sound::cSectionPlayerPriority).cstr(), &enablePlayerParam, &changed);
 
     if (changed)
     {
@@ -309,7 +312,7 @@ static void DrawChannelPrioritySection(SoundInfo& soundInfo)
 {
     bool enablePriority = soundInfo.isEnablePriority();
     bool changed = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Channel Priority", messages::sound::cSectionChannelPriority).cstr(),&enablePriority, &changed, true, 1, messages::sound::cChannelPrioritySectionDetail);
+    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Channel Priority", messages::sound::cSectionChannelPriority).cstr(), &enablePriority, &changed);
 
     if (changed)
     {
@@ -474,27 +477,36 @@ static void DrawSoundOtherSection(Sound* sound)
 
     const f32 stripHeight = CalcRegionStripHeight();
 
+    const bool remoteFilterUsed = sBfsar.getFormat() != ArchiveFormat::BCSAR;
     u8 remoteFilter = sound->getRemoteFilter();
+
+    ImGui::BeginDisabled(!remoteFilterUsed);
     SetNextKnobReset(0.0);
     if (KnobU8(cSoundRemoteKnobs[0], &remoteFilter, cPanMin, cPanMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
     {
         sound->setRemoteFilter(remoteFilter);
         SetUnsavedChanges(true);
     }
+    ImGui::EndDisabled();
 
-    KnobTooltip("%.3f", static_cast<f32>(remoteFilter) / 127.0f);
-    DetailTooltip(messages::sound::cRemoteFilterDetail);
+    if (remoteFilterUsed)
+    {
+        KnobTooltip("%.3f", static_cast<f32>(remoteFilter) / 127.0f);
+        DetailTooltip(messages::sound::cRemoteFilterDetail);
+    }
+    else
+        SetDisabledTooltip(messages::sound::cRemoteFilterNoCtr);
 
     if (sound->getSoundType() != Sound::SoundType::Strm)
     {
-        s32 frontBypass = 0;
-        if (sound->isEnableIsFrontBypass())
-            frontBypass = sound->getIsFrontBypass() ? 2 : 1;
+        s32 frontBypass = sound->isEnableIsFrontBypass() && sound->getIsFrontBypass() ? 1 : 0;
 
         if (DrawSoundSideCombo(messages::sound::cFrontBypass,messages::sound::cFrontBypassDetail, &frontBypass, cSoundFrontBypasses, cSoundFrontBypassDetails, IM_ARRAYSIZE(cSoundFrontBypasses), stripHeight))
         {
-            sound->setEnableIsFrontBypass(frontBypass != 0);
-            sound->setIsFrontBypass(frontBypass == 2);
+            if (frontBypass == 1)
+                sound->setEnableIsFrontBypass(true);
+
+            sound->setIsFrontBypass(frontBypass == 1);
             SetUnsavedChanges(true);
         }
     }

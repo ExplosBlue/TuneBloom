@@ -266,8 +266,6 @@ bool MenuBarIconItem(const char* icon, const char* label, const char* shortcut, 
     return pressed;
 }
 
-static constexpr const char* cIssuesUrl     = "https://github.com/stupidestmodder/TuneBloom/issues";
-
 static s32 sMenuFindFrame = 0;
 static s32 sMenuThemeRequest = -1;
 
@@ -285,7 +283,7 @@ static void DrawBackupsMenu()
     const std::string folder = backup::GetFolder();
 
     if (MenuBarIconItem(ICON_LC_FOLDER_CLOCK, messages::mainmenu::cShowBackupFolder, nullptr, !folder.empty()))
-        ShowInFileManager(folder);
+        OpenFolder(folder);
 
     ImGui::EndMenu();
 }
@@ -538,7 +536,7 @@ static void DrawSaveStatusChip(f32 chipRight, f32 textY)
         }
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", messages::unsaved::cChipTooltip);
+            ImGui::SetTooltip("%s", messages::mainmenu::cShowUnsaved);
     }
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();

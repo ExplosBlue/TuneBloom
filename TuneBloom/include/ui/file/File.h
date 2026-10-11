@@ -15,7 +15,7 @@ void SetNextOpenPath(const char* path);
 void ClearNextOpenPath();
 bool IsOpenPending();
 void UpdatePendingOpen();
-void OpenLastArchiveAtStartup();
+void RunStartupAction();
 bool SaveFile();
 bool SaveFileAs();
 void MarkArchiveInSync();

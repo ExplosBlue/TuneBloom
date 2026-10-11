@@ -414,7 +414,7 @@ static bool DrawRangeIdField(const char* id, u32* value, bool stickyEdit)
     }
 
     if (stickyEdit && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("%s", messages::soundset::cStickyEditTooltip);
+        ImGui::SetTooltip("%s", messages::soundset::cStickyEditDetail);
 
     return changed;
 }

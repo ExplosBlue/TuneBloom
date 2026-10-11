@@ -320,9 +320,9 @@ void WaveImportPanel::drawProcessingPanels(f32 fill)
 
 void WaveImportPanel::drawEncodingField(WaveFile::Encoding* encoding, f32 labelWidth)
 {
-    RowLabel(messages::wavefile::cEncoding, labelWidth, messages::wavefile::cEncodingDetail);
+    RowLabel(messages::wavefile::cEncoding, labelWidth);
 
-    if (ComboScroll("##Encoding", reinterpret_cast<s32*>(encoding), WaveFile::sEncodingTypes, cWaveEncodingDetails, IM_ARRAYSIZE(cWaveEncodingDetails), messages::wavefile::cEncodingDetail))
+    if (ComboScroll("##Encoding", reinterpret_cast<s32*>(encoding), WaveFile::sEncodingTypes, cWaveEncodingDetails, IM_ARRAYSIZE(cWaveEncodingDetails)))
         mTouched = true;
 }
 
@@ -386,7 +386,7 @@ void WaveImportPanel::drawChannelsField(f32 labelWidth)
 
     s32 current = static_cast<s32>(mSettings.channelMode);
 
-    RowLabel(messages::wavefile::cChannels, labelWidth, messages::import::cWaveChannelsTip);
+    RowLabel(messages::wavefile::cChannels, labelWidth);
 
     if (ImGui::BeginCombo("##Channels", cModeNames[current]))
     {
@@ -474,7 +474,7 @@ void WaveImportPanel::drawLoopModeField(FrameContext& ctx, f32 width)
     const char* loopModeNames[] = { messages::import::cWaveLoopModeDetect, messages::import::cLoopDisabled, messages::import::cLoopManual };
     s32 loopModeIndex = static_cast<s32>(mSettings.loopMode);
 
-    if (ComboScroll("##LoopMode", &loopModeIndex, loopModeNames, cModeDetails, IM_ARRAYSIZE(loopModeNames), messages::import::cWaveReencodeDetail))
+    if (ComboScroll("##LoopMode", &loopModeIndex, loopModeNames, cModeDetails, IM_ARRAYSIZE(loopModeNames)))
     {
         mSettings.loopMode = static_cast<LoopMode>(loopModeIndex);
         ctx.changed = true;

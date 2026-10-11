@@ -147,7 +147,7 @@ static const char* GetCheckText(Bfsar::GroupFileCheck check)
     switch (check)
     {
         case Bfsar::GroupFileCheck::Unreadable:   return messages::group::cLocateUnreadable;
-        case Bfsar::GroupFileCheck::NotGroupFile: return messages::group::cLocateNotGroupFile;
+        case Bfsar::GroupFileCheck::NotGroupFile: return messages::reader::cNotGroupFile;
         case Bfsar::GroupFileCheck::OtherArchive: return messages::group::cLocateOtherArchive;
         default:                                  return "";
     }

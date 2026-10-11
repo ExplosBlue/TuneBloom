@@ -676,7 +676,7 @@ void Bfsar::attachWaveSoundWave_(Sound* sound, const nw::snd::internal::WaveSoun
 
     if (noteInfo.waveArchiveId != 0)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cWaveSoundDataPatchFailedFormat, GetInnerFileDisplayName(mFormat, InnerFileKind::WaveSoundData)));
+        PopupMgr::instance()->pushCurrentItemError(messages::archive::cWaveFileLinkFailed);
         return;
     }
 

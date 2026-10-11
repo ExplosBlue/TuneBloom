@@ -154,7 +154,7 @@ static bool GetStreamSoundPlaybackError(const Sound& sound, sead::BufferedSafeSt
         {
             if (track.getChannels_().isEmpty())
             {
-                outError->format(messages::stream::cTrackNoWaveFileFormat, i);
+                outError->format(messages::playback::cTrackNoWaveFileFormat, i);
             }
             else
             {
@@ -171,7 +171,7 @@ static bool GetStreamSoundPlaybackError(const Sound& sound, sead::BufferedSafeSt
 
         if (waveFile.getChannels().isEmpty())
         {
-            outError->format(messages::stream::cTrackWaveFileNoChannelsFormat, i);
+            outError->format(messages::playback::cTrackNoChannelsFormat, i);
             return true;
         }
     }

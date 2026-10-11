@@ -2,6 +2,7 @@
 
 #include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 #include <gfx/gl/seadTextureGL.h>
+#include <gfx/seadGraphics.h>
 #include <gfx/seadTextureUtil.h>
 #include <heap/seadExpHeap.h>
 
@@ -135,11 +136,21 @@ void BfsarTask::prepare()
     s32 height = 0;
     s32 channels = 0;
     u8* data = stbi_load("content/icon.png", &width, &height, &channels, 4);
+    
     if (data && channels == 4)
     {
         sead::TextureGL* icon = new sead::TextureGL();
         bool r = sead::TextureUtil::createTextureImage2DGL(icon, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
         SEAD_ASSERT(r);
+
+        // Mipmaps
+
+        sead::Graphics::instance()->lockDrawContext();
+        glBindTexture(GL_TEXTURE_2D, icon->getID());
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        sead::Graphics::instance()->unlockDrawContext();
 
         util::setIcon_(icon);
 

@@ -77,7 +77,7 @@ static void CheckMultiModVersion(u32 cmd, u32 cmdex)
 {
     if (sBfsar.getVersionForBfseq() < 0x00020000)
     {
-        sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandExUnsupportedFormat,cmd, cmdex);
+        sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandExVersionFormat, cmd, cmdex);
         PopupMgr::instance()->pushCurrentItemError(msg);
         InvalidateSeqFile();
     }
@@ -238,7 +238,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                 case MmlCommand::MML_MOD_PHASE:
                     if (sBfsar.getVersionForBfseq() < 0x00020000)
                     {
-                        PopupMgr::instance()->pushCurrentItemError(messages::sequence::cDataModPhaseUnsupported);
+                        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_phase"));
                         InvalidateSeqFile();
                     }
                     cmdInst = new MmlCommandModPhase(arg1, conditional);
@@ -246,7 +246,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                 case MmlCommand::MML_MOD_CURVE:
                     if (sBfsar.getVersionForBfseq() < 0x00020000)
                     {
-                        PopupMgr::instance()->pushCurrentItemError(messages::sequence::cDataModCurveUnsupported);
+                        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_curve"));
                         InvalidateSeqFile();
                     }
                     cmdInst = new MmlCommandModCurve(arg1, conditional);

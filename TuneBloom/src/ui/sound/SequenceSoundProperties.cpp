@@ -120,8 +120,6 @@ void DrawSequenceStartLabelPanel(Sound::SequenceSoundInfo& seqSoundInfo)
         SetUnsavedChanges(true);
     }
 
-    DetailTooltip(messages::sound::cStartLabelDetail);
-
     ImGui::EndDisabled();
 
     ImGui::BeginDisabled(!seqFile);

@@ -68,7 +68,7 @@ void BankFileReader::Initialize(const void* bankFile)
     const BankFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cInfoBlockNotFoundFormat,bankFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, bankFmt, "INFO").cstr());
         return;
     }
 

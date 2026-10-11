@@ -198,11 +198,11 @@ void MarkArchiveInSync()
         SetLastArchive(filePath.cstr());
 }
 
-void OpenLastArchiveAtStartup()
+void RunStartupAction()
 {
     const StartupSettings& settings = GetStartupSettings();
 
-    if (!settings.reopenLastArchive || testhooks::IsEnabled() || !sDroppedFilePath.isEmpty())
+    if (settings.action == StartupAction::StartPage || testhooks::IsEnabled() || !sDroppedFilePath.isEmpty())
         return;
 
     if (settings.lastArchive.empty() || settings.lastArchive.size() >= static_cast<size_t>(sDroppedFilePath.getBufferSize()))

@@ -591,10 +591,40 @@ void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* 
     drawList->AddText(ImVec2(endX, pos.y), color, end);
 }
 
+void DrawItemValueCell(const char* text, u32 flags, s32 index, bool unused)
+{
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    pos.y += ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset;
+
+    const f32 width = ImGui::GetContentRegionAvail().x - cItemColumnGap - (index == sEdgeColumn ? sEdgeInset : 0.0f);
+    const f32 textWidth = ImGui::CalcTextSize(text).x;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, unused ? cUnusedColor : GetItemValueColor());
+
+    if (flags & cItemColumnFlag_Text)
+    {
+        pos.x += cItemColumnGap;
+
+        if ((flags & cItemColumnFlag_TextEnd) && textWidth > width)
+            DrawTextEnd(ImGui::GetWindowDrawList(), pos, pos.x + width, text, ImGui::GetColorU32(ImGuiCol_Text));
+        else
+            ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), pos, ImVec2(pos.x + width, pos.y + ImGui::GetFontSize()), pos.x + width, pos.x + width, text, nullptr, nullptr);
+
+        ImGui::Dummy(ImVec2(sead::Mathf::min(textWidth, width), ImGui::GetFontSize()));
+    }
+    else
+    {
+        if (textWidth < width)
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width - textWidth);
+
+        ImGui::TextUnformatted(text);
+    }
+
+    ImGui::PopStyleColor();
+}
+
 void DrawItemColumnCells(const Item* item, const ItemColumn* columns, u32 columnCount, bool rowHovered)
 {
-    const ImVec4 valueColor = GetItemValueColor();
-
     for (u32 i = 0; i < columnCount; i++)
     {
         if (!ImGui::TableNextColumn())
@@ -603,35 +633,9 @@ void DrawItemColumnCells(const Item* item, const ItemColumn* columns, u32 column
         sead::FixedSafeString<256> text;
         columns[i].format(item, &text);
 
-        ImVec2 pos = ImGui::GetCursorScreenPos();
-        pos.y += ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset;
-
-        const f32 width = ImGui::GetContentRegionAvail().x - cItemColumnGap - (static_cast<s32>(i) == sEdgeColumn ? sEdgeInset : 0.0f);
-        const f32 textWidth = ImGui::CalcTextSize(text.cstr()).x;
         const bool unused = (columns[i].flags & cItemColumnFlag_WarnZero) && columns[i].sortKey(item) == 0;
 
-        ImGui::PushStyleColor(ImGuiCol_Text, unused ? cUnusedColor : valueColor);
-
-        if (columns[i].flags & cItemColumnFlag_Text)
-        {
-            pos.x += cItemColumnGap;
-
-            if ((columns[i].flags & cItemColumnFlag_TextEnd) && textWidth > width)
-                DrawTextEnd(ImGui::GetWindowDrawList(), pos, pos.x + width, text.cstr(), ImGui::GetColorU32(ImGuiCol_Text));
-            else
-                ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), pos, ImVec2(pos.x + width, pos.y + ImGui::GetFontSize()), pos.x + width, pos.x + width, text.cstr(), nullptr, nullptr);
-
-            ImGui::Dummy(ImVec2(sead::Mathf::min(textWidth, width), ImGui::GetFontSize()));
-        }
-        else
-        {
-            if (textWidth < width)
-                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width - textWidth);
-
-            ImGui::TextUnformatted(text.cstr());
-        }
-
-        ImGui::PopStyleColor();
+        DrawItemValueCell(text.cstr(), columns[i].flags, static_cast<s32>(i), unused);
 
         if (rowHovered && columns[i].tooltip && ImGui::TableGetHoveredColumn() == ImGui::TableGetColumnIndex())
             columns[i].tooltip(item);

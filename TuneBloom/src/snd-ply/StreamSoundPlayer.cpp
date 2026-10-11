@@ -3,6 +3,7 @@
 #include "snd/snd_StreamSoundFileReader.h"
 #include "snd/snd_WaveFileReader.h"
 
+#include "snd/MultiVoice.h"
 #include "snd/VoiceImpl.h"
 
 #include <basis/seadWarning.h>
@@ -12,6 +13,9 @@ namespace {
 const u8 DEFAULT_LPF_FREQ     = 64; // No filter is applied.
 const u8 DEFAULT_BIQUAD_TYPE  = 0;  // No filter is yet used.
 const u8 DEFAULT_BIQUAD_VALUE = 0;  // No filter is applied.
+
+const u32 cSamplesPerAdpcmFrame = 14;
+const u32 cSamplesPerSeekBlock  = 14336;
 
 }
 
@@ -30,6 +34,7 @@ void StreamSoundPlayer::init()
 
     mSetup = false;
     mPrepared = false;
+    mLoopEnabled = true;
 
     // Initialize item (track parent) data parameters.
     mItemData.pitch = 1.0f;
@@ -47,6 +52,9 @@ void StreamSoundPlayer::init()
         track.mVolume      = 1.0f;
         track.mOutputLine  = -1;
 
+        for (u32 channel = 0; channel < snd::cWaveChannelMax; channel++)
+            track.mPeak[channel].store(0.0f, std::memory_order_relaxed);
+
         track.mParam.initialize();
     }
 
@@ -56,6 +64,8 @@ void StreamSoundPlayer::init()
         StreamChannel& channel = mChannels[channelIndex];
         channel.mBufferAddress = nullptr;
         channel.mVoice = nullptr;
+        channel.mSeekInfo = nullptr;
+        channel.mSeekInfoCount = 0;
     }
 
     mSampleRate = 0;
@@ -74,6 +84,8 @@ void StreamSoundPlayer::deinit(bool freeBuffers)
                 delete[] static_cast<u8*>(buffer);
                 mChannels[ch].mBufferAddress = nullptr;
             }
+
+            freeSeekInfo_(ch);
         }
 
         snd::internal::driver::Channel* voice = mChannels[ch].mVoice;
@@ -95,6 +107,16 @@ void StreamSoundPlayer::deinit(bool freeBuffers)
     mPrepared = false;
 
     mActiveFlag = false;
+}
+
+void StreamSoundPlayer::fadeOut()
+{
+    for (u32 ch = 0; ch < mChannelCount; ch++)
+    {
+        snd::internal::driver::Channel* voice = mChannels[ch].mVoice;
+        if (voice)
+            voice->fadeOut();
+    }
 }
 
 void StreamSoundPlayer::setup(const SetupArg& arg)
@@ -433,11 +455,15 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
                 const snd::DspAdpcmParam& adpcmParam = channel.getAdpcmParam(true);
                 const snd::internal::DspAdpcmLoopParam& adpcmLoopParam = channel.getAdpcmLoopParam(true);
                 updateWaveInfo(mWaveInfos[i], channelBuffers[i], currentWave.getDataEndian(), adpcmParam, adpcmLoopParam);
+
+                if (currentWave.getDataEndian() == sead::Endian::getHostEndian())
+                    setSeekInfo_(i, channel.getSeekData());
             }
             else
             {
                 snd::DspAdpcmParam adpcmParam;
                 snd::internal::DspAdpcmLoopParam adpcmLoopParam;
+                WaveFile::Channel::SeekData seekData;
                 channelBuffers[i] = (u8*)WaveFile::convertChannel_(
                     const_cast<WaveFile::Channel&>(channel), channel.getData(), currentWave.getDataEndian(),
                     currentWave.getEncoding(), currentWave.getEncoding(), nullptr, nullptr, false, waveInfo.loopFlag,
@@ -447,10 +473,11 @@ void StreamSoundPlayer::prepare(const Sound::StreamSoundInfo& streamSoundInfo, s
                     waveInfo.loopStartFrame, waveInfo.loopEndFrame,
                     nullptr, nullptr,
                     &adpcmParam, &adpcmLoopParam,
-                    nullptr
+                    &seekData
                 );
 
                 updateWaveInfo(mWaveInfos[i], channelBuffers[i], sead::Endian::getHostEndian(), adpcmParam, adpcmLoopParam);
+                setSeekInfo_(i, seekData);
             }
 
             mChannels[i].mBufferAddress = channelBuffers[i];
@@ -485,18 +512,8 @@ void StreamSoundPlayer::pause(bool flag)
     }
 }
 
-bool StreamSoundPlayer::seek(u32 offsetSample)
+bool StreamSoundPlayer::restartVoices_()
 {
-    if (!mActiveFlag || !mSetup || !mPrepared)
-    {
-        return false;
-    }
-
-    if (offsetSample > mWaveInfos[0].loopEndFrame)
-    {
-        offsetSample = mWaveInfos[0].loopEndFrame;
-    }
-
     for (u32 ch = 0; ch < mChannelCount; ch++)
     {
         snd::internal::driver::Channel* voice = mChannels[ch].mVoice;
@@ -516,9 +533,185 @@ bool StreamSoundPlayer::seek(u32 offsetSample)
         return false;
     }
 
+    return true;
+}
+
+bool StreamSoundPlayer::seek(u32 offsetSample)
+{
+    if (!mActiveFlag || !mSetup || !mPrepared)
+    {
+        return false;
+    }
+
+    if (offsetSample > mWaveInfos[0].loopEndFrame)
+    {
+        offsetSample = mWaveInfos[0].loopEndFrame;
+    }
+
+    if (!restartVoices_())
+        return false;
+
     startPlayer(mWaveInfos, offsetSample);
 
     return true;
+}
+
+void StreamSoundPlayer::setSeekInfo_(u32 channelIndex, const WaveFile::Channel::SeekData& seekData)
+{
+    StreamChannel& channel = mChannels[channelIndex];
+    const s32 blockCount = seekData.getSeekInfoBlocks();
+
+    freeSeekInfo_(channelIndex);
+
+    if (blockCount <= 0)
+        return;
+
+    channel.mSeekInfo = new WaveFile::Channel::SeekInfo[blockCount];
+    channel.mSeekInfoCount = static_cast<u32>(blockCount);
+
+    for (s32 i = 0; i < blockCount; i++)
+        channel.mSeekInfo[i] = seekData.getSeekInfo(i);
+}
+
+void StreamSoundPlayer::freeSeekInfo_(u32 channelIndex)
+{
+    StreamChannel& channel = mChannels[channelIndex];
+
+    delete[] channel.mSeekInfo;
+    channel.mSeekInfo = nullptr;
+    channel.mSeekInfoCount = 0;
+}
+
+void StreamSoundPlayer::calcAdpcmContext_(snd::AdpcmContext* outContext, const snd::internal::WaveInfo& waveInfo, u32 channelIndex, u32 startSample) const
+{
+    const snd::DspAdpcmParam& adpcmParam = waveInfo.channelParam[0].adpcmParam;
+    const void* dataAddress = waveInfo.channelParam[0].dataAddress;
+    const StreamChannel& channel = mChannels[channelIndex];
+
+    snd::AdpcmParam param;
+    for (s32 i = 0; i < 8; i++)
+    {
+        param.coef[i][0] = adpcmParam.coef[i][0];
+        param.coef[i][1] = adpcmParam.coef[i][1];
+    }
+
+    snd::AdpcmContext& context = *outContext;
+    context.pred_scale = adpcmParam.predScale;
+    context.yn1 = adpcmParam.yn1;
+    context.yn2 = adpcmParam.yn2;
+
+    const u32 frameStart = (startSample / cSamplesPerAdpcmFrame) * cSamplesPerAdpcmFrame;
+    const u32 blockNo = frameStart / cSamplesPerSeekBlock;
+    u32 decodeStart = 0;
+
+    if (blockNo > 0 && blockNo < channel.mSeekInfoCount)
+    {
+        decodeStart = blockNo * cSamplesPerSeekBlock;
+        context.yn1 = channel.mSeekInfo[blockNo].yn1;
+        context.yn2 = channel.mSeekInfo[blockNo].yn2;
+    }
+
+    const void* decodeAddress = sead::PtrUtil::addOffset(dataAddress, snd::internal::driver::MultiVoice::frameToByte(decodeStart, waveInfo.sampleFormat));
+    snd::internal::driver::MultiVoice::calcOffsetAdpcmParam(&context, param, frameStart - decodeStart, decodeAddress);
+
+    const void* frameAddress = sead::PtrUtil::addOffset(dataAddress, snd::internal::driver::MultiVoice::frameToByte(frameStart, waveInfo.sampleFormat));
+    context.pred_scale = *static_cast<const u8*>(frameAddress);
+}
+
+bool StreamSoundPlayer::makeChannelRegion_(snd::internal::driver::Channel::Region* channelRegion, const snd::internal::WaveInfo& waveInfo, u32 channelIndex, const Region& region) const
+{
+    const u32 end = sead::Mathu::min(region.end, waveInfo.loopEndFrame);
+
+    if (region.start >= end)
+        return false;
+
+    channelRegion->no = region.no;
+    channelRegion->start = region.start;
+    channelRegion->end = end;
+    channelRegion->loop = mLoopEnabled;
+
+    if (waveInfo.sampleFormat == snd::SampleFormat::DspAdpcm)
+        calcAdpcmContext_(&channelRegion->context, waveInfo, channelIndex, region.start);
+
+    return true;
+}
+
+bool StreamSoundPlayer::playRegion(const Region& region)
+{
+    if (!mActiveFlag || !mSetup || !mPrepared)
+        return false;
+
+    if (region.start >= region.end || region.start >= mWaveInfos[0].loopEndFrame)
+        return false;
+
+    if (!restartVoices_())
+        return false;
+
+    startPlayer(mWaveInfos, 0, &region);
+
+    return true;
+}
+
+void StreamSoundPlayer::setNextRegion(const Region& region)
+{
+    for (u32 ch = 0; ch < mChannelCount; ch++)
+    {
+        snd::internal::driver::Channel* voice = mChannels[ch].mVoice;
+        if (!voice)
+            continue;
+
+        snd::internal::WaveInfo waveInfo;
+        nw::snd::internal::ConvertWaveInfo(&waveInfo, mWaveInfos[ch]);
+
+        snd::internal::driver::Channel::Region channelRegion;
+        if (makeChannelRegion_(&channelRegion, waveInfo, ch, region))
+            voice->setNextRegion(waveInfo, channelRegion);
+    }
+}
+
+void StreamSoundPlayer::clearNextRegion()
+{
+    for (u32 ch = 0; ch < mChannelCount; ch++)
+    {
+        snd::internal::driver::Channel* voice = mChannels[ch].mVoice;
+        if (voice)
+            voice->clearNextRegion(mLoopEnabled);
+    }
+}
+
+s32 StreamSoundPlayer::getPlayingRegionNo() const
+{
+    return mChannelCount != 0 && mChannels[0].mVoice ? mChannels[0].mVoice->getPlayingRegionNo() : -1;
+}
+
+s32 StreamSoundPlayer::getNextRegionNo() const
+{
+    return mChannelCount != 0 && mChannels[0].mVoice ? mChannels[0].mVoice->getNextRegionNo() : -1;
+}
+
+void StreamSoundPlayer::renumberRegions(const s32* newNos, s32 count)
+{
+    for (u32 ch = 0; ch < mChannelCount; ch++)
+    {
+        snd::internal::driver::Channel* voice = mChannels[ch].mVoice;
+        if (voice)
+            voice->renumberRegions(newNos, count);
+    }
+}
+
+void StreamSoundPlayer::setLoopEnabled(bool enable)
+{
+    mLoopEnabled = enable;
+
+    for (u32 ch = 0; ch < mChannelCount; ch++)
+    {
+        snd::internal::driver::Channel* voice = mChannels[ch].mVoice;
+        if (!voice)
+            continue;
+
+        voice->setLoopEnabled(enable);
+        voice->setRegionLoopEnabled(enable);
+    }
 }
 
 void StreamSoundPlayer::applyTrackDataInfo()
@@ -581,7 +774,7 @@ bool StreamSoundPlayer::allocVoices()
     return true;
 }
 
-void StreamSoundPlayer::startPlayer(const nw::snd::internal::WaveInfo* waveInfos, u32 startOffsetSample)
+void StreamSoundPlayer::startPlayer(const nw::snd::internal::WaveInfo* waveInfos, u32 startOffsetSample, const Region* region)
 {
     for (u32 trackIndex = 0; trackIndex < mTrackCount; trackIndex++)
     {
@@ -606,8 +799,28 @@ void StreamSoundPlayer::startPlayer(const nw::snd::internal::WaveInfo* waveInfos
                 snd::internal::WaveInfo waveInfoS;
                 nw::snd::internal::ConvertWaveInfo(&waveInfoS, waveInfo);
 
+                snd::internal::driver::Channel::Region channelRegion;
+
                 voice->setUpdateType(mUpdateType);
-                voice->start(waveInfoS, -1, startOffsetSample);
+
+                if (region && makeChannelRegion_(&channelRegion, waveInfoS, static_cast<u32>(globalChannelIndex), *region))
+                    voice->startRegion(waveInfoS, channelRegion);
+                else
+                {
+                    const u32 contextSample = (startOffsetSample / cSamplesPerAdpcmFrame) * cSamplesPerAdpcmFrame;
+
+                    if (contextSample > 0 && waveInfoS.sampleFormat == snd::SampleFormat::DspAdpcm)
+                    {
+                        snd::internal::WaveFileReader::OffsetContextInfo contextInfo;
+                        contextInfo.offsetSample = contextSample;
+                        calcAdpcmContext_(&contextInfo.contexts[0], waveInfoS, static_cast<u32>(globalChannelIndex), contextSample);
+                        voice->setOffsetContext(contextInfo);
+                    }
+
+                    voice->start(waveInfoS, -1, startOffsetSample);
+                }
+
+                voice->setLoopEnabled(mLoopEnabled);
             }
         }
     }
@@ -635,6 +848,25 @@ void StreamSoundPlayer::update()
     for (u32 trackIndex = 0; trackIndex < mTrackCount; trackIndex++)
     {
         updateVoiceParams(&mTracks[trackIndex]);
+        updateTrackPeak(&mTracks[trackIndex]);
+    }
+}
+
+void StreamSoundPlayer::updateTrackPeak(StreamTrack* track)
+{
+    if (!track->mActiveFlag)
+        return;
+
+    for (u32 ch = 0; ch < track->channelCount && ch < snd::cWaveChannelMax; ch++)
+    {
+        const StreamChannel* channel = track->mChannels[ch];
+        if (!channel || !channel->mVoice)
+            continue;
+
+        const f32 peak = channel->mVoice->fetchVoicePeak();
+
+        if (peak > track->mPeak[ch].load(std::memory_order_relaxed))
+            track->mPeak[ch].store(peak, std::memory_order_relaxed);
     }
 }
 
@@ -794,13 +1026,26 @@ void StreamSoundPlayer::channelCallbackFunc(snd::internal::driver::Channel* drop
     channel->mVoice = nullptr;
 }
 
-void StreamSoundPlayer::setTrackDataVolume(u32 trackIndex, u8 volume)
+void StreamSoundPlayer::setTrackDataInfo(u32 trackIndex, const nw::snd::SoundArchive::StreamTrackInfo& trackInfo)
 {
     if (trackIndex >= mTrackCount)
         return;
 
-    mStreamDataInfoTracks[trackIndex].volume = volume;
-    mTracks[trackIndex].volume = volume;
+    nw::snd::SoundArchive::StreamTrackInfo& info = mStreamDataInfoTracks[trackIndex];
+    StreamTrack& track = mTracks[trackIndex];
+
+    track.volume = info.volume = trackInfo.volume;
+    track.pan = info.pan = trackInfo.pan;
+    track.span = info.span = trackInfo.span;
+    track.flags = info.flags = trackInfo.flags;
+    track.mainSend = info.mainSend = trackInfo.mainSend;
+    for (u32 i = 0; i < nw::snd::AUX_BUS_NUM; i++)
+    {
+        track.fxSend[i] = info.fxSend[i] = trackInfo.fxSend[i];
+    }
+    track.lpfFreq = info.lpfFreq = trackInfo.lpfFreq;
+    track.biquadType = info.biquadType = trackInfo.biquadType;
+    track.biquadValue = info.biquadValue = trackInfo.biquadValue;
 }
 
 void StreamSoundPlayer::setTrackVolume(u32 trackBitFlag, f32 volume)

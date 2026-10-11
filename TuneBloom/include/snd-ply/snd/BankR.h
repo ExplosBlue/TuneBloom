@@ -3,6 +3,7 @@
 #include <basis/seadTypes.h>
 
 #include "Channel.h"
+#include "ChannelMgr.h"
 
 #include "snd/snd_BankFileReader.h"
 #include "snd/snd_WaveArchiveFileReader.h"
@@ -10,8 +11,8 @@
 
 #include "snd/SequenceSoundPlayer.h"
 
-#include <bfsar/BankFile.h>
-#include <bfsar/WaveFile.h>
+#include <bfsar/files/BankFile.h>
+#include <bfsar/files/WaveFile.h>
 
 class BankR
 {
@@ -137,24 +138,10 @@ public:
             return nullptr;
 
         // Initial parameter settings
-        pChannel->setKey(static_cast<u8>(noteOnInfo.key), velocityRegion->getRootKey());
+        pChannel->setKey(static_cast<u8>(noteOnInfo.key));
         pChannel->setVelocity(calcChannelVelocityVolume(static_cast<u8>(noteOnInfo.velocity)));
-        pChannel->setInstrumentVolume(velocityRegion->getVolume() * INSTRUMENT_VOLUME_CRITERION_R);
-        pChannel->setTune(velocityRegion->getPitch());
-
-        pChannel->setAttack(velocityRegion->getAdshrCurve().attack);
-        pChannel->setHold(velocityRegion->getAdshrCurve().hold);
-        pChannel->setDecay(velocityRegion->getAdshrCurve().decay);
-        pChannel->setSustain(velocityRegion->getAdshrCurve().sustain);
-        pChannel->setRelease(velocityRegion->getAdshrCurve().release);
-
-        float initPan = static_cast<f32>(noteOnInfo.initPan + velocityRegion->getPan() - 64) / 63.0f;
-        pChannel->setInitPan(initPan);
-        //pChannel->setInitSurroundPan(0.0f);
-
-        pChannel->setKeyGroupId(velocityRegion->getKeyGroup());
-        pChannel->setIsIgnoreNoteOff(velocityRegion->getIsIgnoreNoteOff());
-        pChannel->setInterpolationType(velocityRegion->getInterpolationType());
+        pChannel->setBankRegion(velocityRegion, noteOnInfo.initPan);
+        applyVelocityRegion(pChannel, *velocityRegion, noteOnInfo.initPan, true);
         pChannel->setUpdateType(noteOnInfo.updateType);
 
         snd::internal::WaveInfo waveInfoS;
@@ -168,5 +155,64 @@ public:
     static f32 calcChannelVelocityVolume(u8 velocity)
     {
         return static_cast<f32>(velocity) * VELOCITY_MAX_R;
+    }
+
+    static void applyVelocityRegion(snd::internal::driver::Channel* channel, const BankFile::VelocityRegion& velocityRegion, s32 notePan, bool isNoteOn)
+    {
+        using EnvelopeParam = snd::internal::driver::Channel::EnvelopeParam;
+
+        channel->setRootKey(velocityRegion.getRootKey());
+        channel->setInstrumentVolume(velocityRegion.getVolume() * INSTRUMENT_VOLUME_CRITERION_R);
+        channel->setTune(velocityRegion.getPitch());
+
+        const snd::AdshrCurve& adshrCurve = velocityRegion.getAdshrCurve();
+        const u8 envelope[static_cast<s32>(EnvelopeParam::Num)] = {
+            adshrCurve.attack,
+            adshrCurve.hold,
+            adshrCurve.decay,
+            adshrCurve.sustain,
+            adshrCurve.release
+        };
+
+        for (s32 i = 0; i < static_cast<s32>(EnvelopeParam::Num); i++)
+        {
+            const EnvelopeParam param = static_cast<EnvelopeParam>(i);
+
+            if (!isNoteOn)
+            {
+                if (!channel->isBankEnvelopeLinked(param) || channel->isRelease() || channel->getBankEnvelope(param) == envelope[i])
+                    continue;
+            }
+
+            channel->setEnvelopeParam(param, envelope[i]);
+            channel->setBankEnvelope(param, envelope[i]);
+        }
+
+        channel->setInitPan(static_cast<f32>(notePan + velocityRegion.getPan() - 64) / 63.0f);
+
+        channel->setKeyGroupId(velocityRegion.getKeyGroup());
+        channel->setIsIgnoreNoteOff(velocityRegion.getIsIgnoreNoteOff());
+        channel->setInterpolationType(velocityRegion.getInterpolationType());
+    }
+
+    static void refreshVelocityRegions()
+    {
+        snd::internal::driver::ChannelMgr::instance()->forEachChannel([](snd::internal::driver::Channel& channel)
+        {
+            const Item* region = channel.getBankRegion();
+            if (!region || !channel.isActive())
+                return;
+
+            applyVelocityRegion(&channel, *static_cast<const BankFile::VelocityRegion*>(region), channel.getBankNotePan(), false);
+        });
+    }
+
+    static void forgetVelocityRegion(const BankFile::VelocityRegion& velocityRegion)
+    {
+        snd::internal::driver::ChannelMgr::instance()->forEachChannel([&velocityRegion](snd::internal::driver::Channel& channel)
+        {
+            if (channel.getBankRegion() == &velocityRegion)
+                channel.resetBankRegion();
+        });
     }
 };

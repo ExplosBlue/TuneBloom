@@ -213,6 +213,16 @@ void CurveAdshr::setRelease(s32 release)
     mRelease = CurveAdshr::calcRelease(release);
 }
 
+void CurveAdshr::limitRelease(s32 release)
+{
+    SEAD_ASSERT(release >= 0 && release <= 127);
+
+    const f32 minRelease = CurveAdshr::calcRelease(release);
+
+    if (mRelease < minRelease)
+        mRelease = minRelease;
+}
+
 f32 CurveAdshr::calcRelease(s32 release)
 {
     SEAD_ASSERT(release >= 0 && release <= 127);

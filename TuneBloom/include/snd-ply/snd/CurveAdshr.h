@@ -55,6 +55,7 @@ public:
     void setDecay(s32 decay);
     void setSustain(s32 sustain);
     void setRelease(s32 release);
+    void limitRelease(s32 release);
 
 private:
     static f32 calcRelease(s32 release);

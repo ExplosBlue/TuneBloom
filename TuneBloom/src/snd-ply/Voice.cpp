@@ -174,6 +174,14 @@ void Voice::freeAllWaveBuffer_()
 {
 }
 
+f32 Voice::fetchPeak()
+{
+    if (!mVoiceImpl)
+        return 0.0f;
+
+    return mVoiceImpl->fetchPeak();
+}
+
 void Voice::VoiceImplDisposeCallback(VoiceImpl* voiceImpl, void* arg)
 {
     Voice* voice = reinterpret_cast<Voice*>(arg);

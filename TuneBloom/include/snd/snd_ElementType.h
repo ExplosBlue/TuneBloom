@@ -69,6 +69,7 @@ enum ElementType
     ElementType_StreamSoundFile_SeekBlock                    = ElementType_Category_StreamSoundFile_Blocks + 1,
     ElementType_StreamSoundFile_DataBlock                    = ElementType_Category_StreamSoundFile_Blocks + 2,
     ElementType_StreamSoundFile_RegionBlock                  = ElementType_Category_StreamSoundFile_Blocks + 3,
+    ElementType_StreamSoundFile_PrefetchDataBlock            = ElementType_Category_StreamSoundFile_Blocks + 4,
 
     ElementType_Category_StreamSoundFile_ItemInfos           = 0x4100,
     ElementType_StreamSoundFile_StreamSoundInfo              = ElementType_Category_StreamSoundFile_ItemInfos + 0,

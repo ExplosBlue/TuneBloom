@@ -99,6 +99,8 @@ public:
         return mVoiceParam.mix;
     }
 
+    f32 fetchPeak();
+
     static void detail_setVoiceMgr(VoiceMgr* voiceMgr);
     static VoiceMgr* detail_getVoiceMgr() { return sVoiceMgr; }
 

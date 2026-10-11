@@ -6,7 +6,9 @@
 
 #include "snd/snd_SoundArchive.h"
 
-#include <bfsar/Sound.h>
+#include <bfsar/model/Sound.h>
+
+#include <atomic>
 
 static const u32 cStrmChannelNum = 16;
 static const u32 cStrmTrackNum = 8;
@@ -16,6 +18,9 @@ struct StreamChannel
     void* mBufferAddress;
     snd::internal::driver::Channel* mVoice;
     snd::UpdateType mUpdateType;
+
+    WaveFile::Channel::SeekInfo* mSeekInfo;
+    u32 mSeekInfoCount;
 };
 
 struct StreamTrack
@@ -37,6 +42,8 @@ public:
 
     f32 mVolume;
     s32 mOutputLine;
+
+    std::atomic<f32> mPeak[snd::cWaveChannelMax] = {};
 
     snd::internal::OutputParam mParam;
 };
@@ -138,26 +145,55 @@ public:
 
     void init();
     void deinit(bool freeBuffers = true);
+    void fadeOut();
+
+    bool hasBuffers() const
+    {
+        for (u32 ch = 0; ch < cStrmChannelNum; ch++)
+        {
+            if (mChannels[ch].mBufferAddress)
+                return true;
+        }
+
+        return false;
+    }
     void setup(const SetupArg& arg);
     void prepare(const void* strmFile, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
     void prepare(const Sound::StreamSoundInfo& streamSoundInfo, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
 
     void pause(bool flag) override;
     bool seek(u32 offsetSample);
+    void setLoopEnabled(bool enable);
+
+    struct Region
+    {
+        s32 no = -1;
+        u32 start = 0;
+        u32 end = 0;
+    };
+
+    bool playRegion(const Region& region);
+    void setNextRegion(const Region& region);
+    void clearNextRegion();
+    s32 getPlayingRegionNo() const;
+    s32 getNextRegionNo() const;
+    void renumberRegions(const s32* newNos, s32 count);
 
     void applyTrackDataInfo();
     bool allocVoices();
 
-    void startPlayer(const nw::snd::internal::WaveInfo* waveInfos, u32 startOffsetSample);
+    void startPlayer(const nw::snd::internal::WaveInfo* waveInfos, u32 startOffsetSample, const Region* region = nullptr);
 
     void update();
     void updateVoiceParams(StreamTrack* track);
+    void updateTrackPeak(StreamTrack* track);
     void setOutputParam(snd::internal::OutputParam* pOutputParam, const snd::internal::OutputParam& trackParam, const TrackData& trackData);
     void mixSettingForOutputParam(snd::internal::OutputParam* pOutputParam, s32 channelIndex, snd::MixMode mixMode);
     void applyTvOutputParamForMultiChannel(snd::internal::OutputParam* pOutputParam, snd::internal::driver::Channel* pVoice, s32 channelIndex, snd::MixMode mixMode);
 
     void setTrackVolume(u32 trackBitFlag, f32 volume);
-    void setTrackDataVolume(u32 trackIndex, u8 volume);
+    void setItemData(const SetupArg& arg) { mItemData.set(arg); }
+    void setTrackDataInfo(u32 trackIndex, const nw::snd::SoundArchive::StreamTrackInfo& trackInfo);
 
     s32 getPlaySamplePosition(bool isOriginalSamplePosition) const;
 
@@ -174,6 +210,11 @@ public:
         return mTrackCount;
     }
 
+    f32 fetchTrackPeak(u32 trackNo, u32 channel)
+    {
+        return mTracks[trackNo].mPeak[channel].exchange(0.0f, std::memory_order_relaxed);
+    }
+
     u32 getSampleRate() const
     {
         return mSampleRate;
@@ -184,10 +225,18 @@ public:
         return mSampleCount;
     }
 
+private:
+    bool restartVoices_();
+    void setSeekInfo_(u32 channelIndex, const WaveFile::Channel::SeekData& seekData);
+    void freeSeekInfo_(u32 channelIndex);
+    void calcAdpcmContext_(snd::AdpcmContext* outContext, const snd::internal::WaveInfo& waveInfo, u32 channelIndex, u32 startSample) const;
+    bool makeChannelRegion_(snd::internal::driver::Channel::Region* channelRegion, const snd::internal::WaveInfo& waveInfo, u32 channelIndex, const Region& region) const;
+
 protected:
     bool mSetup;
     bool mPrepared;
     bool mIsRegisterPlayerCallback;
+    bool mLoopEnabled = true;
 
     ItemData mItemData;
 

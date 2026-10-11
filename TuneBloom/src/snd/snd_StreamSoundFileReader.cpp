@@ -3,8 +3,8 @@
 #include <math/seadMathCalcCommon.h>
 
 #include <ui/Messages.h>
-#include <ui/PopupMgr.h>
-#include <ui/UI.h>
+#include <ui/app/PopupMgr.h>
+#include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
 
@@ -110,7 +110,7 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
         u32 major = ((u32)header->version >> 24) & 0xFF;
         if (major < 1 || major > 4)
         {
-            sead::FormatFixedSafeString<64> msg(messages::archive::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
+            sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
             PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             return false;
         }
@@ -119,7 +119,7 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
     {
         if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version < 0x00070000))
         {
-            sead::FormatFixedSafeString<64> msg(messages::archive::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
+            sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
             PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             return false;
         }
@@ -171,7 +171,32 @@ bool StreamSoundFileReader::ReadStreamSoundInfo(StreamSoundFile::StreamSoundInfo
         strmInfo->originalLoopEnd = info->frameCount;
     }
 
+    strmInfo->unknown4C = GetStreamSoundInfoSize() >= sizeof(StreamSoundFile::StreamSoundInfo) ? static_cast<u32>(info->unknown4C) : 0;
+
     return true;
+}
+
+u32 StreamSoundFileReader::GetStreamSoundInfoSize() const
+{
+    SEAD_ASSERT(mInfoBlockBody);
+
+    const s32 infoOffset = mInfoBlockBody->toStreamSoundInfo.offset;
+    const s32 nextOffsets[] = { mInfoBlockBody->toTrackInfoTable.offset, mInfoBlockBody->toChannelInfoTable.offset };
+
+    u32 size = 0;
+
+    for (s32 nextOffset : nextOffsets)
+    {
+        if (nextOffset <= infoOffset)
+            continue;
+
+        const u32 distance = static_cast<u32>(nextOffset - infoOffset);
+
+        if (size == 0 || distance < size)
+            size = distance;
+    }
+
+    return size;
 }
 
 bool StreamSoundFileReader::ReadStreamTrackInfo(TrackInfo* pTrackInfo, s32 trackIndex) const

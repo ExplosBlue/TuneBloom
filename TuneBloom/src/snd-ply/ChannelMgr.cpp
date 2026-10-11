@@ -105,4 +105,13 @@ void ChannelMgr::updateAudioFrameChannel()
     }
 }
 
+void ChannelMgr::fadeOutAllChannel()
+{
+    for (Channel& channel : mChannelList)
+    {
+        if (channel.isActive())
+            channel.fadeOut();
+    }
+}
+
 } } } // namespace snd::internal::driver

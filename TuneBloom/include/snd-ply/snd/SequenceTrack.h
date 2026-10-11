@@ -124,6 +124,7 @@ public:
     snd::internal::driver::Channel* noteOn(s32 key, s32 velocity, s32 length, bool tieFlag);
     void stopAllChannel();
     void releaseAllChannel(s32 release, bool stop = false);
+    void fadeOutAllChannel();
     void freeAllChannel();
     void pauseAllChannel(bool flag);
 
@@ -165,6 +166,9 @@ public:
             return nullptr;
     }
 
+    u16 getUsedVariables() const { return mUsedVariables; }
+    void markVariableUsed(s32 varNo) { mUsedVariables |= static_cast<u16>(1 << varNo); }
+
     void setPlayerTrackNo(s32 trackNo);
     u8 getPlayerTrackNo() const { return mPlayerTrackNo; }
 
@@ -185,6 +189,7 @@ private:
 
     ParserTrackParam mParserTrackParam;
     volatile s16 mTrackVariable[cTrackVariableNum];
+    u16 mUsedVariables;
 
     SequenceSoundPlayer* mSequenceSoundPlayer;
     snd::internal::driver::Channel* mChannelList;

@@ -682,7 +682,7 @@ void VoiceImpl::setupVoice(const VoiceParam& voiceParam, const OutputMode* outpu
         mLastSamples[i] = 0;
     }
 
-    mPlayPosition = 0;
+    mPlayPosition = mWaveBufferListBegin ? mWaveBufferListBegin->sampleOffset : 0;
 
     // VE
     this->updateVe(voiceParam, true);
@@ -1127,6 +1127,19 @@ void VoiceImpl::synthesize(VoiceSynthesizeBuffer* buffer, f32* workBuffer, u32 s
         }
     }
 
+    // Peak
+    {
+        f32 peak = 0.0f;
+
+        for (u32 i = 0; i < samples; i++)
+            peak = sead::Mathf::max(peak, fabsf(workBuffer[i]));
+
+        peak /= 32768.0f;
+
+        if (peak > mPeak.load(std::memory_order_relaxed))
+            mPeak.store(peak, std::memory_order_relaxed);
+    }
+
     // Mixing
     {
         buffer->flag |= this->mixSample(workBuffer, buffer->mix.left, samples, mMix[(u32)ChannelIdx::Left]) ? VoiceSynthesizeBuffer::Flag_L : 0;
@@ -1178,6 +1191,12 @@ bool VoiceImpl::updateNextWaveBuffer()
         WaveBuffer* waveBuffer = mWaveBufferListBegin;
         mWaveBufferListBegin = mWaveBufferListBegin->next;
         waveBuffer->status = WaveBuffer::Status::Done;
+
+        while (waveBuffer->endFlag && mWaveBufferListBegin)
+        {
+            mWaveBufferListBegin->status = WaveBuffer::Status::Done;
+            mWaveBufferListBegin = mWaveBufferListBegin->next;
+        }
 
         if (!mWaveBufferListBegin)
         {

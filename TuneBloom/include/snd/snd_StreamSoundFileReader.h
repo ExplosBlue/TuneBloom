@@ -106,6 +106,9 @@ public:
         return result;
     }
 
+    // Custom
+    u32 GetStreamSoundInfoSize() const;
+
     const StreamSoundFile::FileHeader* mHeader;
     const StreamSoundFile::InfoBlockBody* mInfoBlockBody;
 };

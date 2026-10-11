@@ -18,6 +18,264 @@ static bool             InputTextFilterCharacter(ImGuiContext* ctx, unsigned int
 static int              InputTextCalcTextLenAndLineCount(const char* text_begin, const char** out_text_end);
 static ImVec2           InputTextCalcTextSizeW(ImGuiContext* ctx, const ImWchar* text_begin, const ImWchar* text_end, const ImWchar** remaining = NULL, ImVec2* out_offset = NULL, bool stop_on_new_line = false);
 
+// Window shadow
+static const int        WINDOW_SHADOW_RING_COUNT = 8;
+static const int        WINDOW_SHADOW_CORNER_SEGMENTS = 8;
+static const float      WINDOW_SHADOW_SIZE_EM = 1.2f;
+static const float      WINDOW_SHADOW_OFFSET_EM = 0.3f;
+static const float      WINDOW_SHADOW_POPUP_SCALE = 0.7f;
+static const float      WINDOW_SHADOW_INSET = 1.0f;
+static float            GWindowShadowAlpha = 0.5f;
+
+void ImGui::SetWindowShadowAlpha(float alpha)
+{
+    GWindowShadowAlpha = alpha;
+}
+
+static float WindowShadowDistance(const ImVec2& pos, const ImVec2& center, const ImVec2& half_size, float rounding)
+{
+    const ImVec2 q(ImFabs(pos.x - center.x) - half_size.x + rounding, ImFabs(pos.y - center.y) - half_size.y + rounding);
+    const ImVec2 outside(ImMax(q.x, 0.0f), ImMax(q.y, 0.0f));
+    return ImSqrt(outside.x * outside.x + outside.y * outside.y) + ImMin(ImMax(q.x, q.y), 0.0f) - rounding;
+}
+
+void ImGui::RenderWindowShadow(ImGuiWindow* window)
+{
+    ImGuiContext& g = *GImGui;
+    const ImGuiWindowFlags flags = window->Flags;
+    if (GWindowShadowAlpha <= 0.0f || window->ViewportOwned || window->DockIsActive)
+        return;
+    if (flags & (ImGuiWindowFlags_ChildWindow | ImGuiWindowFlags_NoBackground))
+        return;
+
+    const ImRect viewport_rect = window->Viewport->GetMainRect();
+    const ImRect rect = window->Rect();
+    if (rect.GetWidth() >= viewport_rect.GetWidth() || rect.GetHeight() >= viewport_rect.GetHeight())
+        return;
+
+    const bool is_popup = (flags & ImGuiWindowFlags_Tooltip) || ((flags & ImGuiWindowFlags_Popup) && !(flags & ImGuiWindowFlags_Modal));
+    float bg_alpha = g.Style.Colors[(flags & (ImGuiWindowFlags_Tooltip | ImGuiWindowFlags_Popup)) ? ImGuiCol_PopupBg : ImGuiCol_WindowBg].w;
+    if (g.NextWindowData.Flags & ImGuiNextWindowDataFlags_HasBgAlpha)
+        bg_alpha = g.NextWindowData.BgAlphaVal;
+
+    const float alpha = GWindowShadowAlpha * g.Style.Alpha * ImSaturate(bg_alpha);
+    if (alpha <= 0.0f)
+        return;
+
+    const float scale = is_popup ? WINDOW_SHADOW_POPUP_SCALE : 1.0f;
+    const float size = ImTrunc(g.FontSize * WINDOW_SHADOW_SIZE_EM * scale);
+    const float offset = ImTrunc(g.FontSize * WINDOW_SHADOW_OFFSET_EM * scale);
+    const float rounding = window->WindowRounding;
+    const ImVec2 shadow_center = rect.GetCenter() + ImVec2(0.0f, offset);
+    const ImVec2 shadow_half_size = rect.GetSize() * 0.5f;
+
+    const int point_count = (WINDOW_SHADOW_CORNER_SEGMENTS + 1) * 4;
+    const int ring_count = WINDOW_SHADOW_RING_COUNT + 1;
+
+    ImDrawList* draw_list = window->DrawList;
+    draw_list->PushClipRect(viewport_rect.Min, viewport_rect.Max, false);
+    draw_list->PrimReserve(WINDOW_SHADOW_RING_COUNT * point_count * 6, ring_count * point_count);
+
+    const ImVec2 uv = draw_list->_Data->TexUvWhitePixel;
+    const unsigned int first_idx = draw_list->_VtxCurrentIdx;
+
+    for (int ring_n = 0; ring_n < ring_count; ring_n++)
+    {
+        const float expand = (size + offset + WINDOW_SHADOW_INSET) * ring_n / WINDOW_SHADOW_RING_COUNT - WINDOW_SHADOW_INSET;
+        const float radius = ImMax(rounding + expand, 0.0f);
+        const ImVec2 center_min = rect.Min - ImVec2(expand, expand) + ImVec2(radius, radius);
+        const ImVec2 center_max = rect.Max + ImVec2(expand, expand) - ImVec2(radius, radius);
+
+        for (int corner_n = 0; corner_n < 4; corner_n++)
+        {
+            const ImVec2 center((corner_n == 0 || corner_n == 3) ? center_min.x : center_max.x, (corner_n < 2) ? center_min.y : center_max.y);
+
+            for (int segment_n = 0; segment_n <= WINDOW_SHADOW_CORNER_SEGMENTS; segment_n++)
+            {
+                const float angle = IM_PI * (1.0f + 0.5f * (corner_n + (float)segment_n / WINDOW_SHADOW_CORNER_SEGMENTS));
+                const ImVec2 pos = center + ImVec2(ImCos(angle), ImSin(angle)) * radius;
+                const float fade = 1.0f - ImSaturate(WindowShadowDistance(pos, shadow_center, shadow_half_size, rounding) / size);
+
+                draw_list->PrimWriteVtx(pos, uv, IM_COL32(0, 0, 0, IM_F32_TO_INT8_SAT(alpha * fade * fade)));
+            }
+        }
+    }
+
+    for (int ring_n = 0; ring_n < WINDOW_SHADOW_RING_COUNT; ring_n++)
+    {
+        for (int point_n = 0; point_n < point_count; point_n++)
+        {
+            const unsigned int a = first_idx + ring_n * point_count + point_n;
+            const unsigned int b = first_idx + ring_n * point_count + (point_n + 1) % point_count;
+
+            draw_list->PrimWriteIdx((ImDrawIdx)a);
+            draw_list->PrimWriteIdx((ImDrawIdx)b);
+            draw_list->PrimWriteIdx((ImDrawIdx)(b + point_count));
+            draw_list->PrimWriteIdx((ImDrawIdx)a);
+            draw_list->PrimWriteIdx((ImDrawIdx)(b + point_count));
+            draw_list->PrimWriteIdx((ImDrawIdx)(a + point_count));
+        }
+    }
+
+    draw_list->PopClipRect();
+}
+
+// Raised gradient
+static const float      RAISED_GRADIENT_BOTTOM_SCALE = 1.5f;
+static float            GRaisedGradient = 0.0f;
+static float            GSurfaceGradient = 0.0f;
+
+void ImGui::SetRaisedGradient(float amount)
+{
+    GRaisedGradient = amount;
+}
+
+void ImGui::SetSurfaceGradient(float amount)
+{
+    GSurfaceGradient = amount;
+}
+
+void ImGui::AddRectFilledGradient(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float amount, float rounding, ImDrawFlags flags)
+{
+    if (amount <= 0.0f || (col & IM_COL32_A_MASK) == 0 || p_max.y <= p_min.y)
+    {
+        draw_list->AddRectFilled(p_min, p_max, col, rounding, flags);
+        return;
+    }
+
+    const ImVec4 base = ImGui::ColorConvertU32ToFloat4(col);
+    float h, s, v;
+    ImGui::ColorConvertRGBtoHSV(base.x, base.y, base.z, h, s, v);
+
+    ImVec4 top = base;
+    ImGui::ColorConvertHSVtoRGB(h, s, ImLerp(v, 1.0f, amount), top.x, top.y, top.z);
+
+    const ImVec4 bottom = ImLerp(base, ImVec4(0.0f, 0.0f, 0.0f, base.w), ImMin(amount * RAISED_GRADIENT_BOTTOM_SCALE, 1.0f));
+
+    const int vtx_begin = draw_list->VtxBuffer.Size;
+    draw_list->AddRectFilled(p_min, p_max, col, rounding, flags);
+    ImGui::ShadeVertsLinearColorGradientKeepAlpha(draw_list, vtx_begin, draw_list->VtxBuffer.Size, p_min, ImVec2(p_min.x, p_max.y), ImGui::ColorConvertFloat4ToU32(top), ImGui::ColorConvertFloat4ToU32(bottom));
+}
+
+void ImGui::AddRectFilledRaised(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding, ImDrawFlags flags)
+{
+    AddRectFilledGradient(draw_list, p_min, p_max, col, GRaisedGradient, rounding, flags);
+}
+
+void ImGui::AddRectFilledSurface(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding, ImDrawFlags flags)
+{
+    AddRectFilledGradient(draw_list, p_min, p_max, col, GSurfaceGradient, rounding, flags);
+}
+
+// Hover fade
+struct HoverSlot
+{
+    ImGuiID id;
+    float ratio;
+    int frame;
+};
+
+static const int        HOVER_SLOT_COUNT = 64;
+static const float      HOVER_FADE_IN_SECONDS = 0.04f;
+static const float      HOVER_FADE_OUT_SECONDS = 0.09f;
+static HoverSlot        GHoverSlots[HOVER_SLOT_COUNT];
+static bool             GHoverAnimation = true;
+
+void ImGui::SetHoverAnimation(bool enabled)
+{
+    GHoverAnimation = enabled;
+}
+
+float ImGui::GetHoverRatio(ImGuiID id, bool hovered)
+{
+    ImGuiContext& g = *GImGui;
+    if (!GHoverAnimation || id == 0)
+        return hovered ? 1.0f : 0.0f;
+
+    HoverSlot* slot = NULL;
+    HoverSlot* free_slot = NULL;
+    for (HoverSlot& candidate : GHoverSlots)
+    {
+        if (candidate.id == id)
+        {
+            slot = &candidate;
+            break;
+        }
+        if (free_slot == NULL && (candidate.id == 0 || candidate.frame < g.FrameCount - 1))
+            free_slot = &candidate;
+    }
+
+    if (slot == NULL)
+    {
+        if (!hovered)
+            return 0.0f;
+        if (free_slot == NULL)
+            return 1.0f;
+
+        slot = free_slot;
+        slot->id = id;
+        slot->ratio = 0.0f;
+        slot->frame = g.FrameCount - 1;
+    }
+    else if (slot->frame < g.FrameCount - 1)
+    {
+        slot->ratio = 0.0f;
+    }
+
+    if (slot->frame != g.FrameCount)
+    {
+        if (hovered)
+            slot->ratio = ImMin(slot->ratio + g.IO.DeltaTime / HOVER_FADE_IN_SECONDS, 1.0f);
+        else
+            slot->ratio = ImMax(slot->ratio - g.IO.DeltaTime / HOVER_FADE_OUT_SECONDS, 0.0f);
+        slot->frame = g.FrameCount;
+    }
+
+    const float ratio = slot->ratio;
+    if (ratio <= 0.0f && !hovered)
+        slot->id = 0;
+
+    return ratio;
+}
+
+static ImU32 LerpHoverColor(ImVec4 idle, const ImVec4& hovered, float ratio)
+{
+    if (idle.w <= 0.0f)
+        idle = ImVec4(hovered.x, hovered.y, hovered.z, 0.0f);
+
+    return ImGui::ColorConvertFloat4ToU32(ImLerp(idle, hovered, ratio));
+}
+
+ImU32 ImGui::GetHoverColorU32(ImGuiID id, bool hovered, bool active, ImGuiCol idle_col, ImGuiCol hovered_col, ImGuiCol active_col, float alpha_mul)
+{
+    const float ratio = GetHoverRatio(id, hovered || active);
+    if (active)
+        return GetColorU32(active_col, alpha_mul);
+    if (ratio <= 0.0f)
+        return GetColorU32(idle_col, alpha_mul);
+    if (ratio >= 1.0f)
+        return GetColorU32(hovered_col, alpha_mul);
+
+    const ImGuiStyle& style = GImGui->Style;
+    ImVec4 idle = style.Colors[idle_col];
+    ImVec4 target = style.Colors[hovered_col];
+    idle.w *= style.Alpha * alpha_mul;
+    target.w *= style.Alpha * alpha_mul;
+
+    return LerpHoverColor(idle, target, ratio);
+}
+
+ImU32 ImGui::GetHoverColorU32(ImGuiID id, bool hovered, ImU32 idle_col, ImU32 hovered_col)
+{
+    const float ratio = GetHoverRatio(id, hovered);
+    if (ratio <= 0.0f)
+        return idle_col;
+    if (ratio >= 1.0f)
+        return hovered_col;
+
+    return LerpHoverColor(ColorConvertU32ToFloat4(idle_col), ColorConvertU32ToFloat4(hovered_col), ratio);
+}
+
 static int InputTextCalcTextLenAndLineCount(const char* text_begin, const char** out_text_end)
 {
     int line_count = 0;
@@ -417,19 +675,20 @@ bool ImGui::BeginComboCustom(const char* label, const char* preview_value)
     // ImRect total_bb(bb.Min, bb.Max + ImVec2(label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f, 0.0f));
 
     // Render shape
-    const ImU32 frame_col = GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+    const float hover_ratio = GetHoverRatio(id, hovered);
+    const ImU32 frame_col = GetColorU32(ImGuiCol_FrameBgHovered, hover_ratio);
     const float value_x2 = ImMax(bb.Min.x, bb.Max.x - arrow_size);
     RenderNavHighlight(bb, id);
     //if (!(flags & ImGuiComboFlags_NoPreview))
-    if (hovered)
+    if (hover_ratio > 0.0f)
     {
         window->DrawList->AddRectFilled(bb.Min, ImVec2(value_x2, bb.Max.y), frame_col, style.FrameRounding, (flags & ImGuiComboFlags_NoArrowButton) ? ImDrawFlags_RoundCornersAll : ImDrawFlags_RoundCornersLeft);
     }
     if (!(flags & ImGuiComboFlags_NoArrowButton))
     {
-        ImU32 bg_col = GetColorU32((popup_open || hovered) ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+        ImU32 bg_col = GetHoverColorU32(id + 1, popup_open || hovered, false, ImGuiCol_Button, ImGuiCol_ButtonHovered, ImGuiCol_ButtonHovered);
         ImU32 text_col = GetColorU32(ImGuiCol_Text);
-        window->DrawList->AddRectFilled(ImVec2(value_x2, bb.Min.y), bb.Max, bg_col, style.FrameRounding, (w <= arrow_size) ? ImDrawFlags_RoundCornersRight : ImDrawFlags_RoundCornersRight);
+        AddRectFilledRaised(window->DrawList, ImVec2(value_x2, bb.Min.y), bb.Max, bg_col, style.FrameRounding, (w <= arrow_size) ? ImDrawFlags_RoundCornersRight : ImDrawFlags_RoundCornersRight);
         if (value_x2 + arrow_size - style.FramePadding.x <= bb.Max.x)
             RenderArrow(window->DrawList, ImVec2(value_x2 + style.FramePadding.y, bb.Min.y + style.FramePadding.y), text_col, ImGuiDir_Down, 1.0f);
     }
@@ -1421,25 +1680,172 @@ bool ImGui::InputTextExCustom(const char* label, const char* hint, char* buf, in
         return value_changed;
 }
 
-static bool stringContainsIgnoreCase(const char* str, const char* substr)
+static bool isWordSeparator(char c)
 {
-    if (!str || !substr || !substr[0])
-        return true;
+    return c == '_' || c == '-' || c == ' ' || c == '.';
+}
 
-    while (*str)
+static bool charsEqual(char a, char b, bool case_sensitive)
+{
+    if (case_sensitive)
+        return a == b;
+
+    return tolower((unsigned char)a) == tolower((unsigned char)b);
+}
+
+static bool textContainsWord(const char* str, const char* word, const char* word_end, bool case_sensitive)
+{
+    for (; *str; str++)
     {
         const char* s = str;
-        const char* sub = substr;
-        while (*s && *sub && tolower((unsigned char)*s) == tolower((unsigned char)*sub))
+        const char* w = word;
+        while (*s && w < word_end)
         {
-            s++;
-            sub++;
+            if (charsEqual(*s, *w, case_sensitive))
+            {
+                s++;
+                w++;
+            }
+            else if (w > word && isWordSeparator(*s))
+            {
+                s++;
+            }
+            else
+            {
+                break;
+            }
         }
-        if (!*sub)
+
+        if (w == word_end)
             return true;
-        str++;
     }
+
     return false;
+}
+
+bool ImGui::TextMatchesQuery(const char* text, const char* query, bool case_sensitive)
+{
+    if (!text || !query)
+        return true;
+
+    const char* word = query;
+    while (true)
+    {
+        while (*word == ' ' || *word == '\t')
+            word++;
+
+        if (!*word)
+            return true;
+
+        const char* word_end = word;
+        while (*word_end && *word_end != ' ' && *word_end != '\t')
+            word_end++;
+
+        const bool exclude = word[0] == '-' && word_end - word > 1;
+        if (exclude)
+            word++;
+
+        if (textContainsWord(text, word, word_end, case_sensitive) == exclude)
+            return false;
+
+        word = word_end;
+    }
+}
+
+static char sSearchPopupQuery[256] = "";
+static bool sSearchPopupAccept     = false;
+static bool sSearchPopupAnyItem    = false;
+
+bool ImGui::BeginSearchPopup(const char* str_id, const char* hint, const ImVec2& anchor_min, const ImVec2& anchor_max, int items_count)
+{
+    const ImGuiStyle& style = GetStyle();
+
+    int maxVisibleItems = items_count < 15 ? items_count : 15;
+    float itemHeight = GetFrameHeight() + style.ItemSpacing.y;
+    float searchBoxHeight = GetFrameHeight() + style.ItemSpacing.y;
+    float fixedHeight = style.WindowPadding.y * 2.0f + searchBoxHeight + style.ItemSpacing.y;
+    float listHeight = itemHeight * maxVisibleItems;
+    float popupHeight = fixedHeight + listHeight;
+
+    // Clamp to fit within the viewport below the trigger
+    ImGuiViewport* viewport = GetMainViewport();
+    float availableBelow = (viewport->Pos.y + viewport->Size.y) - anchor_max.y;
+    if (popupHeight > availableBelow && availableBelow > fixedHeight + itemHeight)
+    {
+        popupHeight = availableBelow;
+        float rawListHeight = availableBelow - fixedHeight;
+        int rawItems = (int)(rawListHeight / itemHeight);
+        listHeight = itemHeight * rawItems;
+    }
+    else if (popupHeight > availableBelow)
+    {
+        popupHeight = fixedHeight + itemHeight;
+        listHeight = itemHeight;
+    }
+
+    const ImVec2 popupSize(anchor_max.x - anchor_min.x, popupHeight);
+    SetNextWindowSize(popupSize);
+    SetNextWindowSizeConstraints(popupSize, popupSize);
+    SetNextWindowPos(ImVec2(anchor_min.x, anchor_max.y));
+
+    if (!BeginPopup(str_id))
+        return false;
+
+    if (IsWindowAppearing())
+    {
+        sSearchPopupQuery[0] = '\0';
+        SetKeyboardFocusHere();
+    }
+
+    SetNextItemWidth(-FLT_MIN);
+    InputTextWithHint("##comboFilter", hint, sSearchPopupQuery, IM_ARRAYSIZE(sSearchPopupQuery));
+
+    sSearchPopupAccept = sSearchPopupQuery[0] != '\0' && IsItemDeactivated() && (IsKeyPressed(ImGuiKey_Enter) || IsKeyPressed(ImGuiKey_KeypadEnter));
+    sSearchPopupAnyItem = false;
+
+    Separator();
+
+    if (!BeginChild("##comboList", ImVec2(0.0f, listHeight), ImGuiChildFlags_Border, ImGuiWindowFlags_AlwaysVerticalScrollbar))
+    {
+        EndChild();
+        EndPopup();
+        return false;
+    }
+
+    return true;
+}
+
+bool ImGui::SearchPopupItem(const char* label, bool selected)
+{
+    if (!TextMatchesQuery(label, sSearchPopupQuery))
+        return false;
+
+    sSearchPopupAnyItem = true;
+
+    bool picked = Selectable(label, selected);
+
+    if (sSearchPopupAccept)
+    {
+        sSearchPopupAccept = false;
+        picked = true;
+    }
+
+    if (picked)
+        CloseCurrentPopup();
+
+    if (selected)
+        SetItemDefaultFocus();
+
+    return picked;
+}
+
+void ImGui::EndSearchPopup()
+{
+    if (!sSearchPopupAnyItem)
+        TextDisabled("No matches");
+
+    EndChild();
+    EndPopup();
 }
 
 bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const char* const items[], int items_count)
@@ -1465,16 +1871,16 @@ bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const cha
         float valueX2 = ImMax(bb.Min.x, bb.Max.x - arrowSize);
 
         // Draw frame background when hovered
-        ImU32 frameCol = GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg);
+        ImU32 frameCol = GetHoverColorU32(id, hovered, false, ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgHovered);
         GetWindowDrawList()->AddRectFilled(bb.Min, ImVec2(valueX2, bb.Max.y), frameCol, style.FrameRounding, ImDrawFlags_RoundCornersLeft);
         // Draw preview text
         PushClipRect(bb.Min + style.FramePadding, ImVec2(valueX2, bb.Max.y) - style.FramePadding, true);
         RenderText(bb.Min + style.FramePadding, buf);
         PopClipRect();
         // Draw arrow button
-        ImU32 bgCol = GetColorU32((IsPopupOpen(id, ImGuiPopupFlags_None) || hovered) ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+        ImU32 bgCol = GetHoverColorU32(id + 1, IsPopupOpen(id, ImGuiPopupFlags_None) || hovered, false, ImGuiCol_Button, ImGuiCol_ButtonHovered, ImGuiCol_ButtonHovered);
         ImU32 textCol = GetColorU32(ImGuiCol_Text);
-        GetWindowDrawList()->AddRectFilled(ImVec2(valueX2, bb.Min.y), bb.Max, bgCol, style.FrameRounding, ImDrawFlags_RoundCornersRight);
+        AddRectFilledRaised(GetWindowDrawList(), ImVec2(valueX2, bb.Min.y), bb.Max, bgCol, style.FrameRounding, ImDrawFlags_RoundCornersRight);
         RenderArrow(GetWindowDrawList(), ImVec2(valueX2 + style.FramePadding.y, bb.Min.y + style.FramePadding.y), textCol, ImGuiDir_Down, 1.0f);
         RenderFrameBorder(bb.Min, bb.Max, style.FrameRounding);
         // Draw label to the right
@@ -1484,6 +1890,9 @@ bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const cha
         if (pressed)
             OpenPopupEx(id);
     }
+
+    if (IsItemHovered())
+        SetItemKeyOwner(ImGuiKey_MouseWheelY);
 
     if (IsItemHovered() && GetIO().MouseWheel != 0.0f)
     {
@@ -1517,178 +1926,23 @@ bool ImGui::InputTextCombo(const char* label, char* buf, int buf_size, const cha
         GetIO().MouseWheel = 0.0f;
     }
 
-    int itemCount = items_count;
-    int maxVisibleItems = itemCount < 15 ? itemCount : 15;
-    float itemHeight = GetFrameHeight() + style.ItemSpacing.y;
-    float searchBoxHeight = GetFrameHeight() + style.ItemSpacing.y;
-    float fixedHeight = style.WindowPadding.y * 2.0f + searchBoxHeight + style.ItemSpacing.y;
-    float listHeight = itemHeight * maxVisibleItems;
-    float popupHeight = fixedHeight + listHeight;
-
-    // Clamp to fit within the viewport below the trigger
-    ImGuiViewport* viewport = GetMainViewport();
-    float availableBelow = (viewport->Pos.y + viewport->Size.y) - bb.Max.y;
-    if (popupHeight > availableBelow && availableBelow > fixedHeight + itemHeight)
+    if (BeginSearchPopup(comboLabel.cstr(), " Search...", bb.Min, bb.Max, items_count))
     {
-        popupHeight = availableBelow;
-        float rawListHeight = availableBelow - fixedHeight;
-        int rawItems = (int)(rawListHeight / itemHeight);
-        listHeight = itemHeight * rawItems;
-    }
-    else if (popupHeight > availableBelow)
-    {
-        popupHeight = fixedHeight + itemHeight;
-        listHeight = itemHeight;
-    }
-    SetNextWindowSize(ImVec2(bb.GetWidth(), popupHeight));
-    SetNextWindowSizeConstraints(ImVec2(bb.GetWidth(), popupHeight), ImVec2(bb.GetWidth(), popupHeight));
-    SetNextWindowPos(ImVec2(bb.Min.x, bb.Max.y));
-
-    if (BeginPopup(comboLabel.cstr()))
-    {
-        static sead::FixedSafeString<256> sComboFilter;
-
-        if (IsWindowAppearing())
+        for (int i = 0; i < items_count; i++)
         {
-            sComboFilter.clear();
-            SetKeyboardFocusHere();
-        }
+            sead::SafeString str(items[i]);
+            if (str.isEmpty())
+                continue;
 
-        SetNextItemWidth(-FLT_MIN);
-        InputTextWithHint("##comboFilter", " Search...", sComboFilter.getBuffer(), sComboFilter.getBufferSize());
-
-        Separator();
-
-        bool filterActive = !sComboFilter.isEmpty();
-
-        char filterLower[256];
-        if (filterActive)
-        {
-            int fi = 0;
-            while (sComboFilter.cstr()[fi] && fi < 255)
+            if (SearchPopupItem(str.cstr(), str == buf))
             {
-                filterLower[fi] = (char)tolower((unsigned char)sComboFilter.cstr()[fi]);
-                fi++;
-            }
-            filterLower[fi] = '\0';
-        }
-
-        if (BeginChild("##comboList", ImVec2(0.0f, listHeight), true, ImGuiWindowFlags_AlwaysVerticalScrollbar))
-        {
-            for (u32 i = 0; i < items_count; i++)
-            {
-                sead::SafeString str(items[i]);
-                if (str.isEmpty())
-                    continue;
-
-                if (filterActive && !stringContainsIgnoreCase(str.cstr(), filterLower))
-                    continue;
-
-                bool selected = str == buf;
-                if (Selectable(str.cstr(), selected))
-                {
-                    strcpy(buf, str.cstr());
-                    ret = true;
-                    CloseCurrentPopup();
-                }
-
-                if (selected)
-                    SetItemDefaultFocus();
+                ImStrncpy(buf, str.cstr(), buf_size);
+                ret = true;
             }
         }
-        EndChild();
 
-        EndPopup();
+        EndSearchPopup();
     }
 
     return ret;
-}
-
-bool ImGui::InputScalarCustom(const char* label, ImGuiDataType data_type, void* p_data, const void* p_step, const void* p_step_fast, const char* format, ImGuiInputTextFlags flags, bool* p_edited_with_button)
-{
-    ImGuiWindow* window = GetCurrentWindow();
-    if (window->SkipItems)
-        return false;
-
-    ImGuiContext& g = *GImGui;
-    ImGuiStyle& style = g.Style;
-
-    if (format == NULL)
-        format = DataTypeGetInfo(data_type)->PrintFmt;
-
-    char buf[64];
-    DataTypeFormatString(buf, IM_ARRAYSIZE(buf), data_type, p_data, format);
-
-    flags |= ImGuiInputTextFlags_AutoSelectAll | (ImGuiInputTextFlags)ImGuiInputTextFlags_NoMarkEdited; // We call MarkItemEdited() ourselves by comparing the actual data rather than the string.
-
-    bool value_changed = false;
-    if (p_step == NULL)
-    {
-        if (InputText(label, buf, IM_ARRAYSIZE(buf), flags))
-            value_changed = DataTypeApplyFromText(buf, data_type, p_data, format);
-    }
-    else
-    {
-        const float button_size = GetFrameHeight();
-
-        BeginGroup(); // The only purpose of the group here is to allow the caller to query item data e.g. IsItemActive()
-        PushID(label);
-        SetNextItemWidth(ImMax(1.0f, CalcItemWidth() - (button_size + style.ItemInnerSpacing.x) * 2));
-        if (InputText("", buf, IM_ARRAYSIZE(buf), flags)) // PushId(label) + "" gives us the expected ID from outside point of view
-        {
-            value_changed = DataTypeApplyFromText(buf, data_type, p_data, format);
-
-            if (p_edited_with_button)
-            {
-                *p_edited_with_button = false;
-            }
-        }
-        IMGUI_TEST_ENGINE_ITEM_INFO(g.LastItemData.ID, label, g.LastItemData.StatusFlags | ImGuiItemStatusFlags_Inputable);
-
-        // Step buttons
-        const ImVec2 backup_frame_padding = style.FramePadding;
-        style.FramePadding.x = style.FramePadding.y;
-        ImGuiButtonFlags button_flags = ImGuiButtonFlags_Repeat | ImGuiButtonFlags_DontClosePopups;
-        if (flags & ImGuiInputTextFlags_ReadOnly)
-            BeginDisabled();
-        SameLine(0, style.ItemInnerSpacing.x);
-        if (ButtonEx("-", ImVec2(button_size, button_size), button_flags))
-        {
-            DataTypeApplyOp(data_type, '-', p_data, p_data, g.IO.KeyCtrl && p_step_fast ? p_step_fast : p_step);
-            value_changed = true;
-
-            if (p_edited_with_button)
-            {
-                *p_edited_with_button = true;
-            }
-        }
-        SameLine(0, style.ItemInnerSpacing.x);
-        if (ButtonEx("+", ImVec2(button_size, button_size), button_flags))
-        {
-            DataTypeApplyOp(data_type, '+', p_data, p_data, g.IO.KeyCtrl && p_step_fast ? p_step_fast : p_step);
-            value_changed = true;
-
-            if (p_edited_with_button)
-            {
-                *p_edited_with_button = true;
-            }
-        }
-        if (flags & ImGuiInputTextFlags_ReadOnly)
-            EndDisabled();
-
-        const char* label_end = FindRenderedTextEnd(label);
-        if (label != label_end)
-        {
-            SameLine(0, style.ItemInnerSpacing.x);
-            TextEx(label, label_end);
-        }
-        style.FramePadding = backup_frame_padding;
-
-        PopID();
-        EndGroup();
-    }
-    if (value_changed)
-        MarkItemEdited(g.LastItemData.ID);
-
-    return value_changed;
 }

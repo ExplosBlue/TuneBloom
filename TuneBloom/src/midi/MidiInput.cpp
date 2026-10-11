@@ -105,86 +105,10 @@ static void PopulateDeviceList()
 #endif
 }
 
-#if defined(SEAD_PLATFORM_MACOSX)
-// CoreMIDI callback — runs on a system thread, queues events for poll()
-static void MidiReadProc(const MIDIPacketList *pktList, void *refCon, void *)
+#if defined(SEAD_PLATFORM_MACOSX) || defined(SEAD_PLATFORM_WINDOWS)
+static void QueueMidiMessage(MidiInput* self, u8 status, u8 d1, u8 d2)
 {
-    auto *self = static_cast<MidiInput *>(refCon);
-    if (!self)
-        return;
-
-    const MIDIPacket *pkt = &pktList->packet[0];
-    for (UInt32 i = 0; i < pktList->numPackets; i++)
-    {
-        if (pkt->length >= 3)
-        {
-            u8 status = pkt->data[0];
-            u8 d1 = pkt->data[1];
-            u8 d2 = pkt->data[2];
-            u8 hi = status & 0xF0;
-
-            s32 msg, key;
-            f32 val;
-            if (hi == 0x90 && d2 > 0)
-            {
-                msg = 1;
-                key = d1;
-                val = d2 / 127.0f;
-            }
-            else if (hi == 0x80 || (hi == 0x90 && d2 == 0))
-            {
-                msg = 2;
-                key = d1;
-                val = 0.0f;
-            }
-            else if (hi == 0xE0)
-            {
-                msg = 3;
-                key = 0;
-                val = ((s32)d1 | ((s32)d2 << 7)) / 8192.0f - 1.0f;
-            }
-            else if (hi == 0xB0)
-            {
-                msg = 4;
-                key = d1;
-                val = d2 / 127.0f;
-            }
-            else
-            {
-                pkt = MIDIPacketNext(pkt);
-                continue;
-            }
-
-            s32 w = self->mQueueWrite;
-            s32 n = (w + 1) % MidiInput::kQueueSize;
-            if (n != self->mQueueRead)
-            {
-                self->mQueue[w].msg = msg;
-                self->mQueue[w].key = key;
-                self->mQueue[w].vel = val;
-                self->mQueueWrite = n;
-            }
-        }
-        pkt = MIDIPacketNext(pkt);
-    }
-}
-#endif
-
-#if defined(SEAD_PLATFORM_WINDOWS)
-// WinMM callback — runs on a system thread, queues events for poll()
-static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR)
-{
-    if (wMsg != MIM_DATA)
-        return;
-
-    auto *self = reinterpret_cast<MidiInput *>(dwInstance);
-    if (!self)
-        return;
-
-    u8 status = dwParam1 & 0xFF;
-    u8 d1 = (dwParam1 >> 8) & 0xFF;
-    u8 d2 = (dwParam1 >> 16) & 0xFF;
-    u8 hi = status & 0xF0;
+    const u8 hi = status & 0xF0;
 
     s32 msg, key;
     f32 val;
@@ -204,7 +128,7 @@ static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_
     {
         msg = 3;
         key = 0;
-        val = ((s32)d1 | ((s32)d2 << 7)) / 8192.0f - 1.0f;
+        val = (static_cast<s32>(d1) | (static_cast<s32>(d2) << 7)) / 8192.0f - 1.0f;
     }
     else if (hi == 0xB0)
     {
@@ -213,7 +137,9 @@ static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_
         val = d2 / 127.0f;
     }
     else
+    {
         return;
+    }
 
     s32 w = self->mQueueWrite;
     s32 n = (w + 1) % MidiInput::kQueueSize;
@@ -224,6 +150,40 @@ static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_
         self->mQueue[w].vel = val;
         self->mQueueWrite = n;
     }
+}
+#endif
+
+#if defined(SEAD_PLATFORM_MACOSX)
+// CoreMIDI callback — runs on a system thread, queues events for poll()
+static void MidiReadProc(const MIDIPacketList *pktList, void *refCon, void *)
+{
+    auto *self = static_cast<MidiInput *>(refCon);
+    if (!self)
+        return;
+
+    const MIDIPacket *pkt = &pktList->packet[0];
+    for (UInt32 i = 0; i < pktList->numPackets; i++)
+    {
+        if (pkt->length >= 3)
+            QueueMidiMessage(self, pkt->data[0], pkt->data[1], pkt->data[2]);
+
+        pkt = MIDIPacketNext(pkt);
+    }
+}
+#endif
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+// WinMM callback — runs on a system thread, queues events for poll()
+static void CALLBACK MidiInProc(HMIDIIN, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR)
+{
+    if (wMsg != MIM_DATA)
+        return;
+
+    auto *self = reinterpret_cast<MidiInput *>(dwInstance);
+    if (!self)
+        return;
+
+    QueueMidiMessage(self, static_cast<u8>(dwParam1 & 0xFF), static_cast<u8>((dwParam1 >> 8) & 0xFF), static_cast<u8>((dwParam1 >> 16) & 0xFF));
 }
 #endif
 

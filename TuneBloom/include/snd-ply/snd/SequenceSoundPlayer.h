@@ -10,7 +10,7 @@
 #include "snd/snd_BankFileReader.h"
 #include "snd/snd_SoundArchive.h"
 
-#include <bfsar/BankFile.h>
+#include <bfsar/files/BankFile.h>
 
 class SequenceFile;
 class SequenceSoundPlayer;
@@ -92,6 +92,7 @@ public:
 
     void init();
     void deinit(bool stop = false);
+    void fadeOut();
     void setup(u32 allocTracks, NoteOnCallback* callback);
     void prepare(const void* seqFile, s32 seqOffset, const void** bankFiles, const void** warcFiles, const bool* warcIsIndividuals, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
     void prepare(const SequenceFile& seqFile, s32 seqOffset, const BankFile** bankFiles, s32 origSeqOffset, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
@@ -106,6 +107,20 @@ public:
     u32 getTickCounter() const { return mTickCounter; }
 
     void requestSkip(u32 ticks) { mSkipTickCounter += static_cast<s32>(ticks); }
+
+    void setLoopStop(u32 loopStartTick, u32 loopEndTick)
+    {
+        mLoopStopStartTick = loopStartTick;
+        mLoopStopEndTick = loopEndTick;
+    }
+
+    bool isLoopStopTick() const
+    {
+        if (mLoopStopEndTick <= mLoopStopStartTick || mTickCounter < mLoopStopEndTick)
+            return false;
+
+        return (mTickCounter - mLoopStopEndTick) % (mLoopStopEndTick - mLoopStopStartTick) == 0;
+    }
 
     snd::UpdateType getUpdateType() const
     {
@@ -195,9 +210,27 @@ public:
         if (varNo < cPlayerVariableNum)
             return &mLocalVariable[varNo];
         else if (varNo < cPlayerVariableNum + cGlobalVariableNum)
-            return &sGlobalVariable[varNo - cPlayerVariableNum];
+            return &mGlobalVariable[varNo - cPlayerVariableNum];
         else
             return nullptr;
+    }
+
+    void setGlobalVariableStorage(volatile s16* storage)
+    {
+        mGlobalVariable = storage ? storage : sGlobalVariable;
+    }
+
+    u16 getUsedLocalVariables() const { return mUsedLocalVariables; }
+    u16 getUsedGlobalVariables() const { return mUsedGlobalVariables; }
+
+    void markVariableUsed(s32 varNo)
+    {
+        SEAD_ASSERT(0 <= varNo && varNo < cPlayerVariableNum + cGlobalVariableNum);
+
+        if (varNo < cPlayerVariableNum)
+            mUsedLocalVariables |= static_cast<u16>(1 << varNo);
+        else
+            mUsedGlobalVariables |= static_cast<u16>(1 << (varNo - cPlayerVariableNum));
     }
 
     void invalidateData(const void* start, const void* end) override;
@@ -286,7 +319,12 @@ protected:
     const BankFile* mBankFile[nw::snd::SoundArchive::SEQ_BANK_MAX];
 
     volatile s16 mLocalVariable[cPlayerVariableNum];
+    volatile s16* mGlobalVariable = sGlobalVariable;
+    u16 mUsedLocalVariables = 0;
+    u16 mUsedGlobalVariables = 0;
     volatile u32 mTickCounter;
+    u32 mLoopStopStartTick = 0;
+    u32 mLoopStopEndTick = 0;
 
     bool mIsRegisterPlayerCallback;
 

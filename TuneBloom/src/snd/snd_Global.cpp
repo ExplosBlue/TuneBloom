@@ -2,7 +2,7 @@
 
 #include <snd/snd_WaveFileReader.h>
 
-#include <bfsar/WaveFile.h>
+#include <bfsar/files/WaveFile.h>
 
 namespace nw { namespace snd { namespace internal {
 

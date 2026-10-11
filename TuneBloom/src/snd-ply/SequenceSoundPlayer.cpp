@@ -6,7 +6,7 @@
 
 #include "snd/snd_SequenceSoundFileReader.h"
 
-#include <bfsar/SequenceFile.h>
+#include <bfsar/files/SequenceFile.h>
 
 MmlParser sMmlParser;
 
@@ -48,8 +48,10 @@ void SequenceSoundPlayer::init()
     //mDelayCount                   = 0;
     mPanRange                     = 1.0f;
     mTickCounter                  = 0;
+    mLoopStopStartTick            = 0;
+    mLoopStopEndTick              = 0;
 
-    mParserParam.tempo            = cDefaultTempo;
+    mParserParam.tempo           = cDefaultTempo;
     mParserParam.timebase         = cDefaultTimebase;
     mParserParam.volume.initValue(127);
     mParserParam.priority         = 64;
@@ -59,6 +61,9 @@ void SequenceSoundPlayer::init()
     {
         mLocalVariable[varNo] = cVariableDefaultValue;
     }
+
+    mUsedLocalVariables = 0;
+    mUsedGlobalVariables = 0;
 
     for (s32 trackNo = 0; trackNo < cTrackNumPerPlayer; trackNo++)
     {
@@ -73,6 +78,20 @@ void SequenceSoundPlayer::init()
 void SequenceSoundPlayer::deinit(bool stop)
 {
     finishPlayer(stop);
+}
+
+void SequenceSoundPlayer::fadeOut()
+{
+    for (s32 trackNo = 0; trackNo < cTrackNumPerPlayer; trackNo++)
+    {
+        SequenceTrack* track = getPlayerTrack(trackNo);
+        if (!track)
+            continue;
+
+        track->fadeOutAllChannel();
+    }
+
+    finishPlayer(false);
 }
 
 void SequenceSoundPlayer::setup(u32 allocTracks, NoteOnCallback* callback)
@@ -336,6 +355,12 @@ void SequenceSoundPlayer::updateTick()
 
         mTickCounter += 1;
 
+        if (isLoopStopTick())
+        {
+            finishPlayer();
+            return;
+        }
+
         tickPerMsec = calcTickPerMsec();
         if (tickPerMsec == 0.0f)
             return;
@@ -386,6 +411,12 @@ void SequenceSoundPlayer::skipTick()
 
         skipCount++;
         mTickCounter += 1;
+
+        if (isLoopStopTick())
+        {
+            finishPlayer();
+            return;
+        }
     }
 
     mSkipTimeCounter = 0.0f;

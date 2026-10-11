@@ -3,6 +3,7 @@
 #include "HardwareMgr.h"
 
 #include <thread/seadAtomic.h>
+#include <atomic>
 #include <container/seadOffsetList.h>
 
 #include "LFRingBuffer.h"
@@ -196,6 +197,9 @@ private:
 
     static s16 sDecodeWaveBuffer[cDecodeWaveSamples + cHistoryWaveSamples];
 
+public:
+    f32 fetchPeak() { return mPeak.exchange(0.0f, std::memory_order_relaxed); }
+
 private:
     friend class VoiceMgr;
 
@@ -216,6 +220,7 @@ private:
     AdpcmContext mAdpcmContext;
 
     u32 mCurrentAddressFraction;
+    std::atomic<f32> mPeak{0.0f};
     s16 mLastSamples[cHistoryWaveSamples];
     u32 mPlayPosition;
 

@@ -10,6 +10,8 @@
 
 #include <math/seadMathCalcCommon.h>
 
+class Item;
+
 namespace snd { namespace internal { namespace driver {
 
 class Channel
@@ -30,6 +32,17 @@ public:
         Cancel
     };
 
+    enum class EnvelopeParam
+    {
+        Attack,
+        Hold,
+        Decay,
+        Sustain,
+        Release,
+
+        Num
+    };
+
     typedef void (*ChannelCallback)(Channel* channel, ChannelCallbackStatus status, void* userData);
 
     static const s32 cChannelNum = HardwareMgr::cMaxVoiceCount + 1; // Number of channels.
@@ -37,6 +50,7 @@ public:
     static const s32 cChannelMax = cChannelMin + cChannelNum - 1;
 
     static const u32 cPriorityRelease = 1;
+    static const s32 cFadeOutRelease = 126;
 
     static const s32 cWaveBufferMax = 2;
 
@@ -73,11 +87,31 @@ public:
     }
 
     void start(const WaveInfo& waveParam, s32 length, u32 startOffsetSamples);
+
+    // Custom
+    struct Region
+    {
+        s32 no = -1;
+        u32 start = 0;
+        u32 end = 0;
+        bool loop = false;
+        AdpcmContext context = {};
+    };
+
+    void startRegion(const WaveInfo& waveInfo, const Region& region);
+    void setNextRegion(const WaveInfo& waveInfo, const Region& region);
+    void clearNextRegion(bool loopPlayingRegion);
+    void setRegionLoopEnabled(bool enable);
+    s32 getPlayingRegionNo() const;
+    s32 getNextRegionNo() const;
+    void renumberRegions(const s32* newNos, s32 count);
+
     void stop();
     void pause(bool flag);
 
     void noteOff();
     void release();
+    void fadeOut();
 
     bool isActive() const
     {
@@ -98,6 +132,82 @@ public:
     {
         mKey = key;
         mRootKey = rootKey;
+    }
+
+    void setRootKey(u8 rootKey)
+    {
+        mRootKey = rootKey;
+    }
+
+    void setBankRegion(const Item* region, s32 notePan)
+    {
+        mBankRegion = region;
+        mBankNotePan = notePan;
+        mBankEnvelopeUnlinkMask = 0;
+    }
+
+    void setEnvelopeParam(EnvelopeParam param, u8 value)
+    {
+        switch (param)
+        {
+            case EnvelopeParam::Attack:
+                setAttack(value);
+                break;
+
+            case EnvelopeParam::Hold:
+                setHold(value);
+                break;
+
+            case EnvelopeParam::Decay:
+                setDecay(value);
+                break;
+
+            case EnvelopeParam::Sustain:
+                setSustain(value);
+                break;
+
+            case EnvelopeParam::Release:
+                setRelease(value);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    u8 getBankEnvelope(EnvelopeParam param) const
+    {
+        return mBankEnvelope[static_cast<s32>(param)];
+    }
+
+    void setBankEnvelope(EnvelopeParam param, u8 value)
+    {
+        mBankEnvelope[static_cast<s32>(param)] = value;
+    }
+
+    bool isBankEnvelopeLinked(EnvelopeParam param) const
+    {
+        return (mBankEnvelopeUnlinkMask & (1 << static_cast<s32>(param))) == 0;
+    }
+
+    void unlinkBankEnvelope(EnvelopeParam param)
+    {
+        mBankEnvelopeUnlinkMask |= 1 << static_cast<s32>(param);
+    }
+
+    void resetBankRegion()
+    {
+        mBankRegion = nullptr;
+    }
+
+    const Item* getBankRegion() const
+    {
+        return mBankRegion;
+    }
+
+    s32 getBankNotePan() const
+    {
+        return mBankNotePan;
     }
 
     void setInitPan(f32 pan)
@@ -216,6 +326,11 @@ public:
         mIsIgnoreNoteOff = flag;
     }
 
+    f32 fetchVoicePeak()
+    {
+        return mVoice ? mVoice->fetchPeak() : 0.0f;
+    }
+
     //void setFrontBypass(bool flag)
     //{
     //    mVoice->setFrontBypass(flag);
@@ -277,6 +392,7 @@ public:
     }
 
     u32 getCurrentPlayingSample(bool isOriginalSamplePosition) const;
+    void setLoopEnabled(bool enable);
 
     void setKeyGroupId(u8 id)
     {
@@ -291,6 +407,9 @@ public:
     void setInterpolationType(u8 type)
     {
         mInterpolationType = type;
+
+        if (mVoice)
+            mVoice->setInterpolationType(type);
     }
 
     u8 getInterpolationType() const
@@ -391,6 +510,11 @@ private:
     f32 mInstrumentVolume;
     f32 mVelocity;
 
+    const Item* mBankRegion;
+    s32 mBankNotePan;
+    u8 mBankEnvelope[static_cast<s32>(EnvelopeParam::Num)];
+    u8 mBankEnvelopeUnlinkMask;
+
     ChannelCallback mCallback;
     void* mCallbackData;
 
@@ -407,6 +531,20 @@ private:
     WaveFileReader::OffsetContextInfo mContextInfo;
     bool mUseContextInfo;
     bool mLoopFlag;
+
+    // Custom
+    static const s32 cRegionBufferMax = 2;
+
+    void setupStart(const WaveInfo& waveInfo, s32 length);
+    void setupRegionBuffer(s32 index, const WaveInfo& waveInfo, const Region& region);
+    s32 getPlayingRegionIndex() const;
+
+    WaveBuffer mRegionBuffer[cRegionBufferMax];
+    AdpcmContext mRegionContext[cRegionBufferMax];
+    Region mRegion[cRegionBufferMax];
+    u32 mRegionBufferStart[cRegionBufferMax];
+    s32 mRegionIndex;
+    bool mRegionMode;
 
     //u8 padding2;
 

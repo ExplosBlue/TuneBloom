@@ -27,6 +27,15 @@ public:
     void updateAllChannel();
     void updateAudioFrameChannel();
 
+    void fadeOutAllChannel();
+
+    template <typename Func>
+    void forEachChannel(Func func)
+    {
+        for (Channel& channel : mChannelList)
+            func(channel);
+    }
+
     s32 getChannelCount()
     {
         return mChannelList.size();

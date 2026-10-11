@@ -2,8 +2,9 @@
 
 #include <format>
 
-#include <ui/PopupMgr.h>
-#include <ui/UI.h>
+#include <ui/Messages.h>
+#include <ui/app/PopupMgr.h>
+#include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
 
@@ -24,7 +25,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Sequence);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid sequence file");
+            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotSequenceFile);
             return;
         }
 
@@ -35,7 +36,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
             u32 major = ((u32)header->version >> 24) & 0xFF;
             if (major < 1 || major > 2)
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -44,7 +45,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version < 0x00030000))
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -56,7 +57,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::DataBlock* dataBlock = header->GetDataBlock();
     if (!dataBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: DATA block not found", seqFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cDataBlockNotFoundFormat,seqFmt).cstr());
         return;
     }
 
@@ -68,7 +69,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::LabelBlock* labelBlock = header->GetLabelBlock();
     if (!labelBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: LABL block not found", seqFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cLablBlockNotFoundFormat,seqFmt).cstr());
         return;
     }
 

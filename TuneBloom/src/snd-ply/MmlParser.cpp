@@ -4,7 +4,7 @@
 #include "snd/ut/res/ut_ResTypes.h"
 #include "snd/SequenceSoundPlayer.h"
 
-#include <bfsar/SequenceFile.h>
+#include <bfsar/files/SequenceFile.h>
 
 #include <basis/seadWarning.h>
 #include <math/seadMathCalcCommon.h>
@@ -1154,12 +1154,14 @@ volatile s16* MmlParser::GetVariablePtr(SequenceSoundPlayer* player, SequenceTra
     if (varNo < SequenceSoundPlayer::cPlayerVariableNum
                + SequenceSoundPlayer::cGlobalVariableNum)
     {
+        player->markVariableUsed(varNo);
         return player->getVariablePtr(varNo);
     }
     else if (varNo < SequenceSoundPlayer::cPlayerVariableNum
                     + SequenceSoundPlayer::cGlobalVariableNum
                     + SequenceTrack::cTrackVariableNum)
     {
+        track->markVariableUsed(varNo - SequenceSoundPlayer::cPlayerVariableNum - SequenceSoundPlayer::cGlobalVariableNum);
         return track->getVariablePtr(varNo - SequenceSoundPlayer::cPlayerVariableNum - SequenceSoundPlayer::cGlobalVariableNum);
     }
     else

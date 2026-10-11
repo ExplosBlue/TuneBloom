@@ -2,7 +2,7 @@
 
 #include <snd/snd_GroupFileReader.h>
 
-#include <ui/UI.h>
+#include <ui/app/UI.h>
 
 namespace nw { namespace snd {
 

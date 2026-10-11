@@ -141,6 +141,8 @@ public:
 
     const Voice& detail_getSdkVoice(s32 index) const;
 
+    f32 fetchPeak();
+
     void setOutputLine(u32 lineFlag);
 
     u32 getOutputLine() const

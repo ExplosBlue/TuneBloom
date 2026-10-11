@@ -16,7 +16,7 @@ postbuildcommands {
     '{COPYFILE} "' .. thirdPartyLicense .. '" "%{cfg.targetdir}"',
 }
 
-local macosBundleScript = path.getabsolute(path.join(_SCRIPT_DIR, "src/macos/make_bundle.sh"))
+local macosBundleScript = path.getabsolute(path.join(_SCRIPT_DIR, "src/platform/macos/make_bundle.sh"))
 
 includedirs {
     path.join(_SCRIPT_DIR, "include"),
@@ -37,7 +37,7 @@ files {
 }
 
 removefiles {
-    "src/macos/**"
+    "src/platform/macos/**"
 }
 
 links {
@@ -58,7 +58,7 @@ defines { "SEAD_PLATFORM_WINDOWS", "_CRT_SECURE_NO_WARNINGS" }
 
 links { "winmm" }
 
-files { "src/win/resource.rc" }
+files { "src/platform/resource.rc" }
 
 filter "system:linux"
 systemversion "latest"
@@ -73,8 +73,8 @@ systemversion "14.0"
 defines { "SEAD_PLATFORM_POSIX", "SEAD_PLATFORM_MACOSX" }
 
 files {
-    "src/macos/**.mm",
-    "src/macos/**.cpp",
+    "src/platform/macos/**.mm",
+    "src/platform/macos/**.cpp",
 }
 
 links {

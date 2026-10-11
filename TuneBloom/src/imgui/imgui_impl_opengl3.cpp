@@ -824,6 +824,14 @@ bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "    gl_Position = ProjMtx * vec4(Position.xy,0,1);\n"
         "}\n";
 
+    // TuneBloom: dither
+#define TUNEBLOOM_DITHER_GLSL \
+        "float Dither()\n" \
+        "{\n" \
+        "    float n = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
+        "    return (n - 0.5) * (0.98 / 255.0);\n" \
+        "}\n"
+
     const GLchar* fragment_shader_glsl_120 =
         "#ifdef GL_ES\n"
         "    precision mediump float;\n"
@@ -831,9 +839,11 @@ bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "uniform sampler2D Texture;\n"
         "varying vec2 Frag_UV;\n"
         "varying vec4 Frag_Color;\n"
+        TUNEBLOOM_DITHER_GLSL
         "void main()\n"
         "{\n"
         "    gl_FragColor = Frag_Color * texture2D(Texture, Frag_UV.st);\n"
+        "    gl_FragColor.rgb += Dither();\n"
         "}\n";
 
     const GLchar* fragment_shader_glsl_130 =
@@ -841,9 +851,11 @@ bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "in vec2 Frag_UV;\n"
         "in vec4 Frag_Color;\n"
         "out vec4 Out_Color;\n"
+        TUNEBLOOM_DITHER_GLSL
         "void main()\n"
         "{\n"
         "    Out_Color = Frag_Color * texture(Texture, Frag_UV.st);\n"
+        "    Out_Color.rgb += Dither();\n"
         "}\n";
 
     const GLchar* fragment_shader_glsl_300_es =
@@ -852,9 +864,11 @@ bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "in vec2 Frag_UV;\n"
         "in vec4 Frag_Color;\n"
         "layout (location = 0) out vec4 Out_Color;\n"
+        TUNEBLOOM_DITHER_GLSL
         "void main()\n"
         "{\n"
         "    Out_Color = Frag_Color * texture(Texture, Frag_UV.st);\n"
+        "    Out_Color.rgb += Dither();\n"
         "}\n";
 
     const GLchar* fragment_shader_glsl_410_core =
@@ -862,9 +876,11 @@ bool    ImGui_ImplOpenGL3_CreateDeviceObjects()
         "in vec4 Frag_Color;\n"
         "uniform sampler2D Texture;\n"
         "layout (location = 0) out vec4 Out_Color;\n"
+        TUNEBLOOM_DITHER_GLSL
         "void main()\n"
         "{\n"
         "    Out_Color = Frag_Color * texture(Texture, Frag_UV.st);\n"
+        "    Out_Color.rgb += Dither();\n"
         "}\n";
 
     // Select shaders matching our GLSL versions

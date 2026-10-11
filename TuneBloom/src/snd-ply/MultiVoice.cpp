@@ -556,6 +556,16 @@ void MultiVoice::setInterpolationType(u8 interpolationType)
     }
 }
 
+f32 MultiVoice::fetchPeak()
+{
+    f32 peak = 0.0f;
+
+    for (s32 i = 0; i < mChannelCount; i++)
+        peak = sead::Mathf::max(peak, mVoice[i].fetchPeak());
+
+    return peak;
+}
+
 const Voice& MultiVoice::detail_getSdkVoice(s32 channelIndex ) const
 {
     SEAD_ASSERT(channelIndex < cWaveChannelMax);

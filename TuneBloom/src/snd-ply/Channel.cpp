@@ -163,7 +163,7 @@ void Channel::callChannelCallback(ChannelCallbackStatus status)
     }
 }
 
-void Channel::start(const WaveInfo& waveInfo, s32 length, u32 startOffsetSamples)
+void Channel::setupStart(const WaveInfo& waveInfo, s32 length)
 {
     // Channel Param
     mLength = length;
@@ -178,11 +178,155 @@ void Channel::start(const WaveInfo& waveInfo, s32 length, u32 startOffsetSamples
     mVoice->setSampleFormat(waveInfo.sampleFormat);
     mVoice->setSampleRate(waveInfo.sampleRate);
     mVoice->setInterpolationType(mInterpolationType);
+}
 
+void Channel::start(const WaveInfo& waveInfo, s32 length, u32 startOffsetSamples)
+{
+    this->setupStart(waveInfo, length);
     this->appendWaveBuffer(waveInfo, startOffsetSamples);
 
     mVoice->start();
     mActiveFlag = true;
+}
+
+void Channel::setupRegionBuffer(s32 index, const WaveInfo& waveInfo, const Region& region)
+{
+    const bool isDspAdpcm = waveInfo.sampleFormat == snd::SampleFormat::DspAdpcm;
+    const u32 bufferStart = isDspAdpcm ? (region.start / 14) * 14 : region.start;
+
+    mRegion[index] = region;
+    mRegionContext[index] = region.context;
+    mRegionBufferStart[index] = bufferStart;
+
+    WaveBuffer& buffer = mRegionBuffer[index];
+
+    buffer.bufferAddress = sead::PtrUtil::addOffset(waveInfo.channelParam[0].dataAddress, MultiVoice::frameToByte(bufferStart, waveInfo.sampleFormat));
+    buffer.sampleLength = region.end - bufferStart;
+    buffer.sampleOffset = region.start - bufferStart;
+    buffer.adpcmContext = isDspAdpcm ? &mRegionContext[index] : nullptr;
+    buffer.loopFlag = region.loop;
+    buffer.endFlag = false;
+    buffer.endian = waveInfo.endian;
+}
+
+void Channel::startRegion(const WaveInfo& waveInfo, const Region& region)
+{
+    SEAD_ASSERT(mVoice->getSdkVoiceCount() == 1);
+    SEAD_ASSERT(region.start < region.end);
+
+    this->setupStart(waveInfo, -1);
+
+    mLoopFlag = false;
+    mRegionMode = true;
+    mRegionIndex = 0;
+
+    if (waveInfo.sampleFormat == snd::SampleFormat::DspAdpcm)
+    {
+        snd::AdpcmParam param;
+        for (s32 i = 0; i < 8; i++)
+        {
+            param.coef[i][0] = waveInfo.channelParam[0].adpcmParam.coef[i][0];
+            param.coef[i][1] = waveInfo.channelParam[0].adpcmParam.coef[i][1];
+        }
+
+        mVoice->setAdpcmParam(0, param);
+    }
+
+    this->setupRegionBuffer(0, waveInfo, region);
+    mVoice->appendWaveBuffer(0, &mRegionBuffer[0], true);
+
+    mVoice->start();
+    mActiveFlag = true;
+}
+
+s32 Channel::getPlayingRegionIndex() const
+{
+    const s32 other = mRegionIndex ^ 1;
+
+    return mRegionBuffer[other].status == WaveBuffer::Status::Play ? other : mRegionIndex;
+}
+
+void Channel::setNextRegion(const WaveInfo& waveInfo, const Region& region)
+{
+    if (!mRegionMode || !mActiveFlag)
+        return;
+
+    SEAD_ASSERT(region.start < region.end);
+
+    mRegionIndex = this->getPlayingRegionIndex();
+
+    const s32 next = mRegionIndex ^ 1;
+    const bool isQueued = mRegionBuffer[next].status == WaveBuffer::Status::Wait;
+
+    this->setupRegionBuffer(next, waveInfo, region);
+
+    if (!isQueued)
+        mVoice->appendWaveBuffer(0, &mRegionBuffer[next], true);
+
+    mRegionBuffer[mRegionIndex].loopFlag = false;
+    mRegionBuffer[mRegionIndex].endFlag = false;
+}
+
+void Channel::setRegionLoopEnabled(bool enable)
+{
+    if (!mRegionMode || !mActiveFlag)
+        return;
+
+    const bool hasNext = this->getNextRegionNo() != -1;
+
+    mRegionIndex = this->getPlayingRegionIndex();
+    mRegionBuffer[mRegionIndex ^ 1].loopFlag = enable;
+
+    if (!hasNext)
+        mRegionBuffer[mRegionIndex].loopFlag = enable;
+}
+
+void Channel::clearNextRegion(bool loopPlayingRegion)
+{
+    if (!mRegionMode || !mActiveFlag)
+        return;
+
+    mRegionIndex = this->getPlayingRegionIndex();
+
+    WaveBuffer& playing = mRegionBuffer[mRegionIndex];
+    WaveBuffer& next = mRegionBuffer[mRegionIndex ^ 1];
+
+    playing.loopFlag = loopPlayingRegion;
+    playing.endFlag = next.status == WaveBuffer::Status::Wait;
+}
+
+s32 Channel::getPlayingRegionNo() const
+{
+    if (!mRegionMode || !mActiveFlag)
+        return -1;
+
+    return mRegion[this->getPlayingRegionIndex()].no;
+}
+
+s32 Channel::getNextRegionNo() const
+{
+    if (!mRegionMode || !mActiveFlag)
+        return -1;
+
+    const s32 playing = this->getPlayingRegionIndex();
+    const s32 next = playing ^ 1;
+
+    if (mRegionBuffer[next].status == WaveBuffer::Status::Wait && !mRegionBuffer[playing].endFlag)
+        return mRegion[next].no;
+
+    return -1;
+}
+
+void Channel::renumberRegions(const s32* newNos, s32 count)
+{
+    if (!mRegionMode)
+        return;
+
+    for (Region& region : mRegion)
+    {
+        if (region.no >= 0)
+            region.no = region.no < count ? newNos[region.no] : -1;
+    }
 }
 
 void Channel::stop()
@@ -228,6 +372,12 @@ void Channel::release()
     mPauseFlag = false;
 }
 
+void Channel::fadeOut()
+{
+    mCurveAdshr.limitRelease(cFadeOutRelease);
+    this->release();
+}
+
 void Channel::setPriority(u32 priority)
 {
     mVoice->setPriority(priority);
@@ -248,6 +398,9 @@ u32 Channel::getCurrentPlayingSample(bool isOriginalSamplePosition) const
 
     SEAD_ASSERT(mVoice != nullptr);
 
+    if (mRegionMode)
+        return mRegionBufferStart[this->getPlayingRegionIndex()] + mVoice->getCurrentPlayingSample();
+
     u32 playSamplePosition = 0;
 
     if (mLoopFlag && mWaveBuffer[0][0].status == WaveBuffer::Status::Done)
@@ -266,6 +419,18 @@ u32 Channel::getCurrentPlayingSample(bool isOriginalSamplePosition) const
     }
     
     return playSamplePosition;
+}
+
+void Channel::setLoopEnabled(bool enable)
+{
+    if (!mLoopFlag)
+        return;
+
+    for (s32 ch = 0; ch < cWaveChannelMax; ch++)
+    {
+        mWaveBuffer[ch][0].endFlag = !enable;
+        mWaveBuffer[ch][1].loopFlag = enable;
+    }
 }
 
 void Channel::setUpdateType(UpdateType updateType)
@@ -358,7 +523,14 @@ void Channel::initParam(ChannelCallback callback, void* callbackData)
     mInstrumentVolume = 1.0f;
     mVelocity = 1.0f;
 
+    mBankRegion = nullptr;
+    mBankNotePan = 0;
+    mBankEnvelopeUnlinkMask = 0;
+
     mUseContextInfo = false;
+
+    mRegionMode = false;
+    mRegionIndex = 0;
 }
 
 void Channel::appendWaveBuffer(const WaveInfo& waveInfo, u32 startOffsetSamples)
@@ -425,7 +597,7 @@ void Channel::appendWaveBuffer(const WaveInfo& waveInfo, u32 startOffsetSamples)
             }
             else // startOffsetSamples > 0
             {
-                if (mUseContextInfo)
+                if (mUseContextInfo && mContextInfo.offsetSample == startOffsetSamples)
                 {
                     adpcmContext = offsetAdpcmContext; // Structure copying
                 }
@@ -438,16 +610,7 @@ void Channel::appendWaveBuffer(const WaveInfo& waveInfo, u32 startOffsetSamples)
                     adpcmContext.yn1 = pParam->yn1;
                     adpcmContext.yn2 = pParam->yn2;
 
-                    //? We are not going to decode for the startOffsetSamples as it's quite expensive to calculate for big streams
-                    //? Probable an audible pop will occur but who cares when seeking right ???
-                    // TODO: Maybe do the getLoopContext thingy ?
-                    // // Decode partway on own effort (because normally it is the DSP doing the decoding, for this portion, the CPU takes the load).
-                    // MultiVoice::calcOffsetAdpcmParam(
-                    //     &adpcmContext,
-                    //     param,
-                    //     startOffsetSamples,
-                    //     originalDataAddress
-                    // );
+                    MultiVoice::calcOffsetAdpcmParam(&adpcmContext, param, startOffsetSamples, originalDataAddress);
                 }
             }
 
@@ -472,6 +635,7 @@ void Channel::appendWaveBuffer(const WaveInfo& waveInfo, u32 startOffsetSamples)
             pBuffer0->bufferAddress = adjustDataAddress;
             pBuffer0->sampleLength = waveInfo.loopEndFrame - startOffsetSamples;
             pBuffer0->loopFlag = false;
+            pBuffer0->endFlag = false;
 
             if (waveInfo.sampleFormat == snd::SampleFormat::DspAdpcm)
                 pBuffer0->adpcmContext = &adpcmContext;

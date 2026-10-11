@@ -5,12 +5,10 @@
 
 class BankFile;
 class Sound;
-class SoundSet;
+struct SeqMidiFilter;
 
-bool exportBankToSf2(const sead::SafeString &path, const BankFile &bank);
-bool exportSeqSoundToSf2(const sead::SafeString &path, const Sound &sound);
-bool exportSeqSoundSetToSf2Dir(const sead::SafeString &dirPath, const SoundSet &soundSet);
+bool exportBankToSf2(const sead::SafeString& path, const BankFile& bank);
+bool exportSeqSoundToSf2(const sead::SafeString& path, const Sound& sound, const SeqMidiFilter* filter = nullptr);
 
-bool exportBankToDls(const sead::SafeString &path, const BankFile &bank);
-bool exportSeqSoundToDls(const sead::SafeString &path, const Sound &sound);
-bool exportSeqSoundSetToDlsDir(const sead::SafeString &dirPath, const SoundSet &soundSet);
+bool exportBankToDls(const sead::SafeString& path, const BankFile& bank);
+bool exportSeqSoundToDls(const sead::SafeString& path, const Sound& sound, const SeqMidiFilter* filter = nullptr);

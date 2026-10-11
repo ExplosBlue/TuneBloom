@@ -2,7 +2,7 @@
 
 #include "BankR.h"
 
-#include <bfsar/BankFile.h>
+#include <bfsar/files/BankFile.h>
 
 #include <basis/seadWarning.h>
 

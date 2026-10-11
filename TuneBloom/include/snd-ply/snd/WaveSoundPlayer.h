@@ -7,7 +7,7 @@
 #include "snd/snd_WaveFileReader.h"
 #include "snd/snd_WaveSoundFileReader.h"
 
-#include <bfsar/BankFile.h>
+#include <bfsar/files/BankFile.h>
 
 class Sound;
 
@@ -47,12 +47,21 @@ public:
 
     void init();
     void deinit(bool stop = false);
+    void fadeOut();
     void prepare(s32 index, const PrepareArg& arg, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
     void prepare(const WaveFile& waveFile, s32 channelIdx = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
     void setBankNoteInfo(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
+    void setWaveSoundInfo(const Sound& sound);
+
+    void setFileScale(f32 volume, f32 pitch)
+    {
+        setInitialVolume(volume);
+        mWaveSoundInfo.pitch = pitch;
+    }
 
     void pause(bool flag) override;
     bool seek(u32 offsetSample);
+    void setLoopEnabled(bool enable);
 
     void update();
 
@@ -87,6 +96,7 @@ protected:
     bool mWavePlayFlag;
     bool mReleasePriorityFixFlag;
     bool mSetAdshr;
+    bool mLoopEnabled = true;
 
     f32 mPanRange;
 

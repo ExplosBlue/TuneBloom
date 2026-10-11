@@ -1,0 +1,110 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  COMMIT_SHA: ${{ github.sha }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows
+            runner: windows-latest
+            bin: TuneBloom-GLFW_x86_64-Develop
+            exe: TuneBloom.exe
+          - os: linux
+            runner: ubuntu-latest
+            config: develop_glfw_x86_64
+            bin: TuneBloom-GLFW_x86_64-Develop
+            exe: TuneBloom
+          - os: macos
+            runner: macos-latest
+            config: develop_glfw_arm64
+            bin: TuneBloom-GLFW_ARM64-Develop
+            exe: TuneBloom
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: abel0b/setup-premake@v2.4
+        with:
+          version: "5.0.0-beta8"
+
+      - if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxext-dev libgl1-mesa-dev
+
+      - if: matrix.os == 'windows'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build
+        if: matrix.os == 'windows'
+        run: |
+          premake5 vs2022
+          msbuild /m /p:Configuration=Develop /p:Platform=GLFW_x86_64 .
+
+      - name: Build
+        if: matrix.os != 'windows'
+        run: |
+          premake5 gmake
+          make -j"$(getconf _NPROCESSORS_ONLN)" config=${{ matrix.config }}
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir package
+          cp -r workdir/. package/
+          cp THIRD_PARTY_LICENSES.txt "TuneBloom/bin/${{ matrix.bin }}/out/${{ matrix.exe }}" package/
+
+      - if: matrix.os == 'windows'
+        run: Compress-Archive -Path package/* -DestinationPath TuneBloom-windows.zip
+
+      - if: matrix.os != 'windows'
+        run: tar -czf TuneBloom-${{ matrix.os }}.tar.gz -C package .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TuneBloom-${{ matrix.os }}
+          path: TuneBloom-${{ matrix.os }}.*
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - id: date
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: nightly-${{ steps.date.outputs.date }}
+          name: Nightly Beta — ${{ steps.date.outputs.date }}
+          body: Automated nightly build from commit ${{ github.sha }}
+          prerelease: true
+          files: dist/*

@@ -182,6 +182,7 @@ struct WaveBuffer
         this->next = nullptr;
 
         this->endian = sead::Endian::eBig;
+        this->endFlag = false;
     }
 
     const void* bufferAddress;
@@ -194,6 +195,7 @@ struct WaveBuffer
     WaveBuffer* next;
 
     sead::Endian::Types endian; // Custom
+    bool endFlag; // Custom
 };
 
 struct BiquadFilterCoefficients

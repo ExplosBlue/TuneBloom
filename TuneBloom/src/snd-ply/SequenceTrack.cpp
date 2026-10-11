@@ -111,6 +111,8 @@ void SequenceTrack::initParam()
     {
         mTrackVariable[varNo] = SequenceSoundPlayer::cVariableDefaultValue;
     }
+
+    mUsedVariables = 0;
 }
 
 void SequenceTrack::open()
@@ -240,6 +242,18 @@ void SequenceTrack::releaseAllChannel(s32 release, bool stop)
             if (stop)
                 channel->stop();
         }
+
+        channel = channel->getNextTrackChannel();
+    }
+}
+
+void SequenceTrack::fadeOutAllChannel()
+{
+    snd::internal::driver::Channel* channel = mChannelList;
+    while (channel)
+    {
+        if (channel->isActive())
+            channel->fadeOut();
 
         channel = channel->getNextTrackChannel();
     }
@@ -482,26 +496,31 @@ snd::internal::driver::Channel* SequenceTrack::noteOn(s32 key, s32 velocity, s32
     if (mParserTrackParam.attack <= SequenceTrack::cMaxEnvelopeValue)
     {
         channel->setAttack(mParserTrackParam.attack);
+        channel->unlinkBankEnvelope(snd::internal::driver::Channel::EnvelopeParam::Attack);
     }
 
     if (mParserTrackParam.decay <= SequenceTrack::cMaxEnvelopeValue)
     {
         channel->setDecay(mParserTrackParam.decay);
+        channel->unlinkBankEnvelope(snd::internal::driver::Channel::EnvelopeParam::Decay);
     }
 
     if (mParserTrackParam.sustain <= SequenceTrack::cMaxEnvelopeValue)
     {
         channel->setSustain(mParserTrackParam.sustain);
+        channel->unlinkBankEnvelope(snd::internal::driver::Channel::EnvelopeParam::Sustain);
     }
 
     if (mParserTrackParam.release <= SequenceTrack::cMaxEnvelopeValue)
     {
         channel->setRelease(mParserTrackParam.release);
+        channel->unlinkBankEnvelope(snd::internal::driver::Channel::EnvelopeParam::Release);
     }
 
     if (mParserTrackParam.envHold <= SequenceTrack::cMaxEnvelopeValue)
     {
         channel->setHold(mParserTrackParam.envHold);
+        channel->unlinkBankEnvelope(snd::internal::driver::Channel::EnvelopeParam::Hold);
     }
 
     // Sweep and portamento update

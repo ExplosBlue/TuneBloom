@@ -2,8 +2,9 @@
 
 #include <prim/seadMemUtil.h>
 
-#include <ui/PopupMgr.h>
-#include <ui/UI.h>
+#include <ui/Messages.h>
+#include <ui/app/PopupMgr.h>
+#include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
 
@@ -23,7 +24,7 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::WaveSoundData);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid wave sound file");
+            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotWaveSoundFile);
             return;
         }
 
@@ -32,10 +33,10 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
         if (fileFormat->format == ArchiveFormat::BCSAR)
         {
             u32 major = ((u32)header->version >> 24) & 0xFF;
-            u32 minor = ((u32)header->version >> 16) & 0xFF;
             if (major < 1)
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
+                PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -43,7 +44,8 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version <= 0x00010100))
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
+                PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -54,7 +56,7 @@ WaveSoundFileReader::WaveSoundFileReader(const void* waveSoundFile)
     const WaveSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: INFO block not found", wsdFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cInfoBlockNotFoundFormat,wsdFmt).cstr());
         return;
     }
 

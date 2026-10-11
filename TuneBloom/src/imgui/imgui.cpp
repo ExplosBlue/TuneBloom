@@ -1123,6 +1123,7 @@ static void             UpdateDebugToolFlashStyleColor();
 static void             UpdateKeyboardInputs();
 static void             UpdateMouseInputs();
 static void             UpdateMouseWheel();
+static void             UpdateSmoothWheelScroll();
 static void             UpdateKeyRoutingTable(ImGuiKeyRoutingTable* rt);
 
 // Misc
@@ -4086,6 +4087,17 @@ static ImGuiHoveredFlags ApplyHoverFlagsForTooltip(ImGuiHoveredFlags user_flags,
     return user_flags | shared_flags;
 }
 
+// TuneBloom: tooltip hold
+static bool GTooltipWheelHold = false;
+
+static bool IsTooltipHeldBack()
+{
+    ImGuiContext& g = *GImGui;
+    if (GTooltipWheelHold)
+        return true;
+    return g.ActiveId != 0 && g.ActiveIdMouseButton != -1 && g.IO.MouseDown[g.ActiveIdMouseButton];
+}
+
 // This is roughly matching the behavior of internal-facing ItemHoverable()
 // - we allow hovering to be true when ActiveId==window->MoveID, so that clicking on non-interactive items such as a Text() item still returns true with IsItemHovered()
 // - this should work even for non-interactive items that have no ID, so we cannot use LastItemId
@@ -4161,6 +4173,10 @@ bool ImGui::IsItemHovered(ImGuiHoveredFlags flags)
     const float delay = CalcDelayFromHoveredFlags(flags);
     if (delay > 0.0f || (flags & ImGuiHoveredFlags_Stationary))
     {
+        // TuneBloom: tooltip hold
+        if (IsTooltipHeldBack())
+            return false;
+
         ImGuiID hover_delay_id = (g.LastItemData.ID != 0) ? g.LastItemData.ID : window->GetIDFromRectangle(g.LastItemData.Rect);
         if ((flags & ImGuiHoveredFlags_NoSharedDelay) && (g.HoverItemDelayIdPreviousFrame != hover_delay_id))
             g.HoverItemDelayTimer = 0.0f;
@@ -4936,6 +4952,7 @@ void ImGui::NewFrame()
 
     // Mouse wheel scrolling, scale
     UpdateMouseWheel();
+    UpdateSmoothWheelScroll();
 
     // Mark all windows as not visible and compact unused memory.
     IM_ASSERT(g.WindowsFocusOrder.Size <= g.Windows.Size);
@@ -6425,6 +6442,10 @@ static void ImGui::RenderWindowOuterBorders(ImGuiWindow* window)
     }
 }
 
+// TuneBloom: imgui_custom.cpp
+namespace ImGui { void RenderWindowShadow(ImGuiWindow* window); }
+namespace ImGui { void AddRectFilledSurface(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding, ImDrawFlags flags); }
+
 // Draw background and borders
 // Draw and handle scrollbars
 void ImGui::RenderWindowDecorations(ImGuiWindow* window, const ImRect& title_bar_rect, bool title_bar_is_highlight, bool handle_borders_and_resize_grips, int resize_grip_count, const ImU32 resize_grip_col[4], float resize_grip_draw_size)
@@ -6436,6 +6457,9 @@ void ImGui::RenderWindowDecorations(ImGuiWindow* window, const ImRect& title_bar
     // Ensure that ScrollBar doesn't read last frame's SkipItems
     IM_ASSERT(window->BeginCount == 0);
     window->SkipItems = false;
+
+    // TuneBloom: window shadow
+    RenderWindowShadow(window);
 
     // Draw window + handle manual resize
     // As we highlight the title bar when want_focus is set, multiple reappearing windows will have their title bar highlighted on their reappearing frame.
@@ -6494,7 +6518,11 @@ void ImGui::RenderWindowDecorations(ImGuiWindow* window, const ImRect& title_bar
             ImDrawList* bg_draw_list = window->DockIsActive ? window->DockNode->HostWindow->DrawList : window->DrawList;
             if (window->DockIsActive || (flags & ImGuiWindowFlags_DockNodeHost))
                 bg_draw_list->ChannelsSetCurrent(DOCKING_HOST_DRAW_CHANNEL_BG);
-            bg_draw_list->AddRectFilled(window->Pos + ImVec2(0, window->TitleBarHeight()), window->Pos + window->Size, bg_col, window_rounding, (flags & ImGuiWindowFlags_NoTitleBar) ? 0 : ImDrawFlags_RoundCornersBottom);
+            // TuneBloom: surface gradient
+            if ((flags & ImGuiWindowFlags_ChildWindow) && !window->DockIsActive)
+                bg_draw_list->AddRectFilled(window->Pos + ImVec2(0, window->TitleBarHeight()), window->Pos + window->Size, bg_col, window_rounding, (flags & ImGuiWindowFlags_NoTitleBar) ? 0 : ImDrawFlags_RoundCornersBottom);
+            else
+                AddRectFilledSurface(bg_draw_list, window->Pos + ImVec2(0, window->TitleBarHeight()), window->Pos + window->Size, bg_col, window_rounding, (flags & ImGuiWindowFlags_NoTitleBar) ? 0 : ImDrawFlags_RoundCornersBottom);
             if (window->DockIsActive || (flags & ImGuiWindowFlags_DockNodeHost))
                 bg_draw_list->ChannelsSetCurrent(DOCKING_HOST_DRAW_CHANNEL_FG);
         }
@@ -9553,6 +9581,12 @@ static void ImGui::UpdateMouseInputs()
     g.MouseStationaryTimer = mouse_stationary ? (g.MouseStationaryTimer + io.DeltaTime) : 0.0f;
     //IMGUI_DEBUG_LOG("%.4f\n", g.MouseStationaryTimer);
 
+    // TuneBloom: tooltip hold
+    if (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f)
+        GTooltipWheelHold = true;
+    else if (!mouse_stationary)
+        GTooltipWheelHold = false;
+
     // If mouse moved we re-enable mouse hovering in case it was disabled by gamepad/keyboard. In theory should use a >0.0f threshold but would need to reset in everywhere we set this to true.
     if (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)
         g.NavDisableMouseHover = false;
@@ -9659,6 +9693,106 @@ static ImGuiWindow* FindBestWheelingWindow(const ImVec2& wheel)
     return (g.WheelingAxisAvg.x > g.WheelingAxisAvg.y) ? windows[0] : windows[1];
 }
 
+// TuneBloom: smooth wheel scroll
+
+static const float      SMOOTH_WHEEL_SCROLL_HALF_LIFE = 0.035f;
+static bool             GSmoothWheelScroll = true;
+static ImGuiID          GSmoothWheelWindowID = 0;
+static bool             GSmoothWheelActive[2] = { false, false };
+static float            GSmoothWheelPos[2] = { 0.0f, 0.0f };
+static float            GSmoothWheelTarget[2] = { 0.0f, 0.0f };
+static const float      SMOOTH_WHEEL_SCROLL_HOVER_DELAY = 0.10f;
+static float            GSmoothWheelHoverTimer = 0.0f;
+static float            GWheelScrollSpeed = 1.0f;
+
+namespace ImGui { void SetSmoothWheelScroll(bool enabled); void SetWheelScrollSpeed(float speed); }
+
+void ImGui::SetWheelScrollSpeed(float speed)
+{
+    GWheelScrollSpeed = speed;
+}
+
+void ImGui::SetSmoothWheelScroll(bool enabled)
+{
+    GSmoothWheelScroll = enabled;
+    if (!enabled)
+        GSmoothWheelWindowID = 0;
+}
+
+static void StartSmoothWheelScroll(ImGuiWindow* window, ImGuiAxis axis, float delta)
+{
+    if (GSmoothWheelWindowID != window->ID)
+    {
+        GSmoothWheelWindowID = window->ID;
+        GSmoothWheelActive[0] = GSmoothWheelActive[1] = false;
+    }
+    if (!GSmoothWheelActive[axis])
+        GSmoothWheelPos[axis] = GSmoothWheelTarget[axis] = window->Scroll[axis];
+    GSmoothWheelTarget[axis] = ImClamp(GSmoothWheelTarget[axis] + delta, 0.0f, window->ScrollMax[axis]);
+    GSmoothWheelActive[axis] = true;
+    if (GSmoothWheelTarget[axis] != GSmoothWheelPos[axis])
+        GSmoothWheelHoverTimer = SMOOTH_WHEEL_SCROLL_HOVER_DELAY;
+}
+
+// No hover highlight below a mouse at rest while the view moves
+static void UpdateSmoothWheelHover()
+{
+    ImGuiContext& g = *GImGui;
+    if (GSmoothWheelHoverTimer <= 0.0f)
+        return;
+
+    if (GSmoothWheelWindowID == 0)
+        GSmoothWheelHoverTimer -= g.IO.DeltaTime;
+    if (g.IO.MouseDelta.x != 0.0f || g.IO.MouseDelta.y != 0.0f || ImGui::IsAnyMouseDown())
+        GSmoothWheelHoverTimer = 0.0f;
+    if (GSmoothWheelHoverTimer > 0.0f)
+        g.HoveredWindow = g.HoveredWindowUnderMovingWindow = NULL;
+}
+
+void ImGui::UpdateSmoothWheelScroll()
+{
+    ImGuiContext& g = *GImGui;
+    UpdateSmoothWheelHover();
+    if (GSmoothWheelWindowID == 0)
+        return;
+
+    ImGuiWindow* window = ImGui::FindWindowByID(GSmoothWheelWindowID);
+    const float ratio = 1.0f - ImPow(0.5f, g.IO.DeltaTime / SMOOTH_WHEEL_SCROLL_HALF_LIFE);
+    bool active = false;
+    for (int axis = 0; axis < 2; axis++)
+    {
+        if (!GSmoothWheelActive[axis])
+            continue;
+
+        // Stop when another input moved the view (scrollbar, keyboard, a scroll request of the app)
+        if (window == NULL || window->ScrollTarget[axis] != FLT_MAX || ImAbs(window->Scroll[axis] - GSmoothWheelPos[axis]) > 1.0f)
+        {
+            GSmoothWheelActive[axis] = false;
+            continue;
+        }
+
+        const float delta = GSmoothWheelTarget[axis] - GSmoothWheelPos[axis];
+        const float step = ImMax(ImAbs(delta) * ratio, 1.0f);
+        if (ImAbs(delta) <= step)
+        {
+            GSmoothWheelPos[axis] = GSmoothWheelTarget[axis];
+            GSmoothWheelActive[axis] = false;
+        }
+        else
+        {
+            GSmoothWheelPos[axis] += (delta < 0.0f) ? -step : step;
+            active = true;
+        }
+
+        if (axis == ImGuiAxis_X)
+            ImGui::SetScrollX(window, GSmoothWheelPos[axis]);
+        else
+            ImGui::SetScrollY(window, GSmoothWheelPos[axis]);
+    }
+    if (!active)
+        GSmoothWheelWindowID = 0;
+}
+
 // Called by NewFrame()
 void ImGui::UpdateMouseWheel()
 {
@@ -9733,16 +9867,22 @@ void ImGui::UpdateMouseWheel()
             {
                 LockWheelingWindow(window, wheel.x);
                 float max_step = window->InnerRect.GetWidth() * 0.67f;
-                float scroll_step = ImTrunc(ImMin(2 * window->CalcFontSize(), max_step));
-                SetScrollX(window, window->Scroll.x - wheel.x * scroll_step);
+                float scroll_step = ImTrunc(ImMin(2 * window->CalcFontSize() * GWheelScrollSpeed, max_step));
+                if (GSmoothWheelScroll)
+                    StartSmoothWheelScroll(window, ImGuiAxis_X, -wheel.x * scroll_step);
+                else
+                    SetScrollX(window, window->Scroll.x - wheel.x * scroll_step);
                 g.WheelingWindowScrolledFrame = g.FrameCount;
             }
             if (do_scroll[ImGuiAxis_Y])
             {
                 LockWheelingWindow(window, wheel.y);
                 float max_step = window->InnerRect.GetHeight() * 0.67f;
-                float scroll_step = ImTrunc(ImMin(5 * window->CalcFontSize(), max_step));
-                SetScrollY(window, window->Scroll.y - wheel.y * scroll_step);
+                float scroll_step = ImTrunc(ImMin(5 * window->CalcFontSize() * GWheelScrollSpeed, max_step));
+                if (GSmoothWheelScroll)
+                    StartSmoothWheelScroll(window, ImGuiAxis_Y, -wheel.y * scroll_step);
+                else
+                    SetScrollY(window, window->Scroll.y - wheel.y * scroll_step);
                 g.WheelingWindowScrolledFrame = g.FrameCount;
             }
         }
@@ -14534,6 +14674,48 @@ void ImGui::TranslateWindowsInViewport(ImGuiViewportP* viewport, const ImVec2& o
             TranslateWindow(window, delta_pos);
 }
 
+// TuneBloom: proportional windows
+static ImVec2 GMainViewportLastSize = ImVec2(0.0f, 0.0f);
+
+static float CalcProportionalWindowOffset(float offset, float old_free, float new_free)
+{
+    if (old_free <= 0.0f)
+        return offset + (new_free - old_free) * 0.5f;
+    if (offset <= 0.0f)
+        return offset;
+    if (offset >= old_free)
+        return offset + new_free - old_free;
+
+    return offset * new_free / old_free;
+}
+
+static void KeepWindowsProportionalInMainViewport(ImGuiViewportP* viewport)
+{
+    ImGuiContext& g = *GImGui;
+    const ImVec2 old_size = GMainViewportLastSize;
+    const ImVec2 new_size = viewport->Size;
+    if (new_size.x <= 0.0f || new_size.y <= 0.0f || (viewport->Flags & ImGuiViewportFlags_IsMinimized))
+        return;
+
+    GMainViewportLastSize = new_size;
+    if (old_size.x <= 0.0f || old_size.y <= 0.0f || (old_size.x == new_size.x && old_size.y == new_size.y))
+        return;
+
+    for (ImGuiWindow* window : g.Windows)
+    {
+        if (window->Viewport != viewport || window->DockIsActive || (window->Flags & ImGuiWindowFlags_ChildWindow))
+            continue;
+        if ((window->Flags & (ImGuiWindowFlags_Popup | ImGuiWindowFlags_Tooltip)) && !(window->Flags & ImGuiWindowFlags_Modal))
+            continue;
+
+        const ImVec2 offset = window->Pos - viewport->Pos;
+        const ImVec2 new_offset(
+            CalcProportionalWindowOffset(offset.x, old_size.x - window->Size.x, new_size.x - window->Size.x),
+            CalcProportionalWindowOffset(offset.y, old_size.y - window->Size.y, new_size.y - window->Size.y));
+        TranslateWindow(window, ImFloor(new_offset) - offset);
+    }
+}
+
 // Scale all windows (position, size). Use when e.g. changing DPI. (This is a lossy operation!)
 void ImGui::ScaleWindowsInViewport(ImGuiViewportP* viewport, float scale)
 {
@@ -14700,6 +14882,10 @@ static void ImGui::UpdateViewportsNewFrame()
         const ImVec2 viewport_delta_pos = viewport->Pos - viewport->LastPos;
         if ((viewport->Flags & ImGuiViewportFlags_CanHostOtherWindows) && (viewport_delta_pos.x != 0.0f || viewport_delta_pos.y != 0.0f))
             TranslateWindowsInViewport(viewport, viewport->LastPos, viewport->Pos);
+
+        // TuneBloom: proportional windows
+        if (n == 0)
+            KeepWindowsProportionalInMainViewport(viewport);
 
         // Update DPI scale
         float new_dpi_scale;
@@ -17052,10 +17238,7 @@ static void ImGui::DockNodeWindowMenuUpdate(ImGuiDockNode* node, ImGuiTabBar* ta
 {
     // Try to position the menu so it is more likely to stays within the same viewport
     ImGuiContext& g = *GImGui;
-    if (g.Style.WindowMenuButtonPosition == ImGuiDir_Left)
-        SetNextWindowPos(ImVec2(node->Pos.x, node->Pos.y + GetFrameHeight()), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
-    else
-        SetNextWindowPos(ImVec2(node->Pos.x + node->Size.x, node->Pos.y + GetFrameHeight()), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    SetNextWindowPos(ImVec2(node->Pos.x, node->Pos.y + GetFrameHeight()), ImGuiCond_Always, ImVec2(0.0f, 0.0f));
     if (BeginPopup("#WindowMenu"))
     {
         node->IsFocused = true;
@@ -17206,10 +17389,19 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     host_window->DrawList->AddRectFilled(title_bar_rect.Min, title_bar_rect.Max, title_bar_col, host_window->WindowRounding, rounding_flags);
 
     // Docking/Collapse button
+    // TuneBloom: corner triangle
+    bool window_menu_button_hovered = false;
+    bool window_menu_button_held = false;
     if (has_window_menu_button)
     {
-        if (CollapseButton(host_window->GetID("#COLLAPSE"), window_menu_button_pos, node)) // == DockNodeGetWindowMenuButtonId(node)
+        const float window_menu_button_sz_hit = ImTrunc(g.FontSize * 0.55f);
+        const ImRect window_menu_button_bb(window_menu_button_pos, window_menu_button_pos + ImVec2(window_menu_button_sz_hit, window_menu_button_sz_hit));
+        const ImGuiID window_menu_button_id = host_window->GetID("#COLLAPSE"); // == DockNodeGetWindowMenuButtonId(node)
+        ItemAdd(window_menu_button_bb, window_menu_button_id);
+        if (ButtonBehavior(window_menu_button_bb, window_menu_button_id, &window_menu_button_hovered, &window_menu_button_held, ImGuiButtonFlags_None))
             OpenPopup("#WindowMenu");
+        if (IsItemActive() && IsMouseDragging(0))
+            StartMouseMovingWindowOrNode(g.CurrentWindow, node, true); // Undock from window/collapse menu button
         if (IsItemActive())
             focus_tab_id = tab_bar->SelectedTabId;
         if (IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_DelayNormal) && g.HoveredIdTimer > 0.5f)
@@ -17246,6 +17438,21 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
         tab_bar->SelectedTabId = tab_bar->NextSelectedTabId = node->SelectedTabId;
     else if (tab_bar->Tabs.Size > tabs_count_old)
         tab_bar->SelectedTabId = tab_bar->NextSelectedTabId = tab_bar->Tabs.back().Window->TabId;
+
+    // TuneBloom: disabled tab
+    for (int window_n = 0; window_n < node->Windows.Size; window_n++)
+    {
+        const ImGuiWindow* disabled_window = node->Windows[window_n];
+        if (!disabled_window->DockTabDisabled || tab_bar->SelectedTabId != disabled_window->TabId)
+            continue;
+        for (int other_n = 0; other_n < node->Windows.Size; other_n++)
+            if (!node->Windows[other_n]->DockTabDisabled && TabBarFindTabByID(tab_bar, node->Windows[other_n]->TabId) != NULL)
+            {
+                tab_bar->SelectedTabId = tab_bar->NextSelectedTabId = node->Windows[other_n]->TabId;
+                break;
+            }
+        break;
+    }
 
     // Begin tab bar
     ImGuiTabBarFlags tab_bar_flags = ImGuiTabBarFlags_Reorderable | ImGuiTabBarFlags_AutoSelectNewTabs; // | ImGuiTabBarFlags_NoTabListScrollingButtons);
@@ -17285,7 +17492,9 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
 
             // Note that TabItemEx() calls TabBarCalcTabID() so our tab item ID will ignore the current ID stack (rightly so)
             bool tab_open = true;
+            BeginDisabled(window->DockTabDisabled); // TuneBloom: disabled tab
             TabItemEx(tab_bar, window->Name, window->HasCloseButton ? &tab_open : NULL, tab_item_flags, window);
+            EndDisabled();
             if (!tab_open)
                 node->WantCloseTabId = window->TabId;
             if (tab_bar->VisibleTabId == window->TabId)
@@ -17304,6 +17513,14 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     // Restore style colors
     for (int color_n = 0; color_n < ImGuiWindowDockStyleCol_COUNT; color_n++)
         g.Style.Colors[GWindowDockStyleColors[color_n]] = backup_style_cols[color_n];
+
+    // TuneBloom: window menu button
+    if (has_window_menu_button)
+    {
+        const float window_menu_button_sz_draw = ImTrunc(g.FontSize * 0.70f);
+        const ImU32 window_menu_button_col = GetColorU32(((window_menu_button_held && window_menu_button_hovered) || (is_focused && !window_menu_button_hovered)) ? ImGuiCol_ButtonActive : window_menu_button_hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+        host_window->DrawList->AddTriangleFilled(window_menu_button_pos, window_menu_button_pos + ImVec2(window_menu_button_sz_draw, 0.0f), window_menu_button_pos + ImVec2(0.0f, window_menu_button_sz_draw), window_menu_button_col);
+    }
 
     // Notify root of visible window (used to display title in OS task bar)
     if (node->VisibleWindow)
@@ -17468,19 +17685,13 @@ static void ImGui::DockNodeCalcTabBarLayout(const ImGuiDockNode* node, ImRect* o
     float button_sz = g.FontSize;
     r.Min.x += style.FramePadding.x;
     r.Max.x -= style.FramePadding.x;
-    ImVec2 window_menu_button_pos = ImVec2(r.Min.x, r.Min.y + style.FramePadding.y);
+    // TuneBloom: window menu button
+    ImVec2 window_menu_button_pos = node->Pos;
+    if (node->HasWindowMenuButton && style.WindowMenuButtonPosition != ImGuiDir_None)
+        r.Min.x = ImMax(r.Min.x, node->Pos.x + ImTrunc(g.FontSize * 0.70f) + 1.0f);
     if (node->HasCloseButton)
     {
         if (out_close_button_pos) *out_close_button_pos = ImVec2(r.Max.x - button_sz, r.Min.y + style.FramePadding.y);
-        r.Max.x -= button_sz + style.ItemInnerSpacing.x;
-    }
-    if (node->HasWindowMenuButton && style.WindowMenuButtonPosition == ImGuiDir_Left)
-    {
-        r.Min.x += button_sz + style.ItemInnerSpacing.x;
-    }
-    else if (node->HasWindowMenuButton && style.WindowMenuButtonPosition == ImGuiDir_Right)
-    {
-        window_menu_button_pos = ImVec2(r.Max.x - button_sz, r.Min.y + style.FramePadding.y);
         r.Max.x -= button_sz + style.ItemInnerSpacing.x;
     }
     if (out_tab_bar_rect) { *out_tab_bar_rect = r; }

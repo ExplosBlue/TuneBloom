@@ -1,6 +1,5 @@
 <img alt="banner" src="https://github.com/user-attachments/assets/c3d1fa1e-30da-42f7-803f-1a4eb08cacb5" />
 <div align="center">
-  <img alt="wiiu" height="56" src="https://github.com/user-attachments/assets/d9074ba2-455c-4083-b8a8-da9150814065">
   <a href="https://go.nsmbu.net/discord">
     <img alt="discord" height="56" src="https://github.com/user-attachments/assets/9c31e6cc-e2f8-4d53-9507-15a17b368088">
   </a>
@@ -10,59 +9,62 @@
 </div>
 
 ## Overview
-TuneBloom is an extremely fast & stable editor for editing NintendoWare audio formats, primarily for the Wii U. It features high performance, low memory usage, and a high degree of data accuracy, allowing you to modify everything throughout the archive while ensuring that nothing will go wrong in the process. Support is included for every component of sound archives including waves, sequences, streams, banks, and more. Live playback allows quick previews of your work resulting in a highly effective and streamlined workflow. This is TuneBloom.
+TuneBloom is a fast, polished, and stable editor for NintendoWare sound archives. It features low memory usage and a high degree of data accuracy.
+
+You can safely edit everything in the archive, such as waves, sequences, streams, and banks. Live emulated audio playback allows previewing your work for a streamlined workflow.
+
+**TuneBloom currently supports Wii U, 3DS, and Switch sound archives. (`BFSAR` and `BCSAR`)**
 
 ## Features
-- Playback for every type of sound!
-- Sequence (`BFSEQ`) editor!
-- Bank (`BFBNK`) editor!
-- Edit every single property of the `BFSAR`!
-- And more!
+- Edit every property of a sound archive!
+- Multi-track stream editing, including support for regions.
+- Sophisticated sequence editor: Built-in manual, autocomplete, and hints.
+- Detailed bank and instrument editor: ADSR envelope, live MIDI playback.
+- Prepare wave files directly in the editor: normalization, trimming, and looping.
+- Export contents to `WAV`, `MIDI`, `SF2`, and `DLS`.
+- And even more!
 
 ## Screenshots
 <div align="center">
-  <img width="400" alt="TuneBloom_k78lOUKtmC" src="https://github.com/user-attachments/assets/c2ca3154-2f22-4e09-8b29-8198828aa871" />
-  <img width="400" alt="TuneBloom_EXVWA0nYae" src="https://github.com/user-attachments/assets/49dfe9df-aafb-4770-9e41-eeb367d226af" />
-  <img width="400" alt="TuneBloom_sT2EMlt6UD" src="https://github.com/user-attachments/assets/31f6e60e-cc31-4309-be73-b1ebb949b9b8" />
-  <img width="400" alt="TuneBloom_RAFJUbpqfn" src="https://github.com/user-attachments/assets/c9932b4c-2c53-4769-8a66-488c4e628928" />
+<img width="400" alt="Stream Sounds List" src="https://github.com/user-attachments/assets/3f0f73ea-0e92-4363-b26f-161586f58919" />
+<img width="400" alt="Bank & Instrument Editor" src="https://github.com/user-attachments/assets/7cf2642f-505b-4c25-b290-adbc4eed6abe" />
+<img width="400" alt="Wave Sound Set List" src="https://github.com/user-attachments/assets/1242c32a-8661-44cc-91bf-6ba442d58a6e" />
+<img width="400" alt="Sequence Editor" src="https://github.com/user-attachments/assets/ec5e20db-5ded-4e2b-99a5-6f47c84ba488" />
 </div>
 
+## Future Goals
+- `BRSAR` support (Wii)
+
 ## Limitations
-- Edited `BFSAR` files
-  - Sound archives which have been re-saved by imperfect tools (such as Citric Composer) are very likely to have been corrupted in ways that will result in failure to load into TuneBloom.
-- External groups (`BFGRP`)
-  - Support for external groups is still WIP (read-only), that means games like SM3DW, CTTT and any other game which makes use of external groups only supports playback. (You have to provide the `BFGRP`s on load)
-- Import/Export wave files
-  - The tool can only make use of RIFF .wav files for importing/replacing and exporting.
-- Stream regions
-  - The `REGN` blocks on `BFSTM` files are yet not supported.
-- Stream prefetch (`BFSTP`)
-  - Prefetch files are yet not supported.
+- Edited sound archives (`BFSAR` and `BCSAR`)
+  - Sound archives saved by imperfect tools (such as Citric Composer) are likely to be corrupted in ways that prevent them from being loaded in TuneBloom.
+- Audio Formats
+  - Currently, only `WAV` files can be imported or exported. (No support for `MP3`, `FLAC`, `OGG`, or `AIFF`)
 - ADTS Streams (`AAC`)
-  - Only `BFSTM` Streams are supported.
+  - Only `BFSTM` and `BCSTM` stream files are supported.
 
 > [!TIP]
-> While TuneBloom has reached a stable release, it is still advised to make frequent backups before saving.
+> While TuneBloom has reached a stable release and creates automatic backups, it's still advised to make your own.
 
 ## Compiling
 [Premake](https://premake.github.io/) is used as the build system which makes setting up a development environment very straightforward.
 
-You only must make sure you have Premake version **5.0.0-beta8** or greater.
+You must have Premake version **5.0.0-beta8** or higher.
 
 > [!IMPORTANT]
 > When cloning the repository, make sure to use `--recurse-submodules`!
 
 ### Windows
 **Requirements**
-- The [latest Premake pre-built binary](https://premake.github.io/download) for Windows (The version on WinGet is not up-to-date!)
+- The [latest Premake pre-built binary](https://premake.github.io/download) for Windows (The version on WinGet is not up to date!)
 - [Microsoft Visual Studio](https://visualstudio.microsoft.com/downloads/) 2022 or higher, with the [C++ Clang tools for Windows](https://learn.microsoft.com/en-us/cpp/build/clang-support-msbuild?view=msvc-170) component installed.
-  - If you cannot use Clang on your system, you may skip this and use MSVC instead, see below for how.
+  - If you cannot use Clang on your system, you may instead use MSVC (see below).
 - Windows 10 or 11
 
 **Build**
 - Run `premake5 vs2022` (Only needed to run on first setup, when a `premake5.lua` changes or when source files are added/deleted)
   - If using MSVC, add the flag `--cc=msc-v143`
-- Open the generated `.sln` file in Visual Studio (2022 or greater) to edit & build
+- Open the generated `.sln` file in Visual Studio (2022 or higher) to edit & build
 
 ### macOS
 **Requirements**
@@ -76,7 +78,7 @@ You only must make sure you have Premake version **5.0.0-beta8** or greater.
 
 ### Linux
 **Requirements**
-- Install Premake from your system package manager if it is up-to-date, otherwise manually download the [latest Premake pre-built binary](https://premake.github.io/download) for Linux
+- Install Premake from your system package manager if it is up to date, otherwise manually download the [latest Premake pre-built binary](https://premake.github.io/download) for Linux
 - You may need to install X11/Wayland development headers packages for your distro
 
 **Build**
@@ -84,10 +86,10 @@ You only must make sure you have Premake version **5.0.0-beta8** or greater.
 - Run `make config=release_glfw_x86_64` (Release build) or `make config=debug_glfw_x86_64` (Debug build)
 
 > [!TIP]
-> On macOS and Linux, you can add `-j` to the `make` command to speed-up compilation.
+> On macOS and Linux, you can add `-j` to the `make` command to speed up compilation.
 
 ## Contributing
-External contributions & Pull Requests are welcome! We understand that the quality of the code may not be fully up-to-bar, so we appreciate your patience. Help and developer discussions are always available in our [Discord](https://go.nsmbu.net/discord) server.
+External contributions and pull requests are welcome! We understand that the quality of the code may not be fully up to par, so we appreciate your patience. Help and developer discussions are always available in our [Discord](https://go.nsmbu.net/discord) server.
 
 ## Credits
 - [STUPID Modder](https://github.com/stupidestmodder) - Development lead
@@ -95,7 +97,7 @@ External contributions & Pull Requests are welcome! We understand that the quali
 - [Luminyx1](https://github.com/Luminyx1) - Build system & testing
 - [jhmaster](https://github.com/jhmaster2000) - macOS assistance
 - [Alex Barney](https://github.com/Thealexbarney) - DspTool (DspAdpcm Encoding)
-- [omar](https://github.com/ocornut) - ImGui
+- [Omar Cornut](https://github.com/ocornut) - ImGui
 - [Vladimir Shatrov](https://github.com/frowrik) - ImGui piano keyboard
 - [BalazsJako](https://github.com/BalazsJako) - ImGui text editor
-- [samhocevar](https://github.com/samhocevar/portable-file-dialogs) - Portable file dialog
+- [samhocevar](https://github.com/samhocevar/portable-file-dialogs) - Portable File Dialogs

@@ -197,6 +197,7 @@ Index of this file:
 #include "imgui.h"
 #ifndef IMGUI_DISABLE
 #include "imgui_internal.h"
+#include "imgui_custom.h"
 
 // System includes
 #include <stdint.h>     // intptr_t
@@ -3070,9 +3071,10 @@ void ImGui::TableHeader(const char* label)
     const bool highlight = (table->HighlightColumnHeader == column_n);
     bool hovered, held;
     bool pressed = ButtonBehavior(bb, id, &hovered, &held, ImGuiButtonFlags_AllowOverlap);
-    if (held || hovered || highlight)
+    const float hover_ratio = GetHoverRatio(id, held || hovered);
+    if (hover_ratio > 0.0f || highlight)
     {
-        const ImU32 col = GetColorU32(held ? ImGuiCol_HeaderActive : hovered ? ImGuiCol_HeaderHovered : ImGuiCol_Header);
+        const ImU32 col = held ? GetColorU32(ImGuiCol_HeaderActive) : highlight ? GetColorU32(ImGuiCol_Header) : GetColorU32(ImGuiCol_HeaderHovered, hover_ratio);
         //RenderFrame(bb.Min, bb.Max, col, false, 0.0f);
         TableSetBgColor(ImGuiTableBgTarget_CellBg, col, table->CurrentColumn);
     }

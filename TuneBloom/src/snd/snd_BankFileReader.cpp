@@ -3,8 +3,9 @@
 #include <basis/seadWarning.h>
 #include <prim/seadMemUtil.h>
 
-#include <ui/PopupMgr.h>
-#include <ui/UI.h>
+#include <ui/Messages.h>
+#include <ui/app/PopupMgr.h>
+#include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
 
@@ -35,7 +36,7 @@ void BankFileReader::Initialize(const void* bankFile)
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Bank);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid bank file");
+            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotBankFile);
             return;
         }
 
@@ -46,7 +47,7 @@ void BankFileReader::Initialize(const void* bankFile)
             u32 major = ((u32)header->version >> 24) & 0xFF;
             if (major < 1)
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -55,7 +56,7 @@ void BankFileReader::Initialize(const void* bankFile)
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && (u32)header->version != 0x00010000)
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -67,7 +68,7 @@ void BankFileReader::Initialize(const void* bankFile)
     const BankFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>("%s: INFO block not found", bankFmt).cstr());
+        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::reader::cInfoBlockNotFoundFormat,bankFmt).cstr());
         return;
     }
 

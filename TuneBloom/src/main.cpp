@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <cstring>
-#include <string>
-#include <sys/stat.h>
+#include <filesystem>
 
 #include <devenv/seadAssertConfig.h>
 #include <filedevice/seadFileDevice.h>
@@ -15,27 +14,38 @@
 #include <filedevice/posix/seadPosixNativeFileDevicePosix.h>
 #endif
 
-#include "AppFramework.h"
+#include "app/AppFramework.h"
 #include "tasks/RootTask.h"
 
 #include <snd/DisposeCallbackMgr.h>
 #include <snd/SoundThread.h>
 #include <snd/ut/ut_BinaryFileFormat.h>
 
-#include "ui/PopupMgr.h"
-#include "Utilll.h"
-#include "bfsar/Bfsar.h"
+#include "ui/Messages.h"
+#include "ui/app/PopupMgr.h"
+#include "core/TestHooks.h"
+#include "ui/file/SystemShell.h"
+#include "app/Utilll.h"
+#include "bfsar/archive/Bfsar.h"
+#include "bfsar/archive/BfsarLayoutCheck.h"
+#include "bfsar/io/FileIo.h"
 
-#include <portable-file-dialogs.h>
+#include <libs/portable-file-dialogs.h>
 
 #if defined(SEAD_PLATFORM_MACOSX)
-#include "macos/bundle.h"
-#include "macos/openFiles.h"
+#include "platform/macos/bundle.h"
+#include "platform/macos/openFiles.h"
 #endif
 
 extern Bfsar sBfsar;
 extern sead::FixedSafeString<512> sDroppedFilePath;
 static bool sCliMode = false;
+static s32 sAssertDialogNum = 0;
+
+bool util::isAssertDialogOpen()
+{
+    return sAssertDialogNum > 0;
+}
 
 void AssertException(const char* msg)
 {
@@ -47,8 +57,11 @@ void AssertException(const char* msg)
 
     auto msgBox = [msg]()
     {
-        sead::FormatFixedSafeString<2048> info("%s\nAn unexpected error has ocurred, please report this issue on 'https://github.com/stupidestmodder/TuneBloom/issues' or ask here 'https://go.nsmbu.net/discord'", msg);
-        pfd::message("ASSERTION ERROR", info.cstr(), pfd::choice::ok, pfd::icon::warning).result();
+        sead::FormatFixedSafeString<2048> info(messages::app::cAssertReportFormat, msg);
+
+        sAssertDialogNum++;
+        pfd::message(messages::app::cAssertTitle, info.cstr(), pfd::choice::ok, pfd::icon::warning).result();
+        sAssertDialogNum--;
     };
 
     if (sead::ThreadMgr::instance() && sead::ThreadMgr::instance()->getCurrentThread())
@@ -67,32 +80,24 @@ static bool isBfsarBcsar(const void* file)
     return memcmp(file, "FSAR", 4) == 0 || memcmp(file, "CSAR", 4) == 0;
 }
 
-#ifdef _WIN32
-#include <direct.h>
-static int mkdir_p(const char* path) { return _mkdir(path); }
-#else
-static int mkdir_p(const char* path) { return mkdir(path, 0755); }
-#endif
-
-static void ensureDir(const char* path)
+static bool ensureDir(const char* path)
 {
-    std::string dir(path);
-    size_t pos = dir.find_last_of('/');
-    if (pos == std::string::npos)
-        return;
-    dir.resize(pos);
-    if (dir.empty() || dir == ".")
-        return;
-    for (size_t i = 1; i < dir.size(); i++)
-    {
-        if (dir[i] == '/')
-        {
-            dir[i] = '\0';
-            mkdir_p(dir.c_str());
-            dir[i] = '/';
-        }
-    }
-    mkdir_p(dir.c_str());
+    const std::filesystem::path dir = std::filesystem::path(path).parent_path();
+
+    if (dir.empty())
+        return true;
+
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+
+    return std::filesystem::is_directory(dir, ec);
+}
+
+[[noreturn]] static void exitConvert(int code)
+{
+    fflush(stdout);
+    fflush(stderr);
+    _Exit(code);
 }
 
 static u32 dumpItemList(const char* label, Item::List& list)
@@ -125,11 +130,105 @@ static void dumpItemIds()
     fprintf(stderr, "%u named items\n", total);
 }
 
+[[noreturn]] static void convertArchive(const char* inPath, const char* outPath)
+{
+    const bool dumpIds = strcmp(outPath, "--dump-ids") == 0;
+
+    if (strlen(inPath) > fileio::cPathLengthMax || (!dumpIds && strlen(outPath) > fileio::cPathLengthMax))
+    {
+        fprintf(stderr, "A path is longer than %d characters\n", fileio::cPathLengthMax);
+        exitConvert(1);
+    }
+
+    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+    if (!device)
+    {
+        fprintf(stderr, "Failed to find native file device\n");
+        exitConvert(1);
+    }
+
+    sead::FileDevice::LoadArg loadArg;
+    sead::FixedSafeString<512> inPathStr(inPath);
+    loadArg.path = inPathStr;
+    u8* bfsarFile = device->tryLoad(loadArg);
+    if (!bfsarFile)
+    {
+        fprintf(stderr, "Failed to load '%s'\n", inPath);
+        exitConvert(1);
+    }
+
+    if (loadArg.read_size < sizeof(nw::ut::BinaryFileHeader) || !isBfsarBcsar(bfsarFile) || !CheckSoundArchiveHeader(bfsarFile, static_cast<u32>(loadArg.read_size)))
+    {
+        fprintf(stderr, "'%s' is not a valid BFSAR/BCSAR file\n", inPath);
+        exitConvert(1);
+    }
+
+    sFileEndian = nw::ut::GetFileEndian(*reinterpret_cast<const nw::ut::BinaryFileHeader*>(bfsarFile));
+
+    const char* openAsPath = testhooks::GetOpenAsPath();
+    const sead::FixedSafeString<512> archivePath(openAsPath ? openAsPath : inPath);
+
+    testhooks::ApplyGroupFiles(archivePath.cstr());
+
+    if (!sBfsar.open(bfsarFile, static_cast<u32>(loadArg.read_size), archivePath, nullptr, openAsPath ? &inPathStr : nullptr))
+    {
+        fprintf(stderr, "Failed to parse '%s'\n", inPath);
+        exitConvert(1);
+    }
+
+    if (dumpIds)
+    {
+        dumpItemIds();
+        exitConvert(0);
+    }
+
+    if (!ensureDir(outPath))
+    {
+        fprintf(stderr, "Failed to create the folder of '%s'\n", outPath);
+        exitConvert(1);
+    }
+
+    if (!testhooks::ApplyGroupCommands())
+        exitConvert(1);
+
+    if (!sBfsar.saveAs(sead::FixedSafeString<512>(outPath)))
+    {
+        if (sBfsar.hasPendingSaveFinalize())
+        {
+            fprintf(stderr, "error: the output file cannot be replaced\n");
+            sBfsar.cancelPendingSaveFinalize();
+        }
+
+        fprintf(stderr, "Failed to save to '%s'\n", outPath);
+        exitConvert(1);
+    }
+
+    fprintf(stdout, "Done: '%s' -> '%s'\n", inPath, outPath);
+    exitConvert(0);
+}
+
+static void setStartupFile(const char* path)
+{
+    std::error_code ec;
+    const std::string fullPath = std::filesystem::absolute(path, ec).string();
+
+    if (ec || fullPath.size() >= static_cast<size_t>(sDroppedFilePath.getBufferSize()))
+        sDroppedFilePath = path;
+    else
+        sDroppedFilePath = fullPath.c_str();
+}
+
 int main(int argc, char* argv[])
 {
+    if (argc == 2 && argv[1][0] != '-')
+        setStartupFile(argv[1]);
+
 #if defined(SEAD_PLATFORM_MACOSX)
     macos::useBundleResources();
     macos::installOpenFileHandler();
+#else
+    if (argc < 3)
+        UseExecutableFolder();
 #endif
 
     sead::Delegate1 deleg = sead::FunctionDelegateCreator<const char*>(&AssertException);
@@ -162,71 +261,7 @@ int main(int argc, char* argv[])
         sead::FileDeviceMgr::instance()->mount(new sead::PosixNativeFileDevice());
 #endif
 
-        const char* inPath = argv[1];
-        const char* outPath = argv[2];
-
-        sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-        if (!device)
-        {
-            fprintf(stderr, "Failed to find native file device\n");
-            fflush(stderr);
-            _Exit(1);
-            return 1;
-        }
-
-        sead::FileDevice::LoadArg loadArg;
-        sead::FormatFixedSafeString<1024> inPathStr(inPath);
-        loadArg.path = inPathStr;
-        u8* bfsarFile = device->tryLoad(loadArg);
-        if (!bfsarFile)
-        {
-            fprintf(stderr, "Failed to load '%s'\n", inPath);
-            fflush(stderr);
-            _Exit(1);
-            return 1;
-        }
-
-        if (!isBfsarBcsar(bfsarFile))
-        {
-            fprintf(stderr, "'%s' is not a valid BFSAR/BCSAR file\n", inPath);
-            delete bfsarFile;
-            fflush(stderr);
-            _Exit(1);
-            return 1;
-        }
-
-        sFileEndian = nw::ut::GetFileEndian(*reinterpret_cast<const nw::ut::BinaryFileHeader*>(bfsarFile));
-
-        if (!sBfsar.open(bfsarFile, static_cast<u32>(loadArg.read_size), inPathStr, nullptr))
-        {
-            fprintf(stderr, "Failed to parse '%s'\n", inPath);
-            fflush(stderr);
-            _Exit(1);
-            return 1;
-        }
-
-        if (strcmp(outPath, "--dump-ids") == 0)
-        {
-            dumpItemIds();
-            fflush(stdout);
-            _Exit(0);
-            return 0;
-        }
-
-        sead::FormatFixedSafeString<1024> outPathStr(outPath);
-        ensureDir(outPath);
-        if (!sBfsar.saveAs(outPathStr))
-        {
-            fprintf(stderr, "Failed to save to '%s'\n", outPath);
-            fflush(stderr);
-            _Exit(1);
-            return 1;
-        }
-
-        fprintf(stdout, "Done: '%s' -> '%s'\n", inPath, outPath);
-        fflush(stdout);
-        _Exit(0);
-        return 0;
+        convertArchive(argv[1], argv[2]);
     }
 
     // Normal GUI mode
@@ -241,7 +276,7 @@ int main(int argc, char* argv[])
     }
 
     AppFramework::CreateArg createArg;
-    createArg.wait_vblank = 0;
+    createArg.wait_vblank = testhooks::IsEnabled() ? 0 : 1;
     createArg.window_name = util::cAppName;
     createArg.clear_color = sead::Color4f(0.0f, 0.0f, 0.3f, 1.0f);
 
@@ -261,8 +296,8 @@ int main(int argc, char* argv[])
         heap->adjust();
     }
 
-    if (argc == 2 && argv[1][0] != '-')
-        sDroppedFilePath = argv[1];
+    if (testhooks::IsEnabled())
+        testhooks::HideWindow(framework->getWindowHandle());
 
     sead::TaskBase::CreateArg rootArg(&sead::TTaskFactory<RootTask>);
     sead::Framework::RunArg runArg;

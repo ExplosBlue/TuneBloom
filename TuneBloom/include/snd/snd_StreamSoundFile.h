@@ -183,6 +183,9 @@ struct StreamSoundFile
 
         ut::ResU32 originalLoopStart; // v0.4.0.0
         ut::ResU32 originalLoopEnd;   // v0.4.0.0
+
+        // Custom
+        ut::ResU32 unknown4C;
     };
 
     struct TrackInfo;
@@ -322,9 +325,24 @@ struct StreamSoundFile
         ut::ResU32 start;
         ut::ResU32 end;
         DspAdpcmLoopParam adpcmContext[16]; // 16 channels (= 2ch/trk * 8 trk).
-        u8 pading[152];                     // Adjust so that each RegionInfo is 256 bytes long.
+
+        // Custom
+        ut::ResU32 unknown68;
+        u8 padding[84];
+        char name[64];
     };
     static_assert(sizeof(RegionInfo) == 256);
+
+    // Custom
+    struct ConverterRegionInfo
+    {
+        ut::ResU32 start;
+        ut::ResU32 end;
+        DspAdpcmLoopParam adpcmContext[8];
+        u8 padding[88];
+        char name[64];
+    };
+    static_assert(sizeof(ConverterRegionInfo) == 208);
 };
 
 } } } // namespace nw::snd::internal

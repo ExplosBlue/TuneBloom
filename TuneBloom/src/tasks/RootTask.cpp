@@ -23,10 +23,6 @@ RootTask::RootTask(const sead::TaskConstructArg& arg)
 void RootTask::prepare()
 {
     {
-        // sead::Framework::CreateSystemTaskArg arg;
-        // arg.infloop_detection_span = sead::TickSpan::makeFromSeconds(5);
-
-        // getFramework()->createSystemTasks(this, arg);
         sead::GameFramework* fw = sead::DynamicCast<sead::GameFramework>(getFramework());
         fw->createProcessMeter(this);
     }
@@ -58,8 +54,6 @@ void RootTask::prepare()
 
         requestCreateTask(arg);
     }
-
-    //adjustHeapAll();
 }
 
 void RootTask::calc()

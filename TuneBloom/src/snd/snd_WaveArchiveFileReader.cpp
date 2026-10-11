@@ -3,8 +3,9 @@
 #include <basis/seadRawPrint.h>
 #include <prim/seadMemUtil.h>
 
-#include <bfsar/ArchiveFormat.h>
-#include <ui/PopupMgr.h>
+#include <bfsar/model/ArchiveFormat.h>
+#include <ui/Messages.h>
+#include <ui/app/PopupMgr.h>
 
 #define NW_SND_DEBUG_PRINT_ENABLE
 
@@ -31,7 +32,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
 {
     if (pWaveArchiveFile == nullptr)
     {
-        PopupMgr::instance()->pushCurrentItemError("No file");
+        PopupMgr::instance()->pushCurrentItemError(messages::reader::cNoFile);
         return;
     }
 
@@ -41,7 +42,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::WaveArchive);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError("File is not a valid wave archive file");
+            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotWaveArchiveFile);
             return;
         }
 
@@ -50,7 +51,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
             u32 major = ((u32)header->version >> 24) & 0xFF;
             if (major < 1)
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }
@@ -59,7 +60,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
         {
             if (!Util::IsHighByteMajorVersion((u32)header->version) && (u32)header->version != 0x00010000)
             {
-                sead::FormatFixedSafeString<64> msg("%s version not supported (0x%08X)", fileFormat->displayName, (u32)header->version);
+                sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
                 PopupMgr::instance()->pushCurrentItemError(msg);
                 return;
             }

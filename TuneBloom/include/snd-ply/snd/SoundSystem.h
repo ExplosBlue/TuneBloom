@@ -99,6 +99,22 @@ public:
     static void setPlaybackDevice(u32 index);
     static void setPlaybackDeviceByName(const char* name);
 
+    struct OutputInfo
+    {
+        u32 channelCount = 0;
+        u32 sampleRate = 0;
+        u32 bufferMsec = 0;
+    };
+
+    static OutputInfo getOutputInfo();
+    static void playTestTone();
+
+    static void setOutputMode(OutputMode mode);
+    static OutputMode getOutputMode();
+
+    static void setSrcType(SrcType type);
+    static SrcType getSrcType();
+
     static bool detail_isStreamLoadWait()
     {
         return sIsStreamLoadWait;

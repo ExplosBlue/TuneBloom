@@ -368,7 +368,7 @@ static RecentFileInfo ReadRecentFileInfo(const std::string& path)
         info.bytes = static_cast<u64>(bytes);
 
         sead::FixedSafeString<32> size;
-        FormatItemSize(&size, static_cast<u32>(sead::Mathf::min(bytes, static_cast<std::uintmax_t>(0xFFFFFFFFu))));
+        FormatItemSize(&size, static_cast<u32>(std::min<std::uintmax_t>(bytes, 0xFFFFFFFFu)));
         info.size = size.cstr();
     }
 

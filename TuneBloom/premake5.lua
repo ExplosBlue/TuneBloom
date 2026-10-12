@@ -16,8 +16,6 @@ postbuildcommands {
     '{COPYFILE} "' .. thirdPartyLicense .. '" "%{cfg.targetdir}"',
 }
 
-local macosBundleScript = path.getabsolute(path.join(_SCRIPT_DIR, "src/platform/macos/make_bundle.sh"))
-
 includedirs {
     path.join(_SCRIPT_DIR, "include"),
     path.join(_SCRIPT_DIR, "include/imgui"),
@@ -133,10 +131,11 @@ filter { "system:windows", "configurations:Release" }
 entrypoint "mainCRTStartup"
 
 filter { "system:macosx", "configurations:Release" }
-linktimeoptimization "off" -- TODO: Fix LTO crashes
+linkoptions { "-Wl,-export_dynamic" }
 
+local bundleScript = path.getabsolute(path.join(_SCRIPT_DIR, "src/platform/macos/make_bundle.sh"))
 postbuildcommands {
-    '"' .. macosBundleScript .. '" "%{cfg.targetdir}" "%{cfg.buildtarget.abspath}"',
+    '"' .. bundleScript .. '" "%{cfg.targetdir}" "%{cfg.buildtarget.abspath}"',
 }
 
 group "Dependencies"

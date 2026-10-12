@@ -24,41 +24,40 @@ jobs:
       matrix:
         include:
           - os: windows
-            runner: windows-latest
-            bin: TuneBloom-GLFW_x86_64-Develop
-            exe: TuneBloom.exe
+            runner: windows-2025
           - os: linux
-            runner: ubuntu-latest
-            config: develop_glfw_x86_64
-            bin: TuneBloom-GLFW_x86_64-Develop
-            exe: TuneBloom
+            runner: ubuntu-24.04
+            configs: develop_glfw_x86_64
           - os: macos
-            runner: macos-latest
-            config: develop_glfw_arm64
-            bin: TuneBloom-GLFW_ARM64-Develop
-            exe: TuneBloom
+            runner: macos-15
+            configs: develop_glfw_arm64 develop_glfw_x86_64
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: abel0b/setup-premake@v2.4
+      - name: Set up Premake
+        uses: abel0b/setup-premake@v2.4
         with:
           version: "5.0.0-beta8"
 
-      - if: matrix.os == 'linux'
+      - name: Install Linux dependencies
+        if: matrix.os == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libasound2-dev libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxext-dev libgl1-mesa-dev
 
-      - if: matrix.os != 'windows'
+      - name: Set up ccache
+        if: matrix.os != 'windows'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ matrix.os }}
           max-size: 500M
 
-      - if: matrix.os == 'windows'
+      - name: Set up MSBuild
+        if: matrix.os == 'windows'
         uses: microsoft/setup-msbuild@v2
 
       - name: Build
@@ -72,22 +71,38 @@ jobs:
         run: |
           chmod +x .premake/premake5
           premake5 gmake
-          make -j"$(getconf _NPROCESSORS_ONLN)" config=${{ matrix.config }} CC="ccache clang" CXX="ccache clang++"
+          for config in ${{ matrix.configs }}; do
+            make -j"$(getconf _NPROCESSORS_ONLN)" config=$config CC="ccache clang" CXX="ccache clang++"
+          done
 
       - name: Package
-        shell: bash
+        if: matrix.os == 'windows'
+        run: |
+          New-Item -ItemType Directory package | Out-Null
+          Copy-Item -Recurse workdir/* package/
+          Copy-Item THIRD_PARTY_LICENSES.txt, TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom.exe package/
+          Compress-Archive -Path package/* -DestinationPath TuneBloom-windows.zip
+
+      - name: Package
+        if: matrix.os == 'linux'
         run: |
           mkdir package
           cp -r workdir/. package/
-          cp THIRD_PARTY_LICENSES.txt "TuneBloom/bin/${{ matrix.bin }}/out/${{ matrix.exe }}" package/
+          cp THIRD_PARTY_LICENSES.txt TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom package/
+          tar -czf TuneBloom-linux.tar.gz -C package .
 
-      - if: matrix.os == 'windows'
-        run: Compress-Archive -Path package/* -DestinationPath TuneBloom-windows.zip
+      - name: Package
+        if: matrix.os == 'macos'
+        env:
+          BUNDLE_VERSION: ${{ github.run_number }}
+        run: |
+          TuneBloom/src/platform/macos/make_bundle.sh package \
+            TuneBloom/bin/TuneBloom-GLFW_ARM64-Develop/out/TuneBloom \
+            TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom
+          ditto -c -k --sequesterRsrc --keepParent package/TuneBloom.app TuneBloom-macos.zip
 
-      - if: matrix.os != 'windows'
-        run: tar -czf TuneBloom-${{ matrix.os }}.tar.gz -C package .
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload
+        uses: actions/upload-artifact@v4
         with:
           name: TuneBloom-${{ matrix.os }}
           path: TuneBloom-${{ matrix.os }}.*
@@ -95,20 +110,23 @@ jobs:
   release:
     needs: build
     if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download builds
+        uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
 
-      - id: date
+      - name: Get date
+        id: date
         run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
 
-      - uses: softprops/action-gh-release@v2
+      - name: Publish nightly release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: nightly-${{ steps.date.outputs.date }}
           name: Nightly Beta — ${{ steps.date.outputs.date }}

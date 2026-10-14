@@ -131,7 +131,13 @@ filter { "system:windows", "configurations:Release" }
 entrypoint "mainCRTStartup"
 
 filter { "system:macosx", "configurations:Release" }
-linkoptions { "-Wl,-export_dynamic" }
+linktimeoptimization "off"
+buildoptions { "-flto=thin" }
+linkoptions {
+    "-flto=thin",
+    "-Wl,-cache_path_lto," .. path.join(_SCRIPT_DIR, "bin/lto-cache"),
+    "-Wl,-export_dynamic",
+}
 
 local bundleScript = path.getabsolute(path.join(_SCRIPT_DIR, "src/platform/macos/make_bundle.sh"))
 postbuildcommands {

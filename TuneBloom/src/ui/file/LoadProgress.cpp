@@ -1,6 +1,7 @@
 #include <ui/file/LoadProgress.h>
 
 #include <ui/Messages.h>
+#include <ui/settings/UiColors.h>
 #include <core/TestHooks.h>
 #include <ui/widgets/WindowAnimation.h>
 
@@ -158,8 +159,7 @@ static void DrawDialog(const char* fileName, Stage stage, f32 fraction, f32 dimA
     dim.w *= dimAlpha;
     background->AddRectFilled(viewport->Pos, viewportMax, ImGui::ColorConvertFloat4ToU32(dim));
 
-    ImVec4 windowColor = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-    windowColor.w = 1.0f;
+    const ImVec4 windowColor = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
 
     ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));

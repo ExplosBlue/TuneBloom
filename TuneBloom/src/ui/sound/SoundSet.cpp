@@ -6,6 +6,7 @@
 #include <ui/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/items/Selection.h>
+#include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
 
@@ -402,7 +403,7 @@ static bool DrawRangeIdField(const char* id, u32* value, bool stickyEdit)
     if (stickyEdit)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0.85f, 0.35f, 0.1f, 0.8f));
+        ImGui::PushStyleColor(ImGuiCol_Border, uicolors::EditBorder());
     }
 
     const bool changed = DragField(id, ImGuiDataType_U32, value, cPropertyDragSpeed);

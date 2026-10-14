@@ -3,7 +3,7 @@
 #include <ui/widgets/ContextMenu.h>
 #include <ui/items/ItemColumnSettings.h>
 #include <ui/Messages.h>
-#include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 
 #include <bfsar/files/BankFile.h>
@@ -29,8 +29,6 @@ static constexpr const char* cItemTextEndMark = "...";
 
 static constexpr const char* cItemIdColumnKey      = "ID";
 static constexpr const char* cItemProgramColumnKey = "Program";
-
-static constexpr ImVec4 cUnusedColor = cWarningTextColor;
 
 static s32 sEdgeColumn = -1;
 static f32 sEdgeInset  = 0.0f;
@@ -358,7 +356,7 @@ void DrawItemHeadersRow(const ItemColumn* columns, u32 columnCount, const f32* w
         const f32 titleWidth = ImGui::CalcTextSize(title).x;
         const f32 bottom = pos.y + ImGui::GetFontSize();
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, uicolors::cTransparent);
         ImGui::TableHeader("");
         ImGui::PopStyleColor();
 
@@ -599,7 +597,7 @@ void DrawItemValueCell(const char* text, u32 flags, s32 index, bool unused)
     const f32 width = ImGui::GetContentRegionAvail().x - cItemColumnGap - (index == sEdgeColumn ? sEdgeInset : 0.0f);
     const f32 textWidth = ImGui::CalcTextSize(text).x;
 
-    ImGui::PushStyleColor(ImGuiCol_Text, unused ? cUnusedColor : GetItemValueColor());
+    ImGui::PushStyleColor(ImGuiCol_Text, unused ? uicolors::Warning() : GetItemValueColor());
 
     if (flags & cItemColumnFlag_Text)
     {

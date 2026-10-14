@@ -2,17 +2,16 @@
 
 #include <ui/Messages.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <vector>
 
 inline constexpr s32 cTrackBypassIndex   = 3;
 inline constexpr f32 cTrackCellPadXEm    = 0.4f;
-inline constexpr f32 cTrackSelectedAlpha = 0.10f;
-inline constexpr f32 cTrackIndexAlpha    = 0.45f;
 inline constexpr f32 cTrackSilentAlpha   = 0.55f;
 
-inline const ImVec4 cTrackMuteColor = ImVec4(0.88f, 0.36f, 0.28f, 1.00f);
-inline const ImVec4 cTrackSoloColor = ImVec4(0.93f, 0.74f, 0.18f, 1.00f);
+inline constexpr uicolors::Themed<f32> cTrackSelectedAlpha = { 0.10f, 0.06f };
+inline constexpr uicolors::Themed<f32> cTrackIndexAlpha    = { 0.45f, 0.18f };
 
 inline constexpr const char* cTrackMixLabels[]    = { messages::common::cVolume, messages::common::cPan, messages::param::cSurroundPan, messages::stream::cTrackBypass };
 inline constexpr const char* cTrackSendLabels[]   = { messages::param::cSendMain, messages::param::cSendFxA, messages::param::cSendFxB, messages::param::cSendFxC };

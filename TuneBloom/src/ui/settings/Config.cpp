@@ -3,6 +3,7 @@
 #include <ui/settings/ConfigFile.h>
 #include <core/TestHooks.h>
 #include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/TimeUtil.h>
 #include <ui/widgets/WindowAnimation.h>
 
@@ -68,7 +69,7 @@ const std::vector<std::string>& GetMidiEnabledDevices()
     return sMidiEnabledDevices;
 }
 
-void SaveAccentColor()
+void SaveThemeConfig()
 {
     const ThemeAdjust& adjust = GetThemeAdjust();
 
@@ -78,7 +79,7 @@ void SaveAccentColor()
     for (const f32 channel : { gAccentColor.x, gAccentColor.y, gAccentColor.z, gAccentColor.w })
         accent.pushFloat(channel);
 
-    theme.setBool("dark", gThemeIsDark);
+    theme.setBool("dark", IsDarkTheme());
     theme.setFloat("brightness", adjust.brightness);
     theme.setFloat("saturation", adjust.saturation);
     theme.setFloat("contrast", adjust.contrast);
@@ -87,7 +88,7 @@ void SaveAccentColor()
     SaveConfigSection(cSettingsFile, cThemeSection, theme);
 }
 
-void LoadAccentColor()
+void LoadThemeConfig()
 {
     ThemeAdjust& adjust = GetThemeAdjust();
 
@@ -103,7 +104,7 @@ void LoadAccentColor()
         gAccentColor = ImVec4(static_cast<f32>(channels[0].number), static_cast<f32>(channels[1].number), static_cast<f32>(channels[2].number), static_cast<f32>(channels[3].number));
     }
 
-    gThemeIsDark = theme.getBool("dark", systemtheme::isDark());
+    SetDarkTheme(theme.getBool("dark", systemtheme::isDark()));
     adjust.brightness = theme.getFloat("brightness", adjust.brightness);
     adjust.saturation = theme.getFloat("saturation", adjust.saturation);
     adjust.contrast = theme.getFloat("contrast", adjust.contrast);
@@ -402,8 +403,8 @@ void ResetAllSettings()
 {
     const std::string lastArchive = sStartupSettings.lastArchive;
 
-    gAccentColor = cDefaultAccentColor;
-    gThemeIsDark = systemtheme::isDark();
+    gAccentColor = uicolors::cAccentDefault;
+    SetDarkTheme(systemtheme::isDark());
     GetThemeAdjust() = ThemeAdjust();
 
     sAudioSettings = AudioSettings();
@@ -423,9 +424,9 @@ void ResetAllSettings()
 
     ApplyAudioConfig();
     ApplyInterfaceConfig();
-    ApplyThemeFromAccent(gAccentColor);
+    ApplyTheme();
 
-    SaveAccentColor();
+    SaveThemeConfig();
     SaveAudioConfig();
     SaveArchiveConfig();
     SaveBackupConfig();

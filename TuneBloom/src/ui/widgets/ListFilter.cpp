@@ -5,6 +5,7 @@
 #include <ui/items/ItemList.h>
 #include <ui/Messages.h>
 #include <ui/app/Shortcuts.h>
+#include <ui/settings/UiColors.h>
 #include <ui/app/Workspace.h>
 
 #include <libs/IconsLucide.h>
@@ -95,7 +96,7 @@ static bool DrawSearchToggle(const char* label, const char* tooltip, bool* value
 
     ImGui::SameLine(0.0f, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(*value ? ImGuiCol_Text : ImGuiCol_TextDisabled));
-    ImGui::PushStyleColor(ImGuiCol_Button, *value ? ImGui::GetColorU32(ImGuiCol_ButtonActive) : IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Button, *value ? ImGui::GetColorU32(ImGuiCol_ButtonActive) : uicolors::cTransparentU32);
 
     if (ImGui::Button(label, ImVec2(size, size)))
     {
@@ -145,8 +146,8 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
         sFocusId = 0;
     }
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, uicolors::cTransparentU32);
+    ImGui::PushStyleColor(ImGuiCol_Button, uicolors::cTransparentU32);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 
     ImGui::SetCursorScreenPos(ImVec2(pos.x + iconWidth, pos.y));

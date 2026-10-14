@@ -7,8 +7,10 @@
 #include <ui/app/Shortcuts.h>
 #include <ui/stream/StreamPanelFold.h>
 #include <ui/stream/StreamRegions.h>
+#include <ui/settings/Theme.h>
 #include <ui/widgets/TimeUtil.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <imgui/imgui_custom.h>
 
@@ -23,17 +25,15 @@ SoundPlayer sSoundPlayer;
 constexpr f32   cSeekTrackHeight      = 6.0f;
 constexpr f32   cSeekHandleRadius     = 5.0f;
 constexpr f32   cSeekLoopInset        = 3.0f;
-constexpr f32   cSeekLoopAlpha        = 0.22f;
 constexpr f32   cSeekGhostAlpha       = 0.35f;
 constexpr f32   cSeekRegionGap        = 5.0f;
 constexpr f32   cSeekRegionHeight     = 4.0f;
 constexpr float cLoopMarkerThickness  = 2.0f;
-constexpr ImU32 cLoopStartMarkerColor = IM_COL32(0, 255, 0, 255);
-constexpr ImU32 cLoopEndMarkerColor   = IM_COL32(255, 0, 0, 255);
+
+constexpr uicolors::Themed<f32> cSeekLoopAlpha = { 0.08f, 0.12f };
 
 constexpr f32 cTransportHeightEm   = 2.6f;
 constexpr f32 cTransportButtonEm   = 1.6f;
-constexpr f32 cTransportIconEm     = 1.1f;
 constexpr f32 cTransportGroupGapEm = 1.0f;
 constexpr f32 cDisplayMaxWidthEm   = 50.0f;
 constexpr f32 cDisplayLargeWidthEm = 30.0f;
@@ -94,21 +94,19 @@ bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
     const ImVec2 trackMax(trackStart + trackWidth, centerY + cSeekTrackHeight * 0.5f);
     const f32 rounding = cSeekTrackHeight * 0.5f;
 
-    ImVec4 fillColor = gAccentColor;
-    fillColor.w = 1.0f;
+    const ImVec4& fillColor = uicolors::PlaybackFill();
+    const ImU32 markerColor = uicolors::ToU32(uicolors::Marker());
 
-    // Loop region
     if (loopStartFrac >= 0.0f && loopEndFrac > loopStartFrac)
     {
-        ImVec4 loopColor = fillColor;
-        loopColor.w = cSeekLoopAlpha;
+        ImVec4 loopColor = uicolors::Marker();
+        loopColor.w = uicolors::Pick(cSeekLoopAlpha);
 
         draw->AddRectFilled(ImVec2(trackStart + loopStartFrac * trackWidth, barStart.y + cSeekLoopInset),
                             ImVec2(trackStart + loopEndFrac * trackWidth, barStart.y + height - cSeekLoopInset),
                             ImGui::GetColorU32(loopColor));
     }
 
-    // Track
     draw->AddRectFilled(trackMin, trackMax, GetTrackColorU32(ImGui::GetHoverColorU32(ImGui::GetID(id) + 1, hovered || held, false, ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgHovered)), rounding);
 
     if (!determinate)
@@ -116,17 +114,16 @@ bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
     else if (fraction > 0.0f)
         draw->AddRectFilled(trackMin, ImVec2(trackStart + fraction * trackWidth, trackMax.y), ImGui::GetColorU32(fillColor), rounding);
 
-    // Loop markers
     if (loopStartFrac >= 0.0f)
     {
         const f32 markerX = ImFloor(trackStart + loopStartFrac * trackWidth);
-        draw->AddRectFilled(ImVec2(markerX, barStart.y + cSeekLoopInset), ImVec2(markerX + cLoopMarkerThickness, barStart.y + height - cSeekLoopInset), cLoopStartMarkerColor);
+        draw->AddRectFilled(ImVec2(markerX, barStart.y + cSeekLoopInset), ImVec2(markerX + cLoopMarkerThickness, barStart.y + height - cSeekLoopInset), markerColor);
     }
 
     if (loopEndFrac >= 0.0f)
     {
         const f32 markerX = ImFloor(trackStart + loopEndFrac * trackWidth);
-        draw->AddRectFilled(ImVec2(markerX - cLoopMarkerThickness, barStart.y + cSeekLoopInset), ImVec2(markerX, barStart.y + height - cSeekLoopInset), cLoopEndMarkerColor);
+        draw->AddRectFilled(ImVec2(markerX - cLoopMarkerThickness, barStart.y + cSeekLoopInset), ImVec2(markerX, barStart.y + height - cSeekLoopInset), markerColor);
     }
 
     if (hovered && !held)
@@ -135,7 +132,6 @@ bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
         draw->AddLine(ImVec2(ghostX, barStart.y + 1.0f), ImVec2(ghostX, barStart.y + height - 1.0f), ImGui::GetColorU32(ImGuiCol_Text, cSeekGhostAlpha));
     }
 
-    // Playhead
     if (determinate)
     {
         const ImVec2 center(trackStart + fraction * trackWidth, centerY);
@@ -348,9 +344,9 @@ static ImU32 GetDisplayValueColor()
     return ImGui::GetColorU32(GetItemValueColor());
 }
 
-static bool DrawTransportButton(const char* id, const char* icon, f32 size, bool lit, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft)
+static bool DrawTransportButton(const char* id, TransportGlyph glyph, f32 size, bool lit, IconButtonTint tint = IconButtonTint::Accent, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft)
 {
-    return DrawIconButton(id, icon, ImVec2(size, size), size, ImFloor(ImGui::GetFontSize() * cTransportIconEm), lit, flags);
+    return DrawGlyphButton(id, glyph, ImVec2(size, size), size, lit, tint, flags);
 }
 
 bool CanTogglePlayback()
@@ -398,7 +394,7 @@ static void DrawTransportButtons(f32 size)
 
     ImGui::BeginDisabled(!canTransport);
 
-    if (DrawTransportButton("##play", isPause ? ICON_LC_PLAY : ICON_LC_PAUSE, size, isPlaying))
+    if (DrawTransportButton("##play", isPause ? TransportGlyph::Play : TransportGlyph::Pause, size, isPlaying, IconButtonTint::Play))
         TogglePlayback();
 
     ImGui::EndDisabled();
@@ -410,7 +406,7 @@ static void DrawTransportButtons(f32 size)
 
     ImGui::SameLine();
 
-    if (DrawTransportButton("##stop", ICON_LC_SQUARE, size, false, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle))
+    if (DrawTransportButton("##stop", TransportGlyph::Stop, size, false, IconButtonTint::Accent, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle))
     {
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Middle))
             sSoundPlayer.fadeOutAllVoices();
@@ -476,8 +472,7 @@ static void DrawDisplayLoop(const PlaybackProgress& progress, const ImVec2& pos)
 
     const bool hovered = canToggle && ImGui::IsItemHovered();
 
-    ImVec4 accent = gAccentColor;
-    accent.w = 1.0f;
+    const ImVec4 accent = GetThemeAccent();
 
     const ImU32 idleColor = ImGui::GetColorU32(lit ? accent : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     const ImU32 hoverColor = ImGui::GetColorU32(lit ? ImLerp(accent, ImGui::GetStyleColorVec4(ImGuiCol_Text), cDisplayLoopHoverMix) : ImGui::GetStyleColorVec4(ImGuiCol_Text));
@@ -586,7 +581,7 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     const f32 row2 = row1 + em + cDisplayRowGap;
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ImVec4 background = gThemeIsDark ? ImLerp(style.Colors[ImGuiCol_WindowBg], ImVec4(0.0f, 0.0f, 0.0f, 1.0f), cDisplayDarken) : style.Colors[ImGuiCol_ChildBg];
+    const ImVec4 background = IsDarkTheme() ? ImLerp(style.Colors[ImGuiCol_WindowBg], uicolors::cInkOnLight, cDisplayDarken) : style.Colors[ImGuiCol_ChildBg];
 
     draw->AddRectFilled(min, max, ImGui::GetColorU32(background), style.FrameRounding);
     draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), style.FrameRounding);
@@ -828,8 +823,7 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
     const f32 centerY = ImFloor(top + em * 0.5f);
     const f32 handleX = ImFloor(trackStart + GetMasterVolumePosition() * trackWidth);
 
-    ImVec4 fillColor = gAccentColor;
-    fillColor.w = 1.0f;
+    const ImVec4 fillColor = GetThemeAccent();
 
     ImVec4 handleColor = ImGui::GetStyleColorVec4(ImGuiCol_Text);
     if (held)
@@ -934,6 +928,48 @@ static void UpdatePlayerBarHeight(f32 transportHeight, f32 drawerHeight)
     SetDockNodeHeight(node, height);
 }
 
+static void DrawTransportRow(f32 height)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 em = ImGui::GetFontSize();
+    const PlaybackProgress progress = BuildPlaybackProgress();
+
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const f32 availWidth = ImGui::GetContentRegionAvail().x;
+    const f32 gap = ImFloor(em * cTransportGroupGapEm);
+
+    const f32 buttonSize = ImFloor(em * cTransportButtonEm);
+    const f32 buttonsWidth = buttonSize * 2.0f + style.ItemSpacing.x;
+
+    const bool showVolumeValue = availWidth >= em * cVolumeValueMinEm;
+    const f32 faderWidth = sead::Mathf::clamp2(em * cVolumeSliderMinEm, availWidth * cVolumeSliderRatio, cVolumeSliderWidth);
+    const f32 masterWidth = MasterVolumeWidth(faderWidth, showVolumeValue);
+    const f32 overridesWidth = CalcPlaybackOverrideButtonsWidth();
+
+    const f32 fixedWidth = buttonsWidth + overridesWidth + masterWidth + gap * 3.0f;
+    const f32 displayWidth = sead::Mathf::clamp2(em * cDisplayMinWidthEm, availWidth - fixedWidth, em * cDisplayMaxWidthEm);
+
+    const f32 buttonsX = origin.x + ImFloor(sead::Mathf::max((availWidth - fixedWidth - displayWidth) * 0.5f, 0.0f));
+    const f32 displayX = buttonsX + buttonsWidth + gap;
+    const f32 overridesX = displayX + displayWidth + gap;
+    const f32 masterX = overridesX + overridesWidth + gap;
+
+    ImGui::SetCursorScreenPos(ImVec2(buttonsX, origin.y + ImFloor((height - buttonSize) * 0.5f)));
+    DrawTransportButtons(buttonSize);
+
+    ImGui::SetCursorScreenPos(ImVec2(displayX, origin.y));
+    DrawTransportDisplay(progress, displayWidth, height);
+
+    ImGui::SetCursorScreenPos(ImVec2(overridesX, origin.y + ImFloor((height - ImGui::GetFrameHeight()) * 0.5f)));
+    DrawPlaybackOverrideButtons();
+
+    ImGui::SetCursorScreenPos(ImVec2(masterX, origin.y));
+    DrawMasterVolume(faderWidth, height, showVolumeValue);
+
+    ImGui::SetCursorScreenPos(origin);
+    ImGui::Dummy(ImVec2(availWidth, height));
+}
+
 static void DrawTransportWindow()
 {
     if (ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_MUSIC " %s###PlayerWindow", messages::common::cPlayer).cstr(), nullptr,ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
@@ -942,52 +978,13 @@ static void DrawTransportWindow()
         if (win && win->DockNode)
             win->DockNode->LocalFlags |= ImGuiDockNodeFlags_NoResize;
 
-        const ImGuiStyle& style = ImGui::GetStyle();
-        const f32 em = ImGui::GetFontSize();
-        const f32 height = ImFloor(em * cTransportHeightEm);
-
+        const f32 height = ImFloor(ImGui::GetFontSize() * cTransportHeightEm);
+        const f32 drawerWidth = ImGui::GetContentRegionAvail().x;
         const PlaybackDrawerLayout drawerLayout = CalcPlaybackDrawerLayout();
-        const f32 drawerHeight = CalcPlaybackDrawerHeight(drawerLayout, ImGui::GetContentRegionAvail().x);
 
-        UpdatePlayerBarHeight(height, drawerHeight);
-        DrawPlaybackDrawer(drawerLayout, drawerHeight);
-
-        const PlaybackProgress progress = BuildPlaybackProgress();
-
-        const ImVec2 origin = ImGui::GetCursorScreenPos();
-        const f32 availWidth = ImGui::GetContentRegionAvail().x;
-        const f32 gap = ImFloor(em * cTransportGroupGapEm);
-
-        const f32 buttonSize = ImFloor(em * cTransportButtonEm);
-        const f32 buttonsWidth = buttonSize * 2.0f + style.ItemSpacing.x;
-
-        const bool showVolumeValue = availWidth >= em * cVolumeValueMinEm;
-        const f32 faderWidth = sead::Mathf::clamp2(em * cVolumeSliderMinEm, availWidth * cVolumeSliderRatio, cVolumeSliderWidth);
-        const f32 masterWidth = MasterVolumeWidth(faderWidth, showVolumeValue);
-        const f32 overridesWidth = CalcPlaybackOverrideButtonsWidth();
-
-        const f32 fixedWidth = buttonsWidth + overridesWidth + masterWidth + gap * 3.0f;
-        const f32 displayWidth = sead::Mathf::clamp2(em * cDisplayMinWidthEm, availWidth - fixedWidth, em * cDisplayMaxWidthEm);
-
-        const f32 buttonsX = origin.x + ImFloor(sead::Mathf::max((availWidth - fixedWidth - displayWidth) * 0.5f, 0.0f));
-        const f32 displayX = buttonsX + buttonsWidth + gap;
-        const f32 overridesX = displayX + displayWidth + gap;
-        const f32 masterX = overridesX + overridesWidth + gap;
-
-        ImGui::SetCursorScreenPos(ImVec2(buttonsX, origin.y + ImFloor((height - buttonSize) * 0.5f)));
-        DrawTransportButtons(buttonSize);
-
-        ImGui::SetCursorScreenPos(ImVec2(displayX, origin.y));
-        DrawTransportDisplay(progress, displayWidth, height);
-
-        ImGui::SetCursorScreenPos(ImVec2(overridesX, origin.y + ImFloor((height - ImGui::GetFrameHeight()) * 0.5f)));
-        DrawPlaybackOverrideButtons();
-
-        ImGui::SetCursorScreenPos(ImVec2(masterX, origin.y));
-        DrawMasterVolume(faderWidth, height, showVolumeValue);
-
-        ImGui::SetCursorScreenPos(origin);
-        ImGui::Dummy(ImVec2(availWidth, height));
+        DrawPlaybackDrawer(drawerLayout, CalcPlaybackDrawerHeight(drawerLayout, drawerWidth));
+        DrawTransportRow(height);
+        UpdatePlayerBarHeight(height, CalcPlaybackDrawerHeight(drawerLayout, drawerWidth));
     }
     ImGui::End();
 }

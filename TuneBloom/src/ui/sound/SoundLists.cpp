@@ -6,14 +6,16 @@
 #include <ui/export/Export.h>
 #include <ui/file/File.h>
 #include <ui/project/FileLists.h>
-#include <ui/project/References.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/ListFilter.h>
 #include <ui/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/PlayerViews.h>
+#include <ui/project/References.h>
 #include <ui/items/Selection.h>
+#include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/app/Workspace.h>
 
@@ -311,22 +313,15 @@ InstanciateItemCallback CreateSequenceSoundSetFunc(bool clear)
     return CreateFixedSoundSetTypeFunc<SoundSet::SoundSetType::Seq>(clear);
 }
 
-static constexpr u8 cRangeSetAlpha       = 160;
-static constexpr u8 cRangeViewedSetAlpha = 255;
+static constexpr u8  cRangeSetAlpha         = 160;
+static constexpr u8  cRangeViewedSetAlpha   = 255;
+static constexpr u8  cRangeTextDimAlpha     = 190;
+static constexpr u8  cRangeOverlapAlpha     = 180;
+static constexpr u8  cRangeHoverAlpha       = 35;
+static constexpr u8  cRangeOutlineAlpha     = 160;
 static constexpr f32 cRangeViewedMarkHeight = 3.0f;
-static constexpr f32 cRangeBarHeight   = 28.0f;
-static constexpr f32 cRangeBarOuterPad = 2.0f;
-
-static constexpr ImU32 cRangeSetColors[] = {
-    IM_COL32(70, 130, 180, 255),
-    IM_COL32(60, 179, 113, 255),
-    IM_COL32(218, 165, 32, 255),
-    IM_COL32(147, 112, 219, 255),
-    IM_COL32(205, 92, 92, 255),
-    IM_COL32(0, 139, 139, 255),
-    IM_COL32(255, 140, 0, 255),
-    IM_COL32(100, 149, 237, 255),
-};
+static constexpr f32 cRangeBarHeight        = 28.0f;
+static constexpr f32 cRangeBarOuterPad      = 2.0f;
 
 namespace
 {
@@ -425,13 +420,14 @@ static void DrawRangeSet(ImDrawList* drawList, const RangeBar& bar, const RangeS
     const f32 x1 = bar.calcX(rangeSet.start);
     const f32 x2 = bar.calcEndX(x1, rangeSet.end);
 
-    const ImU32 color = (cRangeSetColors[rangeSet.index % IM_ARRAYSIZE(cRangeSetColors)] & ~IM_COL32_A_MASK) | (static_cast<ImU32>(viewed ? cRangeViewedSetAlpha : cRangeSetAlpha) << IM_COL32_A_SHIFT);
-    const ImU32 textColor = viewed ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 255, 255, 190);
+    const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 color = uicolors::ToU32(GetSeriesColor(rangeSet.index), viewed ? cRangeViewedSetAlpha : cRangeSetAlpha);
+    const ImU32 textColor = viewed ? ink : uicolors::WithAlpha(ink, cRangeTextDimAlpha);
 
     drawList->AddRectFilled(ImVec2(x1, bar.min.y), ImVec2(x2, bar.max.y), color);
 
     if (viewed)
-        drawList->AddRectFilled(ImVec2(x1, bar.max.y - cRangeViewedMarkHeight), ImVec2(x2, bar.max.y), IM_COL32(255, 255, 255, 230));
+        drawList->AddRectFilled(ImVec2(x1, bar.max.y - cRangeViewedMarkHeight), ImVec2(x2, bar.max.y), ink);
 
     if (x2 - x1 > 3.0f)
         drawList->AddLine(ImVec2(x1 + 0.5f, bar.min.y), ImVec2(x1 + 0.5f, bar.max.y), ImGui::GetColorU32(ImGuiCol_FrameBg));
@@ -472,7 +468,7 @@ static void DrawRangeOverlaps(ImDrawList* drawList, const RangeBar& bar, const s
             {
                 const f32 ox1 = bar.calcX(ovStart);
                 const f32 ox2 = bar.calcEndX(ox1, ovEnd);
-                drawList->AddRectFilled(ImVec2(ox1, bar.min.y), ImVec2(ox2, bar.max.y), IM_COL32(255, 40, 40, 180));
+                drawList->AddRectFilled(ImVec2(ox1, bar.min.y), ImVec2(ox2, bar.max.y), uicolors::ToU32(uicolors::Marker(), cRangeOverlapAlpha));
             }
         }
     }
@@ -530,8 +526,10 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
 
     const f32 hx1 = bar.calcX(hoveredSet->start);
     const f32 hx2 = bar.calcEndX(hx1, hoveredSet->end);
-    drawList->AddRectFilled(ImVec2(hx1, bar.min.y), ImVec2(hx2, bar.max.y), IM_COL32(255, 255, 255, 35));
-    drawList->AddRect(ImVec2(hx1, bar.min.y), ImVec2(hx2, bar.max.y), IM_COL32(255, 255, 255, 160), 0.0f, 0, 1.5f);
+    const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
+
+    drawList->AddRectFilled(ImVec2(hx1, bar.min.y), ImVec2(hx2, bar.max.y), uicolors::WithAlpha(ink, cRangeHoverAlpha));
+    drawList->AddRect(ImVec2(hx1, bar.min.y), ImVec2(hx2, bar.max.y), uicolors::WithAlpha(ink, cRangeOutlineAlpha), 0.0f, 0, 1.5f);
 
     if (ImGui::IsItemActivated())
         SelectItem(hoveredSet->set);

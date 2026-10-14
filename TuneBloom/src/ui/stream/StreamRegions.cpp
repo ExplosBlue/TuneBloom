@@ -12,7 +12,7 @@
 #include <ui/app/Shortcuts.h>
 #include <ui/stream/StreamPanelFold.h>
 #include <ui/widgets/TabRowTools.h>
-#include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/app/Workspace.h>
@@ -160,7 +160,7 @@ static void DrawRegionField(const RegionTable& view, s32 regionNo, s32 column, c
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + style.FramePadding.y - cRegionFieldPadY);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, cRegionFieldPadY));
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, uicolors::cTransparent);
     ImGui::SetNextItemWidth(-FLT_MIN);
     ImGui::BeginDisabled(view.editReason != nullptr);
 
@@ -193,7 +193,7 @@ static void DrawRegionLength(const RegionTable& view, const StreamRegion& region
     sead::FixedSafeString<24> time;
     FormatSampleTime(&time, length, view.sampleRate);
 
-    DrawRegionCellText(time.cstr(), isShort ? cWarningTextColor : GetItemValueColor(), RegionAlign::Right, view.edgeInset);
+    DrawRegionCellText(time.cstr(), isShort ? uicolors::Warning() : GetItemValueColor(), RegionAlign::Right, view.edgeInset);
 
     if (isShort)
         ImGui::SetItemTooltip(messages::stream::cRegionShortTipFormat, view.lengthMin);

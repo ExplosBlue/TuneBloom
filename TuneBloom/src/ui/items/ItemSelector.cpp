@@ -9,6 +9,7 @@
 #include <core/TestHooks.h>
 #include <ui/items/Selection.h>
 #include <ui/widgets/Widgets.h>
+#include <ui/settings/UiColors.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
@@ -114,19 +115,6 @@ static bool StepChoiceIndex(s32* index, s32 delta, s32 total)
     return true;
 }
 
-static bool DrawSelectorStepButton(const char* name, ImGuiDir dir, bool enabled)
-{
-    const f32 buttonSize = ImGui::GetFrameHeight();
-    const sead::FormatFixedSafeString<64> id(dir == ImGuiDir_Left ? "##%sComboLeft" : "##%sComboRight", name);
-
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::BeginDisabled(!enabled);
-    const bool pressed = ImGui::ArrowButtonEx(id.cstr(), dir, ImVec2(buttonSize, buttonSize), ImGuiButtonFlags_Repeat | ImGuiButtonFlags_DontClosePopups);
-    ImGui::EndDisabled();
-
-    return pressed;
-}
-
 static void DrawSelectorLabel(const char* name, bool missing)
 {
     if (name[0] == '#' && name[1] == '#')
@@ -136,8 +124,8 @@ static void DrawSelectorLabel(const char* name, bool missing)
 
     if (missing)
     {
-        ImGui::PushStyleColor(ImGuiCol_Text,         ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.6f, 0.0f, 0.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text,         uicolors::Marker());
+        ImGui::PushStyleColor(ImGuiCol_TextDisabled, uicolors::MarkerDim());
     }
 
     ImGui::Text("%s", name);
@@ -167,51 +155,6 @@ static bool StepItemSelectorIndex(const Item::List& list, Item** itemPtr, bool a
         *itemPtr = nullptr;
     else
         FindItemAt(list, curIdx - noneCount, itemPtr);
-
-    return true;
-}
-
-static bool StepItemSelectorBack(const Item::List& list, Item** itemPtr, bool allowNone)
-{
-    Item* item = *itemPtr;
-
-    if (!item)
-    {
-        Item::ListNode* node = allowNone ? nullptr : list.front();
-
-        if (!node)
-            return false;
-
-        *itemPtr = node->val();
-        return true;
-    }
-
-    Item::ListNode* node = list.prev(item);
-
-    if (node)
-    {
-        *itemPtr = node->val();
-        return true;
-    }
-
-    if (allowNone && item == list.front())
-    {
-        *itemPtr = nullptr;
-        return true;
-    }
-
-    return false;
-}
-
-static bool StepItemSelectorForward(const Item::List& list, Item** itemPtr)
-{
-    Item* item = *itemPtr;
-    Item::ListNode* node = item ? list.next(item) : list.front();
-
-    if (!node)
-        return false;
-
-    *itemPtr = node->val();
 
     return true;
 }
@@ -302,36 +245,18 @@ bool ItemSelector(const char* name, const Item::List& list, Item** itemPtr, bool
 
     Item* const oldItem = *itemPtr;
 
-    const f32 spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-    const f32 buttonSize = ImGui::GetFrameHeight();
-    const f32 stepButtonsWidth = compact ? 0.0f : spacing * 2.0f + buttonSize * 2.0f;
-    const f32 triggerWidth = ImGui::CalcItemWidth() - stepButtonsWidth;
-
     bool changed = false;
 
-    ImGui::PushItemWidth(triggerWidth);
-
-    if (DrawItemSelectorTrigger(name, list, itemPtr, allowNone, compact, triggerWidth))
+    if (DrawItemSelectorTrigger(name, list, itemPtr, allowNone, compact, ImGui::CalcItemWidth()))
         changed = true;
 
     if (DrawItemBrowser(name, list, itemPtr, allowNone))
         changed = true;
 
-    ImGui::PopItemWidth();
-
     DrawGoToContextMenu(*itemPtr, messages::reference::cNothingAttached);
 
     if (compact)
         return changed && *itemPtr != oldItem;
-
-    const bool canStepBack = oldItem ? (allowNone || list.prev(oldItem) != nullptr) : (!allowNone && list.front() != nullptr);
-    const bool canStepForward = oldItem ? list.next(oldItem) != nullptr : list.front() != nullptr;
-
-    if (DrawSelectorStepButton(name, ImGuiDir_Left, canStepBack) && StepItemSelectorBack(list, itemPtr, allowNone))
-        changed = true;
-
-    if (DrawSelectorStepButton(name, ImGuiDir_Right, canStepForward) && StepItemSelectorForward(list, itemPtr))
-        changed = true;
 
     DrawSelectorLabel(name, *itemPtr == nullptr && !allowNone);
 
@@ -345,7 +270,7 @@ bool ItemSelectorDialogRow(const char* label, const Item::List& list, Item** ite
     const bool missing = *itemPtr == nullptr && !allowNone;
 
     if (missing)
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, uicolors::Marker());
 
     DialogRow(label);
 
@@ -359,18 +284,6 @@ static void SetWaveArchive(WaveArchiveType* warcType, Item** warcPtr, WaveArchiv
 {
     *warcType = type;
     *warcPtr = warc;
-}
-
-static bool SelectFirstWaveArchive(WaveArchiveType* warcType, Item** warcPtr, const Item::List& warcList)
-{
-    Item::ListNode* node = warcList.front();
-
-    if (!node)
-        return false;
-
-    SetWaveArchive(warcType, warcPtr, WaveArchiveType::Explicit, node->val());
-
-    return true;
 }
 
 static void FormatWaveArchiveChoice(WaveArchiveType warcType, const Item* warc, sead::BufferedSafeString* out)
@@ -454,69 +367,6 @@ static bool StepWaveArchiveIndex(WaveArchiveType* warcType, Item** warcPtr, cons
     return true;
 }
 
-static bool StepWaveArchiveBack(WaveArchiveType* warcType, Item** warcPtr, const Item::List& warcList)
-{
-    if (*warcType == WaveArchiveType::AutomaticShared)
-        return false;
-
-    if (*warcType == WaveArchiveType::AutomaticIndividual)
-    {
-        SetWaveArchive(warcType, warcPtr, WaveArchiveType::AutomaticShared, nullptr);
-        return true;
-    }
-
-    Item* warc = *warcPtr;
-
-    if (!warc)
-        return SelectFirstWaveArchive(warcType, warcPtr, warcList);
-
-    Item::ListNode* node = warcList.prev(warc);
-
-    if (node)
-    {
-        SetWaveArchive(warcType, warcPtr, WaveArchiveType::Explicit, node->val());
-        return true;
-    }
-
-    if (warc == warcList.front())
-    {
-        SetWaveArchive(warcType, warcPtr, WaveArchiveType::AutomaticIndividual, nullptr);
-        return true;
-    }
-
-    return false;
-}
-
-static bool StepWaveArchiveForward(WaveArchiveType* warcType, Item** warcPtr, const Item::List& warcList)
-{
-    if (*warcType == WaveArchiveType::AutomaticShared)
-    {
-        SetWaveArchive(warcType, warcPtr, WaveArchiveType::AutomaticIndividual, nullptr);
-        return true;
-    }
-
-    Item* warc = *warcPtr;
-
-    if (*warcType == WaveArchiveType::AutomaticIndividual || !warc)
-        return SelectFirstWaveArchive(warcType, warcPtr, warcList);
-
-    Item::ListNode* node = warcList.next(warc);
-
-    if (node)
-    {
-        SetWaveArchive(warcType, warcPtr, WaveArchiveType::Explicit, node->val());
-        return true;
-    }
-
-    if (warc != warcList.back())
-    {
-        SetWaveArchive(warcType, warcPtr, WaveArchiveType::AutomaticShared, nullptr);
-        return true;
-    }
-
-    return false;
-}
-
 bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** warcPtr, const Item::List& warcList)
 {
     SEAD_ASSERT(name);
@@ -530,12 +380,7 @@ bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** war
     sead::FixedSafeString<256> itemName;
     FormatWaveArchiveChoice(*warcType, *warcPtr, &itemName);
 
-    const f32 spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-    const f32 buttonSize = ImGui::GetFrameHeight();
-
     bool changed = false;
-
-    ImGui::PushItemWidth(ImGui::CalcItemWidth() - spacing * 2.0f - buttonSize * 2.0f);
 
     if (ImGui::BeginCombo(sead::FormatFixedSafeString<64>("##%sCombo", name).cstr(), itemName.cstr()))
     {
@@ -544,22 +389,18 @@ bool WaveArchiveSelector(const char* name, WaveArchiveType* warcType, Item** war
 
         ImGui::EndCombo();
     }
+    else
+    {
+        ImGui::SetItemTooltip("%s", messages::browser::cBrowseTip);
+    }
 
     if (StepWaveArchiveIndex(warcType, warcPtr, warcList, GetItemWheelSteps()))
         changed = true;
-
-    ImGui::PopItemWidth();
 
     if (*warcType == WaveArchiveType::Explicit)
         DrawGoToContextMenu(*warcPtr, messages::reference::cNothingAttached);
     else
         DrawGoToContextMenu(nullptr, messages::reference::cWaveArchiveNotExplicit);
-
-    if (DrawSelectorStepButton(name, ImGuiDir_Left, true) && StepWaveArchiveBack(warcType, warcPtr, warcList))
-        changed = true;
-
-    if (DrawSelectorStepButton(name, ImGuiDir_Right, true) && StepWaveArchiveForward(warcType, warcPtr, warcList))
-        changed = true;
 
     DrawSelectorLabel(name, false);
 

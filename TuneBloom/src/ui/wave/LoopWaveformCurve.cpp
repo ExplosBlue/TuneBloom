@@ -2,6 +2,7 @@
 
 #include <ui/widgets/ContextMenu.h>
 #include <ui/Messages.h>
+#include <ui/settings/UiColors.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
@@ -102,7 +103,7 @@ void DrawCurve(ImDrawList* draw, ImVec2 origin, float width, float height, const
         return;
 
     const int pointNum = static_cast<int>(state.curve.size());
-    const ImU32 ink = WithAlpha(GetColorU32(ImGuiCol_Text), 255);
+    const ImU32 ink = uicolors::WithAlpha(GetColorU32(ImGuiCol_Text), 255);
     const ImGuiID baseId = GetID("##curve");
     const float firstX = std::max(0.0f, CurveToX(state, 0.0f, width));
     const float lastX = std::min(width, CurveToX(state, 1.0f, width));
@@ -117,7 +118,7 @@ void DrawCurve(ImDrawList* draw, ImVec2 origin, float width, float height, const
     if (lastX >= firstX)
         draw->PathLineTo(ImVec2(origin.x + lastX, origin.y + CurveToY(AudioProcessing::curveValue(state.curve, CurveFromX(state, lastX, width)), height)));
 
-    draw->PathStroke(WithAlpha(ink, cCurveLineAlpha), ImDrawFlags_None, cCurveLineWidth);
+    draw->PathStroke(uicolors::WithAlpha(ink, cCurveLineAlpha), ImDrawFlags_None, cCurveLineWidth);
 
     // Tension handles
     for (int i = 1; i < pointNum; i++)

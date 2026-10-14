@@ -3,6 +3,7 @@
 #include <ui/Messages.h>
 #include <ui/sound/SoundPanels.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 static constexpr f32 cSoundNumberFieldEm     = 3.0f;
 static constexpr f32 cSoundComboExtraEm      = 0.5f;
@@ -68,7 +69,7 @@ bool ItemSelectorRow(const char* label, const Item::List& list, Item** item, boo
     const bool missing = *item == nullptr && !allowNone;
 
     if (missing)
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.0f, 0.0f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Text, uicolors::Marker());
 
     PropertyRow(label);
 

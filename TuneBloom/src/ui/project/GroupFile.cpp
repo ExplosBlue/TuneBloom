@@ -9,7 +9,7 @@
 #include <ui/app/Notifications.h>
 #include <ui/widgets/Properties.h>
 #include <ui/file/SystemShell.h>
-#include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
@@ -41,7 +41,7 @@ void DrawGroupFileRow(const Group* group)
 
     if (group->getExternalFileState() == Group::ExternalFileState::Missing)
     {
-        ImGui::TextColored(cWarningTextColor, "%s", messages::group::cGroupFileNotLoaded);
+        ImGui::TextColored(uicolors::Warning(), "%s", messages::group::cGroupFileNotLoaded);
         return;
     }
 

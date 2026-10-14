@@ -75,6 +75,7 @@ bool UpdateStreamPanelFold(bool toggleFold)
         return false;
 
     const f32 tabRowHeight = ImGui::GetFrameHeight();
+    const bool drawFolded = sTrackFolded;
 
     toggleFold |= IsFoldTabDoubleClicked(node);
 
@@ -92,7 +93,7 @@ bool UpdateStreamPanelFold(bool toggleFold)
         SetDockNodeHeight(node, tabRowHeight);
         node->LocalFlags |= ImGuiDockNodeFlags_NoResize;
 
-        return true;
+        return drawFolded;
     }
 
     if (toggleFold)
@@ -100,5 +101,5 @@ bool UpdateStreamPanelFold(bool toggleFold)
 
     node->LocalFlags &= ~ImGuiDockNodeFlags_NoResize;
 
-    return false;
+    return drawFolded;
 }

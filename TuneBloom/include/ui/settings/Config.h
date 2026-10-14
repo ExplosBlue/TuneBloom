@@ -74,8 +74,8 @@ extern bool sAutoBackupEnabled;
 extern s32 sAutoBackupIntervalMinutes;
 extern s32 sAutoBackupMaxBackups;
 
-void SaveAccentColor();
-void LoadAccentColor();
+void SaveThemeConfig();
+void LoadThemeConfig();
 
 const std::vector<std::string>& GetMidiEnabledDevices();
 void SetMidiDeviceEnabled(const char* name, bool enabled);

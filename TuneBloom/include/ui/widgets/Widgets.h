@@ -12,7 +12,25 @@
 void GetFileStem(sead::BufferedSafeString* out, const sead::SafeString& path);
 void NormalizePathSlashes(sead::BufferedSafeString* path);
 
-bool DrawIconButton(const char* id, const char* icon, const ImVec2& itemSize, f32 frameSize, f32 iconSize, bool lit, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft);
+enum class TransportGlyph
+{
+    Play,
+    Pause,
+    Stop,
+};
+
+enum class IconButtonTint
+{
+    Accent,
+    Play,
+};
+
+void PushBrightButtonColors(const ImVec4& color);
+void PopBrightButtonColors();
+bool DrawIconButton(const char* id, const char* icon, const ImVec2& itemSize, f32 frameSize, f32 iconSize, bool lit, IconButtonTint tint = IconButtonTint::Accent, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft);
+bool DrawGlyphButton(const char* id, TransportGlyph glyph, const ImVec2& itemSize, f32 frameSize, bool lit, IconButtonTint tint = IconButtonTint::Accent, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft);
+bool TransportButton(TransportGlyph glyph, const char* id, const ImVec2& size = ImVec2(0.0f, 0.0f));
+bool PlayToggleButton(TransportGlyph glyph, const char* id, const ImVec2& size, bool playing);
 f32 GetRowButtonSize();
 bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing);
 bool DrawRowOpenButton(u32 id, const char* tooltip, const char* disabledReason = nullptr);

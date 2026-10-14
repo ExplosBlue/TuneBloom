@@ -36,7 +36,6 @@ void DragViewPan(LoopWaveformState& state, const WaveformCanvas& canvas);
 void HandleViewWheel(LoopWaveformState& state, const WaveformCanvas& canvas);
 void DrawMinimap(LoopWaveformState& state, float width, u32 sampleCount);
 
-ImU32 WithAlpha(ImU32 color, int alpha);
 const WaveformPalette& Palette();
 void UpdatePeakCache(LoopWaveformState& state, const std::vector<float>& mono);
 void DrawWaveform(ImDrawList* draw, ImVec2 origin, float width, float height,

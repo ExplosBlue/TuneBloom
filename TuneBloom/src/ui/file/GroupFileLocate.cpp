@@ -8,7 +8,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
 #include <ui/widgets/Properties.h>
-#include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 
 #include <bfsar/model/Group.h>
@@ -162,7 +162,7 @@ static void DrawRowState(const LocateRow& row)
     else if (row.path.empty())
         ImGui::TextDisabled("%s", ICON_LC_CIRCLE_DASHED);
     else
-        ImGui::TextColored(cWarningTextColor, "%s", ICON_LC_TRIANGLE_ALERT);
+        ImGui::TextColored(uicolors::Warning(), "%s", ICON_LC_TRIANGLE_ALERT);
 }
 
 static void DrawRowFile(const LocateRow& row)
@@ -174,7 +174,7 @@ static void DrawRowFile(const LocateRow& row)
     else if (IsReady(row))
         DrawDialogListText(row.path.c_str(), ImGui::GetColorU32(GetItemValueColor()), false, true);
     else
-        DrawDialogListText(GetCheckText(row.check), ImGui::GetColorU32(cWarningTextColor));
+        DrawDialogListText(GetCheckText(row.check), ImGui::GetColorU32(uicolors::Warning()));
 
     ImGui::Dummy(size);
 

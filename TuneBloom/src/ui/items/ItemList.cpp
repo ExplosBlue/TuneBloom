@@ -7,6 +7,7 @@
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/app/Shortcuts.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 
 #include <bfsar/files/WaveFile.h>
@@ -25,6 +26,7 @@ static constexpr f32 cItemNameEndMinEm    = 4.5f;
 static constexpr f32 cItemTextMinEm       = 5.0f;
 static constexpr f32 cItemScrollMinRatio  = 2.0f;
 static constexpr f32 cItemDimHeaderAlpha  = 0.55f;
+static constexpr f32 cInsertLineAlpha     = 0.86f;
 
 struct ItemRowName
 {
@@ -304,7 +306,7 @@ static void CalcItemListWidths(ItemListContext& ctx)
 
 static void BeginItemListTable(ItemListContext& ctx)
 {
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparentU32);
     ctx.tableOpen = ImGui::BeginTable(cItemListTableId,ctx.nameColumn + 1 + ctx.columnCount, ctx.tableFlags, ImVec2(0.0f, -ctx.footerHeight), ctx.innerWidth);
     ImGui::PopStyleColor();
 
@@ -453,7 +455,7 @@ static void DrawItemRowDragDrop(ItemListContext& ctx, Item* item, const sead::Sa
 
     if (!ctx.sorted)
     {
-        ImGui::PushStyleColor(ImGuiCol_DragDropTarget, IM_COL32(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_DragDropTarget, uicolors::cTransparentU32);
 
         if (ImGui::BeginDragDropTarget())
         {
@@ -464,7 +466,7 @@ static void DrawItemRowDragDrop(ItemListContext& ctx, Item* item, const sead::Sa
             ImGui::GetWindowDrawList()->AddRectFilled(
                 ImVec2(itemTL.x, itemBR.y + offset),
                 ImVec2(itemBR.x, itemBR.y + offset + 3.0f),
-                IM_COL32(255, 200, 0, 220));
+                ImGui::GetColorU32(ImGuiCol_CheckMark, cInsertLineAlpha));
 
             const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ITEM");
             if (payload)

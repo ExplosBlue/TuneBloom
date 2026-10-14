@@ -6,6 +6,7 @@
 #include <ui/Messages.h>
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>
 
 #include <libs/IconsLucide.h>
@@ -26,12 +27,12 @@ static constexpr f32 cAboutWidthEm     = 23.0f;
 static constexpr f32 cAboutPadEm       = 1.2f;
 static constexpr f32 cAboutRoundingEm  = 0.6f;
 static constexpr f32 cAboutGlowEm      = 11.0f;
-static constexpr f32 cAboutGlowDark    = 0.30f;
-static constexpr f32 cAboutGlowLight   = 0.12f;
 static constexpr f32 cAboutFooterGapEm = 0.8f;
 static constexpr f32 cAboutChipPadXEm  = 0.7f;
 static constexpr f32 cAboutChipPadYEm  = 0.15f;
 static constexpr f32 cAboutLogoSize    = 130.0f;
+
+static constexpr uicolors::Themed<f32> cAboutGlowMix = { 0.30f, 0.12f };
 
 static void AboutGap(f32 heightEm)
 {
@@ -127,8 +128,7 @@ static void DrawTuneBloomSplash()
     const f32 width = ImFloor(em * cAboutWidthEm);
     const f32 rounding = ImFloor(em * cAboutRoundingEm);
 
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
 
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0.0f), ImVec2(width, FLT_MAX));
@@ -160,12 +160,11 @@ static void DrawTuneBloomSplash()
     const f32 border = style.WindowBorderSize;
     const ImVec2 glowMin(winPos.x + border, winPos.y + border);
     const ImVec2 glowMax(winPos.x + winSize.x - border, winPos.y + ImFloor(em * cAboutGlowEm));
-    const ImVec4 accent = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
-    const ImVec4 glow = ImLerp(background, ImVec4(accent.x, accent.y, accent.z, 1.0f), gThemeIsDark ? cAboutGlowDark : cAboutGlowLight);
+    const ImVec4 glow = ImLerp(background, GetThemeAccent(), uicolors::Pick(cAboutGlowMix));
 
     drawList->PushClipRect(winPos, winPos + winSize, false);
     const s32 vtxBegin = drawList->VtxBuffer.Size;
-    drawList->AddRectFilled(glowMin, glowMax, IM_COL32_WHITE, ImMax(rounding - border, 0.0f), ImDrawFlags_RoundCornersTop);
+    drawList->AddRectFilled(glowMin, glowMax, uicolors::cInkOnDarkU32, ImMax(rounding - border, 0.0f), ImDrawFlags_RoundCornersTop);
     ImGui::ShadeVertsLinearColorGradientKeepAlpha(drawList, vtxBegin, drawList->VtxBuffer.Size, glowMin, ImVec2(glowMin.x, glowMax.y), ImGui::GetColorU32(glow), ImGui::GetColorU32(background));
     drawList->PopClipRect();
 

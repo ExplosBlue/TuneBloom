@@ -1,7 +1,9 @@
 #include <ui/sequence/SeqManual.h>
 
 #include <ui/Messages.h>
+#include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <imgui/imgui.h>
 #include <imgui/imgui_custom.h>
@@ -26,6 +28,7 @@ constexpr f32 cManualMinDescWidth = 14.0f;
 constexpr f32 cSeqPlainTextAlpha   = 0.85f;
 constexpr f32 cSeqCurrentLineAlpha = 0.06f;
 constexpr f32 cSeqSelectionAlpha   = 0.6f;
+constexpr f32 cSeqCommentAlpha     = 0.85f;
 
 constexpr const char* cSuffixes[] = { "r", "v", "t", "tr", "tv", "if" };
 
@@ -589,51 +592,58 @@ const TextEditor::LanguageDefinition& GetSeqLanguageDefinition()
     return sLangDef;
 }
 
-const TextEditor::Palette& GetSeqPalette(bool dark)
+const TextEditor::Palette& GetSeqPalette()
 {
     static TextEditor::Palette sPalette;
+    static s32 sPaletteFrame = -1;
+
+    if (sPaletteFrame == ImGui::GetFrameCount())
+        return sPalette;
+
+    sPaletteFrame = ImGui::GetFrameCount();
 
     const auto set = [](TextEditor::PaletteIndex index, const ImVec4& color)
     {
         sPalette[static_cast<s32>(index)] = ImGui::ColorConvertFloat4ToU32(color);
     };
 
-    sPalette = dark ? TextEditor::GetDarkPalette() : TextEditor::GetLightPalette();
-
-    if (dark)
+    const auto setAlpha = [&](TextEditor::PaletteIndex index, const ImVec4& color, f32 alpha)
     {
-        sPalette[static_cast<s32>(TextEditor::PaletteIndex::Number)]  = IM_COL32(181, 206, 168, 255);
-        sPalette[static_cast<s32>(TextEditor::PaletteIndex::Comment)] = IM_COL32(106, 153, 85, 255);
-        sPalette[static_cast<s32>(TextEditor::PaletteIndex::CharLiteral)] = IM_COL32(214, 160, 120, 255);
-    }
-    else
-    {
-        sPalette[static_cast<s32>(TextEditor::PaletteIndex::Comment)] = IM_COL32(96, 128, 96, 255);
-        sPalette[static_cast<s32>(TextEditor::PaletteIndex::CharLiteral)] = IM_COL32(176, 104, 48, 255);
-    }
+        set(index, ImVec4(color.x, color.y, color.z, alpha));
+    };
 
-    // Surface of the theme
+    sPalette = IsDarkTheme() ? TextEditor::GetDarkPalette() : TextEditor::GetLightPalette();
+
     const ImVec4* colors = ImGui::GetStyle().Colors;
 
-    ImVec4 background = colors[ImGuiCol_ChildBg];
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(colors[ImGuiCol_ChildBg]);
+    const ImVec4 text = uicolors::Opaque(colors[ImGuiCol_Text]);
+    const ImVec4 accent = GetThemeAccent();
+    const ImVec4 dimmed = colors[ImGuiCol_TextDisabled];
 
-    ImVec4 text = colors[ImGuiCol_Text];
-    text.w = 1.0f;
-
-    set(TextEditor::PaletteIndex::Background, background);
-    set(TextEditor::PaletteIndex::Cursor, text);
-    set(TextEditor::PaletteIndex::Punctuation, text);
-    set(TextEditor::PaletteIndex::Default, ImVec4(text.x, text.y, text.z, cSeqPlainTextAlpha));
-    set(TextEditor::PaletteIndex::Identifier, ImVec4(text.x, text.y, text.z, cSeqPlainTextAlpha));
     ImVec4 selection = colors[ImGuiCol_TextSelectedBg];
     selection.w = ImMax(selection.w, cSeqSelectionAlpha);
 
+    set(TextEditor::PaletteIndex::Keyword, accent);
+    set(TextEditor::PaletteIndex::KnownIdentifier, GetAccentTextColor());
+    set(TextEditor::PaletteIndex::Preprocessor, accent);
+    set(TextEditor::PaletteIndex::PreprocIdentifier, accent);
+    set(TextEditor::PaletteIndex::Number, uicolors::Playback());
+    set(TextEditor::PaletteIndex::String, uicolors::Success());
+    set(TextEditor::PaletteIndex::CharLiteral, uicolors::Warning());
+    set(TextEditor::PaletteIndex::Punctuation, text);
+    setAlpha(TextEditor::PaletteIndex::Default, text, cSeqPlainTextAlpha);
+    setAlpha(TextEditor::PaletteIndex::Identifier, text, cSeqPlainTextAlpha);
+    setAlpha(TextEditor::PaletteIndex::Comment, dimmed, cSeqCommentAlpha);
+    setAlpha(TextEditor::PaletteIndex::MultiLineComment, dimmed, cSeqCommentAlpha);
+
+    set(TextEditor::PaletteIndex::Background, background);
+    set(TextEditor::PaletteIndex::Cursor, uicolors::PlaybackFill());
     set(TextEditor::PaletteIndex::Selection, selection);
-    set(TextEditor::PaletteIndex::LineNumber, colors[ImGuiCol_TextDisabled]);
-    set(TextEditor::PaletteIndex::CurrentLineFill, ImVec4(text.x, text.y, text.z, cSeqCurrentLineAlpha));
-    set(TextEditor::PaletteIndex::CurrentLineFillInactive, ImVec4(text.x, text.y, text.z, cSeqCurrentLineAlpha * 0.5f));
-    set(TextEditor::PaletteIndex::CurrentLineEdge, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    set(TextEditor::PaletteIndex::LineNumber, dimmed);
+    setAlpha(TextEditor::PaletteIndex::CurrentLineFill, text, cSeqCurrentLineAlpha);
+    setAlpha(TextEditor::PaletteIndex::CurrentLineFillInactive, text, cSeqCurrentLineAlpha * 0.5f);
+    set(TextEditor::PaletteIndex::CurrentLineEdge, uicolors::cTransparent);
 
     return sPalette;
 }
@@ -664,7 +674,7 @@ void DrawSeqManual()
 
     *seenScrollY = sScrollY;
 
-    const TextEditor::Palette& palette = GetSeqPalette(gThemeIsDark);
+    const TextEditor::Palette& palette = GetSeqPalette();
     const ImVec4 nameColor = ImGui::ColorConvertU32ToFloat4(palette[static_cast<s32>(TextEditor::PaletteIndex::Keyword)]);
     const f32 nameWidth = CalcNameColumnWidth();
     const bool stacked = ImGui::GetContentRegionAvail().x - nameWidth < ImGui::GetFontSize() * cManualMinDescWidth;

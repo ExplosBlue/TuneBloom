@@ -6,16 +6,15 @@
 #include <ui/sound/SoundPanels.h>
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
+#include <ui/widgets/Widgets.h>
 
 static constexpr f32 cTrackKnobEm         = 2.0f;
 static constexpr f32 cTrackSlotGapEm      = 0.3f;
 static constexpr f32 cTrackCellPadYEm     = 0.2f;
 static constexpr f32 cTrackIndexWidthEm   = 1.0f;
 static constexpr u8  cTrackPanCenter      = 64;
-static constexpr f32 cTrackToggleStateMix = 0.20f;
 static constexpr f32 cTrackToggleHeightEm = 1.6f;
-
-static const ImVec4 cTrackToggleTextColor = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
 
 static constexpr const char* cTrackMuteLabel = messages::stream::cTrackMute;
 static constexpr const char* cTrackSoloLabel = messages::stream::cTrackSolo;
@@ -158,9 +157,9 @@ bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* tra
 {
     using Track = Sound::StreamSoundInfo::Track;
 
-    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Header, uicolors::cTransparent);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, uicolors::cTransparent);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, uicolors::cTransparent);
 
     if (ImGui::Selectable("###Row", track == GetHighlightedStreamTrack(), flags, size))
         HighlightStreamTrack(track);
@@ -248,17 +247,12 @@ static ImVec2 CalcTrackToggleSize(f32 width)
 bool DrawTrackToggle(const char* label, bool on, const ImVec4& color, const ImVec2& size)
 {
     if (on)
-    {
-        ImGui::PushStyleColor(ImGuiCol_Button, color);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImLerp(color, ImVec4(1.0f, 1.0f, 1.0f, 1.0f), cTrackToggleStateMix));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImLerp(color, ImVec4(0.0f, 0.0f, 0.0f, 1.0f), cTrackToggleStateMix));
-        ImGui::PushStyleColor(ImGuiCol_Text, cTrackToggleTextColor);
-    }
+        PushBrightButtonColors(color);
 
     const bool pressed = ImGui::Button(label, size);
 
     if (on)
-        ImGui::PopStyleColor(4);
+        PopBrightButtonColors();
 
     return pressed;
 }
@@ -269,7 +263,7 @@ static void DrawTrackMuteButton(const TrackContext& ctx, s32 index, const ImVec2
     const u32 bit = 1 << index;
     const u32 muteTracks = strmInfo.getMuteTracks();
 
-    if (!DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Mute", messages::stream::cTrackMuteShort).cstr(),(muteTracks & bit) != 0, cTrackMuteColor, size))
+    if (!DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Mute", messages::stream::cTrackMuteShort).cstr(),(muteTracks & bit) != 0, uicolors::cMarker, size))
         return;
 
     strmInfo.setMuteTracks(muteTracks ^ bit);
@@ -282,7 +276,7 @@ static void DrawTrackSoloButton(const TrackContext& ctx, s32 index, const ImVec2
     const u32 bit = 1 << index;
     const u32 soloTracks = strmInfo.getSoloTracks();
 
-    const bool pressed = DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Solo", messages::stream::cTrackSoloShort).cstr(),(soloTracks & bit) != 0, cTrackSoloColor, size);
+    const bool pressed = DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Solo", messages::stream::cTrackSoloShort).cstr(),(soloTracks & bit) != 0, uicolors::PlaybackFill(), size);
 
     ImGui::SetItemTooltip("%s", messages::stream::cTrackSoloTip);
 

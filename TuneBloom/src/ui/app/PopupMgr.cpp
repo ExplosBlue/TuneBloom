@@ -10,7 +10,7 @@
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/sound/SoundViews.h>
-#include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
@@ -20,9 +20,6 @@
 #include <cstring>
 
 SEAD_SINGLETON_DISPOSER_IMPL(PopupMgr);
-
-static const ImVec4 cErrorColor(1.0f, 0.35f, 0.35f, 1.0f);
-static constexpr ImVec4 cWarningColor = cWarningTextColor;
 
 static constexpr f32 cWidthEm          = 44.0f;
 static constexpr f32 cHeightEm         = 26.0f;
@@ -117,7 +114,7 @@ static void DrawMessageGroup(const std::vector<PopupMgr::ItemMessage>& messages,
         {
             const bool isError = severity == PopupMgr::Severity::Error;
 
-            ImGui::PushStyleColor(ImGuiCol_Text, isError ? cErrorColor : cWarningColor);
+            ImGui::PushStyleColor(ImGuiCol_Text, isError ? uicolors::Marker() : uicolors::Warning());
             ImGui::SeparatorText(sead::FormatFixedSafeString<32>("%s %s", isError ? ICON_LC_ALERT_OCTAGON : ICON_LC_ALERT_TRIANGLE, isError ? messages::popup::cGroupErrors : messages::popup::cGroupWarnings).cstr());
             ImGui::PopStyleColor();
 
@@ -424,7 +421,7 @@ static void DrawErrorsHeading(bool isSaving, bool hasErrors)
     {
         ImGui::TextWrapped("%s", messages::popup::cHeadingErrors);
 
-        ImGui::PushStyleColor(ImGuiCol_Text, cErrorColor);
+        ImGui::PushStyleColor(ImGuiCol_Text, uicolors::Marker());
         ImGui::TextUnformatted(messages::popup::cBackupReminder);
         ImGui::PopStyleColor();
     }
@@ -451,7 +448,7 @@ static void DrawErrorEntryList(const std::vector<ListEntry>& entries, size_t* se
 
         if (!isSelected)
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, entry.hasError ? cErrorColor : cWarningColor);
+            ImGui::PushStyleColor(ImGuiCol_Text, entry.hasError ? uicolors::Marker() : uicolors::Warning());
         }
 
         sead::FormatFixedSafeString<384> label("%s %s##%u",
@@ -591,7 +588,7 @@ void PopupMgr::updateErrors()
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + footerGap - ImGui::GetStyle().ItemSpacing.y);
     ImGui::SetCursorScreenPos(ImVec2(listLeft, ImGui::GetCursorScreenPos().y));
     ImGui::AlignTextToFramePadding();
-    DrawSeverityCount(ICON_LC_ALERT_OCTAGON, errorCount, cErrorColor);
+    DrawSeverityCount(ICON_LC_ALERT_OCTAGON, errorCount, uicolors::Marker());
 
     if (errorCount != 0 && warningCount != 0)
     {
@@ -600,7 +597,7 @@ void PopupMgr::updateErrors()
         ImGui::SameLine();
     }
 
-    DrawSeverityCount(ICON_LC_ALERT_TRIANGLE, warningCount, cWarningColor);
+    DrawSeverityCount(ICON_LC_ALERT_TRIANGLE, warningCount, uicolors::Warning());
 
     if (canIgnore)
         DrawIgnoreWarningsCheck(fontSize, viewLeft, &sIgnore);

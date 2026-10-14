@@ -15,6 +15,7 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/items/Selection.h>
 #include <ui/stream/StreamRegions.h>
+#include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveImportPanel.h>
 #include <ui/widgets/Widgets.h>
@@ -360,17 +361,14 @@ static void DrawDuplicateGroupList(const std::vector<Bfsar::WaveDuplicateGroup>&
 {
     ImGui::BeginChild("DedupList", ImVec2(0.0f, -CalcDialogFooterHeight()), true);
 
-    const ImVec4 keepColor(0.45f, 0.85f, 0.45f, 1.0f);
-    const ImVec4 removeColor(0.90f, 0.45f, 0.45f, 1.0f);
-
     for (u32 gi = 0; gi < groups.size(); gi++)
     {
         const Bfsar::WaveDuplicateGroup &g = groups[gi];
-        ImGui::TextColored(keepColor, "[%u] %s", g.keep->getId(), g.keep->getNameOrNull().cstr());
+        ImGui::TextColored(uicolors::Success(), "[%u] %s", g.keep->getId(), g.keep->getNameOrNull().cstr());
         ImGui::Indent(16.0f);
 
         for (WaveFile *d : g.remove)
-            ImGui::TextColored(removeColor, messages::item::cMergeRemovedFormat,d->getId(), d->getNameOrNull().cstr());
+            ImGui::TextColored(uicolors::Marker(), messages::item::cMergeRemovedFormat,d->getId(), d->getNameOrNull().cstr());
 
         ImGui::Unindent(16.0f);
 

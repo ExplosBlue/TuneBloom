@@ -33,6 +33,7 @@ Index of this file:
 #include "imgui.h"
 #ifndef IMGUI_DISABLE
 #include "imgui_internal.h"
+#include "imgui_custom.h"
 #ifdef IMGUI_ENABLE_FREETYPE
 #include "misc/freetype/imgui_freetype.h"
 #endif
@@ -3897,35 +3898,33 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
 //-----------------------------------------------------------------------------
 
 // Render an arrow aimed to be aligned with text (p_min is a position in the same space text would be positioned). To e.g. denote expanded/collapsed state
+// TuneBloom: thin stroked chevron instead of a filled triangle
 void ImGui::RenderArrow(ImDrawList* draw_list, ImVec2 pos, ImU32 col, ImGuiDir dir, float scale)
 {
     const float h = draw_list->_Data->FontSize * 1.00f;
-    float r = h * 0.40f * scale;
+    const float half_width = h * 0.20f * scale;
+    const float half_depth = half_width * 0.55f;
+    const float thickness = GetIconStrokeThickness(h);
     ImVec2 center = pos + ImVec2(h * 0.50f, h * 0.50f * scale);
 
-    ImVec2 a, b, c;
+    ImVec2 forward;
     switch (dir)
     {
-    case ImGuiDir_Up:
-    case ImGuiDir_Down:
-        if (dir == ImGuiDir_Up) r = -r;
-        a = ImVec2(+0.000f, +0.750f) * r;
-        b = ImVec2(-0.866f, -0.750f) * r;
-        c = ImVec2(+0.866f, -0.750f) * r;
-        break;
-    case ImGuiDir_Left:
-    case ImGuiDir_Right:
-        if (dir == ImGuiDir_Left) r = -r;
-        a = ImVec2(+0.750f, +0.000f) * r;
-        b = ImVec2(-0.750f, +0.866f) * r;
-        c = ImVec2(-0.750f, -0.866f) * r;
-        break;
+    case ImGuiDir_Up:    forward = ImVec2(0.0f, -1.0f); break;
+    case ImGuiDir_Down:  forward = ImVec2(0.0f, +1.0f); break;
+    case ImGuiDir_Left:  forward = ImVec2(-1.0f, 0.0f); break;
+    case ImGuiDir_Right: forward = ImVec2(+1.0f, 0.0f); break;
     case ImGuiDir_None:
     case ImGuiDir_COUNT:
         IM_ASSERT(0);
-        break;
+        return;
     }
-    draw_list->AddTriangleFilled(center + a, center + b, center + c, col);
+    const ImVec2 side(-forward.y, forward.x);
+
+    draw_list->PathLineTo(center - forward * half_depth + side * half_width);
+    draw_list->PathLineTo(center + forward * half_depth);
+    draw_list->PathLineTo(center - forward * half_depth - side * half_width);
+    draw_list->PathStroke(col, ImDrawFlags_None, thickness);
 }
 
 void ImGui::RenderBullet(ImDrawList* draw_list, ImVec2 pos, ImU32 col)

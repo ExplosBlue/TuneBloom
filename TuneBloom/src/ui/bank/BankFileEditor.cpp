@@ -8,6 +8,7 @@
 #include <ui/bank/PianoRollPalette.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <imgui/imgui_custom.h>
 
@@ -818,11 +819,11 @@ void BankFile::drawFileUI()
     if (splitterActive)
         sRegionHeight -= ImGui::GetIO().MouseDelta.y;
     {
-        const ImVec2 gmin = ImGui::GetItemRectMin();
-        const ImVec2 gmax = ImGui::GetItemRectMax();
-        const f32 cy = (gmin.y + gmax.y) * 0.5f;
-        const ImU32 gcol = (splitterActive || ImGui::IsItemHovered()) ? GetPianoRollPalette().splitterHover : IM_COL32(120, 130, 145, 130);
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(gmin.x + 6.0f, cy), ImVec2(gmax.x - 6.0f, cy), gcol, 2.0f);
+        const ImVec2 splitterMin = ImGui::GetItemRectMin();
+        const ImVec2 splitterMax = ImGui::GetItemRectMax();
+        const f32 centerY = (splitterMin.y + splitterMax.y) * 0.5f;
+        const ImU32 lineColor = (splitterActive || ImGui::IsItemHovered()) ? GetPianoRollPalette().splitterHover : ImGui::GetColorU32(ImGuiCol_Separator);
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(splitterMin.x + 6.0f, centerY), ImVec2(splitterMax.x - 6.0f, centerY), lineColor, 2.0f);
     }
 
     f32 startY = ImGui::GetCursorScreenPos().y;
@@ -861,7 +862,7 @@ void BankFile::drawFileUI()
             ImGui::SetCursorPosX(midiX);
 
             ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(connected ? ImVec4(0.45f, 0.85f, 0.5f, 1.0f) : ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "%s", statusStr.cstr());
+            ImGui::TextColored(connected ? uicolors::Success() : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), "%s", statusStr.cstr());
 
             ImGui::SameLine(0.0f, spacing);
             if (ImGui::SmallButton(messages::keyboard::cMidiSettings))

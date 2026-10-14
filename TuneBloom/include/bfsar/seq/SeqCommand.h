@@ -843,7 +843,7 @@ class MmlCommandNote : public MmlCommandBase
     SEAD_RTTI_OVERRIDE(MmlCommandNote, MmlCommandBase);
 
 public:
-    static const u32 sKeysNum = 128;
+    static constexpr u32 sKeysNum = 128;
 
     static const char* sKeys[sKeysNum];
 
@@ -2075,7 +2075,7 @@ public:
 class MmlCommandModType : public MmlCommandArgs1<SeqArg8>
 {
 public:
-    static const u32 cTypeNum = 3;
+    static constexpr u32 cTypeNum = 3;
     static const char* cTypes[cTypeNum];
 
 public:

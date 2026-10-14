@@ -14,7 +14,7 @@ class SoundArchive
 public:
     typedef u32 ItemId;
 
-    static const ItemId INVALID_ID = 0xFFFFFFFF;
+    static constexpr ItemId INVALID_ID = 0xFFFFFFFF;
 
     static const s32 USER_PARAM_INDEX_MAX = 3;
 
@@ -42,7 +42,7 @@ public:
 
     static const u32 SEQ_BANK_MAX = nw::snd::SEQ_BANK_MAX;
 
-    static const u32 STRM_TRACK_NUM = internal::STRM_TRACK_NUM;
+    static constexpr u32 STRM_TRACK_NUM = internal::STRM_TRACK_NUM;
 
     struct StreamTrackInfo
     {

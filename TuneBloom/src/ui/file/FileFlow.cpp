@@ -13,6 +13,7 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
+#include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveImportPanel.h>
 #include <ui/widgets/Widgets.h>
@@ -370,7 +371,7 @@ static void DrawSaveInUseDialog()
             ImGui::TextDisabled("%s", sBfsar.getPendingSaveFinalizePath().cstr());
 
             if (sSaveInUseRetryFailed)
-                ImGui::TextColored(ImVec4(0.90f, 0.45f, 0.45f, 1.0f), "%s", messages::saving::cInUseStill);
+                ImGui::TextColored(uicolors::Marker(), "%s", messages::saving::cInUseStill);
 
             ImGui::Separator();
 
@@ -434,9 +435,8 @@ static void DrawRemoveUnusedFilesDialog()
             ImGui::Separator();
             ImGui::BeginChild("UnusedList", ImVec2(0.0f, -CalcDialogFooterHeight()), true);
 
-            const ImVec4 removeColor(0.90f, 0.45f, 0.45f, 1.0f);
             for (WaveFile *wave : sPendingUnusedWaves)
-                ImGui::TextColored(removeColor, "[%u] %s", wave->getId(), wave->getNameOrNull().cstr());
+                ImGui::TextColored(uicolors::Marker(), "[%u] %s", wave->getId(), wave->getNameOrNull().cstr());
 
             ImGui::EndChild();
 

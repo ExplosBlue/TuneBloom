@@ -285,7 +285,7 @@ static void DrawWavePlayButtons(const WaveFile& wave, bool playing, f32 buttonSi
 
     ImGui::BeginDisabled(!canPlay);
 
-    if (ImGui::Button(playing ? ICON_LC_SQUARE "###Play" : ICON_LC_PLAY "###Play", ImVec2(buttonSize, buttonSize)))
+    if (PlayToggleButton(playing ? TransportGlyph::Stop : TransportGlyph::Play, "###Play", ImVec2(buttonSize, buttonSize), playing))
     {
         if (playing)
             sSoundPlayer.fadeOutPlayers();

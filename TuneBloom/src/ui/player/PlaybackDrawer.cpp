@@ -5,7 +5,9 @@
 #include <ui/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/stream/StreamTracks.h>
+#include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <cmath>
 
@@ -32,10 +34,11 @@ constexpr f32 cTrackWaitBarHeight   = 3.0f;
 constexpr f32 cOverrideDotRadius    = 2.5f;
 constexpr f32 cOverrideDotInset     = 5.0f;
 constexpr f32 cSeqVarFramePaddingY  = 1.0f;
-constexpr f32 cSeqVarOverrideAlpha  = 0.45f;
 constexpr f32 cSeqVarDotRadiusEm    = 0.075f;
 constexpr s32 cSeqVarNum            = 16;
 constexpr s32 cSeqVarVisibleRows    = 5;
+
+constexpr uicolors::Themed<f32> cSeqVarOverrideAlpha = { 0.45f, 0.20f };
 
 static const char* cDrawerKnobs[] = { messages::common::cVolume, messages::param::cCoarse, messages::param::cFine, messages::common::cPan, messages::common::cLpf, messages::param::cBiquad, messages::playback::cKnobTempo };
 static const char* cDrawerBiquadLabel = messages::common::cType;
@@ -295,7 +298,7 @@ static void DrawTrackSwitch(u32 trackNo, const ImVec2& size, bool exists)
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(exists ? ImGuiCol_Text : ImGuiCol_TextDisabled));
-    const bool pressed = DrawTrackToggle(sead::FormatFixedSafeString<16>("%u###switch", trackNo).cstr(), isMute || isSolo, isSolo ? cTrackSoloColor : cTrackMuteColor, size);
+    const bool pressed = DrawTrackToggle(sead::FormatFixedSafeString<16>("%u###switch", trackNo).cstr(), isMute || isSolo, isSolo ? uicolors::PlaybackFill() : uicolors::cMarker, size);
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
 
@@ -382,7 +385,7 @@ static void DrawTracksPanel(const PlaybackDrawerLayout& layout)
             const f32 fill = layout.trackKnobSize * sead::Mathf::clamp2(0.0f, static_cast<f32>(wait) / static_cast<f32>(waitAmount), 1.0f);
             const f32 top = pos.y + switchY - cSoundSlotLabelGap - cTrackWaitBarHeight;
 
-            draw->AddRectFilled(ImVec2(pos.x, top), ImVec2(pos.x + fill, top + cTrackWaitBarHeight), ImGui::GetColorU32(gAccentColor));
+            draw->AddRectFilled(ImVec2(pos.x, top), ImVec2(pos.x + fill, top + cTrackWaitBarHeight), ImGui::GetColorU32(GetThemeAccent()));
         }
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + switchY));
@@ -449,10 +452,10 @@ static void DrawSeqVarCell(SoundPlayer::SeqVarScope scope, s32 trackNo, s32 varN
     const bool isOverride = sSoundPlayer.hasSeqVarOverride(scope, trackNo, varNo);
     const bool isQuiet = !isUsed && !isOverride && ImGui::GetHoveredID() != id && ImGui::GetActiveID() != id;
 
-    ImVec4 frameColor = isOverride ? gAccentColor : style.Colors[ImGuiCol_FrameBg];
+    ImVec4 frameColor = isOverride ? GetThemeAccent() : style.Colors[ImGuiCol_FrameBg];
 
     if (isOverride)
-        frameColor.w = cSeqVarOverrideAlpha;
+        frameColor.w = uicolors::Pick(cSeqVarOverrideAlpha);
     else if (!isUsed)
         frameColor.w = 0.0f;
 
@@ -610,24 +613,26 @@ static void DrawPlaybackDrawerButton(const char* icon, PlaybackDrawerView view, 
 {
     const bool open = IsPlaybackDrawerViewOpen(view);
 
-    ImVec4 accent = gAccentColor;
-    accent.w = 1.0f;
+    const ImVec4 accent = GetThemeAccent();
 
     if (open)
+    {
         ImGui::PushStyleColor(ImGuiCol_Button, accent);
+        ImGui::PushStyleColor(ImGuiCol_Text, GetOnAccentTextColor());
+    }
 
     if (ImGui::Button(icon))
         TogglePlaybackDrawer(view);
 
     if (open)
-        ImGui::PopStyleColor();
+        ImGui::PopStyleColor(2);
 
     if (hasOverride)
     {
         const ImVec2 max = ImGui::GetItemRectMax();
         const ImVec2 min = ImGui::GetItemRectMin();
 
-        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(max.x - cOverrideDotInset, min.y + cOverrideDotInset), cOverrideDotRadius, open ? ImGui::GetColorU32(ImGuiCol_Text) : ImGui::GetColorU32(accent));
+        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(max.x - cOverrideDotInset, min.y + cOverrideDotInset), cOverrideDotRadius, open ? ImGui::GetColorU32(GetOnAccentTextColor()) : ImGui::GetColorU32(accent));
     }
 
     if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))

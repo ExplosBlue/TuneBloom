@@ -5,6 +5,7 @@
 #include <ui/bank/PianoRollPalette.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/ZoomScrollBar.h>
 
 #include <imgui/imgui_custom.h>
@@ -21,13 +22,12 @@ static constexpr f32 cVelocityTickWidth    = 8.0f;
 static constexpr f32 cVelocityLabelGapEm   = 1.6f;
 static constexpr s32 cVelocityLabelAlpha   = 170;
 
-static constexpr f32 cRegionLightAlpha         = 0.22f;
-static constexpr f32 cRegionLightSelectedAlpha = 0.45f;
-static constexpr f32 cRegionLightBorderAlpha   = 0.55f;
+static constexpr uicolors::Themed<f32> cRegionFillAlpha         = { 0.30f, 0.07f };
+static constexpr uicolors::Themed<f32> cRegionSelectedFillAlpha = { 0.50f, 0.14f };
+static constexpr f32                   cRegionBorderAlpha       = 0.55f;
 
 static constexpr f32 cRegionEdgeSize      = 6.0f;
 static constexpr f32 cVelocityScrollWidth = 9.0f;
-static constexpr ImU32 cRegionGapColor    = IM_COL32(210, 100, 100, 150);
 
 namespace {
 
@@ -660,13 +660,13 @@ static void DrawVelocityScrollBar(const KeyMapFrame& frame)
 
 static void DrawGrabBar(ImDrawList* draw, const ImVec2& from, const ImVec2& to, ImGuiMouseCursor cursor)
 {
-    draw->AddLine(from, to, GetPianoRollPalette().grabBar, 2.0f);
+    draw->AddLine(from, to, ImGui::GetColorU32(ImGuiCol_CheckMark), 2.0f);
     ImGui::SetMouseCursor(cursor);
 }
 
 static bool DrawKeyRegionGap(const KeyMapFrame& frame, const ImVec2& gapMin, const ImVec2& gapMax, ImGuiID id)
 {
-    frame.draw->AddRect(gapMin, gapMax, cRegionGapColor);
+    frame.draw->AddRect(gapMin, gapMax, uicolors::cRegionGap);
     ImGui::ItemAdd(ImRect(gapMin, gapMax), id);
 
     if (!frame.overVScrollbar && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -785,7 +785,7 @@ static void DrawVelocityRegion(KeyMapFrame& frame, const KeyRegionSpan& span, Ba
     if (!sDroppedWavPath.isEmpty() && !sWavDropTargetVel && frame.mouse.x >= ip0.x && frame.mouse.x <= ip1.x && frame.mouse.y >= ip0.y && frame.mouse.y <= ip1.y)
     {
         sWavDropTargetVel = velRegion;
-        frame.draw->AddRect(ip0, ip1, IM_COL32(120, 230, 140, 255), 0.0f, 0, 2.5f);
+        frame.draw->AddRect(ip0, ip1, ImGui::ColorConvertFloat4ToU32(uicolors::Success()), 0.0f, 0, 2.5f);
     }
 
     if (ImGui::IsItemHovered())
@@ -826,16 +826,9 @@ static void DrawVelocityRegion(KeyMapFrame& frame, const KeyRegionSpan& span, Ba
     }
 
     const bool selected = (sSubSelectedItem == velRegion);
-    ImU32 color = selected ? ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)) : ImGui::GetColorU32(ImGui::GetStyleColorVec4(ImGuiCol_Button));
-    ImU32 borderColor = selected ? IM_COL32(255, 226, 120, 255) : IM_COL32(0, 0, 0, 160);
-    ImU32 nameColor = IM_COL32_WHITE;
-
-    if (!gThemeIsDark)
-    {
-        color = ImGui::GetColorU32(ImGuiCol_CheckMark, selected ? cRegionLightSelectedAlpha : cRegionLightAlpha);
-        borderColor = selected ? ImGui::GetColorU32(ImGuiCol_CheckMark) : ImGui::GetColorU32(ImGuiCol_CheckMark, cRegionLightBorderAlpha);
-        nameColor = ImGui::GetColorU32(ImGuiCol_Text);
-    }
+    const ImU32 color = ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(selected ? cRegionSelectedFillAlpha : cRegionFillAlpha));
+    const ImU32 borderColor = ImGui::GetColorU32(ImGuiCol_CheckMark, selected ? 1.0f : cRegionBorderAlpha);
+    const ImU32 nameColor = ImGui::GetColorU32(ImGuiCol_Text);
 
     if (!frame.overVScrollbar && ImGui::IsItemClicked(ImGuiMouseButton_Left))
     {
@@ -980,7 +973,7 @@ static void DrawKeyMapGrid(const KeyMapFrame& frame)
 
         const f32 fontSize = ImGui::GetFontSize();
         const f32 labelX = frame.visibleCanvasPos.x + cVelocityTickWidth + ImGui::GetStyle().ItemInnerSpacing.x;
-        const ImU32 labelColor = (GetPianoRollPalette().gridLineVelTick & ~IM_COL32_A_MASK) | (static_cast<ImU32>(cVelocityLabelAlpha) << IM_COL32_A_SHIFT);
+        const ImU32 labelColor = uicolors::WithAlpha(GetPianoRollPalette().gridLineVelTick, cVelocityLabelAlpha);
         f32 labelY[IM_ARRAYSIZE(cVelLabels)];
         s32 labelNum = 0;
 

@@ -10,6 +10,7 @@
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Properties.h>
 #include <ui/project/References.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
@@ -242,8 +243,9 @@ static sead::FixedSafeString<16> FormatExportTime(f64 seconds, bool tenths = tru
 
 static constexpr f32 cExportTimelineHeightEm = 1.5f;
 static constexpr f32 cExportSegmentPadEm     = 0.6f;
-static constexpr f32 cExportLoopAlpha        = 0.60f;
-static constexpr f32 cExportLoopAlphaAlt     = 0.42f;
+
+static constexpr uicolors::Themed<f32> cExportLoopAlpha    = { 0.60f, 0.32f };
+static constexpr uicolors::Themed<f32> cExportLoopAlphaAlt = { 0.42f, 0.20f };
 
 static f64 DrawExportTimeline(const SoundExportSummary& summary)
 {
@@ -296,7 +298,7 @@ static f64 DrawExportTimeline(const SoundExportSummary& summary)
         const f32 maxX = calcX(sec + loopSec);
 
         drawList->AddRectFilled(ImVec2(minX, pos.y), ImVec2(maxX, pos.y + size.y), gapColor);
-        drawList->AddRectFilled(ImVec2(minX, pos.y), ImVec2(maxX, pos.y + size.y), ImGui::GetColorU32(ImGuiCol_CheckMark, i % 2 == 0 ? cExportLoopAlpha : cExportLoopAlphaAlt));
+        drawList->AddRectFilled(ImVec2(minX, pos.y), ImVec2(maxX, pos.y + size.y), ImGui::GetColorU32(ImGuiCol_CheckMark, i % 2 == 0 ? uicolors::Pick(cExportLoopAlpha) : uicolors::Pick(cExportLoopAlphaAlt)));
         drawLabel(minX, maxX, sead::FormatFixedSafeString<16>(messages::exporting::cSegmentLoopFormat, i + 1).cstr());
 
         sec += loopSec;
@@ -307,7 +309,7 @@ static f64 DrawExportTimeline(const SoundExportSummary& summary)
     {
         const f32 minX = calcX(sec);
         const f32 maxX = pos.x + size.x;
-        const ImU32 fromColor = isLoop ? ImGui::GetColorU32(ImGuiCol_CheckMark, loopCount % 2 == 0 ? cExportLoopAlpha : cExportLoopAlphaAlt) : baseColor;
+        const ImU32 fromColor = isLoop ? ImGui::GetColorU32(ImGuiCol_CheckMark, loopCount % 2 == 0 ? uicolors::Pick(cExportLoopAlpha) : uicolors::Pick(cExportLoopAlphaAlt)) : baseColor;
 
         drawList->AddRectFilled(ImVec2(minX, pos.y), ImVec2(maxX, pos.y + size.y), gapColor);
         drawList->AddRectFilledMultiColor(ImVec2(minX, pos.y), ImVec2(maxX, pos.y + size.y), fromColor, 0, 0, fromColor);

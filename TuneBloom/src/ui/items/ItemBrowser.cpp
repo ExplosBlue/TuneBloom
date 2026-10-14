@@ -1,12 +1,12 @@
 #include <ui/items/ItemBrowser.h>
 
+#include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemSelector.h>
 #include <ui/widgets/ListFilter.h>
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Widgets.h>
-#include <ui/widgets/WindowAnimation.h>
 
 #include <bfsar/player/SoundPlayer.h>
 #include <bfsar/files/WaveFile.h>
@@ -55,7 +55,7 @@ static constexpr f32 cItemBrowserHeightEm = 32.0f;
 static constexpr f32 cDetailWidthEm       = 21.0f;
 static constexpr f32 cDetailLabelEm       = 7.5f;
 static constexpr f32 cWaveformHeightEm    = 7.0f;
-static constexpr f32 cButtonWidthEm       = 6.0f;
+static constexpr f32 cFooterGapEm         = 0.6f;
 static constexpr s32 cPageRows            = 10;
 static constexpr s32 cPeakNum             = 512;
 
@@ -261,7 +261,7 @@ static void DrawWaveDetails()
 
         ImGui::BeginDisabled(!canPlay);
 
-        if (ImGui::Button(playing ? ICON_LC_SQUARE "###Preview" : ICON_LC_PLAY "###Preview", ImVec2(ImGui::GetFrameHeight() * 1.5f, 0.0f)))
+        if (PlayToggleButton(playing ? TransportGlyph::Stop : TransportGlyph::Play, "###Preview", ImVec2(ImGui::GetFrameHeight() * 1.5f, 0.0f), playing))
         {
             if (playing)
                 StopPreview();
@@ -554,9 +554,6 @@ static bool BeginBrowserPopup(Item::ItemType itemType, const char* customTitle)
     ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(size.x, viewport->Size.x * 0.9f), std::min(size.y, viewport->Size.y * 0.9f)), ImGuiCond_FirstUseEver);
 
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-    background.w = 1.0f;
-
     sead::FixedSafeString<64> title;
     if (customTitle)
         title = customTitle;
@@ -566,12 +563,8 @@ static bool BeginBrowserPopup(Item::ItemType itemType, const char* customTitle)
     const sead::FormatFixedSafeString<128> popupName("%s %s%s", isWave ? ICON_LC_AUDIO_WAVEFORM : ICON_LC_LIST, title.cstr(), popupId);
 
     bool open = true;
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, background);
-    ImGui::PushStyleColor(ImGuiCol_ResizeGrip, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    const bool visible = ImGui::BeginPopupModal(popupName.cstr(), &open, ImGuiWindowFlags_NoScrollbar);
-    ImGui::PopStyleColor(2);
 
-    if (!visible)
+    if (!BeginDialog(popupName.cstr(), &open, ImGuiWindowFlags_NoScrollbar))
     {
         if (!open)
             ForgetHighlight();
@@ -579,39 +572,38 @@ static bool BeginBrowserPopup(Item::ItemType itemType, const char* customTitle)
         return false;
     }
 
-    AnimateWindow(WindowAnimation::Dialog);
-
     return true;
 }
 
-static void DrawBrowserFooter(const Item::List& list, Item::ItemType itemType, s32 rowNum, bool allowNone, const char* acceptLabel, f32 em, BrowserResult* result)
+static void DrawBrowserFooter(const Item::List& list, Item::ItemType itemType, s32 rowNum, bool allowNone, const char* acceptLabel, BrowserResult* result)
 {
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 buttonWidth = ImFloor(em * cButtonWidthEm);
-    const s32 buttonNum = allowNone ? 3 : 2;
+    const char* selectLabel = acceptLabel ? acceptLabel : messages::browser::cSelect;
 
     ImGui::AlignTextToFramePadding();
     PushItemTablePadding();
     DrawItemCount(rowNum, list.size(), GetItemTypeName(itemType));
     ImGui::PopStyleVar();
 
-    ImGui::SameLine(ImGui::GetContentRegionMax().x - buttonWidth * buttonNum - style.ItemSpacing.x * (buttonNum - 1));
+    ImGui::SameLine();
 
     if (allowNone)
     {
-        if (ImGui::Button(messages::common::cNone, ImVec2(buttonWidth, 0.0f)))
-            result->acceptNone = true;
+        BeginDialogFooter({ messages::common::cNone, selectLabel, messages::common::cCancel }, false);
 
-        ImGui::SameLine();
+        if (DialogButton(messages::common::cNone))
+            result->acceptNone = true;
+    }
+    else
+    {
+        BeginDialogFooter({ selectLabel, messages::common::cCancel }, false);
     }
 
     ImGui::BeginDisabled(!sHighlight);
-    if (ImGui::Button(acceptLabel ? acceptLabel : messages::browser::cSelect, ImVec2(buttonWidth, 0.0f)))
+    if (DialogButton(selectLabel))
         result->accept = true;
     ImGui::EndDisabled();
 
-    ImGui::SameLine();
-    if (ImGui::Button(messages::common::cCancel, ImVec2(buttonWidth, 0.0f)))
+    if (DialogButton(messages::common::cCancel))
         result->close = true;
 }
 
@@ -646,7 +638,6 @@ static bool DrawBrowserPopup(const Item::List& list, Item::ItemType itemType, It
 
     BrowserResult result;
 
-    // Search
     if (ListSearchField("##Query", sQuery, sizeof(sQuery), 0.0f, &sCaseSensitive, sFocusSearch))
     {
         sRowsDirty = true;
@@ -655,7 +646,8 @@ static bool DrawBrowserPopup(const Item::List& list, Item::ItemType itemType, It
 
     sFocusSearch = false;
 
-    const f32 footerHeight = ImGui::GetFrameHeight() + style.ItemSpacing.y;
+    const f32 footerGap = ImFloor(em * cFooterGapEm);
+    const f32 footerHeight = CalcDialogFooterHeight() + footerGap;
     const f32 detailWidth = isWave ? ImFloor(em * cDetailWidthEm) + style.ItemSpacing.x : 0.0f;
     const f32 bodyHeight = std::max(em * 6.0f, ImGui::GetContentRegionAvail().y - footerHeight);
 
@@ -671,7 +663,8 @@ static bool DrawBrowserPopup(const Item::List& list, Item::ItemType itemType, It
         ImGui::EndChild();
     }
 
-    DrawBrowserFooter(list, itemType, rowNum, allowNone, acceptLabel, em, &result);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + footerGap - style.ItemSpacing.y);
+    DrawBrowserFooter(list, itemType, rowNum, allowNone, acceptLabel, &result);
 
     if (sHighlight && (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)))
         result.accept = true;

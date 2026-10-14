@@ -14,10 +14,11 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/project/ProjectViews.h>
 #include <ui/widgets/Properties.h>
-#include <ui/widgets/TimeUtil.h>
 #include <ui/file/RecentFiles.h>
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>
+#include <ui/widgets/TimeUtil.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/widgets/WindowAnimation.h>
 #include <ui/app/Workspace.h>
@@ -87,8 +88,9 @@ static constexpr f32 cCardGapEm      = 0.6f;
 static constexpr f32 cMidiNotesHeightEm = 7.0f;
 static constexpr f32 cUIScales[]        = { 1.0f, 1.25f, 1.5f };
 
-static constexpr f32 cNavTintAlpha    = 0.25f;
-static constexpr f32 cSliderFillAlpha = 0.55f;
+static constexpr f32 cNavTintAlpha = 0.25f;
+
+static constexpr uicolors::Themed<f32> cSliderFillAlpha = { 0.55f, 0.22f };
 
 static constexpr size_t cFolderTextMax = 22;
 
@@ -96,20 +98,20 @@ static constexpr s32 cBackupCountMax      = 100;
 static constexpr s32 cBackupDefaultPreset = 2;
 static constexpr s32 cSampleRateDefault   = 5;
 
-static constexpr f32 cAccentSaturation = 0.50f;
-static constexpr f32 cAccentValue      = 0.60f;
-static constexpr f32 cAccentHueMax     = 359.0f / 360.0f;
-static constexpr f32 cBrightnessMin   = 0.3f;
-static constexpr f32 cBrightnessMax    = 2.5f;
-static constexpr f32 cSaturationMin    = 0.0f;
-static constexpr f32 cSaturationMax    = 2.0f;
-static constexpr f32 cContrastMin      = 0.5f;
-static constexpr f32 cContrastMax      = 1.8f;
-static constexpr f32 cGradientMin      = 0.0f;
-static constexpr f32 cGradientMax      = 3.0f;
+static constexpr f32 cAccentSaturation        = 0.50f;
+static constexpr f32 cAccentValue             = 0.60f;
+static constexpr f32 cAccentHueMax            = 359.0f / 360.0f;
+static constexpr f32 cHuePreviewSaturationMin = 0.5f;
+static constexpr f32 cHuePreviewValueMin      = 0.5f;
+static constexpr f32 cBrightnessMin           = 0.3f;
+static constexpr f32 cBrightnessMax           = 2.5f;
+static constexpr f32 cSaturationMin           = 0.0f;
+static constexpr f32 cSaturationMax           = 2.0f;
+static constexpr f32 cContrastMin             = 0.5f;
+static constexpr f32 cContrastMax             = 1.8f;
+static constexpr f32 cGradientMin             = 0.0f;
+static constexpr f32 cGradientMax             = 3.0f;
 
-static const ImVec4 cMidiConnectedColor  = ImVec4(0.45f, 0.85f, 0.50f, 1.00f);
-static const ImVec4 cMidiNotFoundColor   = ImVec4(0.82f, 0.56f, 0.30f, 1.00f);
 static const BackupPreset cBackupPresets[] = {
     { messages::common::cOff,       0  },
     { messages::preferences::cBackupMinute,    1  },
@@ -165,9 +167,9 @@ static ImDrawList* BeginSliderFill()
     drawList->ChannelsSplit(2);
     drawList->ChannelsSetCurrent(1);
 
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, uicolors::cTransparent);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, uicolors::cTransparent);
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, uicolors::cTransparent);
 
     return drawList;
 }
@@ -187,7 +189,7 @@ static void EndSliderFill(ImDrawList* drawList, f32 fraction)
 
     drawList->ChannelsSetCurrent(0);
     drawList->AddRectFilled(min, max, ImGui::GetColorU32(frameColor), style.FrameRounding);
-    drawList->AddRectFilled(min, ImVec2(fillX, max.y), ImGui::GetColorU32(ImGuiCol_SliderGrab, cSliderFillAlpha), style.FrameRounding, ImDrawFlags_RoundCornersLeft);
+    drawList->AddRectFilled(min, ImVec2(fillX, max.y), ImGui::GetColorU32(ImGuiCol_SliderGrab, uicolors::Pick(cSliderFillAlpha)), style.FrameRounding, ImDrawFlags_RoundCornersLeft);
     drawList->ChannelsMerge();
 }
 
@@ -211,9 +213,11 @@ static bool DrawThemeCard(const char* label, f32 width, bool dark, bool selected
     memcpy(colors, style.Colors, sizeof(colors));
     CalcThemeColors(gAccentColor, dark, colors);
 
-    auto color = [&colors](ImGuiCol index, f32 alpha = 1.0f)
+    auto color = [&colors](ImGuiCol index)
     {
-        return ImGui::ColorConvertFloat4ToU32(ImVec4(colors[index].x, colors[index].y, colors[index].z, alpha));
+        const ImVec4& backdrop = colors[ImGuiCol_WindowBg];
+
+        return ImGui::ColorConvertFloat4ToU32(uicolors::Opaque(ImLerp(backdrop, colors[index], colors[index].w)));
     };
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -685,14 +689,14 @@ static bool DrawMidiDeviceRow(const char* name, bool* on, bool present)
 
     if (!present)
     {
-        ImGui::TextColored(cMidiNotFoundColor, "%s", messages::preferences::cMidiNotFound);
+        ImGui::TextColored(uicolors::Warning(), "%s", messages::preferences::cMidiNotFound);
 
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
             ImGui::SetTooltip("%s", messages::preferences::cMidiNotFoundDetail);
     }
     else if (*on)
     {
-        ImGui::TextColored(cMidiConnectedColor, "%s", messages::preferences::cMidiConnected);
+        ImGui::TextColored(uicolors::Success(), "%s", messages::preferences::cMidiConnected);
     }
 
     ImGui::PopID();
@@ -827,17 +831,24 @@ static void DrawMidiPage()
     sMidiNotesHeight = ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y - top - height;
 }
 
-static ImU32 GetAccentColor(f32 hue)
+static ImU32 GetAccentPreviewColor(f32 hue)
 {
-    ImVec4 color(0.0f, 0.0f, 0.0f, 1.0f);
-    ImGui::ColorConvertHSVtoRGB(hue, cAccentSaturation, cAccentValue, color.x, color.y, color.z);
+    const ImVec4 accent = GetThemeAccent();
 
-    return ImGui::ColorConvertFloat4ToU32(color);
+    f32 accentHue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, accentHue, saturation, value);
+
+    saturation = ImMax(saturation, cHuePreviewSaturationMin);
+    value = ImMax(value, cHuePreviewValueMin);
+
+    return ImGui::ColorConvertFloat4ToU32(uicolors::FromHsv(hue, saturation, value));
 }
 
 static bool IsDefaultAccentColor()
 {
-    return gAccentColor.x == cDefaultAccentColor.x && gAccentColor.y == cDefaultAccentColor.y && gAccentColor.z == cDefaultAccentColor.z && gAccentColor.w == cDefaultAccentColor.w;
+    return gAccentColor == uicolors::cAccentDefault;
 }
 
 static bool DrawHueSlider(const char* id, f32* hue, bool* done)
@@ -868,8 +879,8 @@ static bool DrawHueSlider(const char* id, f32* hue, bool* done)
     {
         const f32 start = static_cast<f32>(i) / cSegmentNum;
         const f32 end = static_cast<f32>(i + 1) / cSegmentNum;
-        const ImU32 startColor = GetAccentColor(start * cAccentHueMax);
-        const ImU32 endColor = GetAccentColor(end * cAccentHueMax);
+        const ImU32 startColor = GetAccentPreviewColor(start * cAccentHueMax);
+        const ImU32 endColor = GetAccentPreviewColor(end * cAccentHueMax);
 
         const ImVec2 min(ImFloor(trackStart + trackWidth * start), pos.y);
         const ImVec2 max(ImFloor(trackStart + trackWidth * end), pos.y + size.y);
@@ -877,19 +888,28 @@ static bool DrawHueSlider(const char* id, f32* hue, bool* done)
         drawList->AddRectFilledMultiColor(min, max, startColor, endColor, endColor, startColor);
     }
 
-    // The ends below the handle
-    drawList->AddRectFilled(pos, ImVec2(ImFloor(trackStart) + 1.0f, pos.y + size.y), GetAccentColor(0.0f), style.FrameRounding, ImDrawFlags_RoundCornersLeft);
-    drawList->AddRectFilled(ImVec2(ImFloor(trackStart + trackWidth) - 1.0f, pos.y), pos + size, GetAccentColor(cAccentHueMax), style.FrameRounding, ImDrawFlags_RoundCornersRight);
+    drawList->AddRectFilled(pos, ImVec2(ImFloor(trackStart) + 1.0f, pos.y + size.y), GetAccentPreviewColor(0.0f), style.FrameRounding, ImDrawFlags_RoundCornersLeft);
+    drawList->AddRectFilled(ImVec2(ImFloor(trackStart + trackWidth) - 1.0f, pos.y), pos + size, GetAccentPreviewColor(cAccentHueMax), style.FrameRounding, ImDrawFlags_RoundCornersRight);
 
     const f32 handlePos = sead::Mathf::min(*hue / cAccentHueMax, 1.0f);
     const f32 handleX = ImFloor(trackStart + trackWidth * handlePos - handleWidth * 0.5f);
     const ImVec2 handleMin(handleX, pos.y);
     const ImVec2 handleMax(handleX + handleWidth, pos.y + size.y);
 
-    drawList->AddRectFilled(handleMin, handleMax, GetAccentColor(*hue), style.GrabRounding);
+    drawList->AddRectFilled(handleMin, handleMax, GetAccentPreviewColor(*hue), style.GrabRounding);
     drawList->AddRect(handleMin, handleMax, ImGui::GetColorU32(ImGuiCol_Text, (held || hovered) ? 1.0f : 0.7f), style.GrabRounding, 0, held ? 2.0f : 1.0f);
 
     return held;
+}
+
+static void DrawThemeChoice(const char* label, f32 width, bool dark, bool* changed, bool* done)
+{
+    if (!DrawThemeCard(label, width, dark, IsDarkTheme() == dark) || IsDarkTheme() == dark)
+        return;
+
+    SetDarkTheme(dark);
+    *changed = true;
+    *done = true;
 }
 
 static void DrawThemeCards(bool* changed, bool* done)
@@ -900,49 +920,42 @@ static void DrawThemeCards(bool* changed, bool* done)
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(em * cRowGapEm));
 
-    if (DrawThemeCard(messages::mainmenu::cThemeDark, width, true, gThemeIsDark) && !gThemeIsDark)
-    {
-        gThemeIsDark = true;
-        *changed = true;
-        *done = true;
-    }
+    DrawThemeChoice(messages::mainmenu::cThemeDark, width, true, changed, done);
 
     ImGui::SameLine(0.0f, gap);
+    DrawThemeChoice(messages::mainmenu::cThemeLight, width, false, changed, done);
+}
 
-    if (DrawThemeCard(messages::mainmenu::cThemeLight, width, false, !gThemeIsDark) && gThemeIsDark)
+static void DrawHueRow(bool* changed, bool* done)
+{
+    f32 hue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(gAccentColor.x, gAccentColor.y, gAccentColor.z, hue, saturation, value);
+
+    DrawRowLabel(messages::preferences::cHueLabel);
+    if (DrawHueSlider("##Hue", &hue, done))
     {
-        gThemeIsDark = false;
+        ImGui::ColorConvertHSVtoRGB(hue, cAccentSaturation, cAccentValue, gAccentColor.x, gAccentColor.y, gAccentColor.z);
+        gAccentColor.w = 1.0f;
+        *changed = true;
+    }
+
+    const bool isDefault = IsDefaultAccentColor();
+
+    if (!isDefault && ImGui::IsItemClicked(ImGuiMouseButton_Right))
+    {
+        gAccentColor = uicolors::cAccentDefault;
         *changed = true;
         *done = true;
     }
+
+    DrawResetTooltip(isDefault);
 }
 
 static void DrawColorRows(bool* changed, bool* done)
 {
-    // Hue
-    {
-        f32 hue, saturation, value;
-        ImGui::ColorConvertRGBtoHSV(gAccentColor.x, gAccentColor.y, gAccentColor.z, hue, saturation, value);
-
-        DrawRowLabel(messages::preferences::cHueLabel);
-        if (DrawHueSlider("##Hue", &hue, done))
-        {
-            ImGui::ColorConvertHSVtoRGB(hue, cAccentSaturation, cAccentValue, gAccentColor.x, gAccentColor.y, gAccentColor.z);
-            gAccentColor.w = 1.0f;
-            *changed = true;
-        }
-
-        const bool isDefault = IsDefaultAccentColor();
-
-        if (!isDefault && ImGui::IsItemClicked(ImGuiMouseButton_Right))
-        {
-            gAccentColor = cDefaultAccentColor;
-            *changed = true;
-            *done = true;
-        }
-
-        DrawResetTooltip(isDefault);
-    }
+    DrawHueRow(changed, done);
 
     const ThemeAdjust defaults;
     ThemeAdjust& adjust = GetThemeAdjust();
@@ -976,7 +989,7 @@ static void DrawAppearancePage()
 
     if (reset)
     {
-        gAccentColor = cDefaultAccentColor;
+        gAccentColor = uicolors::cAccentDefault;
         GetThemeAdjust() = ThemeAdjust();
 
         changed = true;
@@ -987,7 +1000,7 @@ static void DrawAppearancePage()
         sThemeChanged = true;
 
     if (done)
-        SaveAccentColor();
+        SaveThemeConfig();
 }
 
 static bool DrawTooltipDelayRow(f32* seconds)
@@ -1199,8 +1212,7 @@ void DrawPreferencesWindow()
     CenterNextDialog();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ImFloor(em * cWindowPadEm), ImFloor(em * cWindowPadEm)));
 
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
 
     ImGui::PushStyleColor(ImGuiCol_PopupBg, background);
 
@@ -1289,7 +1301,7 @@ void DrawPreferencesWindow()
     if (sThemeChanged)
     {
         sThemeChanged = false;
-        ApplyThemeFromAccent(gAccentColor);
+        ApplyTheme();
     }
 
     const f32 closeWidth = ImFloor(em * cCloseWidthEm);

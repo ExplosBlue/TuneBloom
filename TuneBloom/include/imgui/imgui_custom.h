@@ -29,6 +29,8 @@ void AddRectFilledRaised(ImDrawList* draw_list, const ImVec2& p_min, const ImVec
 void SetSurfaceGradient(float amount);
 void AddRectFilledSurface(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding = 0.0f, ImDrawFlags flags = 0);
 
+float GetIconStrokeThickness(float font_size);
+
 void SetHoverAnimation(bool enabled);
 float GetHoverRatio(ImGuiID id, bool hovered);
 ImU32 GetHoverColorU32(ImGuiID id, bool hovered, bool active, ImGuiCol idle_col, ImGuiCol hovered_col, ImGuiCol active_col, float alpha_mul = 1.0f);

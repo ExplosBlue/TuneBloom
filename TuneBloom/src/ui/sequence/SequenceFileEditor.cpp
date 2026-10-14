@@ -12,6 +12,7 @@
 #include <ui/sequence/SeqEditor.h>
 #include <ui/sequence/SeqManual.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <imgui/imgui.h>
 #include <imgui/imgui_custom.h>
@@ -32,7 +33,7 @@ void SequenceFile::onOpenFileWindow()
     SEAD_ASSERT(!mTextEditor);
     mTextEditor = new TextEditor();
     mTextEditor->SetLanguageDefinition(GetSeqLanguageDefinition());
-    mTextEditor->SetPalette(GetSeqPalette(gThemeIsDark));
+    mTextEditor->SetPalette(GetSeqPalette());
 
     mIsDirty = false;
     mHasPlayMarkers = false;
@@ -282,8 +283,7 @@ void SequenceFile::drawBankSelector_(const char* name, f32 width)
         ImGui::EndTooltip();
     }
 
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
 
     ImGui::SetNextWindowPos(popupPos, ImGuiCond_Appearing, ImVec2(1.0f, 0.0f));
 
@@ -392,7 +392,7 @@ void SequenceFile::calcToolbarState_(SeqToolbarState& bar) const
     if (mTextEditor->GetFirstError(errorLine, errorText))
     {
         bar.state.format("%s %s", ICON_LC_CIRCLE_X, messages::sequence::cStateError);
-        bar.stateColor = cSeqErrorColor;
+        bar.stateColor = uicolors::Marker();
     }
     else if (bar.canCompile)
     {
@@ -458,7 +458,7 @@ void SequenceFile::calcToolbarState_(SeqToolbarState& bar) const
 void SequenceFile::drawTransportTools_(const SeqToolbarState& bar)
 {
     // Play
-    if (DrawIconButton("##Play", ICON_LC_PLAY, bar.buttonSize, bar.frame, bar.em, bar.playing))
+    if (DrawGlyphButton("##Play", TransportGlyph::Play, bar.buttonSize, bar.frame, bar.playing, IconButtonTint::Play))
         play_(mTextEditor->GetCursorBlockHeader());
     ImGui::SetItemTooltip("%s", messages::sequence::cPlayTooltip);
 
@@ -664,7 +664,7 @@ void SequenceFile::drawFileUI()
     if (mAnnotationsDirty || ImGui::GetFrameCount() % 30 == 0)
         updateAnnotations_();
 
-    mTextEditor->SetPalette(GetSeqPalette(gThemeIsDark));
+    mTextEditor->SetPalette(GetSeqPalette());
 
     const f32 availWidth = ImGui::GetContentRegionAvail().x;
     const f32 splitterWidth = ImGui::GetStyle().ItemSpacing.x;

@@ -8,6 +8,7 @@
 #include <ui/widgets/PanelLayout.h>
 #include <ui/items/Selection.h>
 #include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 
 #include <bfsar/files/WaveFile.h>
 
@@ -93,20 +94,6 @@ static const char* const cUseNames[cUseNum] = {
     messages::item::cStatsUseUnused
 };
 
-static const ImVec4 cUseColorsDark[cUseNum] = {
-    ImVec4(0.224f, 0.529f, 0.898f, 1.0f),
-    ImVec4(0.851f, 0.349f, 0.149f, 1.0f),
-    ImVec4(0.098f, 0.620f, 0.439f, 1.0f),
-    ImVec4(0.537f, 0.529f, 0.506f, 1.0f)
-};
-
-static const ImVec4 cUseColorsLight[cUseNum] = {
-    ImVec4(0.165f, 0.471f, 0.839f, 1.0f),
-    ImVec4(0.922f, 0.408f, 0.204f, 1.0f),
-    ImVec4(0.106f, 0.686f, 0.478f, 1.0f),
-    ImVec4(0.537f, 0.529f, 0.506f, 1.0f)
-};
-
 static bool sShowStreamWaves = true;
 static bool sCaseSensitive = false;
 static char sQuery[128] = "";
@@ -114,7 +101,10 @@ static s32 sIsolatedUse = cUseAll;
 
 static ImVec4 GetUseColor(s32 use)
 {
-    return gThemeIsDark ? cUseColorsDark[use] : cUseColorsLight[use];
+    if (use == static_cast<s32>(WaveUse::Unused))
+        return ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+
+    return GetSeriesColor(use);
 }
 
 static ImU32 MixUseColor(s32 use, f32 mix)
@@ -127,12 +117,13 @@ static ImU32 CalcBlockColor(s32 use, f32 sizeRatio)
     const f32 shift = sizeRatio * 2.0f - 1.0f;
 
     const ImVec4 color = GetUseColor(use);
-    f32 h, s, v;
-    ImGui::ColorConvertRGBtoHSV(color.x, color.y, color.z, h, s, v);
-    h = ImFmod(h + shift * cBlockHueRange + 1.0f, 1.0f);
+    f32 hue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(color.x, color.y, color.z, hue, saturation, value);
+    hue = ImFmod(hue + shift * cBlockHueRange + 1.0f, 1.0f);
 
-    ImVec4 shaded(0.0f, 0.0f, 0.0f, color.w);
-    ImGui::ColorConvertHSVtoRGB(h, s, v, shaded.x, shaded.y, shaded.z);
+    const ImVec4 shaded = uicolors::FromHsv(hue, saturation, value, color.w);
 
     return ImGui::GetColorU32(ImLerp(ImGui::GetStyleColorVec4(ImGuiCol_ChildBg), shaded, cBlockMix + shift * cBlockMixRange));
 }

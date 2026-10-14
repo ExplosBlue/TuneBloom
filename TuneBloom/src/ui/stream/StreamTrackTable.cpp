@@ -2,6 +2,7 @@
 
 #include <ui/Messages.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <imgui/imgui_custom.h>
 
@@ -139,8 +140,8 @@ static void DrawTrackIndexCell(const TrackContext& ctx, s32 index, f32 rowHeight
 
     if (selected)
     {
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_CheckMark, cTrackSelectedAlpha));
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_CheckMark, cTrackIndexAlpha));
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackSelectedAlpha)));
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackIndexAlpha)));
     }
     else if (hoverRatio > 0.0f)
     {

@@ -1,157 +1,195 @@
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/settings/Theme.h>
 
+#include <ui/settings/UiColors.h>
+
 #include <imgui/imgui_custom.h>
 #include <imgui/imgui_internal.h>
 
 #include <app/Utilll.h>
 
-ImVec4 gAccentColor = cDefaultAccentColor;
-bool gThemeIsDark = true;
+static constexpr f32 cKeepTokenAlpha      = -1.0f;
+static constexpr f32 cGrayscaleSaturation = 0.05f;
+static constexpr f32 cLightTrackInkMix    = 0.13f;
+static constexpr f32 cSeriesHueStep       = 0.618034f;
+static constexpr f32 cSeriesSaturationMin = 0.5f;
+static constexpr f32 cAccentTextMix       = 0.3f;
+
+static constexpr uicolors::Themed<f32> cWindowShadowAlpha = { 0.50f, 0.20f };
+static constexpr uicolors::Themed<f32> cRaisedGradient    = { 0.03f, 0.015f };
+static constexpr uicolors::Themed<f32> cSurfaceGradient   = { 0.02f, 0.0075f };
+static constexpr uicolors::Themed<f32> cRecessedPaneValue = { 0.72f, 0.965f };
+
+namespace
+{
+
+struct ThemeSlot
+{
+    ImVec4 color;
+    bool tint;
+    f32 alpha;
+};
+
+struct ThemeRole
+{
+    ImGuiCol index;
+    ThemeSlot dark;
+    ThemeSlot light;
+};
+
+constexpr ThemeSlot Tinted(const ImVec4& color, f32 alpha = cKeepTokenAlpha)
+{
+    return { color, true, alpha };
+}
+
+constexpr ThemeSlot Fixed(const ImVec4& color)
+{
+    return { color, false, cKeepTokenAlpha };
+}
+
+}
+
+ImVec4 gAccentColor = uicolors::cAccentDefault;
+static bool sThemeIsDark = true;
 
 static ThemeAdjust sThemeAdjust;
 static bool sWindowShadows = true;
+
+bool IsDarkTheme()
+{
+    return sThemeIsDark;
+}
+
+void SetDarkTheme(bool dark)
+{
+    sThemeIsDark = dark;
+}
 
 ThemeAdjust& GetThemeAdjust()
 {
     return sThemeAdjust;
 }
 
-static ImVec4 HSV(float h, float s, float v, float a = 1.0f)
+static ImVec4 FromAdjustedHsv(f32 hue, f32 saturation, f32 value, f32 alpha)
 {
-    s *= sThemeAdjust.saturation;
-    if (s > 1.0f) s = 1.0f;
-    if (s < 0.0f) s = 0.0f;
+    saturation = ImSaturate(saturation * sThemeAdjust.saturation);
+    value = ImSaturate((value * sThemeAdjust.brightness - 0.5f) * sThemeAdjust.contrast + 0.5f);
 
-    v *= sThemeAdjust.brightness;
-    v = (v - 0.5f) * sThemeAdjust.contrast + 0.5f;
-    if (v > 1.0f) v = 1.0f;
-    if (v < 0.0f) v = 0.0f;
-
-    ImVec4 c;
-    ImGui::ColorConvertHSVtoRGB(h, s, v, c.x, c.y, c.z);
-    c.w = a;
-    return c;
+    return uicolors::FromHsv(hue, saturation, value, alpha);
 }
 
-static constexpr float cDimTextSaturation = 0.20f;
-static constexpr float cDimTextLuma       = 0.50f;
-
-static ImVec4 Neutral(float h, float s, float luma)
+static ImVec4 Tint(f32 hue, const ImVec4& token, f32 alpha)
 {
-    s *= sThemeAdjust.saturation;
-    if (s > 1.0f) s = 1.0f;
-    if (s < 0.0f) s = 0.0f;
+    f32 tokenHue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(token.x, token.y, token.z, tokenHue, saturation, value);
 
-    ImVec4 c;
-    ImGui::ColorConvertHSVtoRGB(h, s, 1.0f, c.x, c.y, c.z);
+    return FromAdjustedHsv(hue, saturation, value, alpha < 0.0f ? token.w : alpha);
+}
 
-    const float scale = luma / (0.2126f * c.x + 0.7152f * c.y + 0.0722f * c.z);
-    return ImVec4(ImMin(c.x * scale, 1.0f), ImMin(c.y * scale, 1.0f), ImMin(c.z * scale, 1.0f), 1.0f);
+static ImVec4 Neutral(f32 hue, f32 saturation, f32 luma)
+{
+    const ImVec4 base = uicolors::FromHsv(hue, ImSaturate(saturation * sThemeAdjust.saturation), 1.0f);
+
+    const f32 scale = luma / (0.2126f * base.x + 0.7152f * base.y + 0.0722f * base.z);
+
+    return ImVec4(ImMin(base.x * scale, 1.0f), ImMin(base.y * scale, 1.0f), ImMin(base.z * scale, 1.0f), 1.0f);
 }
 
 void CalcThemeColors(ImVec4 accent, bool dark, ImVec4* colors)
 {
-    float h, s, v;
-    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, h, s, v);
-    if (s < 0.05f) h = 0.0f;
+    using namespace uicolors::token;
 
-    auto C = [&](float s, float v, float a = 1.0f) { return HSV(h, s, v, a); };
-    auto D = [&](float ds, float dv, float ls, float lv) { return dark ? C(ds, dv) : C(ls, lv); };
-    auto F = [&](ImVec4 d, ImVec4 l) { return dark ? d : l; };
+    static constexpr ThemeRole cRoles[] =
+    {
+        { ImGuiCol_Text,                  Tinted(cText),                     Fixed(uicolors::light::cText) },
+        { ImGuiCol_WindowBg,              Tinted(cWindow),                   Tinted(uicolors::light::cWindowBg) },
+        { ImGuiCol_ChildBg,               Tinted(cPanel),                    Tinted(uicolors::light::cChildBg) },
+        { ImGuiCol_PopupBg,               Tinted(cCard),                     Tinted(uicolors::light::cPopupBg) },
+        { ImGuiCol_Border,                Tinted(cLine),                     Tinted(uicolors::light::cBorder) },
+        { ImGuiCol_FrameBg,               Tinted(cControl),                  Tinted(uicolors::light::cFrameBg) },
+        { ImGuiCol_FrameBgHovered,        Tinted(cHover),                    Tinted(uicolors::light::cFrameBgHovered) },
+        { ImGuiCol_FrameBgActive,         Tinted(cLine),                     Tinted(uicolors::light::cFrameBgActive) },
+        { ImGuiCol_TitleBg,               Tinted(cPanel),                    Tinted(uicolors::light::cTitleBg) },
+        { ImGuiCol_TitleBgActive,         Tinted(cCard),                     Tinted(uicolors::light::cTitleBgActive) },
+        { ImGuiCol_TitleBgCollapsed,      Tinted(cWindow),                   Tinted(uicolors::light::cTitleBgCollapsed) },
+        { ImGuiCol_MenuBarBg,             Tinted(cPanel),                    Tinted(uicolors::light::cMenuBarBg) },
+        { ImGuiCol_ScrollbarBg,           Tinted(cPanel),                    Fixed(uicolors::light::cScrollbarBg) },
+        { ImGuiCol_ScrollbarGrab,         Tinted(cLine),                     Fixed(uicolors::light::cScrollbarGrab) },
+        { ImGuiCol_ScrollbarGrabHovered,  Tinted(cMuted),                    Fixed(uicolors::light::cScrollbarGrabHovered) },
+        { ImGuiCol_ScrollbarGrabActive,   Tinted(cAccent),                   Fixed(uicolors::light::cScrollbarGrabActive) },
+        { ImGuiCol_CheckMark,             Tinted(cAccent),                   Tinted(uicolors::light::cCheckMark) },
+        { ImGuiCol_SliderGrab,            Tinted(cAccent),                   Tinted(uicolors::light::cSliderGrab) },
+        { ImGuiCol_SliderGrabActive,      Tinted(cAccentSoft),               Tinted(uicolors::light::cSliderGrabActive) },
+        { ImGuiCol_Button,                Tinted(cButton),                   Tinted(uicolors::light::cButton) },
+        { ImGuiCol_ButtonHovered,         Tinted(cButtonHover),              Tinted(uicolors::light::cButtonHovered) },
+        { ImGuiCol_ButtonActive,          Tinted(cPressed),                  Tinted(uicolors::light::cButtonActive) },
+        { ImGuiCol_Header,                Tinted(cSelected),                 Tinted(uicolors::light::cHeader) },
+        { ImGuiCol_HeaderHovered,         Tinted(cHover),                    Tinted(uicolors::light::cHeaderHovered) },
+        { ImGuiCol_HeaderActive,          Tinted(cPressed),                  Tinted(uicolors::light::cHeaderActive) },
+        { ImGuiCol_Separator,             Tinted(cLine),                     Tinted(uicolors::light::cSeparator) },
+        { ImGuiCol_SeparatorHovered,      Tinted(cMuted),                    Tinted(uicolors::light::cSeparatorHovered) },
+        { ImGuiCol_SeparatorActive,       Tinted(cAccent),                   Tinted(uicolors::light::cSeparatorActive) },
+        { ImGuiCol_ResizeGrip,            Tinted(cLine),                     Fixed(uicolors::light::cResizeGrip) },
+        { ImGuiCol_ResizeGripHovered,     Tinted(cMuted),                    Fixed(uicolors::light::cResizeGripHovered) },
+        { ImGuiCol_ResizeGripActive,      Tinted(cAccent),                   Fixed(uicolors::light::cResizeGripActive) },
+        { ImGuiCol_Tab,                   Tinted(cPanel),                    Fixed(uicolors::cTransparent) },
+        { ImGuiCol_TabHovered,            Tinted(cHover),                    Tinted(uicolors::light::cTabHovered) },
+        { ImGuiCol_TabActive,             Tinted(cSelected),                 Tinted(uicolors::light::cTabActive) },
+        { ImGuiCol_TabUnfocused,          Tinted(cPanel),                    Fixed(uicolors::cTransparent) },
+        { ImGuiCol_TabUnfocusedActive,    Tinted(cControl),                  Tinted(uicolors::light::cTabUnfocusedActive) },
+        { ImGuiCol_DockingPreview,        Tinted(cAccent, 0.55f),            Tinted(uicolors::light::cDockingPreview) },
+        { ImGuiCol_DockingEmptyBg,        Tinted(cWindow),                   Tinted(uicolors::light::cDockingEmptyBg) },
+        { ImGuiCol_PlotLines,             Tinted(cText),                     Tinted(uicolors::light::cPlotLines) },
+        { ImGuiCol_PlotHistogram,         Tinted(cAccent),                   Tinted(uicolors::light::cPlotHistogram) },
+        { ImGuiCol_PlotHistogramHovered,  Tinted(cAccentSoft),               Tinted(uicolors::light::cPlotHistogramHovered) },
+        { ImGuiCol_TableHeaderBg,         Tinted(cCard),                     Tinted(uicolors::light::cTableHeaderBg) },
+        { ImGuiCol_TableBorderStrong,     Tinted(cLine),                     Tinted(uicolors::light::cTableBorderStrong) },
+        { ImGuiCol_TableBorderLight,      Tinted(cControl),                  Tinted(uicolors::light::cTableBorderLight) },
+        { ImGuiCol_TableRowBgAlt,         Tinted(cCard),                     Fixed(uicolors::light::cTableRowBgAlt) },
+        { ImGuiCol_TextSelectedBg,        Tinted(cAccent, 0.35f),            Tinted(uicolors::light::cTextSelectedBg) },
+        { ImGuiCol_NavHighlight,          Tinted(cAccent),                   Tinted(uicolors::light::cNavHighlight) },
+        { ImGuiCol_NavWindowingHighlight, Fixed(cNavWindowingHighlight),     Fixed(uicolors::light::cNavWindowingHighlight) },
+        { ImGuiCol_NavWindowingDimBg,     Fixed(cNavWindowingDimBg),         Fixed(uicolors::light::cNavWindowingDimBg) },
+        { ImGuiCol_ModalWindowDimBg,      Fixed(cModalWindowDimBg),          Fixed(uicolors::light::cModalWindowDimBg) },
+    };
 
-    colors[ImGuiCol_Text]              = F({0.92f, 0.92f, 0.93f, 0.90f}, {0.07f, 0.07f, 0.08f, 0.97f});
-    colors[ImGuiCol_TextDisabled]      = Neutral(h, cDimTextSaturation, cDimTextLuma);
+    f32 hue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, hue, saturation, value);
 
-    colors[ImGuiCol_WindowBg]          = D(0.40f, 0.17f, 0.012f, 0.950f);
-    colors[ImGuiCol_ChildBg]           = D(0.35f, 0.13f, 0.00f, 1.00f);
-    colors[ImGuiCol_PopupBg]           = dark ? C(0.38f, 0.15f, 0.85f) : C(0.01f, 0.985f, 0.98f);
-    colors[ImGuiCol_Border]            = dark ? C(0.30f, 0.40f, 0.65f) : C(0.04f, 0.78f, 0.90f);
-    colors[ImGuiCol_BorderShadow]      = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    if (saturation < cGrayscaleSaturation)
+        hue = 0.0f;
 
-    colors[ImGuiCol_FrameBg]           = D(0.42f, 0.22f, 0.02f, 0.895f);
-    colors[ImGuiCol_FrameBgHovered]    = dark ? C(0.45f, 0.32f, 0.40f) : C(0.03f, 0.86f);
-    colors[ImGuiCol_FrameBgActive]     = dark ? C(0.48f, 0.38f, 0.45f) : C(0.05f, 0.82f);
+    for (const ThemeRole& role : cRoles)
+    {
+        const ThemeSlot& slot = dark ? role.dark : role.light;
 
-    colors[ImGuiCol_TitleBg]           = dark ? C(0.30f, 0.12f, 0.83f) : C(0.015f, 0.905f);
-    colors[ImGuiCol_TitleBgActive]     = dark ? C(0.32f, 0.14f, 0.87f) : C(0.02f, 0.885f);
-    colors[ImGuiCol_TitleBgCollapsed]  = dark ? C(0.35f, 0.20f, 0.20f) : C(0.02f, 0.92f, 0.60f);
-    colors[ImGuiCol_MenuBarBg]         = dark ? C(0.35f, 0.13f, 0.80f) : C(0.012f, 0.93f);
+        colors[role.index] = slot.tint ? Tint(hue, slot.color, slot.alpha) : slot.color;
+    }
 
-    colors[ImGuiCol_ScrollbarBg]           = dark ? C(0.38f, 0.20f, 0.60f) : ImVec4(0.00f, 0.00f, 0.00f, 0.04f);
-    colors[ImGuiCol_ScrollbarGrab]         = dark ? C(0.40f, 0.38f, 0.51f) : ImVec4(0.00f, 0.00f, 0.00f, 0.28f);
-    colors[ImGuiCol_ScrollbarGrabHovered]  = dark ? C(0.45f, 0.48f, 1.00f) : ImVec4(0.00f, 0.00f, 0.00f, 0.36f);
-    colors[ImGuiCol_ScrollbarGrabActive]   = dark ? C(0.50f, 0.56f, 0.91f) : ImVec4(0.00f, 0.00f, 0.00f, 0.48f);
-
-    colors[ImGuiCol_CheckMark]             = dark ? C(0.60f, 0.80f, 0.83f) : C(0.80f, 0.92f);
-    colors[ImGuiCol_SliderGrab]            = dark ? C(0.40f, 0.45f, 0.62f) : C(0.78f, 0.92f);
-    colors[ImGuiCol_SliderGrabActive]      = dark ? C(0.50f, 0.65f, 0.84f) : C(0.88f, 0.80f);
-
-    colors[ImGuiCol_Button]                = dark ? C(0.50f, 0.60f, 0.49f) : C(0.30f, 0.20f, 0.07f);
-    colors[ImGuiCol_ButtonHovered]         = dark ? C(0.50f, 0.70f, 0.68f) : C(0.30f, 0.20f, 0.12f);
-    colors[ImGuiCol_ButtonActive]          = dark ? C(0.55f, 0.50f, 1.00f) : C(0.30f, 0.20f, 0.19f);
-
-    colors[ImGuiCol_Header]                = dark ? C(0.45f, 0.50f, 0.53f) : C(0.70f, 0.95f, 0.24f);
-    colors[ImGuiCol_HeaderHovered]         = dark ? C(0.50f, 0.65f, 0.28f) : C(0.60f, 0.95f, 0.10f);
-    colors[ImGuiCol_HeaderActive]          = dark ? C(0.55f, 0.55f, 0.60f) : C(0.70f, 0.90f, 0.36f);
-
-    colors[ImGuiCol_Separator]             = dark ? C(0.15f, 0.30f, 0.50f) : C(0.03f, 0.80f);
-    colors[ImGuiCol_SeparatorHovered]      = dark ? C(0.40f, 0.55f, 0.78f) : C(0.50f, 0.85f, 0.80f);
-    colors[ImGuiCol_SeparatorActive]       = dark ? C(0.50f, 0.65f, 1.00f) : C(0.70f, 0.90f);
-
-    colors[ImGuiCol_ResizeGrip]            = F({1.00f, 1.00f, 1.00f, 0.85f}, {0.00f, 0.00f, 0.00f, 0.25f});
-    colors[ImGuiCol_ResizeGripHovered]     = F({1.00f, 1.00f, 1.00f, 0.60f}, {0.00f, 0.00f, 0.00f, 0.45f});
-    colors[ImGuiCol_ResizeGripActive]      = F({1.00f, 1.00f, 1.00f, 0.90f}, {0.00f, 0.00f, 0.00f, 0.65f});
-
-    colors[ImGuiCol_Tab]                   = dark ? C(0.35f, 0.18f) : ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TabHovered]            = dark ? C(0.50f, 0.55f, 0.80f) : C(0.012f, 0.935f);
-    colors[ImGuiCol_TabActive]             = dark ? C(0.38f, 0.24f) : C(0.012f, 0.950f);
-    colors[ImGuiCol_TabUnfocused]          = dark ? C(0.30f, 0.14f) : ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TabUnfocusedActive]    = D(0.32f, 0.20f, 0.012f, 0.950f);
-
-    colors[ImGuiCol_DockingPreview]        = dark ? C(0.50f, 0.65f, 0.70f) : C(0.75f, 0.90f, 0.40f);
-    colors[ImGuiCol_DockingEmptyBg]        = D(0.00f, 0.20f, 0.012f, 0.93f);
-
-    colors[ImGuiCol_PlotLines]             = dark ? ImVec4(1.00f, 1.00f, 1.00f, 1.00f) : C(0.85f, 0.78f);
-    colors[ImGuiCol_PlotLinesHovered]      = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-    colors[ImGuiCol_PlotHistogram]         = dark ? C(0.55f, 0.65f, 1.00f) : C(0.75f, 0.90f);
-    colors[ImGuiCol_PlotHistogramHovered]  = dark ? C(0.55f, 0.80f, 1.00f) : C(0.85f, 0.80f);
-
-    colors[ImGuiCol_TableHeaderBg]         = D(0.35f, 0.22f, 0.012f, 0.955f);
-    colors[ImGuiCol_TableBorderStrong]     = D(0.20f, 0.25f, 0.03f, 0.75f);
-    colors[ImGuiCol_TableBorderLight]      = D(0.15f, 0.18f, 0.02f, 0.85f);
-    colors[ImGuiCol_TableRowBg]            = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-    colors[ImGuiCol_TableRowBgAlt]         = F({1.00f, 1.00f, 1.00f, 0.06f}, {0.00f, 0.00f, 0.00f, 0.03f});
-
-    colors[ImGuiCol_TextSelectedBg]        = dark ? C(0.40f, 0.40f, 0.35f) : C(0.55f, 1.00f, 0.40f);
-    colors[ImGuiCol_DragDropTarget]        = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
-
-    colors[ImGuiCol_NavHighlight]          = dark ? C(0.50f, 0.60f, 1.00f) : C(0.75f, 0.90f, 0.70f);
-    colors[ImGuiCol_NavWindowingHighlight] = F({1.00f, 1.00f, 1.00f, 0.70f}, {0.00f, 0.00f, 0.00f, 0.40f});
-    colors[ImGuiCol_NavWindowingDimBg]     = F({0.00f, 0.00f, 0.00f, 0.30f}, {0.00f, 0.00f, 0.00f, 0.20f});
-    colors[ImGuiCol_ModalWindowDimBg]      = F({0.00f, 0.00f, 0.00f, 0.45f}, {0.00f, 0.00f, 0.00f, 0.25f});
+    colors[ImGuiCol_TextDisabled]     = dark ? Tint(hue, cMuted, cKeepTokenAlpha) : Neutral(hue, cDimTextSaturation, cDimTextLuma);
+    colors[ImGuiCol_BorderShadow]     = uicolors::cTransparent;
+    colors[ImGuiCol_TableRowBg]       = uicolors::cTransparent;
+    colors[ImGuiCol_PlotLinesHovered] = uicolors::cPlayback;
+    colors[ImGuiCol_DragDropTarget]   = uicolors::Pick(uicolors::cSuccessThemed, dark);
 }
-
-static constexpr f32 cWindowShadowAlphaDark  = 0.50f;
-static constexpr f32 cWindowShadowAlphaLight = 0.20f;
-static constexpr f32 cRaisedGradientDark     = 0.03f;
-static constexpr f32 cRaisedGradientLight    = 0.015f;
-static constexpr f32 cSurfaceGradientDark    = 0.02f;
-static constexpr f32 cSurfaceGradientLight   = 0.0075f;
 
 f32 CalcRaisedGradient(bool dark)
 {
-    return (dark ? cRaisedGradientDark : cRaisedGradientLight) * sThemeAdjust.gradient;
+    return uicolors::Pick(cRaisedGradient, dark) * sThemeAdjust.gradient;
 }
 
 f32 CalcSurfaceGradient(bool dark)
 {
-    return (dark ? cSurfaceGradientDark : cSurfaceGradientLight) * sThemeAdjust.gradient;
+    return uicolors::Pick(cSurfaceGradient, dark) * sThemeAdjust.gradient;
 }
 
 static void ApplyWindowShadowAlpha()
 {
-    const f32 alpha = gThemeIsDark ? cWindowShadowAlphaDark : cWindowShadowAlphaLight;
+    const f32 alpha = uicolors::Pick(cWindowShadowAlpha, sThemeIsDark);
 
     ImGui::SetWindowShadowAlpha(sWindowShadows ? alpha : 0.0f);
 }
@@ -162,66 +200,68 @@ void SetWindowShadows(bool enabled)
     ApplyWindowShadowAlpha();
 }
 
-void ApplyThemeFromAccent(ImVec4 accent)
+void ApplyTheme()
 {
     ImVec4* colors = ImGui::GetStyle().Colors;
 
-    CalcThemeColors(accent, gThemeIsDark, colors);
+    CalcThemeColors(gAccentColor, sThemeIsDark, colors);
     ApplyWindowShadowAlpha();
-    ImGui::SetRaisedGradient(CalcRaisedGradient(gThemeIsDark));
-    ImGui::SetSurfaceGradient(CalcSurfaceGradient(gThemeIsDark));
+    ImGui::SetRaisedGradient(CalcRaisedGradient(sThemeIsDark));
+    ImGui::SetSurfaceGradient(CalcSurfaceGradient(sThemeIsDark));
 
-    const ImVec4& wbg = colors[ImGuiCol_WindowBg];
-    util::setClearColor(sead::Color4f(wbg.x, wbg.y, wbg.z, 1.0f));
+    const ImVec4& windowBg = colors[ImGuiCol_WindowBg];
+    util::setClearColor(sead::Color4f(windowBg.x, windowBg.y, windowBg.z, 1.0f));
 }
-
-static constexpr f32 cRecessedPaneValueDark  = 0.72f;
-static constexpr f32 cRecessedPaneValueLight = 0.965f;
 
 ImU32 GetRecessedPaneColorU32()
 {
     const ImVec4& bg = ImGui::GetStyleColorVec4(ImGuiCol_ChildBg);
 
-    f32 h, s, v;
-    ImGui::ColorConvertRGBtoHSV(bg.x, bg.y, bg.z, h, s, v);
-    v *= gThemeIsDark ? cRecessedPaneValueDark : cRecessedPaneValueLight;
+    f32 hue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(bg.x, bg.y, bg.z, hue, saturation, value);
+    value *= uicolors::Pick(cRecessedPaneValue, sThemeIsDark);
 
-    ImVec4 c(0.0f, 0.0f, 0.0f, bg.w);
-    ImGui::ColorConvertHSVtoRGB(h, s, v, c.x, c.y, c.z);
-    return ImGui::ColorConvertFloat4ToU32(c);
+    return ImGui::ColorConvertFloat4ToU32(uicolors::FromHsv(hue, saturation, value, bg.w));
 }
-
-static constexpr f32 cLightTrackInkMix = 0.13f;
 
 ImU32 GetTrackColorU32(ImU32 frameColor)
 {
-    if (gThemeIsDark)
+    if (sThemeIsDark)
         return frameColor;
 
-    ImVec4 ink = ImGui::GetStyleColorVec4(ImGuiCol_Text);
-    ink.w = 1.0f;
+    const ImVec4 ink = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_Text));
 
     return ImGui::ColorConvertFloat4ToU32(ImLerp(ImGui::ColorConvertU32ToFloat4(frameColor), ink, cLightTrackInkMix));
 }
-
-static constexpr f32 cSeriesHueStep       = 0.618034f;
-static constexpr f32 cSeriesSaturationMin = 0.5f;
 
 ImVec4 GetSeriesColor(s32 index)
 {
     const ImVec4& accent = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
 
-    f32 h, s, v;
-    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, h, s, v);
-    h = ImFmod(h + static_cast<f32>(index) * cSeriesHueStep, 1.0f);
-    s = ImMax(s, cSeriesSaturationMin);
+    f32 hue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, hue, saturation, value);
+    hue = ImFmod(hue + static_cast<f32>(index) * cSeriesHueStep, 1.0f);
+    saturation = ImMax(saturation, cSeriesSaturationMin);
 
-    ImVec4 c(0.0f, 0.0f, 0.0f, accent.w);
-    ImGui::ColorConvertHSVtoRGB(h, s, v, c.x, c.y, c.z);
-    return c;
+    return uicolors::FromHsv(hue, saturation, value, accent.w);
 }
 
-static constexpr f32 cAccentTextMix = 0.3f;
+ImVec4 GetThemeAccent()
+{
+    return uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_CheckMark));
+}
+
+ImVec4 GetOnAccentTextColor()
+{
+    if (sThemeIsDark)
+        return ImGui::GetStyleColorVec4(ImGuiCol_Text);
+
+    return uicolors::cInkOnDark;
+}
 
 ImVec4 GetAccentTextColor()
 {

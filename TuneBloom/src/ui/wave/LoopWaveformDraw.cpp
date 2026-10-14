@@ -1,6 +1,6 @@
 #include <ui/wave/LoopWaveformInternal.h>
 
-#include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/TimeUtil.h>
 
 #include <imgui/imgui_internal.h>
@@ -25,8 +25,10 @@ constexpr int    cCropDimAlpha     = 190;
 constexpr float  cWaveDimMix          = 0.5f;
 constexpr float  cEdgeMix             = 0.14f;
 constexpr int    cEdgeSoftAlpha       = 150;
-constexpr int    cIntroGlowAlphaDark  = 26;
-constexpr int    cIntroGlowAlphaLight = 35;
+constexpr u32    cLoopGlowAlpha       = 0x28;
+
+constexpr uicolors::Themed<u32> cIntroGlowAlpha = { 0x1A, 0x23 };
+constexpr uicolors::Themed<u32> cCrossfadeAlpha = { 0x24, 0x2D };
 
 constexpr double cTickStepsMs[] =
 {
@@ -38,31 +40,8 @@ constexpr double cTickStepsMs[] =
     10000, 20000, 30000, 60000,
 };
 
-ImU32 WithAlpha(ImU32 color, int alpha)
-{
-    return (color & ~IM_COL32_A_MASK) | (static_cast<ImU32>(alpha) << IM_COL32_A_SHIFT);
-}
-
 const WaveformPalette& Palette()
 {
-    // Marker colors
-    static constexpr WaveformPalette cDark =
-    {
-        .loop      = IM_COL32(0xff, 0xb3, 0x47, 255),
-        .loopGlow  = IM_COL32(0xff, 0xb3, 0x47, 40),
-        .xfadeFill = IM_COL32(0x9b, 0x6d, 0xff, 36),
-        .good      = IM_COL32(0x5f, 0xd3, 0x8a, 255),
-        .crop      = IM_COL32(0xff, 0x6b, 0x8b, 255),
-    };
-    static constexpr WaveformPalette cLight =
-    {
-        .loop      = IM_COL32(0xd9, 0x7a, 0x0a, 255),
-        .loopGlow  = IM_COL32(0xd9, 0x7a, 0x0a, 55),
-        .xfadeFill = IM_COL32(0x7a, 0x4a, 0xc9, 45),
-        .good      = IM_COL32(0x1f, 0x8f, 0x52, 255),
-        .crop      = IM_COL32(0xc9, 0x2a, 0x4d, 255),
-    };
-
     static WaveformPalette sPalette;
     static int sPaletteFrame = -1;
 
@@ -70,9 +49,11 @@ const WaveformPalette& Palette()
         return sPalette;
 
     sPaletteFrame = GetFrameCount();
-    sPalette = gThemeIsDark ? cDark : cLight;
+    sPalette.loop      = uicolors::ToU32(uicolors::Marker());
+    sPalette.loopGlow  = uicolors::ToU32(uicolors::Marker(), cLoopGlowAlpha);
+    sPalette.good      = uicolors::ToU32(uicolors::Playback());
+    sPalette.crop      = sPalette.loop;
 
-    // Theme colors
     ImVec4 bg = GetStyleColorVec4(ImGuiCol_ChildBg);
     ImVec4 ink = GetStyleColorVec4(ImGuiCol_Text);
     ImVec4 lit = GetStyleColorVec4(ImGuiCol_CheckMark);
@@ -81,11 +62,12 @@ const WaveformPalette& Palette()
 
     sPalette.bg        = ColorConvertFloat4ToU32(bg);
     sPalette.edge      = ColorConvertFloat4ToU32(ImLerp(bg, ink, cEdgeMix));
-    sPalette.edgeSoft  = WithAlpha(sPalette.edge, cEdgeSoftAlpha);
+    sPalette.edgeSoft  = uicolors::WithAlpha(sPalette.edge, cEdgeSoftAlpha);
     sPalette.inkFaint  = ColorConvertFloat4ToU32(faint);
     sPalette.waveLit   = ColorConvertFloat4ToU32(lit);
     sPalette.wave      = ColorConvertFloat4ToU32(ImLerp(bg, lit, cWaveDimMix));
-    sPalette.introGlow = WithAlpha(sPalette.waveLit, gThemeIsDark ? cIntroGlowAlphaDark : cIntroGlowAlphaLight);
+    sPalette.xfadeFill = uicolors::WithAlpha(sPalette.waveLit, uicolors::Pick(cCrossfadeAlpha));
+    sPalette.introGlow = uicolors::WithAlpha(sPalette.waveLit, uicolors::Pick(cIntroGlowAlpha));
 
     return sPalette;
 }
@@ -203,7 +185,7 @@ static void DrawCrop(ImDrawList* draw, ImVec2 origin, float width, float height,
     const float cropEndX = SampleToX(state, state.cropEnd, width);
     const float clampedStartX = sead::Mathf::clamp2(0.0f, cropStartX, width);
     const float clampedEndX = sead::Mathf::clamp2(0.0f, cropEndX, width);
-    const ImU32 dim = WithAlpha(Palette().bg, cCropDimAlpha);
+    const ImU32 dim = uicolors::WithAlpha(Palette().bg, cCropDimAlpha);
 
     if (clampedStartX > 0.0f)
         draw->AddRectFilled(origin, ImVec2(origin.x + clampedStartX, origin.y + height), dim);
@@ -557,7 +539,7 @@ bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
     if (playing)
     {
         const float playheadX = sead::Mathf::clamp2(0.0f, SampleToX(state, static_cast<u32>(playheadSample), width), width);
-        const ImU32 playedColor = ColorConvertFloat4ToU32(ImVec4(gAccentColor.x, gAccentColor.y, gAccentColor.z, cSeekPlayedAlpha));
+        const ImU32 playedColor = uicolors::ToU32(uicolors::PlaybackFill(), uicolors::UnitToByte(cSeekPlayedAlpha));
 
         draw->AddRectFilled(ImVec2(left, top), ImVec2(left + playheadX, bottom), playedColor, 3.0f);
     }
@@ -568,7 +550,7 @@ bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
         const float clampedLoopEndX = sead::Mathf::clamp2(0.0f, SampleToX(state, loopEnd, width), width);
 
         if (clampedLoopEndX > clampedLoopStartX)
-            draw->AddRectFilled(ImVec2(left + clampedLoopStartX, top), ImVec2(left + clampedLoopEndX, bottom), WithAlpha(palette.loop, cSeekLoopTintA));
+            draw->AddRectFilled(ImVec2(left + clampedLoopStartX, top), ImVec2(left + clampedLoopEndX, bottom), uicolors::WithAlpha(palette.loop, cSeekLoopTintA));
     }
 
     if (sampleRate > 0)

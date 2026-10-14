@@ -14,10 +14,13 @@ bool TestPianoBoardFunct(void* UserData, int Msg, int Key, float Vel) {
 }
 */
 
-#include <ui/app/UI.h>
+#include <ui/bank/PianoKeyboard.h>
 
+#include <ui/bank/KeyboardPalette.h>
 #include <ui/Messages.h>
 #include <ui/app/Shortcuts.h>
+#include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <math/seadMathCalcCommon.h>
 
@@ -34,21 +37,11 @@ static constexpr f32 cBlackKeyWidth       = 0.85f;
 static constexpr f32 cBlackKeyHeight      = 0.62f;
 static constexpr f32 cBlackKeyFaceMinPx   = 5.0f;
 static constexpr f32 cKeyShadowHeight     = 0.1f;
+static constexpr f32 cRootStripePx        = 4.0f;
 static constexpr f32 cRulerPadEm          = 0.15f;
 static constexpr f32 cRulerRangeBarPx     = 2.0f;
 
-static constexpr ImU32 cWhiteKeyColor           = IM_COL32(244, 244, 240, 255);
-static constexpr ImU32 cWhiteKeyHoverColor      = IM_COL32(208, 224, 240, 255);
-static constexpr ImU32 cWhiteKeyActiveColor     = IM_COL32(127, 209, 255, 255);
-static constexpr ImU32 cWhiteKeyRootColor       = IM_COL32(26, 210, 77, 255);
-static constexpr ImU32 cWhiteKeyRootActiveColor = IM_COL32(120, 245, 155, 255);
-static constexpr ImU32 cBlackKeyColor           = IM_COL32(44, 44, 50, 255);
-static constexpr ImU32 cBlackKeyHoverColor      = IM_COL32(78, 86, 100, 255);
-static constexpr ImU32 cBlackKeyActiveColor     = IM_COL32(64, 150, 205, 255);
-static constexpr ImU32 cBlackKeyRootColor       = IM_COL32(26, 161, 62, 255);
-static constexpr ImU32 cBlackKeyRootActiveColor = IM_COL32(31, 207, 78, 255);
-static constexpr ImU32 cBlackKeyEdgeColor       = IM_COL32(12, 12, 14, 255);
-static constexpr ImU32 cKeyShadowColor          = IM_COL32(0, 0, 0, 70);
+static constexpr uicolors::Themed<f32> cRulerRangeAlpha = { 0.16f, 0.10f };
 
 static constexpr bool cIsBlackKey[cOctaveKeyNum] = { false, true, false, true, false, false, true, false, true, false, true, false };
 static const char* const cKeyNames[cOctaveKeyNum] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -182,24 +175,28 @@ static sead::FixedSafeString<16> FormatKeyLabel(s32 key, bool withNumber)
 
 static ImU32 GetWhiteKeyColor(const KeyState& state)
 {
+    const KeyboardPalette& palette = GetKeyboardPalette();
+
     if (state.root)
-        return state.active ? cWhiteKeyRootActiveColor : cWhiteKeyRootColor;
+        return state.active ? palette.whiteKeyRootActive : palette.whiteKeyRoot;
 
     if (state.active)
-        return cWhiteKeyActiveColor;
+        return palette.whiteKeyActive;
 
-    return state.hovered ? cWhiteKeyHoverColor : cWhiteKeyColor;
+    return state.hovered ? palette.whiteKeyHover : palette.whiteKey;
 }
 
 static ImU32 GetBlackKeyColor(const KeyState& state)
 {
+    const KeyboardPalette& palette = GetKeyboardPalette();
+
     if (state.root)
-        return state.active ? cBlackKeyRootActiveColor : cBlackKeyRootColor;
+        return state.active ? palette.blackKeyRootActive : palette.blackKeyRoot;
 
     if (state.active)
-        return cBlackKeyActiveColor;
+        return palette.blackKeyActive;
 
-    return state.hovered ? cBlackKeyHoverColor : cBlackKeyColor;
+    return state.hovered ? palette.blackKeyHover : palette.blackKey;
 }
 
 static void ReleaseComputerKeys(ImGuiPianoKeyboardProc callback, void* userData)
@@ -282,7 +279,7 @@ static void DrawRuler(ImDrawList* draw, const ImRect& ruler, const KeyLayout& la
         const ImVec2 rangeMin(layout.cellX(sOctaveBase), ruler.Min.y);
         const ImVec2 rangeMax(layout.cellX(rangeEnd), ruler.Max.y);
 
-        draw->AddRectFilled(rangeMin, rangeMax, ImGui::GetColorU32(ImGuiCol_CheckMark, 0.16f));
+        draw->AddRectFilled(rangeMin, rangeMax, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cRulerRangeAlpha)));
         draw->AddRectFilled(ImVec2(rangeMin.x, rangeMax.y - cRulerRangeBarPx), rangeMax, ImGui::GetColorU32(ImGuiCol_CheckMark));
     }
 
@@ -309,14 +306,15 @@ static void DrawKeys(ImDrawList* draw, const KeyLayout& layout, s32 firstKey, s3
     const ImRect& keys = layout.keys;
     const f32 whiteWidth = layout.noteWidth * cOctaveKeyNum / 7.0f;
     const f32 separatorAlpha = sead::MathCalcCommon<f32>::clamp2(0.3f, (whiteWidth - 4.0f) / 6.0f, 1.0f);
-    const ImU32 separatorColor = IM_COL32(70, 70, 76, static_cast<s32>(separatorAlpha * 255.0f));
+    const KeyboardPalette& palette = GetKeyboardPalette();
+    const ImU32 separatorColor = uicolors::WithAlpha(palette.separator, uicolors::UnitToByte(separatorAlpha));
 
     auto getState = [&](s32 key) -> KeyState
     {
         return { callback(userData, NoteGetStatus, key, 0.0f), key == hoveredKey, key == rootKey };
     };
 
-    draw->AddRectFilled(keys.Min, keys.Max, cWhiteKeyColor);
+    draw->AddRectFilled(keys.Min, keys.Max, palette.whiteKey);
 
     // Draw white keys
     for (s32 key = firstKey; key <= lastKey; key++)
@@ -325,17 +323,21 @@ static void DrawKeys(ImDrawList* draw, const KeyLayout& layout, s32 firstKey, s3
             continue;
 
         const ImRect rect = layout.whiteRect(key);
-        const ImU32 color = GetWhiteKeyColor(getState(key));
+        const KeyState state = getState(key);
+        const ImU32 color = GetWhiteKeyColor(state);
 
-        if (color != cWhiteKeyColor)
+        if (color != palette.whiteKey)
             draw->AddRectFilled(rect.Min, rect.Max, color);
+
+        if (state.root && state.active)
+            draw->AddRectFilled(ImVec2(rect.Min.x, rect.Max.y - cRootStripePx), rect.Max, palette.rootStripe);
 
         if (key > layout.beginNote)
             draw->AddRectFilled(rect.Min, ImVec2(rect.Min.x + 1.0f, rect.Max.y), separatorColor);
     }
 
     const f32 shadowHeight = ImFloor(keys.GetHeight() * cKeyShadowHeight);
-    draw->AddRectFilledMultiColor(keys.Min, ImVec2(keys.Max.x, keys.Min.y + shadowHeight), cKeyShadowColor, cKeyShadowColor, IM_COL32_BLACK_TRANS, IM_COL32_BLACK_TRANS);
+    draw->AddRectFilledMultiColor(keys.Min, ImVec2(keys.Max.x, keys.Min.y + shadowHeight), palette.keyShadow, palette.keyShadow, uicolors::cTransparentU32, uicolors::cTransparentU32);
 
     // Draw black keys
     for (s32 key = firstKey; key <= lastKey; key++)
@@ -353,7 +355,7 @@ static void DrawKeys(ImDrawList* draw, const KeyLayout& layout, s32 firstKey, s3
         }
 
         const f32 lip = std::max(2.0f, ImFloor(rect.GetHeight() * 0.08f));
-        draw->AddRectFilled(rect.Min, rect.Max, cBlackKeyEdgeColor);
+        draw->AddRectFilled(rect.Min, rect.Max, palette.blackKeyEdge);
         draw->AddRectFilled(ImVec2(rect.Min.x + 1.0f, rect.Min.y), ImVec2(rect.Max.x - 1.0f, rect.Max.y - lip), color);
     }
 

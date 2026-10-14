@@ -7,6 +7,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
 #include <ui/items/Selection.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/app/Workspace.h>
 
@@ -295,9 +296,9 @@ static bool DrawRows()
             namePos.y += ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset;
             const f32 nameRight = namePos.x + ImGui::GetContentRegionAvail().x;
 
-            ImGui::PushStyleColor(ImGuiCol_Header,        IM_COL32(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(0, 0, 0, 0));
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  IM_COL32(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Header,        uicolors::cTransparentU32);
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, uicolors::cTransparentU32);
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive,  uicolors::cTransparentU32);
 
             if (ImGui::Selectable("##Row", selected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_DontClosePopups))
             {

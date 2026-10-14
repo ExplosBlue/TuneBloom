@@ -11,6 +11,7 @@
 #include <ui/file/SystemShell.h>
 #include <ui/widgets/TimeUtil.h>
 #include <ui/widgets/Widgets.h>
+#include <ui/settings/UiColors.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
@@ -859,7 +860,7 @@ bool DrawRecentFilesList(std::string* outPath)
         if (scroll)
         {
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() - inset);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparent);
             ImGui::BeginChild("##recent", ImVec2(width + inset * 2.0f + style.ScrollbarSize, cRecentVisibleRows * CalcRecentRowHeight()));
             ImGui::SetCursorPos(ImVec2(inset, ImFloor(style.ItemSpacing.y * 0.5f)));
             ImGui::Indent(inset);
@@ -1077,7 +1078,7 @@ static bool BeginRecentTable(const char* id, bool pinned, ItemColumn* columns, s
     const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_SizingFixedFit |
                                   (pinned ? ImGuiTableFlags_None : ImGuiTableFlags_ScrollY | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate);
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparentU32);
     const bool open = ImGui::BeginTable(id, static_cast<s32>(RecentColumn::Num), flags);
     ImGui::PopStyleColor();
 

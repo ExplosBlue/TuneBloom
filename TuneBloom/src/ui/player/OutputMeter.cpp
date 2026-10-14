@@ -2,6 +2,7 @@
 
 #include <ui/widgets/ContextMenu.h>
 #include <ui/Messages.h>
+#include <ui/settings/UiColors.h>
 
 #include <snd/HardwareMgr.h>
 
@@ -46,12 +47,12 @@ struct ColorStop
 };
 
 static constexpr ColorStop cColorStops[] = {
-    { cFloorDb, IM_COL32(40, 170, 90, 255) },
-    { -12.0f, IM_COL32(90, 200, 80, 255) },
-    { -9.0f, IM_COL32(225, 205, 60, 255) },
-    { -4.0f, IM_COL32(230, 140, 40, 255) },
-    { -1.5f, IM_COL32(228, 85, 45, 255) },
-    { 0.0f, IM_COL32(220, 45, 40, 255) },
+    { cFloorDb, uicolors::meter::cLevelFloor },
+    { -12.0f, uicolors::meter::cLevelLow },
+    { -9.0f, uicolors::meter::cLevelMid },
+    { -4.0f, uicolors::meter::cLevelHigh },
+    { -1.5f, uicolors::meter::cLevelHot },
+    { 0.0f, uicolors::meter::cLevelClip },
 };
 
 static constexpr f32 cTickLen        = 4.0f;
@@ -71,9 +72,6 @@ static constexpr f32 cMinBarHeight   = 10.0f;
 static constexpr f32 cMaxBarHeight   = 28.0f;
 static constexpr f32 cVerticalBelow  = 1.0f;
 static constexpr f32 cHorizontalFrom = 1.4f;
-
-static constexpr ImU32 cClipColor     = IM_COL32(220, 45, 40, 255);
-static constexpr ImU32 cClipTextColor = IM_COL32(255, 255, 255, 255);
 
 static bool sMergeChannels = false;
 static bool sWindowVisible = false;
@@ -260,15 +258,15 @@ static f32 PositionToDb(f32 position)
 static ImU32 GetPeakMarkerColor(f32 db)
 {
     if (db >= -1.5f)
-        return IM_COL32(235, 90, 70, 255);
+        return uicolors::meter::cPeakHot;
 
     if (db >= -4.0f)
-        return IM_COL32(235, 155, 55, 255);
+        return uicolors::meter::cPeakHigh;
 
     if (db >= -9.0f)
-        return IM_COL32(230, 210, 70, 255);
+        return uicolors::meter::cPeakMid;
 
-    return IM_COL32(235, 235, 240, 230);
+    return uicolors::meter::cPeakSafe;
 }
 
 static bool WantsVerticalLayout(const ImVec2& avail)
@@ -302,7 +300,7 @@ static const char* FormatPeakDb(char* buffer, size_t size, const OutputMeter::Ch
     return buffer;
 }
 
-static ImU32 WithAlpha(ImU32 color, f32 alpha)
+static ImU32 MultiplyAlpha(ImU32 color, f32 alpha)
 {
     ImVec4 value = ImGui::ColorConvertU32ToFloat4(color);
     value.w *= alpha;
@@ -316,8 +314,8 @@ static void DrawGradient(ImDrawList* drawList, const ImVec2& min, const ImVec2& 
     {
         const ColorStop& a = cColorStops[i - 1];
         const ColorStop& b = cColorStops[i];
-        const ImU32 colorA = WithAlpha(a.color, alpha);
-        const ImU32 colorB = WithAlpha(b.color, alpha);
+        const ImU32 colorA = MultiplyAlpha(a.color, alpha);
+        const ImU32 colorB = MultiplyAlpha(b.color, alpha);
 
         if (horizontal)
         {
@@ -395,8 +393,8 @@ static void DrawPeakReadout(ImDrawList* drawList, const OutputMeter::ChannelStat
     const ImVec2 size = CalcPeakReadoutSize();
     const ImVec2 min(std::floor(center.x - size.x * 0.5f), std::floor(center.y - size.y * 0.5f));
 
-    drawList->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y), channel.clip ? cClipColor : ImGui::GetColorU32(ImGuiCol_FrameBg), 3.0f);
-    drawList->AddText(ImVec2(std::floor(min.x + (size.x - textSize.x) * 0.5f), min.y + cReadoutPadY), channel.clip ? cClipTextColor : ImGui::GetColorU32(ImGuiCol_Text), text);
+    drawList->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y), channel.clip ? uicolors::meter::cLevelClip : ImGui::GetColorU32(ImGuiCol_FrameBg), 3.0f);
+    drawList->AddText(ImVec2(std::floor(min.x + (size.x - textSize.x) * 0.5f), min.y + cReadoutPadY), channel.clip ? uicolors::meter::cClipText : ImGui::GetColorU32(ImGuiCol_Text), text);
 }
 
 static void DrawChannelName(ImDrawList* drawList, const char* name, const ImVec2& center)

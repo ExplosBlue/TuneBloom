@@ -831,14 +831,16 @@ bool ImGui::CloseButton(ImGuiID id, const ImVec2& pos)
     const float hover_ratio = GetHoverRatio(id, hovered);
     ImU32 col = GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered, hover_ratio);
     ImVec2 center = bb.GetCenter();
-    if (hover_ratio > 0.0f)
-        window->DrawList->AddCircleFilled(center, ImMax(2.0f, g.FontSize * 0.5f + 1.0f), col);
 
-    float cross_extent = g.FontSize * 0.5f * 0.7071f - 1.0f;
+    // TuneBloom: smaller hover & cross
+    if (hover_ratio > 0.0f)
+        window->DrawList->AddCircleFilled(center, ImMax(2.0f, g.FontSize * 0.38f), col);
+
+    const float cross_extent = g.FontSize * 0.16f;
+    const float cross_thickness = GetIconStrokeThickness(g.FontSize);
     ImU32 cross_col = GetColorU32(ImGuiCol_Text);
-    center -= ImVec2(0.5f, 0.5f);
-    window->DrawList->AddLine(center + ImVec2(+cross_extent, +cross_extent), center + ImVec2(-cross_extent, -cross_extent), cross_col, 1.0f);
-    window->DrawList->AddLine(center + ImVec2(+cross_extent, -cross_extent), center + ImVec2(-cross_extent, +cross_extent), cross_col, 1.0f);
+    window->DrawList->AddLine(center + ImVec2(+cross_extent, +cross_extent), center + ImVec2(-cross_extent, -cross_extent), cross_col, cross_thickness);
+    window->DrawList->AddLine(center + ImVec2(+cross_extent, -cross_extent), center + ImVec2(-cross_extent, +cross_extent), cross_col, cross_thickness);
 
     return pressed;
 }
@@ -1154,7 +1156,8 @@ bool ImGui::Checkbox(const char* label, bool* v)
     }
     else if (*v)
     {
-        const float pad = ImMax(1.0f, IM_TRUNC(square_sz / 6.0f));
+        // TuneBloom: smaller checkmark
+        const float pad = ImMax(1.0f, IM_TRUNC(square_sz * 0.27f));
         RenderCheckMark(window->DrawList, check_bb.Min + ImVec2(pad, pad), check_col, square_sz - pad * 2.0f);
     }
 
@@ -4800,7 +4803,8 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         RenderFrame(frame_bb.Min, frame_bb.Max, GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
     }
 
-    const ImVec4 clip_rect(frame_bb.Min.x, frame_bb.Min.y, frame_bb.Min.x + inner_size.x, frame_bb.Min.y + inner_size.y); // Not using frame_bb.Max because we have adjusted size
+    const float clip_inset_x = is_multiline ? 0.0f : style.FramePadding.x;
+    const ImVec4 clip_rect(frame_bb.Min.x, frame_bb.Min.y, frame_bb.Min.x + inner_size.x - clip_inset_x, frame_bb.Min.y + inner_size.y); // Not using frame_bb.Max because we have adjusted size
     ImVec2 draw_pos = is_multiline ? draw_window->DC.CursorPos : frame_bb.Min + style.FramePadding;
     ImVec2 text_size(0.0f, 0.0f);
 
@@ -4891,7 +4895,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
             if (!(flags & ImGuiInputTextFlags_NoHorizontalScroll))
             {
                 const float scroll_increment_x = inner_size.x * 0.25f;
-                const float visible_width = inner_size.x - style.FramePadding.x;
+                const float visible_width = inner_size.x - style.FramePadding.x - clip_inset_x;
                 if (cursor_offset.x < state->ScrollX)
                     state->ScrollX = IM_TRUNC(ImMax(0.0f, cursor_offset.x - scroll_increment_x));
                 else if (cursor_offset.x - visible_width >= state->ScrollX)

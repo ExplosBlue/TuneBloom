@@ -3,13 +3,13 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/app/MenuBar.h>
 #include <ui/Messages.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/widgets/WindowAnimation.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
 
-static constexpr ImVec4 cMenuDangerColor     = ImVec4(0.94f, 0.42f, 0.40f, 1.0f);
 static constexpr s32    cMenuStyleColorCount = 2;
 
 static bool sMenuSeparatorPending = false;
@@ -17,8 +17,7 @@ static u32 sMenuItemCount = 0;
 
 static void PushMenuWindowStyle()
 {
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
 
     ImGui::PushStyleColor(ImGuiCol_PopupBg, background);
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, ImFloor(ImGui::GetFontSize() * cMenuRoundingEm));
@@ -113,7 +112,7 @@ bool ContextMenuItem(const char* icon, const char* label, bool enabled, const ch
 
 bool ContextMenuDangerItem(const char* icon, const char* label)
 {
-    ImGui::PushStyleColor(ImGuiCol_Text, cMenuDangerColor);
+    ImGui::PushStyleColor(ImGuiCol_Text, uicolors::Marker());
     const bool pressed = DrawMenuRow(icon, label, false, true);
     ImGui::PopStyleColor();
 
@@ -146,7 +145,7 @@ bool BeginContextSubMenu(const char* icon, const char* label)
     PushMenuWindowStyle();
 
     ImDrawList* drawList = BeginMenuHighlight();
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, uicolors::cTransparent);
     const bool open = ImGui::BeginMenuEx(label, icon);
     ImGui::PopStyleColor();
     EndMenuHighlight(drawList, open);

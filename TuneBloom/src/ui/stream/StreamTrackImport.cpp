@@ -9,6 +9,7 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/widgets/Properties.h>
 #include <ui/stream/StreamRegions.h>
+#include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/widgets/Widgets.h>
@@ -37,8 +38,6 @@ constexpr f32 cPanelWidthEm    = 36.0f;
 constexpr f32 cLoopDragRange   = 2000.0f;
 
 constexpr u32 cMaxFiles = cStrmChannelNum;
-
-const ImVec4 cErrorColor(0.90f, 0.45f, 0.45f, 1.0f);
 
 using ChannelData = std::vector<std::vector<float>>;
 
@@ -766,7 +765,7 @@ void StreamTrackImport::drawMainRow()
 
     ImGui::TableNextColumn();
 
-    if (ImGui::Button(isMainPreviewing() ? ICON_LC_SQUARE : ICON_LC_PLAY))
+    if (TransportButton(isMainPreviewing() ? TransportGlyph::Stop : TransportGlyph::Play, "##glyph"))
     {
         const bool wasPlaying = isMainPreviewing();
 
@@ -845,7 +844,7 @@ void StreamTrackImport::drawFileRow(u32 index, const FileTracks& tracks, u32 fir
 
     ImGui::TableNextColumn();
 
-    if (ImGui::Button(isPreviewing(index) ? ICON_LC_SQUARE : ICON_LC_PLAY))
+    if (TransportButton(isPreviewing(index) ? TransportGlyph::Stop : TransportGlyph::Play, "##glyph"))
         actions->preview = static_cast<s32>(index);
 
     ImGui::TableNextColumn();
@@ -1151,7 +1150,7 @@ bool StreamTrackImport::drawBody(const Sound* sound, std::vector<TrackPlan>* pla
     drawNotes(*target, locked, isCreate);
 
     if (!error.isEmpty())
-        ImGui::TextColored(cErrorColor, "%s", error.cstr());
+        ImGui::TextColored(uicolors::Marker(), "%s", error.cstr());
 
     ImGui::PopID();
 

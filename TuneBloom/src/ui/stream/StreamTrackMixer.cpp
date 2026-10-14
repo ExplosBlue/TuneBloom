@@ -4,6 +4,7 @@
 #include <ui/player/OutputMeter.h>
 #include <ui/sound/SoundPanels.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 static constexpr f32 cTrackStripGapEm        = 0.3f;
 static constexpr f32 cTrackStripSectionGapEm = 0.7f;
@@ -142,7 +143,7 @@ static void DrawTrackDetailTitle(const TrackContext& ctx, s32 index, f32 padX)
     const f32 nameX = textPos.x + ImGui::CalcTextSize(title.cstr()).x + style.ItemSpacing.x;
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-    drawList->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_CheckMark, cTrackIndexAlpha));
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackIndexAlpha)));
     drawList->AddText(textPos, ImGui::GetColorU32(ImGuiCol_Text), title.cstr());
 
     if (waveFile)
@@ -418,7 +419,7 @@ static void DrawTrackStripNumber(const TrackContext& ctx, s32 trackIdx, const Tr
     const ImVec2 min(screenPos.x, screenPos.y + layout.numberY);
     const ImVec2 max(min.x + layout.numberWidth, min.y + layout.frameHeight);
 
-    ImGui::GetWindowDrawList()->AddRectFilled(min, max, selected ? ImGui::GetColorU32(ImGuiCol_CheckMark, cTrackIndexAlpha) : ImGui::GetColorU32(ImGuiCol_TableHeaderBg), style.FrameRounding);
+    ImGui::GetWindowDrawList()->AddRectFilled(min, max, selected ? ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackIndexAlpha)) : ImGui::GetColorU32(ImGuiCol_TableHeaderBg), style.FrameRounding);
 
     ImGui::SetCursorPos(ImVec2(pos.x, pos.y + layout.numberY));
     DrawTrackHandle(ctx, ctx.tracks[trackIdx], ImVec2(layout.numberWidth, layout.frameHeight), ImGuiSelectableFlags_None, edit);
@@ -440,7 +441,7 @@ static void DrawTrackStrip(const TrackContext& ctx, s32 trackIdx, const TrackStr
     const bool selected = track == GetHighlightedStreamTrack();
 
     if (selected)
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_CheckMark, cTrackSelectedAlpha));
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackSelectedAlpha)));
     else
         ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_Text, hovered ? cTrackStripHoveredAlpha : cTrackStripAlpha));
 

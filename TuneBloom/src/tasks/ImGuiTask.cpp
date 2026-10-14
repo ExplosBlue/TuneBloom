@@ -10,11 +10,13 @@
 #include <framework/seadProcessMeter.h>
 #include <heap/seadExpHeap.h>
 
+#include <core/TestHooks.h>
+
 #include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/player/OutputMeter.h>
-#include <core/TestHooks.h>
 #include <ui/sequence/SeqManual.h>
+#include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
 #include <ui/widgets/WindowAnimation.h>
 
@@ -226,20 +228,22 @@ void ImGuiTask::draw()
 static void SetupImGuiStyle()
 {
     ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 5.3f;
-    style.FrameRounding = 2.3f;
-    style.ScrollbarRounding = 12;
-    style.GrabRounding = 2;
-    style.DisabledAlpha = 0.35f;
+    style.WindowRounding = 10.0f;
+    style.ChildRounding = 8.0f;
+    style.PopupRounding = 8.0f;
+    style.FrameRounding = 4.0f;
+    style.ScrollbarRounding = 8.0f;
+    style.GrabRounding = 4.0f;
+    style.DisabledAlpha = 0.45f;
 
     MigrateLegacyConfig();
-    LoadAccentColor();
+    LoadThemeConfig();
     LoadStartupConfig();
     LoadRecentFiles();
     LoadArchiveConfig();
     LoadBackupConfig();
     LoadInterfaceConfig();
     ApplyInterfaceConfig();
-    ApplyThemeFromAccent(gAccentColor);
+    ApplyTheme();
     RunStartupAction();
 }

@@ -167,6 +167,13 @@ void ImGui::AddRectFilledSurface(ImDrawList* draw_list, const ImVec2& p_min, con
     AddRectFilledGradient(draw_list, p_min, p_max, col, GSurfaceGradient, rounding, flags);
 }
 
+static const float ICON_STROKE_THICKNESS = 0.07f;
+
+float ImGui::GetIconStrokeThickness(float font_size)
+{
+    return ImMax(1.0f, font_size * ICON_STROKE_THICKNESS);
+}
+
 // Hover fade
 struct HoverSlot
 {

@@ -4,8 +4,8 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
 #include <ui/Messages.h>
-#include <ui/settings/Theme.h>
 #include <ui/widgets/TimeUtil.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>
 
 #include <libs/IconsLucide.h>
@@ -99,9 +99,9 @@ static ImVec4 GetKindColor(Kind kind)
 {
     switch (kind)
     {
-        case Kind::Success: return gThemeIsDark ? ImVec4(0.45f, 0.82f, 0.52f, 1.0f) : ImVec4(0.13f, 0.55f, 0.25f, 1.0f);
-        case Kind::Warning: return gThemeIsDark ? ImVec4(1.0f, 0.78f, 0.35f, 1.0f) : ImVec4(0.75f, 0.50f, 0.05f, 1.0f);
-        case Kind::Error:   return gThemeIsDark ? ImVec4(1.0f, 0.35f, 0.35f, 1.0f) : ImVec4(0.80f, 0.20f, 0.20f, 1.0f);
+        case Kind::Success: return uicolors::Success();
+        case Kind::Warning: return uicolors::Warning();
+        case Kind::Error:   return uicolors::Marker();
         default:            return ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
     }
 }
@@ -244,8 +244,7 @@ static f32 DrawToast(Entry& entry, const ImGuiViewport* viewport, f32 right, f32
     const f32 fade = 1.0f - (1.0f - entry.alpha) * (1.0f - entry.alpha) * (1.0f - entry.alpha);
     const f32 slide = entry.isClosing ? 0.0f : ImFloor(em * cToastSlideEm * (1.0f - fade));
 
-    ImVec4 background = style.Colors[ImGuiCol_PopupBg];
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(style.Colors[ImGuiCol_PopupBg]);
 
     ImGui::SetNextWindowViewport(viewport->ID);
     ImGui::SetNextWindowPos(ImVec2(right, ImFloor(bottom - entry.offset + slide)), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
@@ -377,8 +376,7 @@ static void DrawList()
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
 
-    ImVec4 background = style.Colors[ImGuiCol_PopupBg];
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(style.Colors[ImGuiCol_PopupBg]);
 
     ImGui::SetNextWindowPos(ImVec2(sListAnchor.x, sListAnchor.y + ImFloor(em * cListGapEm)), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(ImFloor(em * cListWidthEm), 0.0f));

@@ -20,6 +20,7 @@
 #include <ui/app/ShortcutsDialog.h>
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/widgets/WindowAnimation.h>
@@ -28,6 +29,8 @@
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
 #include <imgui/imgui_internal.h>
+
+#include <optional>
 
 static constexpr f32 cMenuBarPadYEm      = 0.2f;
 static constexpr f32 cMenuBarPillInsetEm = 0.25f;
@@ -49,9 +52,9 @@ ImDrawList* BeginMenuHighlight()
     drawList->ChannelsSplit(2);
     drawList->ChannelsSetCurrent(1);
 
-    ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Header, uicolors::cTransparent);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, uicolors::cTransparent);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, uicolors::cTransparent);
 
     return drawList;
 }
@@ -216,7 +219,7 @@ bool MenuBarItem(const char* label, const char* shortcut, bool selected, bool en
     const f32 posY = ImGui::GetCursorScreenPos().y;
 
     ImDrawList* drawList = BeginMenuHighlight();
-    ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_TextDisabled, uicolors::cTransparent);
     const bool pressed = ImGui::MenuItem(label, shortcut, selected, enabled);
     ImGui::PopStyleColor();
     EndMenuHighlight(drawList, false);
@@ -242,7 +245,7 @@ bool BeginSubMenu(const char* label)
     const f32 right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
 
     ImDrawList* drawList = BeginMenuHighlight();
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Text, uicolors::cTransparent);
     const bool open = ImGui::BeginMenu(label);
     ImGui::PopStyleColor();
     EndMenuHighlight(drawList, open);
@@ -267,7 +270,7 @@ bool MenuBarIconItem(const char* icon, const char* label, const char* shortcut, 
 }
 
 static s32 sMenuFindFrame = 0;
-static s32 sMenuThemeRequest = -1;
+static std::optional<bool> sMenuThemeRequest;
 
 static void DrawBackupsMenu()
 {
@@ -332,11 +335,11 @@ static void DrawViewMenu()
 
     if (BeginSubMenu(messages::common::cTheme))
     {
-        if (MenuBarItem(messages::mainmenu::cThemeDark, nullptr, gThemeIsDark))
-            sMenuThemeRequest = 1;
+        if (MenuBarItem(messages::mainmenu::cThemeDark, nullptr, IsDarkTheme()))
+            sMenuThemeRequest = true;
 
-        if (MenuBarItem(messages::mainmenu::cThemeLight, nullptr, !gThemeIsDark))
-            sMenuThemeRequest = 0;
+        if (MenuBarItem(messages::mainmenu::cThemeLight, nullptr, !IsDarkTheme()))
+            sMenuThemeRequest = false;
 
         ImGui::EndMenu();
     }
@@ -515,7 +518,7 @@ static void DrawSaveStatusChip(f32 chipRight, f32 textY)
     const ImGuiStyle& style = ImGui::GetStyle();
     const sead::FormatFixedSafeString<64> statusLabel(gUnsavedChanges ? ICON_LC_FILE " %s" : ICON_LC_CHECK_CHECK " %s", gUnsavedChanges ? messages::mainmenu::cUnsaved : messages::mainmenu::cSaved);
     const char* statusText = statusLabel.cstr();
-    const ImVec4 statusColor = gUnsavedChanges ? ImVec4(0.85f, 0.65f, 0.15f, 1.0f) : style.Colors[ImGuiCol_TextDisabled];
+    const ImVec4 statusColor = gUnsavedChanges ? uicolors::Warning() : style.Colors[ImGuiCol_TextDisabled];
 
     const ImVec2 rangeY = CalcMenuBarPillRangeY();
     const f32 chipLeft = chipRight - ImGui::CalcTextSize(statusText).x - style.ItemSpacing.x * 2.0f;
@@ -611,17 +614,17 @@ static void DrawMenuBarItems(f32 em)
 
 static void ApplyMenuThemeRequest()
 {
-    if (sMenuThemeRequest < 0)
+    if (!sMenuThemeRequest)
         return;
 
-    const bool dark = sMenuThemeRequest != 0;
-    sMenuThemeRequest = -1;
+    const bool dark = *sMenuThemeRequest;
+    sMenuThemeRequest.reset();
 
-    if (dark != gThemeIsDark)
+    if (dark != IsDarkTheme())
     {
-        gThemeIsDark = dark;
-        ApplyThemeFromAccent(gAccentColor);
-        SaveAccentColor();
+        SetDarkTheme(dark);
+        ApplyTheme();
+        SaveThemeConfig();
     }
 }
 
@@ -634,8 +637,7 @@ void DrawMenuBar()
 
     const ImVec4 hoverColor = ImGui::GetStyleColorVec4(ImGuiCol_Header);
     const ImVec4 heldColor = ImGui::GetStyleColorVec4(ImGuiCol_HeaderActive);
-    ImVec4 popupColor = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
-    popupColor.w = 1.0f;
+    const ImVec4 popupColor = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
 
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, hoverColor);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, heldColor);

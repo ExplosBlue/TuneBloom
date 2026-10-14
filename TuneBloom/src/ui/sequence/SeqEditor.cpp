@@ -5,6 +5,7 @@
 #include <ui/Messages.h>
 #include <ui/sequence/SeqManual.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <imgui/imgui.h>
 #include <imgui/imgui_custom.h>
@@ -26,7 +27,6 @@ static constexpr f32 cLabelsWidthEm   = 24.0f;
 static constexpr s32 cLabelsRowMax    = 12;
 static constexpr f32 cStatusPadEm     = 0.15f;
 static constexpr f32 cStatusGapEm     = 0.25f;
-
 
 static f32 sBarInsetRight = 0.0f;
 
@@ -67,7 +67,7 @@ static bool BarButton(const char* label, const char* tooltip, bool enabled = tru
     const f32 size = ImGui::GetFrameHeight();
 
     ImGui::BeginDisabled(!enabled);
-    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Button, uicolors::cTransparentU32);
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 
     const bool pressed = ImGui::Button(label, ImVec2(size, size));
@@ -96,8 +96,7 @@ static bool BeginEditorBar(const ImVec2& editorMin, ImVec2 editorMax, f32 width,
 
     const f32 height = rowNum * ImGui::GetFrameHeight() + (rowNum - 1) * style.ItemSpacing.y + padding * 2.0f;
 
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
 
     ImGui::SetCursorScreenPos(ImVec2(right - width, editorMin.y));
 
@@ -287,8 +286,7 @@ static void DrawLabelsPopup(TextEditor& editor, const ImVec2& editorMin, const I
     const f32 em = ImGui::GetFontSize();
     const f32 width = ImMin(em * cLabelsWidthEm, editorMax.x - editorMin.x);
 
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
 
     ImGui::SetNextWindowPos(ImVec2(ImFloor((editorMin.x + editorMax.x - width) * 0.5f), editorMin.y), ImGuiCond_Appearing);
     ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
@@ -490,7 +488,7 @@ static void DrawStatusLine(TextEditor& editor, f32 padY, bool& openGoTo, bool& o
     const f32 overwriteWidth = editor.IsOverwrite() ? ImGui::CalcTextSize(messages::sequence::cStatusOverwrite).x + gap : 0.0f;
     const f32 rightWidth = positionWidth + selectionWidth + overwriteWidth;
 
-    ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Button, uicolors::cTransparentU32);
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(padX, padY));
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
@@ -507,7 +505,7 @@ static void DrawStatusLine(TextEditor& editor, f32 padY, bool& openGoTo, bool& o
 
         const std::string label = FitText(std::string(ICON_LC_CIRCLE_X "  ") + message,leftWidth - padX * 2.0f) + "###SeqError";
 
-        ImGui::PushStyleColor(ImGuiCol_Text, cSeqErrorColor);
+        ImGui::PushStyleColor(ImGuiCol_Text, uicolors::Marker());
 
         if (ImGui::Button(label.c_str()))
         {

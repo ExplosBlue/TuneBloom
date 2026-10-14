@@ -5,6 +5,7 @@
 #include <ui/widgets/Properties.h>
 #include <ui/settings/Theme.h>
 #include <ui/wave/WaveFormatUI.h>
+#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
@@ -16,6 +17,22 @@ namespace waveimport
 
 constexpr f32 cWaveformHeightEm = 8.0f;
 constexpr f32 cToolGroupGapEm   = 0.6f;
+
+static void PushToggleButtonColors(bool on)
+{
+    if (!on)
+        return;
+
+    ImGui::PushStyleColor(ImGuiCol_Button, GetThemeAccent());
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, GetThemeAccent());
+    ImGui::PushStyleColor(ImGuiCol_Text, GetOnAccentTextColor());
+}
+
+static void PopToggleButtonColors(bool on)
+{
+    if (on)
+        ImGui::PopStyleColor(3);
+}
 
 bool WaveImportPanel::isPreviewActive() const
 {
@@ -129,11 +146,7 @@ void WaveImportPanel::drawWaveformTools(FrameContext& ctx, f32 groupGap)
     ImGui::SameLine(0.0f, groupGap);
     ImGui::BeginDisabled(!ctx.cropEditable);
 
-    if (curveOn)
-    {
-        ImGui::PushStyleColor(ImGuiCol_Button, gAccentColor);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, gAccentColor);
-    }
+    PushToggleButtonColors(curveOn);
 
     if (ImGui::Button(messages::common::cCurve))
     {
@@ -146,8 +159,7 @@ void WaveImportPanel::drawWaveformTools(FrameContext& ctx, f32 groupGap)
         mTouched = true;
     }
 
-    if (curveOn)
-        ImGui::PopStyleColor(2);
+    PopToggleButtonColors(curveOn);
 
     ImGui::SetItemTooltip("%s", messages::import::cWaveCurveTip);
     ImGui::EndDisabled();
@@ -215,7 +227,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
     const bool previewPlaying = previewActive && !previewPaused;
     const ImVec2 size(buttonSize, buttonSize);
 
-    if (ImGui::Button(previewPlaying ? ICON_LC_PAUSE "###Play" : ICON_LC_PLAY "###Play", size))
+    if (PlayToggleButton(previewPlaying ? TransportGlyph::Pause : TransportGlyph::Play, "###Play", size, previewPlaying))
     {
         if (!previewActive)
         {
@@ -236,7 +248,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
         ImGui::SetTooltip("%s", previewPlaying ? messages::common::cPause : previewPaused ? messages::import::cWavePreviewResume : messages::import::cWavePreviewPlay);
 
     ImGui::SameLine();
-    if (ImGui::Button(ICON_LC_SQUARE "###Stop", size))
+    if (TransportButton(TransportGlyph::Stop, "###Stop", size))
     {
         mPlayRequested = false;
         sSoundPlayer.stopAllPlayers();
@@ -250,11 +262,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
 
     const bool loopOn = mLoopPlayback && ctx.loopActive;
 
-    if (loopOn)
-    {
-        ImGui::PushStyleColor(ImGuiCol_Button, gAccentColor);
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, gAccentColor);
-    }
+    PushToggleButtonColors(loopOn);
 
     if (ImGui::Button(ICON_LC_REPEAT "###LoopPlayback", size))
     {
@@ -262,8 +270,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
         mPreviewStale = true;
     }
 
-    if (loopOn)
-        ImGui::PopStyleColor(2);
+    PopToggleButtonColors(loopOn);
 
     if (ImGui::IsItemHovered())
         ImGui::SetTooltip("%s", mLoopPlayback ? messages::import::cWaveLoopPlaybackOn : messages::import::cWaveLoopPlaybackOff);

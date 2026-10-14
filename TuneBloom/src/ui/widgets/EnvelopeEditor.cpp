@@ -2,6 +2,7 @@
 
 #include <ui/Messages.h>
 #include <ui/app/UI.h>
+#include <ui/settings/UiColors.h>
 
 #include <imgui/imgui_internal.h>
 
@@ -13,8 +14,9 @@ static constexpr s32 cAdshrCurveStageSamples = 24;
 static constexpr f32 cAdshrCurveSustainWidth = 0.15f;
 static constexpr f32 cAdshrCurveStageWidth   = 0.4f;
 static constexpr f32 cAdshrCurveKneeMsec     = 5.0f;
-static constexpr f32 cAdshrCurveFillAlpha    = 0.25f;
 static constexpr f32 cAdshrInstantOctaves    = 1.0f;
+
+static constexpr uicolors::Themed<f32> cAdshrCurveFillAlpha = { 0.25f, 0.14f };
 
 static constexpr u8 cAdsrMin = 0;
 static constexpr u8 cAdsrMax = 127;
@@ -208,7 +210,7 @@ static void DrawAdshrCurve(const AdshrTimes& times, const ImVec2& size)
     // Fill below the curve
     {
         ImVec4 fill = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
-        fill.w *= cAdshrCurveFillAlpha;
+        fill.w *= uicolors::Pick(cAdshrCurveFillAlpha);
         const ImU32 fillColor = ImGui::GetColorU32(fill);
 
         const ImDrawListFlags flags = draw->Flags;

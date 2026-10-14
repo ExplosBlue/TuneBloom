@@ -23,6 +23,6 @@ extern SeqEditorSettings gSeqEditorSettings;
 void RegisterSeqEditorSettings();
 
 const TextEditor::LanguageDefinition& GetSeqLanguageDefinition();
-const TextEditor::Palette& GetSeqPalette(bool dark);
+const TextEditor::Palette& GetSeqPalette();
 
 void DrawSeqManual();

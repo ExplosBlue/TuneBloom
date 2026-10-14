@@ -5,9 +5,9 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
 #include <ui/file/SystemShell.h>
-#include <ui/settings/Theme.h>
-#include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/TimeUtil.h>
+#include <ui/settings/UiColors.h>
+#include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
@@ -29,8 +29,6 @@ static constexpr f32 cHeadGapEm        = 0.5f;
 static constexpr f32 cFooterGapEm      = 0.6f;
 static constexpr f32 cRecoverLabelEm   = 5.0f;
 static constexpr f32 cRecoverRowGapEm  = 0.3f;
-
-static constexpr ImVec4 cNoticeColor = cWarningTextColor;
 
 static bool sWantsRestoreDialog = false;
 static std::vector<Snapshot> sDialogSnapshots;
@@ -76,12 +74,12 @@ static void DrawRestoreHead()
 
     if (sDialogConfirmDiscard)
     {
-        ImGui::TextColored(cNoticeColor, ICON_LC_TRIANGLE_ALERT " %s", messages::backup::cRestoreDiscards);
+        ImGui::TextColored(uicolors::Warning(), ICON_LC_TRIANGLE_ALERT " %s", messages::backup::cRestoreDiscards);
     }
     else if (GetFailure(&failure))
     {
         const char* notice = failure == Bfsar::BackupResult::Invalid ? messages::backup::cPausedInvalid : messages::backup::cPausedWrite;
-        ImGui::TextColored(cNoticeColor, ICON_LC_TRIANGLE_ALERT " %s", notice);
+        ImGui::TextColored(uicolors::Warning(), ICON_LC_TRIANGLE_ALERT " %s", notice);
     }
 
     ImGui::Dummy(ImVec2(0.0f, ImFloor(em * cHeadGapEm) - ImGui::GetStyle().ItemSpacing.y));

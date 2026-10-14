@@ -8,6 +8,7 @@
 #include <ui/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/stream/StreamTrackImport.h>
+#include <ui/settings/UiColors.h>
 #include <ui/wave/WaveImportPanel.h>
 #include <ui/widgets/Widgets.h>
 
@@ -577,7 +578,7 @@ static void DrawStreamSourceUI()
         return;
     }
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparent);
 
     if (ImGui::BeginChild("###StreamImport", ImVec2(CalcStreamCreateImportWidth() + ImGui::GetStyle().ScrollbarSize, maxHeight)))
         DrawStreamCreateImport();

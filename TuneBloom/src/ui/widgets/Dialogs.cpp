@@ -4,6 +4,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Properties.h>
 #include <ui/settings/Theme.h>
+#include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>
 
 #include <libs/IconsLucide.h>
@@ -75,8 +76,7 @@ void BeginDialogFooter(std::initializer_list<const char*> labels, bool separator
 
 bool BeginDialog(const char* name, bool* open, ImGuiWindowFlags flags)
 {
-    ImVec4 background = ImGui::GetStyleColorVec4(ImGuiCol_WindowBg);
-    background.w = 1.0f;
+    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_WindowBg));
 
     const f32 pad = ImFloor(ImGui::GetFontSize() * cDialogPadEm);
 
@@ -84,7 +84,7 @@ bool BeginDialog(const char* name, bool* open, ImGuiWindowFlags flags)
         ImGui::SetNextWindowSizeConstraints(ImVec2(ImFloor(ImGui::GetFontSize() * cDialogMinWidthEm), 0.0f), ImVec2(FLT_MAX, FLT_MAX));
 
     ImGui::PushStyleColor(ImGuiCol_PopupBg, background);
-    ImGui::PushStyleColor(ImGuiCol_ResizeGrip, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_ResizeGrip, uicolors::cTransparent);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(pad, pad));
     const bool visible = ImGui::BeginPopupModal(name, open, flags);
     ImGui::PopStyleVar();

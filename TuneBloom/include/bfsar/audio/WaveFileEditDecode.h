@@ -21,8 +21,8 @@ inline DecodedPcm decodeWaveFileForEditing(const WaveFile& wave)
     const bool useFullData = firstChannel && firstChannel->getFullData_() != nullptr;
 
     out.isLoop = wave.getIsLoop();
-    out.loopStartFrame = useFullData ? wave.getOriginalLoopStartFrame() : wave.getLoopStartFrame(false);
-    out.loopEndFrame = useFullData ? wave.getOriginalLoopEndFrame() : wave.getLoopEndFrame(false);
+    out.loopStartFrame = wave.getOriginalLoopStartFrame();
+    out.loopEndFrame = wave.getOriginalLoopEndFrame();
 
     if (out.loopEndFrame > sampleCount)
         out.loopEndFrame = sampleCount;

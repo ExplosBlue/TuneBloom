@@ -11,6 +11,7 @@
 
 #include <libs/dsp/dsp.h>
 
+#include <optional>
 #include <string>
 
 class Sound;
@@ -326,11 +327,11 @@ public:
 
     static const char* sEncodingTypes[3];
 
-    static const u32 cFramesAfterLoopEnd = 140;
-    static const u32 cSamplesPerFrame = 14;
-    static const u32 cStreamLoopStartAlignmentFramesAdpcm = 0x3800;
-    static const u32 cCtrLoopStartAlignmentBytes = 512;
-    static const u32 cStreamMinimumLoopFrames = 0x480;
+    static constexpr u32 cFramesAfterLoopEnd                  = 140;
+    static constexpr u32 cSamplesPerFrame                     = 14;
+    static constexpr u32 cStreamLoopStartAlignmentFramesAdpcm = 0x3800;
+    static constexpr u32 cCtrLoopStartAlignmentBytes          = 512;
+    static constexpr u32 cStreamMinimumLoopFrames             = 0x480;
 
 public:
     WaveFile()
@@ -425,7 +426,15 @@ public:
 
     u32 getLoopStartFrame(bool forStream) const
     {
-        return getOriginalLoopStartFrame() + getSpoolFrames(getLoopStartAlignmentFrames(forStream));
+        return getOriginalLoopStartFrame() + getDataSpoolFrames(forStream);
+    }
+
+    u32 getDataSpoolFrames(bool forStream) const
+    {
+        if (!forStream && mDataSpoolFrames)
+            return *mDataSpoolFrames;
+
+        return getSpoolFrames(getLoopStartAlignmentFrames(forStream));
     }
 
     u32 getLoopEndFrame(bool forStream) const
@@ -543,6 +552,7 @@ private:
         }
 
         mUseOriginalData = false;
+        mDataSpoolFrames.reset();
     }
 
     bool readChannel_(const nw::snd::internal::WaveFileReader& reader, const nw::snd::internal::WaveInfo& waveInfo, s32 channelIndex);
@@ -566,6 +576,7 @@ private:
     u32 mLoopStartFrame;
     u32 mLoopEndFrame;
     u32 mOriginalFileLoopStartFrame;
+    std::optional<u32> mDataSpoolFrames;
 
     u32 mSampleCount;
 

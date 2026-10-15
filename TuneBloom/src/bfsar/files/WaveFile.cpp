@@ -295,8 +295,11 @@ bool WaveFile::doRead(const void* fileAddr)
     if (waveInfo.originalLoopStartFrame == 0 && waveInfo.loopStartFrame != 0)
         waveInfo.originalLoopStartFrame = waveInfo.loopStartFrame;
 
+    const u32 fileSpoolFrames = waveInfo.loopStartFrame - waveInfo.originalLoopStartFrame;
+
     mLoopStartFrame = waveInfo.originalLoopStartFrame;
-    mLoopEndFrame = waveInfo.loopEndFrame - (waveInfo.loopStartFrame - waveInfo.originalLoopStartFrame);
+    mLoopEndFrame = waveInfo.loopEndFrame - fileSpoolFrames;
+    mDataSpoolFrames = mIsLoop ? fileSpoolFrames : 0;
 
     if (mLoopStartFrame >= mLoopEndFrame)
     {
@@ -733,6 +736,8 @@ void WaveFile::rebuildSpooledData_()
 
 void WaveFile::reencodeChannels_(Encoding fromEncoding)
 {
+    mDataSpoolFrames.reset();
+
     for (u32 i = 0; i < mChannels.size(); i++)
     {
         Channel* channel = mChannels.nth(i);
@@ -1109,6 +1114,7 @@ bool WaveFile::setupPreviewPcm16(const DecodedPcm& pcm, bool isLoop, u32 loopSta
     mIsLoop = isLoop;
     mLoopStartFrame = loopStartFrame;
     mLoopEndFrame = loopEndFrame;
+    mDataSpoolFrames = 0;
     mIsLoopDirty = false;
 
     for (const auto& chFloats : pcm.channels)

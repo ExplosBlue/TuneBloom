@@ -33,8 +33,11 @@ static constexpr s32 cBackupIntervalMin     = 1;
 static constexpr s32 cBackupIntervalMax     = 60;
 static constexpr s32 cBackupIntervalDefault = 10;
 
-static constexpr f32 cTooltipDelayMin = 0.1f;
-static constexpr f32 cTooltipDelayMax = 2.0f;
+static constexpr f32 cHoverStationaryDelay      = 0.15f;
+static constexpr f32 cScrollSmoothingMaxSeconds = 0.05f;
+static constexpr f32 cLegacyScrollSmoothingScale = 2.0f;
+
+static constexpr ImGuiHoveredFlags cTooltipHoverFlags = ImGuiHoveredFlags_Stationary | ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled;
 
 static constexpr bool cSaveMetadataDefault   = true;
 static constexpr bool cForceSaveInUseDefault = false;
@@ -280,8 +283,8 @@ void SaveInterfaceConfig()
 {
     json::Value section;
     section.setBool("animations", sInterfaceSettings.animations);
-    section.setBool("smoothScrolling", sInterfaceSettings.smoothScrolling);
-    section.setBool("windowShadows", sInterfaceSettings.windowShadows);
+    section.setFloat("scrollSmoothingAmount", sInterfaceSettings.scrollSmoothing);
+    section.setFloat("shadowOpacity", sInterfaceSettings.shadowOpacity);
     section.setFloat("tooltipDelay", sInterfaceSettings.tooltipDelay);
     section.setFloat("scrollSpeed", sInterfaceSettings.scrollSpeed);
     section.setFloat("uiScale", sInterfaceSettings.uiScale);
@@ -290,14 +293,26 @@ void SaveInterfaceConfig()
     SaveConfigSection(cSettingsFile, cInterfaceSection, section);
 }
 
+static f32 LoadLegacyScrollSmoothing(const json::Value& section)
+{
+    const f32 fromBool = section.getBool("smoothScrolling", true) ? cScrollSmoothingDefault : cScrollSmoothingMin;
+
+    return section.getFloat("scrollSmoothing", fromBool / cLegacyScrollSmoothingScale) * cLegacyScrollSmoothingScale;
+}
+
+static f32 LoadLegacyShadowOpacity(const json::Value& section)
+{
+    return section.getBool("windowShadows", true) ? cShadowOpacityDefault : cShadowOpacityMin;
+}
+
 void LoadInterfaceConfig()
 {
     json::Value section;
     LoadConfigSection(cSettingsFile, cInterfaceSection, &section);
 
     sInterfaceSettings.animations = section.getBool("animations", sInterfaceSettings.animations);
-    sInterfaceSettings.smoothScrolling = section.getBool("smoothScrolling", sInterfaceSettings.smoothScrolling);
-    sInterfaceSettings.windowShadows = section.getBool("windowShadows", sInterfaceSettings.windowShadows);
+    sInterfaceSettings.scrollSmoothing = sead::Mathf::clamp2(cScrollSmoothingMin, section.getFloat("scrollSmoothingAmount", LoadLegacyScrollSmoothing(section)), cScrollSmoothingMax);
+    sInterfaceSettings.shadowOpacity = sead::Mathf::clamp2(cShadowOpacityMin, section.getFloat("shadowOpacity", LoadLegacyShadowOpacity(section)), cShadowOpacityMax);
     sInterfaceSettings.tooltipDelay = sead::Mathf::clamp2(cTooltipDelayMin, section.getFloat("tooltipDelay", sInterfaceSettings.tooltipDelay), cTooltipDelayMax);
     sInterfaceSettings.scrollSpeed = sead::Mathf::clamp2(cScrollSpeedMin, section.getFloat("scrollSpeed", sInterfaceSettings.scrollSpeed), cScrollSpeedMax);
     sInterfaceSettings.uiScale = sead::Mathf::clamp2(cUIScaleMin, section.getFloat("uiScale", sInterfaceSettings.uiScale), cUIScaleMax);
@@ -310,10 +325,15 @@ void ApplyInterfaceConfig()
 
     SetAnimationEnabled(sInterfaceSettings.animations);
     ImGui::SetHoverAnimation(sInterfaceSettings.animations && motion);
-    ImGui::SetSmoothWheelScroll(sInterfaceSettings.smoothScrolling && motion);
+    ImGui::SetScrollSmoothing(motion ? sInterfaceSettings.scrollSmoothing * cScrollSmoothingMaxSeconds : 0.0f);
     ImGui::SetWheelScrollSpeed(sInterfaceSettings.scrollSpeed);
-    ImGui::GetStyle().HoverDelayNormal = sInterfaceSettings.tooltipDelay;
-    SetWindowShadows(sInterfaceSettings.windowShadows);
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.HoverDelayNormal = sInterfaceSettings.tooltipDelay;
+    style.HoverStationaryDelay = sead::Mathf::min(cHoverStationaryDelay, sInterfaceSettings.tooltipDelay);
+    style.HoverFlagsForTooltipMouse = cTooltipHoverFlags;
+
+    SetWindowShadowOpacity(sInterfaceSettings.shadowOpacity);
     timeutil::SetTwelveHourClock(sInterfaceSettings.twelveHourClock);
 }
 

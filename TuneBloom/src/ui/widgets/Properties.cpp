@@ -342,8 +342,8 @@ bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool 
         enableChanged = ImGui::Checkbox("##enable", enabled);
         ImGui::PopStyleColor();
 
-        if (enableDetail && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", enableDetail);
+        if (enableDetail)
+            ImGui::SetItemTooltip("%s", enableDetail);
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y));
         ImGui::Dummy(ImVec2(0.0f, 0.0f));
@@ -417,8 +417,8 @@ bool DrawPanelHeader(const char* title, bool* enabled, const char* detail)
     const bool changed = ImGui::Checkbox("##enable", enabled);
     ImGui::PopID();
 
-    if (detail && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("%s", detail);
+    if (detail)
+        ImGui::SetItemTooltip("%s", detail);
 
     return changed;
 }

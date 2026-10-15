@@ -11,6 +11,7 @@
 #include <ui/app/Shortcuts.h>
 #include <ui/sound/SoundViews.h>
 #include <ui/settings/UiColors.h>
+#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
@@ -79,22 +80,9 @@ static void DrawSeverityCount(const char* icon, size_t count, const ImVec4& colo
 static void DrawMessage(const PopupMgr::ItemMessage& message)
 {
     if (!message.detail.empty())
-    {
-        ImGui::TextDisabled(messages::popup::cDetailMarker);
-
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-        {
-            ImGui::BeginTooltip();
-            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 22.0f);
-            ImGui::TextUnformatted(message.detail.c_str());
-            ImGui::PopTextWrapPos();
-            ImGui::EndTooltip();
-        }
-    }
+        HelpMarker(message.detail.c_str());
     else
-    {
         ImGui::Dummy(ImVec2(ImGui::CalcTextSize(messages::popup::cDetailMarker).x, 0.0f));
-    }
 
     ImGui::SameLine();
 
@@ -486,8 +474,7 @@ static void DrawIgnoreWarningsCheck(f32 fontSize, f32 viewLeft, bool* ignore)
     ImGui::SetCursorScreenPos(ImVec2(checkX, ImGui::GetCursorScreenPos().y));
     ImGui::Checkbox(messages::popup::cIgnoreWarnings, ignore);
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("%s", messages::popup::cIgnoreWarningsDetail);
+    ImGui::SetItemTooltip("%s", messages::popup::cIgnoreWarningsDetail);
 }
 
 void PopupMgr::updateErrors()

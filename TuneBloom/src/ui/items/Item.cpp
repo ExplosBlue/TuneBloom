@@ -9,6 +9,12 @@
 
 #include <libs/IconsLucide.h>
 
+const Item* Item::validate(sead::BufferedSafeString& error) const
+{
+    error = messages::cNotImplemented;
+    return this;
+}
+
 bool Item::validateName(sead::BufferedSafeString& error) const
 {
     if (!sBfsar.validName(getName()))
@@ -68,6 +74,11 @@ void WarningPopup(const char* name, const char* content)
 
         ImGui::EndPopup();
     }
+}
+
+void DupeNamePopup(const char* name)
+{
+    WarningPopup(name, messages::item::cNameDuplicated);
 }
 
 void ApplyRenameShortcut()

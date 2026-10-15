@@ -67,8 +67,6 @@ bool ResetItemOnRightClick(T* value, const T& reset)
 std::string CutPathStart(const std::string& path, size_t maxLength);
 
 void HelpMarker(const char* desc);
-bool IsItemHoveredAllowDisabled();
 bool IsItemHoveredForDetail();
-void SetDisabledTooltip(const char* reason);
 void DetailTooltip(const char* detail);
 void ListItemDetailTooltip(const char* detail);

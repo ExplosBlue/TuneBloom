@@ -674,8 +674,8 @@ static bool DrawKeyRegionGap(const KeyMapFrame& frame, const ImVec2& gapMin, con
 
     if (!frame.overVScrollbar && ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         DeselectVelocity();
-    else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("%s", messages::bank::cDoubleClickToAdd);
+    else
+        ImGui::SetItemTooltip("%s", messages::bank::cDoubleClickToAdd);
 
     return false;
 }

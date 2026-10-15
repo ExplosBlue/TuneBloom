@@ -21,10 +21,7 @@ void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)
 
         ImGui::EndDisabled();
 
-        if (!waveFile)
-            SetDisabledTooltip(messages::reference::cNoWaveFile);
-        else
-            ImGui::SetItemTooltip("%s", messages::sound::cWaveFileMenuTip);
+        ImGui::SetItemTooltip("%s", waveFile ? messages::sound::cWaveFileMenuTip : messages::reference::cNoWaveFile);
 
         if (BeginContextMenu("WaveFileMenu"))
         {

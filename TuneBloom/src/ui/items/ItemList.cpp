@@ -46,7 +46,11 @@ static const ItemColumn* sNextListColumns = nullptr;
 static u32 sNextListColumnCount = 0;
 static bool sNextListHideAll = false;
 static ItemRowActionCallback sNextListAction = nullptr;
-static ItemRemoveText sNextListRemoveText;
+static constexpr ItemRemoveText cDefaultRemoveText = { messages::common::cDelete, messages::menu::cDeleteItemsFormat, true };
+
+static ItemRemoveText sNextListRemoveText = cDefaultRemoveText;
+static ItemListFooterCallback sNextListFooter = nullptr;
+static f32 sNextListFooterWidth = 0.0f;
 
 void ScrollItemListTo(Item* item)
 {
@@ -75,6 +79,12 @@ void SetNextItemListColumns(const ItemColumn* columns, u32 columnCount, bool hid
     sNextListHideAll = hideAll;
 }
 
+void SetNextItemListFooter(ItemListFooterCallback callback, f32 width)
+{
+    sNextListFooter = callback;
+    sNextListFooterWidth = width;
+}
+
 void SetNextItemListAction(ItemRowActionCallback callback)
 {
     sNextListAction = callback;
@@ -91,10 +101,15 @@ static void CollectItemListRows(ItemListContext& ctx)
     sNextListNote = nullptr;
 
     ctx.removeText = sNextListRemoveText;
-    sNextListRemoveText = ItemRemoveText();
+    sNextListRemoveText = cDefaultRemoveText;
 
     ctx.actionCallback = sNextListAction;
     sNextListAction = nullptr;
+
+    ctx.footerCallback = sNextListFooter;
+    ctx.footerWidth = sNextListFooterWidth;
+    sNextListFooter = nullptr;
+    sNextListFooterWidth = 0.0f;
 
     ctx.listItems.reserve(ctx.list.size());
 
@@ -186,7 +201,8 @@ static void SetupItemListLayout(ItemListContext& ctx)
     if (ctx.hasHeader)
         ctx.tableFlags |= ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate | ImGuiTableFlags_Resizable | ImGuiTableFlags_Hideable;
 
-    ctx.footerHeight = (ctx.hasHeader ? ImGui::GetTextLineHeightWithSpacing() : 0.0f) + (ctx.joined ? ImGui::GetStyle().WindowPadding.y : 0.0f);
+    ctx.hasFooter = ctx.hasHeader || ctx.footerCallback;
+    ctx.footerHeight = (ctx.hasFooter ? ImGui::GetTextLineHeightWithSpacing() : 0.0f) + (ctx.joined ? ImGui::GetStyle().WindowPadding.y : 0.0f);
 
     ctx.tableId = ImGui::GetID(cItemListTableId);
 
@@ -199,109 +215,158 @@ static void SetupItemListLayout(ItemListContext& ctx)
     ctx.nameOffset = ctx.storage->GetFloat(ctx.nameOffsetId, ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x);
 }
 
+static bool IsItemColumnSorted(const ImGuiTable* table, s32 index)
+{
+    return table->Columns[index].SortOrder != -1;
+}
+
+static f32 CalcItemLeadWidth(const ItemListContext& ctx, const ImGuiTable* table)
+{
+    const f32 cellPadding = ImGui::GetStyle().CellPadding.x * 2.0f;
+
+    f32 width = GetItemIdColumnWidth(ctx.itemType) + cellPadding;
+
+    if (table)
+        width = table->Columns[ctx.idColumn].IsEnabled ? table->Columns[ctx.idColumn].WidthRequest + cellPadding : 0.0f;
+
+    if (ctx.actionCallback)
+        width += GetItemActionColumnWidth() + cellPadding;
+
+    return width;
+}
+
+static f32 ShrinkItemTextColumns(ItemListContext& ctx, const bool* shrinkable, f32 excess, f32 floorWidth)
+{
+    f32 shrinkableWidth = 0.0f;
+
+    for (u32 i = 0; i < ctx.columnCount; i++)
+    {
+        if (shrinkable[i])
+            shrinkableWidth += ctx.columnWidths[i];
+    }
+
+    if (excess <= 0.0f || shrinkableWidth <= 0.0f)
+        return 0.0f;
+
+    f32 freed = 0.0f;
+
+    for (u32 i = 0; i < ctx.columnCount; i++)
+    {
+        if (!shrinkable[i])
+            continue;
+
+        const f32 width = sead::Mathf::max(ctx.columnWidths[i] - excess * ctx.columnWidths[i] / shrinkableWidth, sead::Mathf::min(floorWidth, ctx.columnWidths[i]));
+
+        freed += ctx.columnWidths[i] - width;
+        ctx.columnWidths[i] = width;
+    }
+
+    return freed;
+}
+
+static f32 CollapseItemColumns(ItemListContext& ctx, const ImGuiTable* table, f32 excess)
+{
+    if (!table)
+        return 0.0f;
+
+    const f32 cellPadding = ImGui::GetStyle().CellPadding.x * 2.0f;
+
+    f32 freed = 0.0f;
+
+    for (s32 i = static_cast<s32>(ctx.columnCount) - 1; i >= 0 && freed < excess; i--)
+    {
+        if (ctx.columnWidths[i] <= 0.0f || IsItemColumnSorted(table, ctx.nameColumn + 1 + i))
+            continue;
+
+        freed += ctx.columnWidths[i] + cellPadding;
+        ctx.columnWidths[i] = 0.0f;
+        ctx.collapsed[i] = true;
+    }
+
+    return freed;
+}
+
 static void CalcItemListWidths(ItemListContext& ctx)
 {
     CalcItemColumnAutoWidths(ctx.columns, ctx.columnCount, ctx.listItems, ctx.autoWidths);
 
-    if (ctx.columnCount > 0)
+    if (ctx.columnCount == 0)
+        return;
+
+    const ImGuiTable* foundTable = ImGui::TableFindByID(ctx.tableId);
+    const ImGuiTable* table = foundTable && foundTable->ColumnsCount == static_cast<s32>(ctx.nameColumn + 1 + ctx.columnCount) ? foundTable : nullptr;
+    const f32 em = ImGui::GetFontSize();
+    const f32 cellPadding = ImGui::GetStyle().CellPadding.x * 2.0f;
+    const f32 availWidth = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
+    const f32 textMin = em * cItemTextMinEm;
+    const f32 leadWidth = CalcItemLeadWidth(ctx, table);
+    const f32 nameMin = sead::Mathf::max(em * cItemNameMinEm, ctx.nameWidth);
+
+    f32 minWidth = nameMin + leadWidth;
+    bool autoText[cItemColumnMax] = {};
+    bool shownText[cItemColumnMax] = {};
+
+    for (u32 i = 0; i < ctx.columnCount; i++)
     {
-        const ImGuiTable* table = ImGui::TableFindByID(ctx.tableId);
-        const bool hasLayout = table && table->ColumnsCount == static_cast<s32>(ctx.nameColumn + 1 + ctx.columnCount);
-        const f32 cellPadding = ImGui::GetStyle().CellPadding.x * 2.0f;
-        const f32 availWidth = ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ScrollbarSize;
-        const f32 textMin = ImGui::GetFontSize() * cItemTextMinEm;
+        const s32 index = ctx.nameColumn + 1 + i;
 
-        f32 idWidth = GetItemIdColumnWidth(ctx.itemType) + cellPadding;
+        if (table ? !table->Columns[index].IsUserEnabled : IsItemColumnHiddenAtFirst(ctx.columns[i], ctx.hideAll))
+            continue;
 
-        if (hasLayout)
-            idWidth = table->Columns[ctx.idColumn].IsEnabled ? table->Columns[ctx.idColumn].WidthRequest + cellPadding : 0.0f;
+        ctx.columnWidths[i] = table ? GetItemColumnLayoutWidth(table, index, ctx.autoWidths[i]) : ctx.autoWidths[i];
+        minWidth += ctx.columnWidths[i] + cellPadding;
 
-        if (ctx.actionCallback)
-            idWidth += GetItemActionColumnWidth() + cellPadding;
-
-        const f32 nameMin = sead::Mathf::max(ImGui::GetFontSize() * cItemNameMinEm, ctx.nameWidth);
-
-        f32 minWidth = nameMin + idWidth;
-        f32 textWidth = 0.0f;
-        f32 autoTextWidth = 0.0f;
-        bool autoText[cItemColumnMax] = {};
-
-        for (u32 i = 0; i < ctx.columnCount; i++)
-        {
-            if (hasLayout ? !table->Columns[ctx.nameColumn + 1 + i].IsEnabled : IsItemColumnHiddenAtFirst(ctx.columns[i], ctx.hideAll))
-                continue;
-
-            ctx.columnWidths[i] = hasLayout ? GetItemColumnLayoutWidth(table, ctx.nameColumn + 1 + i, ctx.autoWidths[i]) : ctx.autoWidths[i];
-            minWidth += ctx.columnWidths[i] + cellPadding;
-
-            if (!(ctx.columns[i].flags & cItemColumnFlag_Text))
-                continue;
-
-            textWidth += ctx.columnWidths[i];
-            autoText[i] = !hasLayout || IsItemColumnAuto(table, ctx.nameColumn + 1 + i);
-
-            if (autoText[i])
-                autoTextWidth += ctx.columnWidths[i];
-        }
-
-        const f32 nameAuto = CalcItemNameAutoWidth(ctx.listItems) + ctx.nameOffset + ImGui::GetFontSize() + cellPadding;
-        const f32 nameNeed = nameAuto - (availWidth - (minWidth - nameMin));
-
-        if (ctx.nameWidth == 0.0f && nameNeed > 0.0f && autoTextWidth > 0.0f)
-        {
-            const f32 textComfort = ImGui::GetFontSize() * cItemTextComfortEm;
-
-            for (u32 i = 0; i < ctx.columnCount; i++)
-            {
-                if (!autoText[i])
-                    continue;
-
-                const f32 width = sead::Mathf::max(ctx.columnWidths[i] - nameNeed * ctx.columnWidths[i] / autoTextWidth, sead::Mathf::min(textComfort, ctx.columnWidths[i]));
-
-                minWidth -= ctx.columnWidths[i] - width;
-                textWidth -= ctx.columnWidths[i] - width;
-                ctx.columnWidths[i] = width;
-            }
-        }
-
-        const f32 textRoom = textWidth - (minWidth + ImGui::GetFontSize() * (cItemNameComfortEm - cItemNameMinEm) - availWidth);
-
-        if (textWidth > 0.0f && textRoom < textWidth)
-        {
-            for (u32 i = 0; i < ctx.columnCount; i++)
-            {
-                if (!(ctx.columns[i].flags & cItemColumnFlag_Text) || ctx.columnWidths[i] <= 0.0f)
-                    continue;
-
-                const f32 width = sead::Mathf::max(ctx.columnWidths[i] * textRoom / textWidth, sead::Mathf::min(textMin, ctx.columnWidths[i]));
-
-                minWidth -= ctx.columnWidths[i] - width;
-                ctx.columnWidths[i] = width;
-            }
-        }
-
-        const f32 valueWidth = minWidth - nameMin - idWidth;
-        const f32 scrollRoom = valueWidth <= textMin * cItemScrollMinRatio ? valueWidth : textMin;
-
-        f32 nameKeep = nameMin;
-
-        if (ctx.nameWidth == 0.0f)
-        {
-            const f32 nameComfort = sead::Mathf::min(nameAuto, ImGui::GetFontSize() * cItemNameComfortEm);
-
-            nameKeep = sead::Mathf::max(nameMin, sead::Mathf::min(nameComfort, availWidth - idWidth - scrollRoom));
-            minWidth += nameKeep - nameMin;
-        }
-
-        SetItemTableNameMin(nameKeep);
-
-        if (availWidth < minWidth)
-        {
-            ctx.innerWidth = minWidth;
-            ctx.freezeName = nameKeep + idWidth + scrollRoom <= availWidth || nameKeep + idWidth <= ImGui::GetContentRegionAvail().x * cItemNameFreezeRatio;
-            ctx.tableFlags |= ImGuiTableFlags_ScrollX;
-        }
+        shownText[i] = (ctx.columns[i].flags & cItemColumnFlag_Text) != 0;
+        autoText[i] = shownText[i] && (!table || IsItemColumnAuto(table, index));
     }
+
+    const f32 nameAuto = CalcItemNameAutoWidth(ctx.listItems) + ctx.nameOffset + em + cellPadding;
+    const f32 nameComfort = sead::Mathf::min(nameAuto, em * cItemNameComfortEm);
+    const f32 nameWant = sead::Mathf::max(nameMin, nameComfort);
+    const auto calcExcess = [&](f32 nameWidth)
+    {
+        return minWidth - nameMin + nameWidth - availWidth;
+    };
+
+    if (ctx.nameWidth == 0.0f)
+        minWidth -= ShrinkItemTextColumns(ctx, autoText, calcExcess(nameAuto), em * cItemTextComfortEm);
+
+    minWidth -= ShrinkItemTextColumns(ctx, shownText, calcExcess(nameWant), textMin);
+    minWidth -= CollapseItemColumns(ctx, table, calcExcess(nameWant));
+
+    const f32 valueWidth = minWidth - nameMin - leadWidth;
+    const f32 scrollRoom = valueWidth <= textMin * cItemScrollMinRatio ? valueWidth : textMin;
+
+    f32 nameKeep = nameMin;
+
+    if (ctx.nameWidth == 0.0f)
+    {
+        nameKeep = sead::Mathf::max(nameMin, sead::Mathf::min(nameComfort, availWidth - leadWidth - scrollRoom));
+        minWidth += nameKeep - nameMin;
+    }
+
+    SetItemTableNameMin(nameKeep);
+
+    if (availWidth < minWidth)
+    {
+        ctx.innerWidth = minWidth;
+        ctx.freezeName = nameKeep + leadWidth + scrollRoom <= availWidth || nameKeep + leadWidth <= ImGui::GetContentRegionAvail().x * cItemNameFreezeRatio;
+        ctx.tableFlags |= ImGuiTableFlags_ScrollX;
+    }
+}
+
+static void DrawItemListFooter(const ItemListContext& ctx)
+{
+    const f32 right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+
+    DrawItemCount(ctx.rowNum, static_cast<s32>(ctx.fitRows->size()), ctx.listName, ctx.listNote);
+
+    if (!ctx.footerCallback)
+        return;
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(sead::Mathf::max(ImGui::GetCursorPosX(), right - ctx.footerWidth));
+    ctx.footerCallback();
 }
 
 static void BeginItemListTable(ItemListContext& ctx)
@@ -319,7 +384,7 @@ static void BeginItemListTable(ItemListContext& ctx)
             SetupItemIdColumn(ctx.itemType);
 
         ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
-        SetupItemColumns(ctx.columns, ctx.columnCount, ctx.hideAll);
+        SetupItemColumns(ctx.columns, ctx.columnCount, ctx.hideAll, ctx.collapsed);
     }
 
     if (ctx.tableOpen && ctx.hasHeader)
@@ -329,7 +394,7 @@ static void BeginItemListTable(ItemListContext& ctx)
         const ImGuiTable* table = ImGui::GetCurrentTable();
 
         for (u32 i = 0; table->IsInitializing && i < ctx.columnCount; i++)
-            ctx.columnWidths[i] = table->Columns[ctx.nameColumn + 1 + i].IsUserEnabledNextFrame ? GetItemColumnLayoutWidth(table, ctx.nameColumn + 1 + i, ctx.autoWidths[i]) : 0.0f;
+            ctx.columnWidths[i] = table->Columns[ctx.nameColumn + 1 + i].IsUserEnabledNextFrame && !ctx.collapsed[i] ? GetItemColumnLayoutWidth(table, ctx.nameColumn + 1 + i, ctx.autoWidths[i]) : 0.0f;
 
         if (!(ctx.tableFlags & ImGuiTableFlags_ScrollX) && table->InnerWindow && !table->InnerWindow->ScrollbarY)
         {
@@ -417,15 +482,26 @@ static void DrawLoopDirtyMark(Item* item, const sead::SafeString& selName, const
     ImGui::RenderBullet(ImGui::GetWindowDrawList(), pos, ImGui::GetColorU32(ImGuiCol_Text));
 }
 
+static bool IsMouseOverItemListColumn(s32 column)
+{
+    const ImGuiTableColumn& tableColumn = ImGui::GetCurrentTable()->Columns[column];
+    const f32 mouseX = ImGui::GetMousePos().x;
+
+    return tableColumn.IsEnabled && mouseX >= tableColumn.MinX && mouseX < tableColumn.MaxX;
+}
+
 static void HandleItemRowDoubleClick(ItemListContext& ctx, Item* item, const sead::SafeString& selName, f32 nameLeft, f32 nameRight)
 {
     const bool opensFile = item->getItemType() == Item::ItemType::SequenceFile || item->getItemType() == Item::ItemType::BankFile;
     const f32 nameEnd = opensFile ? sead::Mathf::min(nameRight, nameLeft + ImGui::CalcTextSize(selName.cstr()).x) : nameRight;
     const f32 mouseX = ImGui::GetMousePos().x;
     const bool onName = mouseX >= nameLeft && mouseX < nameEnd;
+    const bool onId = ctx.hasHeader && IsMouseOverItemListColumn(ctx.idColumn);
     const bool modifier = shortcuts::Held(shortcuts::Modifier::ToggleSelection) || shortcuts::Held(shortcuts::Modifier::ExtendSelection);
 
-    if (onName && !modifier && CanRenameItem(item))
+    if (onId && !modifier && CanEditItemListId(item))
+        BeginItemListIdEdit(item, ctx.tableId);
+    else if (onName && !modifier && CanRenameItem(item))
         BeginItemRename(item, ctx.tableId);
     else if (opensFile)
         OpenFileWindow(item);
@@ -490,7 +566,21 @@ static void DrawItemRowDragDrop(ItemListContext& ctx, Item* item, const sead::Sa
     }
 }
 
-static void BeginItemListRow(ItemListContext& ctx, Item* item)
+static void DrawItemListIdCell(const Item* item)
+{
+    const char* conflict = GetItemListIdConflict(item);
+
+    sead::FixedSafeString<16> id;
+    FormatItemListId(item, &id);
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(conflict ? uicolors::Marker() : GetItemValueColor(), "%s", id.cstr());
+
+    if (conflict && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_AllowWhenOverlappedByItem))
+        ImGui::SetTooltip("%s", conflict);
+}
+
+static void BeginItemListRow(ItemListContext& ctx, Item* item, bool editingId)
 {
     ImGui::TableNextRow();
 
@@ -501,11 +591,8 @@ static void BeginItemListRow(ItemListContext& ctx, Item* item)
         EndItemActionCell();
     }
 
-    if (ctx.hasHeader && ImGui::TableSetColumnIndex(ctx.idColumn))
-    {
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(GetItemValueColor(), "%u", GetItemListId(item));
-    }
+    if (ctx.hasHeader && !editingId && ImGui::TableSetColumnIndex(ctx.idColumn))
+        DrawItemListIdCell(item);
 
     ImGui::TableSetColumnIndex(ctx.nameColumn);
 
@@ -533,9 +620,9 @@ static void CalcItemRowName(ItemListContext& ctx, Item* item, const char* namePr
     row->text.format("%s%s", row->name.cstr(), playingMark);
 }
 
-static bool DrawItemRowSelectable(Item* item, bool selected, bool renaming, bool* outHovered)
+static bool DrawItemRowSelectable(Item* item, bool selected, bool editing, bool* outHovered)
 {
-    if (renaming)
+    if (editing)
         ImGui::SetNextItemAllowOverlap();
 
     return DrawTableRowSelectable(sead::FormatFixedSafeString<32>("###%p", item).cstr(), selected, outHovered);
@@ -557,11 +644,31 @@ static void DrawItemRowName(const ItemListContext& ctx, Item* item, const ItemRo
         ImGui::PopStyleColor();
 }
 
+static void PlaceItemRowEditField(f32 left, f32 right, f32 rowTop)
+{
+    const f32 framePadding = ImGui::GetStyle().FramePadding.x;
+
+    ImGui::SetCursorScreenPos(ImVec2(left - framePadding, rowTop));
+    ImGui::SetNextItemWidth(right - left + framePadding);
+}
+
+static void DrawItemRowIdEditCell(const ItemListContext& ctx, Item* item, f32 rowTop)
+{
+    if (!ImGui::TableSetColumnIndex(ctx.idColumn))
+        return;
+
+    const ImGuiTableColumn& column = ImGui::GetCurrentTable()->Columns[ctx.idColumn];
+
+    PlaceItemRowEditField(column.WorkMinX, column.WorkMaxX, rowTop);
+    DrawItemListIdInput(item);
+}
+
 static void DrawItemListRow(ItemListContext& ctx, Item* item)
 {
     Item*& selectedItem = *ctx.selection;
+    const bool editingId = GetItemListIdEditedItem(ctx.tableId) == item;
 
-    BeginItemListRow(ctx, item);
+    BeginItemListRow(ctx, item, editingId);
 
     const char* namePrefix = ctx.nameCallback ? ctx.nameCallback(item) : nullptr;
 
@@ -584,7 +691,7 @@ static void DrawItemListRow(ItemListContext& ctx, Item* item)
 
     bool rowHovered = false;
 
-    if (DrawItemRowSelectable(item, selected, renaming, &rowHovered))
+    if (DrawItemRowSelectable(item, selected, renaming || editingId, &rowHovered))
         SelectItemListRow(ctx, item);
 
     DrawLoopDirtyMark(item, row.text, row.cursor, row.left, row.right);
@@ -593,7 +700,7 @@ static void DrawItemListRow(ItemListContext& ctx, Item* item)
     if (dimHeader)
         ImGui::PopStyleColor();
 
-    if (rowHovered && !renaming && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+    if (rowHovered && !renaming && !editingId && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         HandleItemRowDoubleClick(ctx, item, row.text, row.left, row.right);
 
     const bool detailHovered = rowHovered && IsItemHoveredForDetail();
@@ -614,13 +721,12 @@ static void DrawItemListRow(ItemListContext& ctx, Item* item)
 
     if (renaming)
     {
-        const f32 framePadding = ImGui::GetStyle().FramePadding.x;
-
-        ImGui::SetCursorScreenPos(ImVec2(row.left - framePadding, row.cursor.y));
-        ImGui::SetNextItemWidth(row.right - row.left + framePadding);
-
+        PlaceItemRowEditField(row.left, row.right, row.cursor.y);
         ctx.renameResult = DrawItemRenameField(item);
     }
+
+    if (editingId)
+        DrawItemRowIdEditCell(ctx, item, row.cursor.y);
 
     DrawItemColumnCells(item, ctx.columns, ctx.columnCount, detailHovered);
 }
@@ -647,6 +753,7 @@ static void DrawItemListRows(ItemListContext& ctx)
 
     IncludeItemRow(clipper, ctx, sScrollItem);
     IncludeItemRow(clipper, ctx, GetRenamedItem(ctx.tableId));
+    IncludeItemRow(clipper, ctx, GetItemListIdEditedItem(ctx.tableId));
 
     while (clipper.Step())
     {
@@ -718,8 +825,8 @@ void DrawAllItemsUI(const char* id, const char *listName, Item::List &list, Crea
     DrawItemListRows(ctx);
     EndItemListTable(ctx);
 
-    if (ctx.hasHeader)
-        DrawItemCount(ctx.rowNum, static_cast<s32>(ctx.fitRows->size()), ctx.listName, ctx.listNote);
+    if (ctx.hasFooter)
+        DrawItemListFooter(ctx);
 
     ImGui::PopStyleVar();
 

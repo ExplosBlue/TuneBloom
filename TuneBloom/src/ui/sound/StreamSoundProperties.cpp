@@ -89,7 +89,7 @@ static void ReplaceStreamFile(Sound* sound, Sound::StreamSoundInfo& strmSoundInf
 
 static void SetStreamReloadTooltip(const Sound* sound, const Sound::StreamSoundInfo& strmSoundInfo, bool hasPath, bool hasArchiveDir)
 {
-    if (!IsItemHoveredAllowDisabled())
+    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
         return;
 
     if (!hasPath)
@@ -177,7 +177,7 @@ static void DrawStreamPathUI(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo
         }
     }
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
     {
         const Sound::StreamSoundInfo::Track::List& tracks = strmSoundInfo.getTrackList();
 
@@ -218,7 +218,7 @@ static void DrawStreamPathUI(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo
     if (!hasArchiveDir)
         ImGui::EndDisabled();
 
-    SetDisabledTooltip(hasArchiveDir ? messages::stream::cReplaceTooltip : messages::stream::cReloadNoArchiveFolder);
+    ImGui::SetItemTooltip("%s", hasArchiveDir ? messages::stream::cReplaceTooltip : messages::stream::cReloadNoArchiveFolder);
 
     DrawStreamReloadSummary(sound, strmSoundInfo);
 }
@@ -226,7 +226,7 @@ static void DrawStreamPathUI(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo
 static void LoopRowTooltip(bool fromWaveFile)
 {
     if (fromWaveFile)
-        SetDisabledTooltip(messages::stream::cLoopFromWaveFile);
+        ImGui::SetItemTooltip("%s", messages::stream::cLoopFromWaveFile);
 }
 
 static void DrawStreamLoopRows(Sound::StreamSoundInfo& strmSoundInfo)

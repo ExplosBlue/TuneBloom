@@ -4,7 +4,6 @@
 #include <ui/app/MenuBar.h>
 #include <ui/Messages.h>
 #include <ui/settings/UiColors.h>
-#include <ui/widgets/Widgets.h>
 #include <ui/widgets/WindowAnimation.h>
 
 #include <libs/IconsLucide.h>
@@ -105,7 +104,7 @@ bool ContextMenuItem(const char* icon, const char* label, bool enabled, const ch
     const bool pressed = DrawMenuRow(icon, label, false, enabled);
 
     if (!enabled && disabledReason)
-        SetDisabledTooltip(disabledReason);
+        ImGui::SetItemTooltip("%s", disabledReason);
 
     return pressed;
 }

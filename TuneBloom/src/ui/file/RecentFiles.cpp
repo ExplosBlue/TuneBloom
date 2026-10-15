@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/file/RecentFiles.h>
 
 #include <ui/settings/Config.h>
@@ -486,8 +485,7 @@ static bool DrawRecentRowButton(const char* id, const char* icon, bool lit, bool
     const bool hovered = ImGui::IsItemHovered();
     const bool held = ImGui::IsItemActive();
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("%s", tooltip);
+    ImGui::SetItemTooltip("%s", tooltip);
 
     if (!visible && !hovered && !held)
         return pressed;
@@ -694,12 +692,7 @@ static void DrawRecentHeaderCell(const char* id, const char* title, RecentSort s
     drawList->AddText(ImVec2(textLeft, pos.y), ImGui::GetColorU32(sorted ? ImGuiCol_Text : ImGuiCol_TextDisabled), title);
 
     if (sorted)
-    {
-        const char* mark = sRecentSortDescending ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_UP;
-        const f32 markLeft = textLeft + ImGui::CalcTextSize(title).x + ImGui::GetStyle().ItemInnerSpacing.x;
-
-        drawList->AddText(ImVec2(markLeft, pos.y), ImGui::GetColorU32(GetItemValueColor()), mark);
-    }
+        DrawItemSortMark(drawList, ImVec2(textLeft + ImGui::CalcTextSize(title).x + GetItemSortMarkGap(), pos.y), sRecentSortDescending, ImGui::GetColorU32(GetItemValueColor()));
 
     ImGui::SetCursorScreenPos(pos);
 }

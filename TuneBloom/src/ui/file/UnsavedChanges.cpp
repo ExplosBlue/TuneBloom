@@ -8,7 +8,6 @@
 #include <ui/Messages.h>
 #include <ui/items/Selection.h>
 #include <ui/settings/UiColors.h>
-#include <ui/widgets/Widgets.h>
 #include <ui/app/Workspace.h>
 
 #include <libs/IconsLucide.h>
@@ -443,7 +442,7 @@ void DrawUnsavedChangesDialog()
     ImGui::EndDisabled();
 
     if (!canGoTo)
-        SetDisabledTooltip(hasSelection ? messages::unsaved::cRemovedReason : messages::unsaved::cNoRowReason);
+        ImGui::SetItemTooltip("%s", hasSelection ? messages::unsaved::cRemovedReason : messages::unsaved::cNoRowReason);
 
     if (DialogButton(messages::common::cClose) || ImGui::IsKeyPressed(ImGuiKey_Escape))
         close = true;

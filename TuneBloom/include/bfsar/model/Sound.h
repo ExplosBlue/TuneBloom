@@ -6,8 +6,6 @@
 
 #include <snd/Global.h>
 
-#include <ui/Messages.h>
-
 #include <container/seadObjList.h>
 
 #include <utility>
@@ -453,13 +451,7 @@ public:
                 mBiquadValue = biquadValue;
             }
 
-            sead::FixedSafeString<256> getFormattedName() const override
-            {
-                sead::FixedSafeString<256> name;
-                u32 id = getId();
-                name.appendWithFormat(messages::stream::cTrackNameFormat, id);
-                return name;
-            }
+            sead::FixedSafeString<256> getFormattedName() const override;
 
         private:
             ItemReference mWaveFileRef;

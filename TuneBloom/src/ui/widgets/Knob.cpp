@@ -1,6 +1,7 @@
 #include <ui/widgets/Knob.h>
 
 #include <ui/Messages.h>
+#include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
 
 #include <imgui/imgui_custom.h>

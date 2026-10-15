@@ -83,26 +83,7 @@ public:
             mItemType = ItemType::GroupItemInfo;
         }
 
-        sead::FixedSafeString<256> getFormattedName() const override
-        {
-            sead::FixedSafeString<256> name;
-            name.appendWithFormat("[%u] ", getId());
-
-            if (mIsDisabled)
-            {
-                name.append(messages::group::cItemDisabled);
-            }
-            else if (mItemRef.isAttached())
-            {
-                name.append(mItemRef.getItem()->getNameOrNull());
-            }
-            else
-            {
-                name.append(messages::common::cNull);
-            }
-
-            return name;
-        }
+        sead::FixedSafeString<256> getFormattedName() const override;
 
         void drawUI();
 

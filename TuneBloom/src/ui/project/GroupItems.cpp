@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/project/ItemViews.h>
 #include <ui/project/References.h>
 

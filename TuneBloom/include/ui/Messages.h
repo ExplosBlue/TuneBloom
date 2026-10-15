@@ -1,13 +1,9 @@
 #pragma once
 
+#include <ui/MessageType.h>
+
 namespace messages
 {
-
-struct Message
-{
-    const char* text = nullptr;
-    const char* detail = nullptr;
-};
 
 inline constexpr const char* cNotImplemented = "Not implemented";
 
@@ -126,6 +122,7 @@ inline constexpr const char* cMillisecondsFormat = "%.0f ms";
 inline constexpr const char* cMegabytesFormat = "%.1f MB";
 inline constexpr const char* cSecondsFormat = "%.2f s";
 inline constexpr const char* cPercentFormat = "%d%%";
+inline constexpr const char* cPercentFloatFormat = "%.0f%%";
 inline constexpr const char* cChannelCountFormat = "%u Channels";
 
 }
@@ -557,13 +554,14 @@ inline constexpr const char* cKnobSustain = "Sustain";
 inline constexpr const char* cKnobRelease = "Release";
 
 inline constexpr const char* cKeyRange      = "Key Range";
-inline constexpr const char* cVelocityRange = "Velocity Range";
+inline constexpr const char* cVelocityRange = "Vel. Range";
 inline constexpr const char* cRootKey       = "Root Key";
 inline constexpr const char* cKeyGroup      = "Key Group";
 
 inline constexpr const char* cPanelSample   = "Sample";
 
 inline constexpr const char* cInterpolationPolyphase = "Polyphase (4-point)";
+inline constexpr const char* cInterpolationTypes[] = { cInterpolationPolyphase, common::cLinear };
 
 inline constexpr const char* cPanCenter      = "C";
 inline constexpr const char* cPanLeftFormat  = "L%d";
@@ -592,6 +590,9 @@ inline constexpr const char* cNoInstrumentSelected = "Select an Instrument";
 
 inline constexpr const char* cInstrumentNameFormat = "Instrument %d";
 inline constexpr const char* cNextProgramNumberTooltip = "Use the next free program number";
+inline constexpr const char* cProgramNumberShared = "Already in use";
+inline constexpr const char* cVelocityMinFixed = "The lowest Velocity Region always starts at 0";
+inline constexpr const char* cVelocityMaxFixed = "The highest Velocity Region always ends at 127";
 
 
 }
@@ -604,7 +605,7 @@ inline constexpr const char* cComputerRangeTooltipFormat = "Computer keyboard: %
 inline constexpr const char* cMidiOn            = "MIDI: on";
 inline constexpr const char* cMidiDevicesFormat = "MIDI: %u devices";
 inline constexpr const char* cMidiOff           = "MIDI: off";
-inline constexpr const char* cMidiSettings      = "MIDI Settings";
+inline constexpr const char* cMidiSettingsHint  = "Open MIDI Settings";
 
 inline constexpr const char* cHelpTitle      = "Computer Keyboard Mapping";
 inline constexpr const char* cHelpLowerRow   = "Lower row (Z-/):";
@@ -1212,11 +1213,6 @@ inline constexpr const char* cTrackImportFollowsFirst = "Tracks after Track 0 fo
 inline constexpr const char* cTrackImportLayoutPerFileDetail = "Files with over 2 channels split into pairs";
 inline constexpr const char* cTrackImportLayoutPairMonoDetail = "Two adjacent mono files become L and R";
 
-inline constexpr const char* cSampleRateLabel = "Sample rate";
-inline constexpr const char* cChannelsMono = "mono";
-inline constexpr const char* cChannelsStereo = "stereo";
-inline constexpr const char* cLoopStart = "Loop start";
-inline constexpr const char* cLoopEnd = "Loop end";
 inline constexpr const char* cWaveDiscardTitle = "Cancel import?";
 inline constexpr const char* cWaveDiscardQuestion = "Cancel importing this file?";
 inline constexpr const char* cWaveRegionTitle = "Import Wave File";
@@ -1348,6 +1344,7 @@ inline constexpr const char* cColumnRate        = "Rate";
 inline constexpr const char* cLoopTooltip       = "Loops";
 inline constexpr const char* cLoopStartTooltipFormat = "Loops from %u:%06.3f";
 inline constexpr const char* cColumnWaves       = "Waves";
+inline constexpr const char* cColumnRegions     = "Regions";
 inline constexpr const char* cColumnIds         = "IDs";
 inline constexpr const char* cColumnUses        = "Uses";
 inline constexpr const char* cSizeAllColumns   = "Size all columns to fit###SizeAll";
@@ -1712,19 +1709,17 @@ inline constexpr const char* cAppearanceReset = "Reset to Default";
 
 inline constexpr const char* cAnimationsLabel = "Animations";
 inline constexpr const char* cAnimationsDetail = "Fades windows, menus and hover states";
-inline constexpr const char* cSmoothScrollLabel = "Smooth Scrolling";
+inline constexpr const char* cScrollSmoothingLabel = "Scroll Smoothing";
 inline constexpr const char* cScrollSpeedLabel = "Scroll Speed";
 inline constexpr const char* cUIScaleLabel = "UI Scale";
 inline constexpr const char* cUIScaleRestart = "Restart to apply";
-inline constexpr const char* cShadowsLabel = "Window Shadows";
+inline constexpr const char* cShadowOpacityLabel = "Shadow Opacity";
 inline constexpr const char* cTimeFormatLabel = "Time Format";
 inline constexpr const char* cTimeFormat24Format = "24-Hour (%s)";
 inline constexpr const char* cTimeFormat12Format = "12-Hour (%s)";
 
 inline constexpr const char* cTooltipDelayLabel = "Tooltip Delay";
-inline constexpr const char* cTooltipDelayShort = "Short (0.2 s)";
-inline constexpr const char* cTooltipDelayNormal = "Normal (0.4 s)";
-inline constexpr const char* cTooltipDelayLong = "Long (0.8 s)";
+inline constexpr const char* cTooltipDelayInstant = "Instant";
 
 inline constexpr const char* cSettingsFolderLabel = "Settings Folder";
 inline constexpr const char* cResetAll = "Reset All Settings";

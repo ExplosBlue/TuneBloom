@@ -1,9 +1,14 @@
 #include <ui/items/ItemListInternal.h>
 
+#include <bfsar/files/BankFile.h>
 #include <ui/file/File.h>
 #include <ui/Messages.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/file/UnsavedChanges.h>
+
+#include <cstdlib>
+
+static constexpr ImGuiID cItemListIdField = 1;
 
 static bool IsItemNameOptional(const Item* item)
 {
@@ -121,4 +126,57 @@ ItemRenameResult DrawItemRenameField(Item* item)
         return ItemRenameResult::None;
 
     return RenameItem(item, name);
+}
+
+static s32 FilterDigitChar(ImGuiInputTextCallbackData* data)
+{
+    return data->EventChar < '0' || data->EventChar > '9';
+}
+
+static bool ParseProgramNo(const char* text, s16* outProgramNo)
+{
+    char* end = nullptr;
+    const long value = std::strtol(text, &end, 10);
+
+    if (end == text || *end != '\0')
+        return false;
+
+    *outProgramNo = static_cast<s16>(sead::MathCalcCommon<long>::clamp2(BankFile::Instrument::cProgramNoMin, value, BankFile::Instrument::cProgramNoMax));
+
+    return true;
+}
+
+bool CanEditItemListId(const Item* item)
+{
+    return IsItemListIdProgramNo(item->getItemType());
+}
+
+void BeginItemListIdEdit(Item* item, ImGuiID table)
+{
+    sead::FixedSafeString<16> text;
+    FormatItemListId(item, &text);
+
+    BeginRowRename(item, table, text.cstr(), cItemListIdField);
+}
+
+Item* GetItemListIdEditedItem(ImGuiID table)
+{
+    return static_cast<Item*>(GetRenamedRow(table, cItemListIdField));
+}
+
+void DrawItemListIdInput(Item* item)
+{
+    sead::FixedSafeString<256> text;
+    s16 programNo = 0;
+
+    if (!DrawRowRenameField("", &text, &FilterDigitChar) || !ParseProgramNo(text.cstr(), &programNo))
+        return;
+
+    BankFile::Instrument* instrument = static_cast<BankFile::Instrument*>(item);
+
+    if (programNo == instrument->getProgramNo())
+        return;
+
+    instrument->setProgramNo(programNo);
+    SetUnsavedChanges(true);
 }

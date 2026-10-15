@@ -244,8 +244,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
         }
     }
 
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", previewPlaying ? messages::common::cPause : previewPaused ? messages::import::cWavePreviewResume : messages::import::cWavePreviewPlay);
+    ImGui::SetItemTooltip("%s", previewPlaying ? messages::common::cPause : previewPaused ? messages::import::cWavePreviewResume : messages::import::cWavePreviewPlay);
 
     ImGui::SameLine();
     if (TransportButton(TransportGlyph::Stop, "###Stop", size))
@@ -254,8 +253,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
         sSoundPlayer.stopAllPlayers();
     }
 
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", messages::common::cStop);
+    ImGui::SetItemTooltip("%s", messages::common::cStop);
 
     ImGui::SameLine();
     ImGui::BeginDisabled(!ctx.loopActive);
@@ -272,8 +270,7 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
 
     PopToggleButtonColors(loopOn);
 
-    if (ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", mLoopPlayback ? messages::import::cWaveLoopPlaybackOn : messages::import::cWaveLoopPlaybackOff);
+    ImGui::SetItemTooltip("%s", mLoopPlayback ? messages::import::cWaveLoopPlaybackOn : messages::import::cWaveLoopPlaybackOff);
 
     ImGui::EndDisabled();
 }

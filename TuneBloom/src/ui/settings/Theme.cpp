@@ -1,6 +1,6 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/settings/Theme.h>
 
+#include <ui/settings/Config.h>
 #include <ui/settings/UiColors.h>
 
 #include <imgui/imgui_custom.h>
@@ -15,7 +15,7 @@ static constexpr f32 cSeriesHueStep       = 0.618034f;
 static constexpr f32 cSeriesSaturationMin = 0.5f;
 static constexpr f32 cAccentTextMix       = 0.3f;
 
-static constexpr uicolors::Themed<f32> cWindowShadowAlpha = { 0.50f, 0.20f };
+static constexpr uicolors::Themed<f32> cWindowShadowMaxAlpha = { 1.00f, 0.40f };
 static constexpr uicolors::Themed<f32> cRaisedGradient    = { 0.03f, 0.015f };
 static constexpr uicolors::Themed<f32> cSurfaceGradient   = { 0.02f, 0.0075f };
 static constexpr uicolors::Themed<f32> cRecessedPaneValue = { 0.72f, 0.965f };
@@ -53,7 +53,7 @@ ImVec4 gAccentColor = uicolors::cAccentDefault;
 static bool sThemeIsDark = true;
 
 static ThemeAdjust sThemeAdjust;
-static bool sWindowShadows = true;
+static f32 sWindowShadowOpacity = cShadowOpacityDefault;
 
 bool IsDarkTheme()
 {
@@ -95,6 +95,16 @@ static ImVec4 Neutral(f32 hue, f32 saturation, f32 luma)
     const f32 scale = luma / (0.2126f * base.x + 0.7152f * base.y + 0.0722f * base.z);
 
     return ImVec4(ImMin(base.x * scale, 1.0f), ImMin(base.y * scale, 1.0f), ImMin(base.z * scale, 1.0f), 1.0f);
+}
+
+static f32 CalcAccentHue(const ImVec4& accent)
+{
+    f32 hue;
+    f32 saturation;
+    f32 value;
+    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, hue, saturation, value);
+
+    return saturation < cGrayscaleSaturation ? 0.0f : hue;
 }
 
 void CalcThemeColors(ImVec4 accent, bool dark, ImVec4* colors)
@@ -155,13 +165,7 @@ void CalcThemeColors(ImVec4 accent, bool dark, ImVec4* colors)
         { ImGuiCol_ModalWindowDimBg,      Fixed(cModalWindowDimBg),          Fixed(uicolors::light::cModalWindowDimBg) },
     };
 
-    f32 hue;
-    f32 saturation;
-    f32 value;
-    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, hue, saturation, value);
-
-    if (saturation < cGrayscaleSaturation)
-        hue = 0.0f;
+    const f32 hue = CalcAccentHue(accent);
 
     for (const ThemeRole& role : cRoles)
     {
@@ -189,14 +193,14 @@ f32 CalcSurfaceGradient(bool dark)
 
 static void ApplyWindowShadowAlpha()
 {
-    const f32 alpha = uicolors::Pick(cWindowShadowAlpha, sThemeIsDark);
+    const f32 alpha = uicolors::Pick(cWindowShadowMaxAlpha, sThemeIsDark);
 
-    ImGui::SetWindowShadowAlpha(sWindowShadows ? alpha : 0.0f);
+    ImGui::SetWindowShadowAlpha(alpha * sWindowShadowOpacity);
 }
 
-void SetWindowShadows(bool enabled)
+void SetWindowShadowOpacity(f32 opacity)
 {
-    sWindowShadows = enabled;
+    sWindowShadowOpacity = opacity;
     ApplyWindowShadowAlpha();
 }
 
@@ -240,11 +244,12 @@ ImVec4 GetSeriesColor(s32 index)
 {
     const ImVec4& accent = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
 
-    f32 hue;
+    f32 ignoredHue;
     f32 saturation;
     f32 value;
-    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, hue, saturation, value);
-    hue = ImFmod(hue + static_cast<f32>(index) * cSeriesHueStep, 1.0f);
+    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, ignoredHue, saturation, value);
+
+    const f32 hue = ImFmod(CalcAccentHue(gAccentColor) + static_cast<f32>(index) * cSeriesHueStep, 1.0f);
     saturation = ImMax(saturation, cSeriesSaturationMin);
 
     return uicolors::FromHsv(hue, saturation, value, accent.w);

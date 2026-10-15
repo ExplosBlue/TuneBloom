@@ -1,6 +1,7 @@
 #include <ui/stream/StreamTracks.h>
 
 #include <ui/Messages.h>
+#include <ui/sound/SoundProperties.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
 
@@ -22,7 +23,6 @@ struct TrackTableView
 {
     TrackTableLayout layout;
     f32 rowHeight;
-    f32 goWidth;
     f32 channelWidth;
     bool compactWave;
     bool showWaveLink;
@@ -173,7 +173,7 @@ static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, const TrackTab
     ImGui::TableNextColumn();
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor((view.rowHeight - ImGui::GetFrameHeight()) * 0.5f));
 
-    DrawTrackWaveSelector(track, ImGui::GetContentRegionAvail().x - (view.showWaveLink ? style.ItemInnerSpacing.x + view.goWidth : 0.0f) - (view.showChannels ? style.ItemSpacing.x + view.channelWidth : 0.0f), view.compactWave);
+    DrawTrackWaveSelector(track, ImGui::GetContentRegionAvail().x - (view.showWaveLink ? TrailingButtonsWidth(1) : 0.0f) - (view.showChannels ? style.ItemSpacing.x + view.channelWidth : 0.0f), view.compactWave);
 
     Item* waveFile = track->getWaveFileRef().getItem();
 
@@ -181,14 +181,13 @@ static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, const TrackTab
     {
         ImGui::BeginDisabled(!waveFile);
 
-        ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-        if (ImGui::Button(ICON_LC_EXTERNAL_LINK "###GoWave"))
+        if (TrailingButton(ICON_LC_EXTERNAL_LINK "###GoWave"))
             SelectItem(waveFile);
 
         ImGui::EndDisabled();
 
         if (!waveFile)
-            SetDisabledTooltip(messages::reference::cNoWaveFile);
+            ImGui::SetItemTooltip("%s", messages::reference::cNoWaveFile);
     }
 
     if (view.showChannels)
@@ -246,7 +245,6 @@ void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit)
     TrackTableView view = {};
     view.layout = CalcTrackTableLayout(ctx);
     view.rowHeight = CalcTrackKnobSize();
-    view.goWidth = ImGui::CalcTextSize(ICON_LC_EXTERNAL_LINK).x + ImGui::GetStyle().FramePadding.x * 2.0f;
     view.channelWidth = ImGui::CalcTextSize(cTrackChannelWidest).x;
 
     const f32 availWidth = ImGui::GetContentRegionAvail().x;

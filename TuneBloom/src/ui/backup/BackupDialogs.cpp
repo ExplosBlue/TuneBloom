@@ -150,9 +150,9 @@ static bool DrawRestoreTable()
     if (ImGui::BeginTable("##Backups", 3, ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerH, ImVec2(0.0f, listHeight)))
     {
         ImGui::TableSetupScrollFreeze(0, 1);
-        ImGui::TableSetupColumn(messages::backup::cColumnDate, ImGuiTableColumnFlags_WidthStretch, 2.0f);
-        ImGui::TableSetupColumn(messages::common::cType, ImGuiTableColumnFlags_WidthStretch, 1.5f);
-        ImGui::TableSetupColumn(messages::common::cSize, ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn(messages::backup::cColumnDate, ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(messages::common::cType, ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn(messages::common::cSize, ImGuiTableColumnFlags_WidthFixed);
         ImGui::TableHeadersRow();
 
         restore = DrawRestoreRows();

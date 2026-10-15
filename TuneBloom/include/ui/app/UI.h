@@ -23,7 +23,6 @@
 #include <ui/widgets/Knob.h>
 #include <ui/widgets/ListFilter.h>
 #include <ui/app/MenuBar.h>
-#include <ui/Messages.h>
 #include <ui/widgets/PanelLayout.h>
 #include <ui/bank/PianoKeyboard.h>
 #include <ui/player/PlayerViews.h>
@@ -36,7 +35,6 @@
 #include <ui/app/ShortcutsDialog.h>
 #include <ui/sound/SoundViews.h>
 #include <ui/file/SystemShell.h>
-#include <ui/settings/Theme.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/app/Workspace.h>

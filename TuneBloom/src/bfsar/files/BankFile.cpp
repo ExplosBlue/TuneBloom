@@ -336,6 +336,18 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
         PushInstrumentError(messages::bank::cKeyRegionEmptyFormat, mId);
 }
 
+sead::FixedSafeString<256> BankFile::Instrument::getFormattedName() const
+{
+    sead::FixedSafeString<256> name;
+
+    if (isNameValid())
+        name.appendWithFormat("[%d] %s", mProgramNo, mName.cstr());
+    else
+        name.appendWithFormat(messages::bank::cInstrumentNameFormat, mProgramNo);
+
+    return name;
+}
+
 BankFile::VelocityRegion::~VelocityRegion()
 {
     sSoundPlayer.forgetBankRegion(*this);
@@ -359,7 +371,7 @@ const Item* BankFile::validate(sead::BufferedSafeString& error) const
         SEAD_ASSERT(instrumentItem->getItemType() == Item::ItemType::BankFileInstrument);
         const BankFile::Instrument* instrument = static_cast<const BankFile::Instrument*>(instrumentItem);
 
-        if (instrument->getProgramNo() < 0 || instrument->getProgramNo() > 32766)
+        if (instrument->getProgramNo() < Instrument::cProgramNoMin || instrument->getProgramNo() > Instrument::cProgramNoMax)
         {
             error.format(messages::bank::cInvalidProgramNumberFormat, i);
             return instrument;
@@ -439,6 +451,69 @@ s16 FindNextAvailableProgramNo(const Item::List &instrumentList, const BankFile:
         prog++;
 
     return prog;
+}
+
+struct SharedProgramNoCache
+{
+    const sead::TList<Item*>* instrumentList;
+    std::vector<s16> sharedProgramNos;
+};
+
+static std::vector<SharedProgramNoCache> sSharedProgramNoCaches;
+static s32 sSharedProgramNoCacheFrame = -1;
+
+static std::vector<s16> CollectSharedProgramNos(const sead::TList<Item*>& instrumentList)
+{
+    std::vector<s16> programNos;
+    programNos.reserve(instrumentList.size());
+
+    for (const Item* item : instrumentList)
+        programNos.push_back(static_cast<const BankFile::Instrument*>(item)->getProgramNo());
+
+    std::sort(programNos.begin(), programNos.end());
+
+    std::vector<s16> sharedProgramNos;
+
+    for (size_t i = 1; i < programNos.size(); i++)
+    {
+        if (programNos[i] == programNos[i - 1] && (sharedProgramNos.empty() || sharedProgramNos.back() != programNos[i]))
+            sharedProgramNos.push_back(programNos[i]);
+    }
+
+    return sharedProgramNos;
+}
+
+static const std::vector<s16>& FindSharedProgramNos(const sead::TList<Item*>& instrumentList)
+{
+    const s32 frame = ImGui::GetFrameCount();
+
+    if (sSharedProgramNoCacheFrame != frame)
+    {
+        sSharedProgramNoCaches.clear();
+        sSharedProgramNoCacheFrame = frame;
+    }
+
+    for (const SharedProgramNoCache& cache : sSharedProgramNoCaches)
+    {
+        if (cache.instrumentList == &instrumentList)
+            return cache.sharedProgramNos;
+    }
+
+    sSharedProgramNoCaches.push_back({ &instrumentList, CollectSharedProgramNos(instrumentList) });
+
+    return sSharedProgramNoCaches.back().sharedProgramNos;
+}
+
+bool IsProgramNoShared(const BankFile::Instrument* instrument)
+{
+    const sead::TList<Item*>* instrumentList = instrument->list();
+
+    if (!instrumentList)
+        return false;
+
+    const std::vector<s16>& sharedProgramNos = FindSharedProgramNos(*instrumentList);
+
+    return std::binary_search(sharedProgramNos.begin(), sharedProgramNos.end(), instrument->getProgramNo());
 }
 
 bool BankFile::doRead(const void* fileAddr)

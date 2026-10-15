@@ -166,6 +166,14 @@ u64 Sound::computeStateSignature() const
     return hash.value();
 }
 
+sead::FixedSafeString<256> Sound::StreamSoundInfo::Track::getFormattedName() const
+{
+    sead::FixedSafeString<256> name;
+    name.appendWithFormat(messages::stream::cTrackNameFormat, getId());
+
+    return name;
+}
+
 Sound::~Sound()
 {
     if (this == sSoundPlayer.getPlayingSound())

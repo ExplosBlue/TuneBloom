@@ -11,8 +11,8 @@
 
 struct ItemRemoveText
 {
-    const char* label = messages::common::cDelete;
-    const char* manyFormat = messages::menu::cDeleteItemsFormat;
+    const char* label = nullptr;
+    const char* manyFormat = nullptr;
     bool removesData = true;
 };
 
@@ -42,6 +42,8 @@ struct ItemListContext
     const char* listNote = nullptr;
     ItemRemoveText removeText;
     ItemRowActionCallback actionCallback = nullptr;
+    ItemListFooterCallback footerCallback = nullptr;
+    f32 footerWidth = 0.0f;
 
     std::vector<Item*> listItems;
     std::vector<Item*> rows;
@@ -54,6 +56,7 @@ struct ItemListContext
     bool hideAll = false;
     Item::ItemType itemType = Item::ItemType::Invalid;
     bool hasHeader = false;
+    bool hasFooter = false;
     bool joined = false;
     s32 actionColumn = -1;
     s32 idColumn = -1;
@@ -72,6 +75,7 @@ struct ItemListContext
     f32 innerWidth = 0.0f;
     f32 columnWidths[cItemColumnMax] = {};
     f32 autoWidths[cItemColumnMax] = {};
+    bool collapsed[cItemColumnMax] = {};
 
     ImGuiStorage* storage = nullptr;
     ImGuiID nameWidthId = 0;
@@ -110,5 +114,10 @@ void DrawRenamePopups();
 void BeginItemRename(Item* item, ImGuiID table);
 ItemRenameResult DrawItemRenameField(Item* item);
 Item* GetRenamedItem(ImGuiID table);
+
+bool CanEditItemListId(const Item* item);
+void BeginItemListIdEdit(Item* item, ImGuiID table);
+void DrawItemListIdInput(Item* item);
+Item* GetItemListIdEditedItem(ImGuiID table);
 
 Sound* CloneSound(Sound* src);

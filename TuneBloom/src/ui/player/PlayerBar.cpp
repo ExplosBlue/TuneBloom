@@ -333,12 +333,6 @@ static PlaybackProgress BuildPlaybackProgress()
     return progress;
 }
 
-static void SetPlayerBarTooltip(const char* text)
-{
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-        ImGui::SetTooltip("%s", text);
-}
-
 static ImU32 GetDisplayValueColor()
 {
     return ImGui::GetColorU32(GetItemValueColor());
@@ -400,8 +394,8 @@ static void DrawTransportButtons(f32 size)
     ImGui::EndDisabled();
 
     if (!canTransport)
-        SetDisabledTooltip(messages::playback::cNothingToPlay);
-    else if (!sSoundPlayer.isActive() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+        ImGui::SetItemTooltip("%s", messages::playback::cNothingToPlay);
+    else if (!sSoundPlayer.isActive() && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
         ImGui::SetTooltip(messages::playback::cLastSoundFormat, sSoundPlayer.getLastPlayedSound()->getFormattedName().cstr());
 
     ImGui::SameLine();
@@ -414,7 +408,7 @@ static void DrawTransportButtons(f32 size)
             sSoundPlayer.fadeOutPlayers();
     }
 
-    SetPlayerBarTooltip(messages::playback::cStopAllVoices);
+    ImGui::SetItemTooltip("%s", messages::playback::cStopAllVoices);
 }
 
 static void DrawDisplayTime(const PlaybackProgress& progress, const ImVec2& pos, f32 width, f32 height, ImFont* font, f32 fontSize)
@@ -430,8 +424,7 @@ static void DrawDisplayTime(const PlaybackProgress& progress, const ImVec2& pos,
     {
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", sShowRemainingTime ? messages::playback::cShowElapsedTime : messages::playback::cShowRemainingTime);
+        ImGui::SetItemTooltip("%s", sShowRemainingTime ? messages::playback::cShowElapsedTime : messages::playback::cShowRemainingTime);
     }
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -482,7 +475,7 @@ static void DrawDisplayLoop(const PlaybackProgress& progress, const ImVec2& pos)
     if (hovered)
         ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
 
-    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
         return;
 
     if (noEnd)
@@ -784,7 +777,7 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
     ImGui::SetCursorScreenPos(ImVec2(min.x, top));
     ImGui::TextUnformatted(MasterVolumeIcon());
 
-    SetPlayerBarTooltip(messages::playback::cMasterVolume);
+    ImGui::SetItemTooltip("%s", messages::playback::cMasterVolume);
 
     // Fader
     const ImVec2 faderMin(min.x + ImGui::CalcTextSize(ICON_LC_VOLUME_2).x + spacing, top);

@@ -15,7 +15,7 @@ bool BeginSearchPopup(const char* str_id, const char* hint, const ImVec2& anchor
 bool SearchPopupItem(const char* label, bool selected);
 void EndSearchPopup();
 
-void SetSmoothWheelScroll(bool enabled);
+void SetScrollSmoothing(float seconds);
 void SetWheelScrollSpeed(float speed);
 
 void SetWindowShadowAlpha(float alpha);

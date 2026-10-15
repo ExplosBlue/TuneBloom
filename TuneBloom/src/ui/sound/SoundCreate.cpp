@@ -485,7 +485,7 @@ static void DrawStreamExistingSource(const char* browseLabel)
     ImGui::EndDisabled();
 
     if (!hasArchiveDir)
-        SetDisabledTooltip(messages::stream::cReloadNoArchiveFolder);
+        ImGui::SetItemTooltip("%s", messages::stream::cReloadNoArchiveFolder);
 
     ImGui::SameLine();
 

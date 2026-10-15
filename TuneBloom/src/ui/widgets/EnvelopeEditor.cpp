@@ -247,8 +247,9 @@ bool DrawAdshrEditor(snd::AdshrCurve& adshrCurve, f32 height, bool stacked)
     const f32 knobWidth = CalcKnobWidth(cRegionAdshrKnobs, IM_ARRAYSIZE(cRegionAdshrKnobs));
     const f32 knobsWidth = CalcKnobRowWidth(cRegionAdshrKnobs, IM_ARRAYSIZE(cRegionAdshrKnobs));
     const f32 knobGap = sead::Mathf::clamp2(0.0f, em * cRegionKnobGapEm - (knobsWidth - ImGui::GetContentRegionAvail().x) / (IM_ARRAYSIZE(cRegionAdshrKnobs) - 1), em * cRegionKnobGapEm);
+    const f32 preferredCurveWidth = em * (IsRegionPanelFill() ? cRegionCurveMaxEm : cRegionCurveEm);
     const f32 freeWidth = ImGui::GetContentRegionAvail().x - knobsWidth - gap;
-    const f32 curveWidth = ImFloor(IsRegionPanelFill() ? freeWidth : std::min(freeWidth, em * cRegionCurveEm));
+    const f32 curveWidth = ImFloor(std::min(freeWidth, preferredCurveWidth));
 
     const AdshrTimes times = CalcAdshrTimes(adshrCurve);
     const f32 stageMsec[] = { times.attackMsec, times.holdMsec, times.decayMsec, 0.0f, times.releaseMsec };
@@ -256,6 +257,9 @@ bool DrawAdshrEditor(snd::AdshrCurve& adshrCurve, f32 height, bool stacked)
 
     if (drawCurve)
     {
+        if (!stacked)
+            CenterRegionKnobs(curveWidth + gap + knobsWidth);
+
         DrawAdshrCurve(times, stacked ? ImVec2(std::min(ImGui::GetContentRegionAvail().x, CalcAdshrEditorWidth(true)), height) : ImVec2(curveWidth, height));
 
         if (IsItemHoveredForDetail())

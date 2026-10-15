@@ -4,25 +4,27 @@ static constexpr s32 cRenameFocusFrames = 4;
 
 static void* sRenameRow = nullptr;
 static ImGuiID sRenameTable = 0;
+static ImGuiID sRenameField = 0;
 static sead::FixedSafeString<256> sRenameText;
 static s32 sRenameFrame = 0;
 static s32 sRenameFocusFrame = 0;
 static bool sRenameFocus = false;
 static bool sRenameActive = false;
 
-void BeginRowRename(void* row, ImGuiID table, const char* text)
+void BeginRowRename(void* row, ImGuiID table, const char* text, ImGuiID field)
 {
     sRenameRow = row;
     sRenameTable = table;
+    sRenameField = field;
     sRenameText = text;
     sRenameFrame = ImGui::GetFrameCount();
     sRenameFocus = true;
     sRenameActive = false;
 }
 
-void* GetRenamedRow(ImGuiID table)
+void* GetRenamedRow(ImGuiID table, ImGuiID field)
 {
-    return sRenameTable == table ? sRenameRow : nullptr;
+    return sRenameTable == table && sRenameField == field ? sRenameRow : nullptr;
 }
 
 void EndRowRenameOf(const void* row)
@@ -37,7 +39,7 @@ void EndStaleRowRename()
         sRenameRow = nullptr;
 }
 
-bool DrawRowRenameField(const char* hint, sead::FixedSafeString<256>* outText)
+bool DrawRowRenameField(const char* hint, sead::FixedSafeString<256>* outText, ImGuiInputTextCallback charFilter)
 {
     const s32 frame = ImGui::GetFrameCount();
 
@@ -51,8 +53,9 @@ bool DrawRowRenameField(const char* hint, sead::FixedSafeString<256>* outText)
     }
 
     const bool cancel = ImGui::IsKeyPressed(ImGuiKey_Escape);
+    const ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll | (charFilter ? ImGuiInputTextFlags_CallbackCharFilter : 0);
 
-    ImGui::InputTextWithHint("##Rename", hint, sRenameText.getBuffer(), sRenameText.getBufferSize(), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+    ImGui::InputTextWithHint("##Rename", hint, sRenameText.getBuffer(), sRenameText.getBufferSize(), flags, charFilter);
 
     if (ImGui::IsItemActive())
     {

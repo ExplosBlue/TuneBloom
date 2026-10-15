@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/file/FileFlow.h>
 
 #include <ui/backup/Backup.h>

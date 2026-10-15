@@ -6,6 +6,8 @@
 #include <bfsar/files/BfwarFile.h>
 #include <bfsar/files/BfwsdFile.h>
 
+#include <ui/Messages.h>
+
 static bool ItemInGroupOfType(BfsarSaveContext& ctx, const Item* item, Group::OutputType outputType)
 {
     for (const Group* group : ctx.itemAttachedGroups[item])

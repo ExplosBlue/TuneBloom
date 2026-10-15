@@ -10,7 +10,7 @@
 #include <vector>
 
 #include <bfsar/model/Item.h>
-#include <ui/Messages.h>
+#include <ui/MessageType.h>
 
 class PopupMgr
 {

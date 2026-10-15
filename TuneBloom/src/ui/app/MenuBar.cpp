@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/app/MenuBar.h>
 
 #include <ui/app/About.h>
@@ -22,7 +21,6 @@
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
-#include <ui/widgets/Widgets.h>
 #include <ui/widgets/WindowAnimation.h>
 #include <ui/app/Workspace.h>
 
@@ -264,7 +262,7 @@ bool MenuBarIconItem(const char* icon, const char* label, const char* shortcut, 
     const bool pressed = MenuBarItem(sead::FormatFixedSafeString<96>("%s %s", icon, label).cstr(), shortcut, false, enabled);
 
     if (!enabled && disabledReason)
-        SetDisabledTooltip(disabledReason);
+        ImGui::SetItemTooltip("%s", disabledReason);
 
     return pressed;
 }
@@ -538,8 +536,7 @@ static void DrawSaveStatusChip(f32 chipRight, f32 textY)
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         }
 
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", messages::mainmenu::cShowUnsaved);
+        ImGui::SetItemTooltip("%s", messages::mainmenu::cShowUnsaved);
     }
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();

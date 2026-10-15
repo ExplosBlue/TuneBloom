@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/app/About.h>
 
 #include <ui/widgets/Dialogs.h>
@@ -84,8 +83,7 @@ static void DrawAboutLink(const char* text, const char* url)
             OpenURL(url);
     }
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("%s", url);
+    ImGui::SetItemTooltip("%s", url);
 }
 
 static void DrawAboutButton(const char* icon, const char* label, const char* url)
@@ -96,8 +94,7 @@ static void DrawAboutButton(const char* icon, const char* label, const char* url
     if (ImGui::Button(text.cstr(), ImVec2(width, 0.0f)))
         OpenURL(url);
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-        ImGui::SetTooltip("%s", url);
+    ImGui::SetItemTooltip("%s", url);
 }
 
 void DrawAppIcon(float size)

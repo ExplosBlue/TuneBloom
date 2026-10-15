@@ -412,13 +412,13 @@ void ImGui_PianoKeyboard(const char* idName, ImVec2 size, s32* prevNoteActive, s
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             SetOctaveBase((layout.keyAtX(mouse.x) / cOctaveKeyNum) * cOctaveKeyNum, callback, userData);
 
-        if (!held && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        if (!held && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
         {
             const s32 rangeLast = std::min(sOctaveBase + cComputerKeyRange - 1, cKeyNum - 1);
             ImGui::SetTooltip(messages::keyboard::cComputerRangeTooltipFormat, FormatKeyLabel(sOctaveBase, false).cstr(), FormatKeyLabel(rangeLast, false).cstr());
         }
     }
-    else if (mouseKey >= 0 && !held && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+    else if (mouseKey >= 0 && !held && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
     {
         ImGui::SetTooltip("%s", FormatKeyLabel(mouseKey, true).cstr());
     }

@@ -277,10 +277,7 @@ static void DrawWavePlayButtons(const WaveFile& wave, bool playing, f32 buttonSi
 
     const auto buttonTooltip = [&](const char* text)
     {
-        if (!canPlay)
-            SetDisabledTooltip(playbackError.cstr());
-        else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", text);
+        ImGui::SetItemTooltip("%s", canPlay ? text : playbackError.cstr());
     };
 
     ImGui::BeginDisabled(!canPlay);

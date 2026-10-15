@@ -9695,8 +9695,7 @@ static ImGuiWindow* FindBestWheelingWindow(const ImVec2& wheel)
 
 // TuneBloom: smooth wheel scroll
 
-static const float      SMOOTH_WHEEL_SCROLL_HALF_LIFE = 0.035f;
-static bool             GSmoothWheelScroll = true;
+static float            GScrollSmoothing = 0.0f;
 static ImGuiID          GSmoothWheelWindowID = 0;
 static bool             GSmoothWheelActive[2] = { false, false };
 static float            GSmoothWheelPos[2] = { 0.0f, 0.0f };
@@ -9705,17 +9704,17 @@ static const float      SMOOTH_WHEEL_SCROLL_HOVER_DELAY = 0.10f;
 static float            GSmoothWheelHoverTimer = 0.0f;
 static float            GWheelScrollSpeed = 1.0f;
 
-namespace ImGui { void SetSmoothWheelScroll(bool enabled); void SetWheelScrollSpeed(float speed); }
+namespace ImGui { void SetScrollSmoothing(float seconds); void SetWheelScrollSpeed(float speed); }
 
 void ImGui::SetWheelScrollSpeed(float speed)
 {
     GWheelScrollSpeed = speed;
 }
 
-void ImGui::SetSmoothWheelScroll(bool enabled)
+void ImGui::SetScrollSmoothing(float seconds)
 {
-    GSmoothWheelScroll = enabled;
-    if (!enabled)
+    GScrollSmoothing = seconds;
+    if (seconds <= 0.0f)
         GSmoothWheelWindowID = 0;
 }
 
@@ -9757,7 +9756,7 @@ void ImGui::UpdateSmoothWheelScroll()
         return;
 
     ImGuiWindow* window = ImGui::FindWindowByID(GSmoothWheelWindowID);
-    const float ratio = 1.0f - ImPow(0.5f, g.IO.DeltaTime / SMOOTH_WHEEL_SCROLL_HALF_LIFE);
+    const float ratio = 1.0f - ImPow(0.5f, g.IO.DeltaTime / GScrollSmoothing);
     bool active = false;
     for (int axis = 0; axis < 2; axis++)
     {
@@ -9868,7 +9867,7 @@ void ImGui::UpdateMouseWheel()
                 LockWheelingWindow(window, wheel.x);
                 float max_step = window->InnerRect.GetWidth() * 0.67f;
                 float scroll_step = ImTrunc(ImMin(2 * window->CalcFontSize() * GWheelScrollSpeed, max_step));
-                if (GSmoothWheelScroll)
+                if (GScrollSmoothing > 0.0f)
                     StartSmoothWheelScroll(window, ImGuiAxis_X, -wheel.x * scroll_step);
                 else
                     SetScrollX(window, window->Scroll.x - wheel.x * scroll_step);
@@ -9879,7 +9878,7 @@ void ImGui::UpdateMouseWheel()
                 LockWheelingWindow(window, wheel.y);
                 float max_step = window->InnerRect.GetHeight() * 0.67f;
                 float scroll_step = ImTrunc(ImMin(5 * window->CalcFontSize() * GWheelScrollSpeed, max_step));
-                if (GSmoothWheelScroll)
+                if (GScrollSmoothing > 0.0f)
                     StartSmoothWheelScroll(window, ImGuiAxis_Y, -wheel.y * scroll_step);
                 else
                     SetScrollY(window, window->Scroll.y - wheel.y * scroll_step);

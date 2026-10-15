@@ -11,7 +11,7 @@
 #include <bfsar/model/WaveArchive.h>
 #include <bfsar/files/WaveFile.h>
 
-#include <ui/Messages.h>
+#include <ui/MessageType.h>
 
 #include <filedevice/seadFileDevice.h>
 #include <prim/seadSafeString.h>

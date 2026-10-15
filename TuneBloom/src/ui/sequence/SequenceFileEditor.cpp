@@ -333,7 +333,7 @@ void SequenceFile::drawBankSelector_(const char* name, f32 width)
         if (bankFile)
             ImGui::SetItemTooltip("%s", messages::bank::cOpenFileTip);
         else
-            SetDisabledTooltip(bank ? messages::bank::cNoFileAttached : messages::reference::cNoBank);
+            ImGui::SetItemTooltip("%s", bank ? messages::bank::cNoFileAttached : messages::reference::cNoBank);
     }
 
     ImGui::EndPopup();
@@ -470,8 +470,8 @@ void SequenceFile::drawTransportTools_(const SeqToolbarState& bar)
         compile_();
     ImGui::EndDisabled();
 
-    if (!bar.showNames && IsItemHoveredAllowDisabled())
-        ImGui::SetTooltip("%s", bar.canCompile ? messages::sequence::cCompileButton : messages::sequence::cStateCompiled);
+    if (!bar.showNames)
+        ImGui::SetItemTooltip("%s", bar.canCompile ? messages::sequence::cCompileButton : messages::sequence::cStateCompiled);
 
     if (bar.showState)
     {

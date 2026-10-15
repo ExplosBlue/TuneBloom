@@ -272,7 +272,7 @@ static void DrawWaveDetails()
         ImGui::EndDisabled();
 
         if (!canPlay)
-            SetDisabledTooltip(error.cstr());
+            ImGui::SetItemTooltip("%s", error.cstr());
 
         ImGui::SameLine();
         if (ImGui::Checkbox(messages::browser::cAutoPlay, &sAutoPlay) && sAutoPlay && canPlay)

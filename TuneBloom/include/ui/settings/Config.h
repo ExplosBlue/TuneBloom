@@ -20,11 +20,21 @@ inline constexpr s32 cRecentFileCountMin     = 5;
 inline constexpr s32 cRecentFileCountMax     = 50;
 inline constexpr s32 cRecentFileCountDefault = 20;
 
-inline constexpr f32 cTooltipDelayDefault = 0.4f;
+inline constexpr f32 cTooltipDelayMin     = 0.0f;
+inline constexpr f32 cTooltipDelayMax     = 0.5f;
+inline constexpr f32 cTooltipDelayDefault = 0.25f;
 
 inline constexpr f32 cScrollSpeedMin     = 0.5f;
 inline constexpr f32 cScrollSpeedMax     = 3.0f;
 inline constexpr f32 cScrollSpeedDefault = 1.0f;
+
+inline constexpr f32 cScrollSmoothingMin     = 0.0f;
+inline constexpr f32 cScrollSmoothingMax     = 1.0f;
+inline constexpr f32 cScrollSmoothingDefault = 0.5f;
+
+inline constexpr f32 cShadowOpacityMin     = 0.0f;
+inline constexpr f32 cShadowOpacityMax     = 1.0f;
+inline constexpr f32 cShadowOpacityDefault = 0.5f;
 
 inline constexpr f32 cUIScaleMin     = 1.0f;
 inline constexpr f32 cUIScaleMax     = 1.5f;
@@ -37,8 +47,8 @@ inline constexpr s32 cMidiVelocityDefault = 100;
 struct InterfaceSettings
 {
     bool animations = true;
-    bool smoothScrolling = true;
-    bool windowShadows = true;
+    f32 scrollSmoothing = cScrollSmoothingDefault;
+    f32 shadowOpacity = cShadowOpacityDefault;
     f32 tooltipDelay = cTooltipDelayDefault;
     f32 scrollSpeed = cScrollSpeedDefault;
     f32 uiScale = cUIScaleDefault;

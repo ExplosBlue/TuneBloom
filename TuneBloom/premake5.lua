@@ -45,6 +45,14 @@ links {
     "opus",
 }
 
+filter "action:gmake*"
+pchheader "include/Precompiled.h"
+
+filter { "action:gmake*", "files:**.mm" }
+enablepch "Off"
+
+filter {}
+
 if os.getenv("COMMIT_SHA") then
     filter "files:src/app/Utilll.cpp"
     defines { "COMMIT_SHA=\"" .. string.sub(os.getenv("COMMIT_SHA"), 1, 7) .. "\"" }

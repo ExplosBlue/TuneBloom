@@ -4,8 +4,6 @@
 #include <basis/seadTypes.h>
 #include <prim/seadEndian.h>
 
-#include <ui/Messages.h>
-
 #include <cctype>
 #include <cstring>
 
@@ -47,38 +45,9 @@ struct ArchiveFormatInfo
     const char* systemName;
 };
 
-inline constexpr ArchiveFormatInfo cFormatTable[] = {
-    {
-        ArchiveFormat::BFSAR,
-        ArchivePlatform::CAFE,
-        sead::Endian::eBig,
-        0x00020000,
-        "bfsar",
-        "BFSAR",
-        messages::format::cLabelCafe,
-        messages::format::cSystemWiiU
-    },
-    {
-        ArchiveFormat::BCSAR,
-        ArchivePlatform::CTR,
-        sead::Endian::eLittle,
-        0x02000000,
-        "bcsar",
-        "BCSAR",
-        messages::format::cLabelCtr,
-        messages::format::cSystem3ds
-    },
-    {
-        ArchiveFormat::BFSAR,
-        ArchivePlatform::NX,
-        sead::Endian::eLittle,
-        0x00020400,
-        "bfsar",
-        "BFSAR",
-        messages::format::cLabelCafe,
-        messages::format::cSystemSwitch
-    },
-};
+inline constexpr s32 cFormatTableSize = 3;
+
+extern const ArchiveFormatInfo cFormatTable[cFormatTableSize];
 
 inline const ArchiveFormatInfo *getFormatInfo(ArchiveFormat format, ArchivePlatform platform)
 {
@@ -125,9 +94,7 @@ inline constexpr InnerFileFormatInfo cInnerFileFormatTable[] = {
     { ArchiveFormat::BCSAR, InnerFileKind::StreamPrefetch, "CSTP", "bcstp", "BCSTP" },
 };
 
-inline constexpr InnerFileFormatInfo cUnknownInnerFileFormat = {
-    ArchiveFormat::BFSAR, InnerFileKind::SoundArchive, "????", "bin", messages::common::cUnknown
-};
+extern const InnerFileFormatInfo cUnknownInnerFileFormat;
 
 inline const InnerFileFormatInfo& GetInnerFileFormat(ArchiveFormat format, InnerFileKind kind)
 {

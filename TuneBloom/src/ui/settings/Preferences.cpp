@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/settings/Preferences.h>
 
 #include <ui/backup/Backup.h>
@@ -60,12 +59,6 @@ struct SampleRate
     u32 rate;
 };
 
-struct TooltipDelay
-{
-    const char* label;
-    f32 seconds;
-};
-
 }
 
 static constexpr f32 cWindowWidthEm  = 40.0f;
@@ -91,6 +84,7 @@ static constexpr f32 cUIScales[]        = { 1.0f, 1.25f, 1.5f };
 static constexpr f32 cNavTintAlpha = 0.25f;
 
 static constexpr uicolors::Themed<f32> cSliderFillAlpha = { 0.55f, 0.22f };
+static constexpr uicolors::Themed<ImVec4> cHuePreviewTone = { uicolors::cAccentDefault, uicolors::light::cCheckMark };
 
 static constexpr size_t cFolderTextMax = 22;
 
@@ -101,8 +95,6 @@ static constexpr s32 cSampleRateDefault   = 5;
 static constexpr f32 cAccentSaturation        = 0.50f;
 static constexpr f32 cAccentValue             = 0.60f;
 static constexpr f32 cAccentHueMax            = 359.0f / 360.0f;
-static constexpr f32 cHuePreviewSaturationMin = 0.5f;
-static constexpr f32 cHuePreviewValueMin      = 0.5f;
 static constexpr f32 cBrightnessMin           = 0.3f;
 static constexpr f32 cBrightnessMax           = 2.5f;
 static constexpr f32 cSaturationMin           = 0.0f;
@@ -111,6 +103,9 @@ static constexpr f32 cContrastMin             = 0.5f;
 static constexpr f32 cContrastMax             = 1.8f;
 static constexpr f32 cGradientMin             = 0.0f;
 static constexpr f32 cGradientMax             = 3.0f;
+static constexpr f32 cPercentScale            = 100.0f;
+
+static constexpr const char* cAmountFormat = "%.2f";
 
 static const BackupPreset cBackupPresets[] = {
     { messages::common::cOff,       0  },
@@ -129,12 +124,6 @@ static const SampleRate cSampleRates[] = {
     { messages::unit::cSampleRate44100, 44100 },
     { messages::unit::cSampleRate48000, 48000 },
     { messages::unit::cSampleRate96000, 96000 },
-};
-
-static const TooltipDelay cTooltipDelays[] = {
-    { messages::preferences::cTooltipDelayShort,  0.2f },
-    { messages::preferences::cTooltipDelayNormal, 0.4f },
-    { messages::preferences::cTooltipDelayLong,   0.8f },
 };
 
 static PreferencesPage sPage = PreferencesPage::File;
@@ -296,22 +285,23 @@ static bool DrawCountSliderRow(const char* label, const char* id, s32* value, s3
 
     const bool done = ResetItemOnRightClick(value, reset) || ImGui::IsItemDeactivatedAfterEdit();
 
-    DrawResetTooltip(*value == reset);
+    if (!disabledReason)
+        DrawResetTooltip(*value == reset);
 
     ImGui::EndDisabled();
 
     if (disabledReason)
-        SetDisabledTooltip(disabledReason);
+        ImGui::SetItemTooltip("%s", disabledReason);
 
     return done;
 }
 
-static bool DrawAmountSliderRow(const char* label, const char* id, f32* value, f32 min, f32 max, f32 reset, const char* detail, bool* done)
+static bool DrawAmountSliderRow(const char* label, const char* id, f32* value, f32 min, f32 max, f32 reset, const char* detail, bool* done, const char* format = cAmountFormat)
 {
     DrawRowLabel(label);
 
     ImDrawList* drawList = BeginSliderFill();
-    bool changed = ImGui::SliderFloat(id, value, min, max, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+    bool changed = ImGui::SliderFloat(id, value, min, max, format, ImGuiSliderFlags_AlwaysClamp);
     EndSliderFill(drawList, (*value - min) / (max - min));
 
     if (ResetItemOnRightClick(value, reset))
@@ -588,11 +578,10 @@ static void DrawPlaybackRows()
 
     // Interpolation
     {
-        const char* labels[] = { messages::bank::cInterpolationPolyphase, messages::common::cLinear };
         s32 selected = settings.linearInterpolation ? 1 : 0;
 
         DrawRowLabel(messages::common::cInterpolation);
-        if (ComboScroll("##Interpolation", &selected, labels, IM_ARRAYSIZE(labels)))
+        if (ComboScroll("##Interpolation", &selected, messages::bank::cInterpolationTypes, IM_ARRAYSIZE(messages::bank::cInterpolationTypes)))
         {
             settings.linearInterpolation = selected == 1;
             snd::SoundSystem::setSrcType(settings.linearInterpolation ? snd::SrcType::Type_Linear : snd::SrcType::Type_4Tap);
@@ -691,8 +680,7 @@ static bool DrawMidiDeviceRow(const char* name, bool* on, bool present)
     {
         ImGui::TextColored(uicolors::Warning(), "%s", messages::preferences::cMidiNotFound);
 
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", messages::preferences::cMidiNotFoundDetail);
+        ImGui::SetItemTooltip("%s", messages::preferences::cMidiNotFoundDetail);
     }
     else if (*on)
     {
@@ -833,15 +821,12 @@ static void DrawMidiPage()
 
 static ImU32 GetAccentPreviewColor(f32 hue)
 {
-    const ImVec4 accent = GetThemeAccent();
+    const ImVec4& tone = uicolors::Pick(cHuePreviewTone);
 
-    f32 accentHue;
+    f32 toneHue;
     f32 saturation;
     f32 value;
-    ImGui::ColorConvertRGBtoHSV(accent.x, accent.y, accent.z, accentHue, saturation, value);
-
-    saturation = ImMax(saturation, cHuePreviewSaturationMin);
-    value = ImMax(value, cHuePreviewValueMin);
+    ImGui::ColorConvertRGBtoHSV(tone.x, tone.y, tone.z, toneHue, saturation, value);
 
     return ImGui::ColorConvertFloat4ToU32(uicolors::FromHsv(hue, saturation, value));
 }
@@ -1003,26 +988,33 @@ static void DrawAppearancePage()
         SaveThemeConfig();
 }
 
-static bool DrawTooltipDelayRow(f32* seconds)
+static bool DrawPercentSliderRow(const char* label, const char* id, f32* amount, f32 min, f32 max, f32 reset, bool* done)
 {
-    const char* labels[IM_ARRAYSIZE(cTooltipDelays)];
-    s32 selected = 0;
+    f32 percent = ImFloor(*amount * cPercentScale + 0.5f);
+    const char* format = percent > 0.0f ? messages::common::cPercentFloatFormat : messages::common::cOff;
+    const bool changed = DrawAmountSliderRow(label, id, &percent, min * cPercentScale, max * cPercentScale, reset * cPercentScale, nullptr, done, format);
 
-    for (s32 i = 0; i < IM_ARRAYSIZE(cTooltipDelays); i++)
-    {
-        labels[i] = cTooltipDelays[i].label;
+    if (changed)
+        *amount = percent / cPercentScale;
 
-        if (ImFabs(cTooltipDelays[i].seconds - *seconds) < ImFabs(cTooltipDelays[selected].seconds - *seconds))
-            selected = i;
-    }
+    return changed;
+}
 
-    DrawRowLabel(messages::preferences::cTooltipDelayLabel);
+static bool DrawScrollSmoothingRow(f32* amount, bool* done)
+{
+    return DrawPercentSliderRow(messages::preferences::cScrollSmoothingLabel, "##ScrollSmoothing", amount, cScrollSmoothingMin, cScrollSmoothingMax, cScrollSmoothingDefault, done);
+}
 
-    if (!ComboScroll("##TooltipDelay", &selected, labels, IM_ARRAYSIZE(cTooltipDelays)))
-        return false;
+static bool DrawTooltipDelayRow(f32* seconds, bool* done)
+{
+    const char* format = *seconds > 0.0f ? messages::common::cSecondsFormat : messages::preferences::cTooltipDelayInstant;
 
-    *seconds = cTooltipDelays[selected].seconds;
-    return true;
+    return DrawAmountSliderRow(messages::preferences::cTooltipDelayLabel, "##TooltipDelay", seconds, cTooltipDelayMin, cTooltipDelayMax, cTooltipDelayDefault, nullptr, done, format);
+}
+
+static bool DrawShadowOpacityRow(f32* opacity, bool* done)
+{
+    return DrawPercentSliderRow(messages::preferences::cShadowOpacityLabel, "##ShadowOpacity", opacity, cShadowOpacityMin, cShadowOpacityMax, cShadowOpacityDefault, done);
 }
 
 static bool DrawTimeFormatRow(bool* twelveHour)
@@ -1086,7 +1078,7 @@ static void DrawInterfacePage()
     if (BeginGroupBox(messages::preferences::cBoxMotion))
     {
         selected |= DrawCheckRow(messages::preferences::cAnimationsLabel, "##Animations", &settings.animations, messages::preferences::cAnimationsDetail);
-        selected |= DrawCheckRow(messages::preferences::cSmoothScrollLabel, "##SmoothScroll", &settings.smoothScrolling);
+        dragged |= DrawScrollSmoothingRow(&settings.scrollSmoothing, &released);
         dragged |= DrawAmountSliderRow(messages::preferences::cScrollSpeedLabel, "##ScrollSpeed", &settings.scrollSpeed, cScrollSpeedMin, cScrollSpeedMax, cScrollSpeedDefault, nullptr, &released);
         EndGroupBox();
     }
@@ -1096,8 +1088,8 @@ static void DrawInterfacePage()
     if (restart ? BeginGroupBoxWithStatus(messages::preferences::cBoxDisplay, messages::preferences::cUIScaleRestart) : BeginGroupBox(messages::preferences::cBoxDisplay))
     {
         selected |= DrawUIScaleRow(&settings.uiScale);
-        selected |= DrawCheckRow(messages::preferences::cShadowsLabel, "##Shadows", &settings.windowShadows);
-        selected |= DrawTooltipDelayRow(&settings.tooltipDelay);
+        dragged |= DrawShadowOpacityRow(&settings.shadowOpacity, &released);
+        dragged |= DrawTooltipDelayRow(&settings.tooltipDelay, &released);
         selected |= DrawTimeFormatRow(&settings.twelveHourClock);
         EndGroupBox();
     }

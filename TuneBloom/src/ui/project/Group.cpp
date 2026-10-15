@@ -4,6 +4,7 @@
 #include <ui/file/File.h>
 #include <ui/items/ItemList.h>
 #include <ui/items/ItemSelector.h>
+#include <ui/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
@@ -128,7 +129,7 @@ void DrawGroupPropertiesUI()
         ImGui::EndDisabled();
 
         if (isLocked)
-            SetDisabledTooltip(messages::group::cOutputTypeLockedTip);
+            ImGui::SetItemTooltip("%s", messages::group::cOutputTypeLockedTip);
 
         if (isExternal)
             DrawGroupFileRow(group);
@@ -158,6 +159,27 @@ static bool IsSameLoadItemKind(Item::ItemType itemType, const Item* oldItem, con
         default:
             return true;
     }
+}
+
+sead::FixedSafeString<256> Group::ItemInfo::getFormattedName() const
+{
+    sead::FixedSafeString<256> name;
+    name.appendWithFormat("[%u] ", getId());
+
+    if (mIsDisabled)
+    {
+        name.append(messages::group::cItemDisabled);
+    }
+    else if (mItemRef.isAttached())
+    {
+        name.append(mItemRef.getItem()->getNameOrNull());
+    }
+    else
+    {
+        name.append(messages::common::cNull);
+    }
+
+    return name;
 }
 
 void Group::ItemInfo::drawUI()

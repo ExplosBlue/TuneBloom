@@ -6,8 +6,6 @@
 
 #include <snd/snd_BankFileReader.h>
 
-#include <ui/Messages.h>
-
 #include <unordered_map>
 
 class Bank;
@@ -48,8 +46,6 @@ public:
         ~VelocityRegion() override;
 
         void read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId);
-        void drawMappingUI();
-        void drawSampleUI();
         void drawPitchUI();
         void drawOutputUI();
         void drawEnvelopeUI();
@@ -278,6 +274,9 @@ public:
     class Instrument : public Item
     {
     public:
+        static constexpr s16 cProgramNoMin = 0;
+        static constexpr s16 cProgramNoMax = 32766;
+
         Instrument()
             : Item()
             , mProgramNo(0)
@@ -296,8 +295,7 @@ public:
 
         void setProgramNo(s16 programNo)
         {
-            programNo = sead::MathCalcCommon<s16>::clamp2(0, programNo, 32766);
-            mProgramNo = programNo;
+            mProgramNo = sead::MathCalcCommon<s16>::clamp2(cProgramNoMin, programNo, cProgramNoMax);
         }
 
         const KeyRegion* getKeyRegion(u8 key) const
@@ -337,18 +335,7 @@ public:
             return mKeyRegionList;
         }
 
-        sead::FixedSafeString<256> getFormattedName() const override
-        {
-            sead::FixedSafeString<256> name;
-
-            if (isNameValid()) {
-                name.appendWithFormat("[%d] %s", mProgramNo, mName.cstr());
-            } else {
-                name.appendWithFormat(messages::bank::cInstrumentNameFormat, mProgramNo);
-            }
-
-            return name;
-        }
+        sead::FixedSafeString<256> getFormattedName() const override;
 
     private:
         void addKeyRegion_(u8 keyMin, u8 keyMax, const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
@@ -599,6 +586,7 @@ void ForEachVelocityRegion(const BankFile::Instrument& instrument, Func&& func)
 }
 
 s16 FindNextAvailableProgramNo(const Item::List& instrumentList, const BankFile::Instrument* skipInstrument = nullptr);
+bool IsProgramNoShared(const BankFile::Instrument* instrument);
 void CopyVelocityRegion(BankFile::VelocityRegion* dst, const BankFile::VelocityRegion* src);
 void PollMidiInput();
 void DeselectVelocity();

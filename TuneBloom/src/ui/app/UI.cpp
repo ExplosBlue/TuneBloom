@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/app/Workspace.h>
 
 #include <ui/app/About.h>

@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/export/Export.h>
 
 #include <ui/bank/BankFileEditor.h>
@@ -565,7 +564,7 @@ static void DrawMidiExportFooter()
     ImGui::EndDisabled();
 
     if (!canExport)
-        SetDisabledTooltip(messages::exporting::cMidiNothingSelected);
+        ImGui::SetItemTooltip("%s", messages::exporting::cMidiNothingSelected);
 
     if (DialogButton(messages::common::cCancel))
     {

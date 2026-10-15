@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/project/References.h>
 
 #include <ui/file/File.h>
@@ -8,7 +7,6 @@
 #include <ui/widgets/Properties.h>
 #include <ui/items/Selection.h>
 #include <ui/sound/SoundViews.h>
-#include <ui/widgets/Widgets.h>
 #include <ui/app/Workspace.h>
 
 #include <libs/IconsLucide.h>

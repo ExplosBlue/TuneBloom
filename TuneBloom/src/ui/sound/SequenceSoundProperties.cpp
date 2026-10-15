@@ -27,7 +27,7 @@ void DrawSequenceSoundUI(Sound::SequenceSoundInfo& seqSoundInfo)
         ImGui::EndDisabled();
 
         if (!seqFile)
-            SetDisabledTooltip(messages::reference::cNoSequenceFile);
+            ImGui::SetItemTooltip("%s", messages::reference::cNoSequenceFile);
     }
 
     for (u32 i = 0; i < 4; i++)
@@ -54,7 +54,7 @@ void DrawSequenceSoundUI(Sound::SequenceSoundInfo& seqSoundInfo)
         ImGui::EndDisabled();
 
         if (!bankFile)
-            SetDisabledTooltip(bank ? messages::bank::cNoFileAttached : messages::reference::cNoBank);
+            ImGui::SetItemTooltip("%s", bank ? messages::bank::cNoFileAttached : messages::reference::cNoBank);
     }
 }
 
@@ -129,8 +129,5 @@ void DrawSequenceStartLabelPanel(Sound::SequenceSoundInfo& seqSoundInfo)
 
     ImGui::EndDisabled();
 
-    if (!seqFile)
-        SetDisabledTooltip(messages::reference::cNoSequenceFile);
-    else if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
-        ImGui::SetTooltip("%s", messages::sequence::cGoToLabelHint);
+    ImGui::SetItemTooltip("%s", seqFile ? messages::sequence::cGoToLabelHint : messages::reference::cNoSequenceFile);
 }

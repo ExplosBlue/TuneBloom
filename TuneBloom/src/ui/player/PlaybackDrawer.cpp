@@ -483,7 +483,7 @@ static void DrawSeqVarCell(SoundPlayer::SeqVarScope scope, s32 trackNo, s32 varN
         ImGui::GetWindowDrawList()->AddCircleFilled(center, ImGui::GetFontSize() * cSeqVarDotRadiusEm, ImGui::GetColorU32(ImGuiCol_TextDisabled));
     }
 
-    if (ImGui::IsItemHovered())
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
         DrawSeqVarTooltip(scope, varNo, isUsed, isOverride);
 
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -635,7 +635,7 @@ static void DrawPlaybackDrawerButton(const char* icon, PlaybackDrawerView view, 
         ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(max.x - cOverrideDotInset, min.y + cOverrideDotInset), cOverrideDotRadius, open ? ImGui::GetColorU32(GetOnAccentTextColor()) : ImGui::GetColorU32(accent));
     }
 
-    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNone))
+    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
         return;
 
     if (hasOverride)
@@ -672,7 +672,7 @@ void DrawPlaybackOverrideButtons()
 
     ImGui::EndDisabled();
 
-    SetDisabledTooltip(messages::playback::cOverridesReset);
+    ImGui::SetItemTooltip("%s", messages::playback::cOverridesReset);
 
     ImGui::PopID();
 }

@@ -275,7 +275,7 @@ void DrawGroupFileLocateDialog()
     ImGui::EndDisabled();
 
     if (!canLoad)
-        SetDisabledTooltip(messages::group::cLocateLoadDisabled);
+        ImGui::SetItemTooltip("%s", messages::group::cLocateLoadDisabled);
 
     const bool skip = DialogButton(messages::group::cLocateSkip);
     DetailTooltip(messages::group::cLocateSkipDetail);

@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/widgets/ListFilter.h>
 
 #include <ui/widgets/ContextMenu.h>

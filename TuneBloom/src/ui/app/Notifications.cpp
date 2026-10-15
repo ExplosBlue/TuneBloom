@@ -471,8 +471,8 @@ f32 DrawBell(f32 right, f32 top, f32 bottom)
     const bool hovered = ImGui::IsItemHovered();
     const bool held = ImGui::IsItemActive();
 
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal) && !sListOpen)
-        ImGui::SetTooltip("%s", messages::notify::cTitle);
+    if (!sListOpen)
+        ImGui::SetItemTooltip("%s", messages::notify::cTitle);
 
     sListAnchor = ImVec2(right, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
 

@@ -8,6 +8,11 @@
 #include <ui/widgets/TabRowTools.h>
 #include <ui/app/UI.h>
 
+const char* const cTrackMixLabels[cTrackMixLabelCount]       = { messages::common::cVolume, messages::common::cPan, messages::param::cSurroundPan, messages::stream::cTrackBypass };
+const char* const cTrackSendLabels[cTrackSendLabelCount]     = { messages::param::cSendMain, messages::param::cSendFxA, messages::param::cSendFxB, messages::param::cSendFxC };
+const char* const cTrackFilterLabels[cTrackFilterLabelCount] = { messages::common::cLpf, messages::param::cBiquad, messages::stream::cTrackBiquadValue };
+const char* const cTrackWaveLabel                            = messages::common::cWaveFile;
+
 static Item* sHighlightTrack = nullptr;
 static bool sTrackMixerView = false;
 static bool sTrackToolsInTabBar = false;

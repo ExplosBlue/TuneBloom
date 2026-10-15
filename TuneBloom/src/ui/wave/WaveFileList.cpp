@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/project/FileLists.h>
 
 #include <ui/bank/BankBundle.h>
@@ -423,7 +422,7 @@ static void DrawMergeDuplicatesDialog(std::vector<Bfsar::WaveDuplicateGroup>* gr
 
     if (nothingToMerge)
     {
-        SetDisabledTooltip(messages::exporting::cNothingToMerge);
+        ImGui::SetItemTooltip("%s", messages::exporting::cNothingToMerge);
     }
 
     if (DialogButton(messages::common::cCancel))

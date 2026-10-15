@@ -7,6 +7,8 @@
 #include <ui/Messages.h>
 #include <ui/bank/PianoRollPalette.h>
 #include <ui/app/PopupMgr.h>
+#include <ui/settings/Preferences.h>
+#include <ui/sound/SoundProperties.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
 
@@ -14,43 +16,43 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <unordered_set>
 #include <vector>
 
 static constexpr f32 cPianoKeysHeightEm = 3.5f;
 
-static constexpr f32 cRegionMappingFieldEm = 3.0f;
-static constexpr f32 cRegionRangeDragSpeed = 0.25f;
-static constexpr f32 cRegionPanelPadXEm    = 0.5f;
-static constexpr f32 cRegionPanelPadYEm    = 0.3f;
+static constexpr f32 cKeyboardPaneInitialHeight = 200.0f;
+static constexpr f32 cRegionPaneInitialHeight   = 128.0f;
+static constexpr f32 cRegionPaneMinHeight       = 48.0f;
+static constexpr f32 cRegionPaneHeightReserve   = 220.0f;
+static constexpr f32 cSplitterHeight            = 6.0f;
+static constexpr f32 cSplitterLineInset         = 6.0f;
+static constexpr f32 cSplitterLineThickness     = 2.0f;
+
+static constexpr f32 cAddInstrumentNameWidth       = 240.0f;
+static constexpr f32 cAddInstrumentProgramWidth    = 120.0f;
+static constexpr s16 cAddInstrumentProgramStep     = 1;
+static constexpr s16 cAddInstrumentProgramStepFast = 10;
+
+static constexpr f32 cRegionMappingFieldEm   = 3.0f;
+static constexpr f32 cRegionMappingMinGapEm  = 0.75f;
+static constexpr f32 cRegionRangeDragSpeed   = 0.25f;
+static constexpr f32 cProgramNoDragSpeed     = 0.25f;
+static constexpr f32 cRegionPanelPadXEm      = 0.5f;
+static constexpr f32 cRegionPanelPadYEm      = 0.3f;
+static constexpr f32 cRegionSampleComboMinEm = 6.0f;
+static constexpr f32 cRegionWaveFieldMinEm   = 10.0f;
+
+static constexpr s32 cRegionRangeMin  = 0;
+static constexpr s32 cRegionRangeMax  = 127;
+static constexpr s32 cKeyGroupMax     = 15;
+static constexpr s32 cEmptyFieldValue = 0;
+
+static constexpr u8 cRegionPanCenter     = 64;
+static constexpr u8 cRegionVolumeMax     = 255;
+static constexpr u8 cRegionVolumeDefault = 127;
 
 static const char* cRegionPitchKnobs[]  = { messages::param::cCoarse, messages::param::cFine };
 static const char* cRegionOutputKnobs[] = { messages::common::cVolume, messages::common::cPan };
-
-static const char* cRegionKeyRangeLabel      = messages::bank::cKeyRange;
-static const char* cRegionVelocityRangeLabel = messages::bank::cVelocityRange;
-static const char* cRegionRootKeyLabel       = messages::bank::cRootKey;
-static const char* cRegionKeyGroupLabel      = messages::bank::cKeyGroup;
-
-static void RegionLabel(const char* label)
-{
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
-}
-
-static void NextRegionGroup(const char* label, s32 fieldNum)
-{
-    const f32 em = ImGui::GetFontSize();
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 width = ImGui::CalcTextSize(label).x + style.ItemSpacing.x + em * cRegionMappingFieldEm * fieldNum + style.ItemInnerSpacing.x * (fieldNum - 1);
-
-    ImGui::SameLine(0.0f, em * cRegionGapEm);
-    if (ImGui::GetContentRegionAvail().x < width)
-        ImGui::NewLine();
-
-    RegionLabel(label);
-}
 
 static sead::FixedSafeString<24> FormatKeyName(s32 key)
 {
@@ -85,114 +87,153 @@ static sead::FixedSafeString<8> FormatKeyText(s32 key)
     return sead::FixedSafeString<8>(name.cstr());
 }
 
-void BankFile::VelocityRegion::drawMappingUI()
+enum class SampleLayout
 {
-    static const ImU8 cU8Min = 0;
-    static const ImU8 cRootKeyMax = 127;
-    static const ImU8 cKeyGroupMax = 15;
+    Strip,
+    Inline,
+    Lines,
+};
 
-    const f32 fieldWidth = ImGui::GetFontSize() * cRegionMappingFieldEm;
-
-    NextRegionGroup(cRegionRootKeyLabel, 1);
+static void DrawRootKeyField(BankFile::VelocityRegion& velRegion)
+{
+    s32 rootKey = velRegion.getRootKey();
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * cRegionMappingFieldEm);
+    SetNextKnobText(FormatKeyText(rootKey).cstr());
+    SetNextKnobReset(cPianoDefaultCenter);
+    if (DragField("##RootKey", ImGuiDataType_S32, &rootKey, cRegionRangeDragSpeed, &cRegionRangeMin, &cRegionRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp))
     {
-        u8 rootKey = getRootKey();
-        ImGui::SetNextItemWidth(fieldWidth);
-        SetNextKnobText(FormatKeyText(rootKey).cstr());
-        SetNextKnobReset(cPianoDefaultCenter);
-        if (DragField("##RootKey", ImGuiDataType_U8, &rootKey, cRegionRangeDragSpeed, &cU8Min, &cRootKeyMax, "%d", ImGuiSliderFlags_AlwaysClamp))
-        {
-            const u8 oldRootKey = getRootKey();
-            setRootKey(rootKey);
+        const u8 oldRootKey = velRegion.getRootKey();
+        velRegion.setRootKey(static_cast<u8>(rootKey));
 
-            if (getRootKey() != oldRootKey)
-                SetUnsavedChanges(true);
-        }
-
-        KnobTooltip("%s", FormatKeyName(rootKey).cstr());
+        if (velRegion.getRootKey() != oldRootKey)
+            SetUnsavedChanges(true);
     }
 
-    NextRegionGroup(cRegionKeyGroupLabel, 1);
-    {
-        u8 keyGroup = getKeyGroup();
-        ImGui::SetNextItemWidth(fieldWidth);
-        SetNextKnobReset(0.0);
-        if (DragField("##KeyGroup", ImGuiDataType_U8, &keyGroup, cRegionRangeDragSpeed, &cU8Min, &cKeyGroupMax, "%d", ImGuiSliderFlags_AlwaysClamp))
-        {
-            const u8 oldKeyGroup = getKeyGroup();
-            setKeyGroup(keyGroup);
+    KnobTooltip("%s", FormatKeyName(rootKey).cstr());
+}
 
-            if (getKeyGroup() != oldKeyGroup)
-                SetUnsavedChanges(true);
-        }
+static void DrawKeyGroupField(BankFile::VelocityRegion& velRegion)
+{
+    s32 keyGroup = velRegion.getKeyGroup();
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * cRegionMappingFieldEm);
+    SetNextKnobReset(0.0);
+    if (DragField("##KeyGroup", ImGuiDataType_S32, &keyGroup, cRegionRangeDragSpeed, &cRegionRangeMin, &cKeyGroupMax, "%d", ImGuiSliderFlags_AlwaysClamp))
+    {
+        const u8 oldKeyGroup = velRegion.getKeyGroup();
+        velRegion.setKeyGroup(static_cast<u8>(keyGroup));
+
+        if (velRegion.getKeyGroup() != oldKeyGroup)
+            SetUnsavedChanges(true);
     }
 }
 
-void BankFile::VelocityRegion::drawSampleUI()
+static f32 CalcInterpolationLabelWidth()
 {
-    static const char* cInterpolationLabel = messages::common::cInterpolation;
+    return ImGui::CalcTextSize(messages::common::cInterpolation).x + ImGui::GetStyle().ItemSpacing.x;
+}
 
-    RegionHeader(messages::bank::cPanelSample);
-
+static f32 CalcInterpolationFieldWidth()
+{
     const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 spacing = style.ItemInnerSpacing.x;
-    const f32 height = CalcRegionStripHeight();
-    const f32 frameHeight = ImGui::GetFrameHeight();
-    const f32 width = ImGui::GetContentRegionAvail().x;
+
+    f32 textWidth = 0.0f;
+    for (const char* type : messages::bank::cInterpolationTypes)
+        textWidth = std::max(textWidth, ImGui::CalcTextSize(type).x);
+
+    return CalcInterpolationLabelWidth() + textWidth + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+}
+
+static f32 CalcSampleInlineGap()
+{
+    return ImGui::GetFontSize() * cRegionGapEm;
+}
+
+static bool CanInlineSampleFields(f32 width)
+{
+    return width >= ImGui::GetFontSize() * cRegionWaveFieldMinEm + CalcSampleInlineGap() + CalcInterpolationFieldWidth();
+}
+
+static f32 CalcSampleFieldsHeight(SampleLayout layout)
+{
+    if (layout == SampleLayout::Inline)
+        return ImGui::GetFrameHeight();
+
+    return ImGui::GetFrameHeight() * 2.0f + ImGui::GetStyle().ItemSpacing.y;
+}
+
+static void CenterSampleFieldsInStrip()
+{
     const ImVec2 origin = ImGui::GetCursorPos();
-    const f32 rowY = origin.y + ImFloor(std::max(0.0f, height - frameHeight * 2.0f - style.ItemSpacing.y) * 0.5f);
+    const f32 height = CalcRegionStripHeight();
+    const f32 fieldsHeight = CalcSampleFieldsHeight(SampleLayout::Lines);
 
     ImGui::Dummy(ImVec2(0.0f, height));
+    ImGui::SetCursorPos(ImVec2(origin.x, origin.y + ImFloor(std::max(0.0f, height - fieldsHeight) * 0.5f)));
+}
 
-    ImGui::SetCursorPos(ImVec2(origin.x, rowY));
+static void DrawWaveFileField(BankFile::VelocityRegion& velRegion, f32 width)
+{
+    ImGui::SetNextItemWidth(width - TrailingButtonsWidth(1));
+
+    Item* waveFile = velRegion.getWaveFileRef().getItem();
+    if (ItemSelector("##RegionWave", sBfsar.getWaveFileList(), &waveFile))
     {
-        const f32 buttonWidth = ImGui::CalcTextSize(ICON_LC_EXTERNAL_LINK).x + style.FramePadding.x * 2.0f;
-        ImGui::SetNextItemWidth(width - spacing - buttonWidth);
-
-        Item* waveFile = getWaveFileRef().getItem();
-        if (ItemSelector("##RegionWave", sBfsar.getWaveFileList(), &waveFile))
-        {
-            getWaveFileRef().attach(waveFile);
-            SetUnsavedChanges(true);
-        }
-
-        if (!waveFile)
-        {
-            ImGui::BeginDisabled();
-        }
-
-        ImGui::SameLine(0.0f, spacing);
-        if (ImGui::Button(ICON_LC_EXTERNAL_LINK "###GoWave"))
-        {
-            SelectItem(waveFile);
-        }
-
-        if (!waveFile)
-        {
-            ImGui::EndDisabled();
-
-            SetDisabledTooltip(messages::reference::cNoWaveFile);
-        }
+        velRegion.getWaveFileRef().attach(waveFile);
+        SetUnsavedChanges(true);
     }
 
-    ImGui::SetCursorPos(ImVec2(origin.x, rowY + frameHeight + style.ItemSpacing.y));
+    ImGui::BeginDisabled(!waveFile);
+
+    if (TrailingButton(ICON_LC_EXTERNAL_LINK "###GoWave"))
+        SelectItem(waveFile);
+
+    ImGui::EndDisabled();
+
+    if (!waveFile)
+        ImGui::SetItemTooltip("%s", messages::reference::cNoWaveFile);
+}
+
+static void DrawInterpolationField(BankFile::VelocityRegion& velRegion, f32 width)
+{
+    const f32 right = ImGui::GetCursorPosX() + width;
+    s32 interpolationType = static_cast<s32>(sead::Mathu::min(velRegion.getInterpolationType(), IM_ARRAYSIZE(messages::bank::cInterpolationTypes) - 1));
+
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(cInterpolationLabel);
-    ImGui::SameLine(0.0f, style.ItemSpacing.x);
+    ImGui::TextUnformatted(messages::common::cInterpolation);
+
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+    ImGui::SetNextItemWidth(right - ImGui::GetCursorPosX());
+    if (ComboScroll("##Interpolation", &interpolationType, messages::bank::cInterpolationTypes, IM_ARRAYSIZE(messages::bank::cInterpolationTypes)))
     {
-        static const char* sInterpolationTypes[] = {
-            messages::bank::cInterpolationPolyphase,
-            messages::common::cLinear,
-        };
-
-        u32 interpolationType = sead::Mathu::min(getInterpolationType(), IM_ARRAYSIZE(sInterpolationTypes) - 1);
-
-        ImGui::SetNextItemWidth(origin.x + width - ImGui::GetCursorPosX());
-        if (ComboScroll("##Interpolation", (s32*)&interpolationType, sInterpolationTypes, IM_ARRAYSIZE(sInterpolationTypes)))
-        {
-            setInterpolationType(interpolationType);
-            SetUnsavedChanges(true);
-        }
+        velRegion.setInterpolationType(static_cast<u8>(interpolationType));
+        SetUnsavedChanges(true);
     }
+}
+
+static void DrawSampleUI(BankFile::VelocityRegion& velRegion, SampleLayout layout)
+{
+    RegionHeader(messages::bank::cPanelSample);
+
+    const f32 width = ImGui::GetContentRegionAvail().x;
+
+    if (layout == SampleLayout::Inline)
+    {
+        const f32 gap = CalcSampleInlineGap();
+        const f32 interpolationWidth = CalcInterpolationFieldWidth();
+
+        DrawWaveFileField(velRegion, width - gap - interpolationWidth);
+
+        ImGui::SameLine(0.0f, gap);
+        DrawInterpolationField(velRegion, interpolationWidth);
+
+        return;
+    }
+
+    if (layout == SampleLayout::Strip)
+        CenterSampleFieldsInStrip();
+
+    DrawWaveFileField(velRegion, width);
+    DrawInterpolationField(velRegion, width);
 }
 
 void BankFile::VelocityRegion::drawPitchUI()
@@ -211,12 +252,6 @@ void BankFile::VelocityRegion::drawPitchUI()
 
 void BankFile::VelocityRegion::drawOutputUI()
 {
-    static const ImU8 cU8Min = 0;
-    static const ImU8 cPanMax = 127;
-    static const ImU8 cPanCenter = 64;
-    static const ImU8 cVolumeMax = 255;
-    static const ImU8 cRegionVolumeDefault = 127;
-
     RegionHeader(messages::panel::cOutput);
     CenterRegionKnobs(CalcKnobRowWidth(cRegionOutputKnobs, IM_ARRAYSIZE(cRegionOutputKnobs)));
 
@@ -225,26 +260,26 @@ void BankFile::VelocityRegion::drawOutputUI()
     {
         u8 volume = getVolume();
         SetNextKnobReset(cRegionVolumeDefault);
-        if (KnobU8(messages::common::cVolume, &volume, cU8Min, cVolumeMax, knobSize))
+        if (KnobU8(messages::common::cVolume, &volume, cRegionRangeMin, cRegionVolumeMax, knobSize))
         {
             setVolume(volume);
             SetUnsavedChanges(true);
         }
 
-        KnobTooltip("%.3f", static_cast<f32>(volume) / 127.0f);
+        KnobTooltip("%.3f", static_cast<f32>(volume) / static_cast<f32>(cRegionVolumeDefault));
     }
 
     ImGui::SameLine(0.0f, ImGui::GetFontSize() * cRegionKnobGapEm);
     {
         u8 pan = getPan();
-        SetNextKnobText(FormatPanText(pan, cPanCenter).cstr());
-        if (KnobU8(messages::common::cPan, &pan, cU8Min, cPanMax, cPanCenter, knobSize))
+        SetNextKnobText(FormatPanText(pan, cRegionPanCenter).cstr());
+        if (KnobU8(messages::common::cPan, &pan, cRegionRangeMin, cRegionRangeMax, cRegionPanCenter, knobSize))
         {
             setPan(pan);
             SetUnsavedChanges(true);
         }
 
-        KnobTooltip("%s", FormatPanLabel(pan, cU8Min, cPanCenter, cPanMax).cstr());
+        KnobTooltip("%s", FormatPanLabel(pan, cRegionRangeMin, cRegionPanCenter, cRegionRangeMax).cstr());
     }
 }
 
@@ -255,7 +290,7 @@ void BankFile::VelocityRegion::drawEnvelopeUI()
     const f32 noteOffWidth = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(messages::bank::cIgnoreNoteOff).x;
     const f32 noteOffX = headerPos.x + ImGui::GetContentRegionAvail().x - noteOffWidth;
 
-    RegionHeader(messages::panel::cEnvelope,noteOffWidth + style.ItemSpacing.x);
+    RegionHeader(messages::panel::cEnvelope, noteOffWidth + style.ItemSpacing.x);
 
     ImGui::SameLine();
     ImGui::SetCursorScreenPos(ImVec2(noteOffX, headerPos.y));
@@ -267,8 +302,7 @@ void BankFile::VelocityRegion::drawEnvelopeUI()
             SetUnsavedChanges(true);
         }
 
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip("%s", messages::bank::cIgnoreNoteOffDetail);
+        ImGui::SetItemTooltip("%s", messages::bank::cIgnoreNoteOffDetail);
     }
 
     snd::AdshrCurve adshrCurve = getAdshrCurve();
@@ -282,21 +316,28 @@ void BankFile::VelocityRegion::drawEnvelopeUI()
 
 void BankFile::Instrument::drawUI()
 {
-    static const s16 cProgramMin = 0;
-    static const s16 cProgramMax = 32766;
-
     DrawItemNameRow(this);
 
     PropertyRow(messages::bank::cProgramNumber);
     {
+        const bool shared = IsProgramNoShared(this);
         s16 program = getProgramNo();
-        if (DragField("##ProgramNo", ImGuiDataType_S16, &program, cRegionRangeDragSpeed, &cProgramMin, &cProgramMax, "%d", ImGuiSliderFlags_AlwaysClamp))
-        {
-            const s16 oldProgram = getProgramNo();
-            setProgramNo(program);
 
-            if (getProgramNo() != oldProgram)
-                SetUnsavedChanges(true);
+        if (shared)
+            ImGui::PushStyleColor(ImGuiCol_Text, uicolors::Marker());
+
+        const bool changed = DragField("##ProgramNo", ImGuiDataType_S16, &program, cProgramNoDragSpeed, &cProgramNoMin, &cProgramNoMax, "%d", ImGuiSliderFlags_AlwaysClamp);
+
+        if (shared)
+        {
+            ImGui::PopStyleColor();
+            ImGui::SetItemTooltip("%s", messages::bank::cProgramNumberShared);
+        }
+
+        if (changed && program != getProgramNo())
+        {
+            setProgramNo(program);
+            SetUnsavedChanges(true);
         }
     }
 }
@@ -314,134 +355,495 @@ void BankFile::drawUI()
     ImGui::EndDisabled();
 }
 
-static void DrawRegionRanges(BankFile::Instrument& instrument, BankFile::KeyRegion& keyRegion, BankFile::VelocityRegion& velRegion)
+struct RegionMappingContext
 {
-    static const s32 cRangeMin = 0;
-    static const s32 cRangeMax = 127;
+    BankFile::Instrument* instrument;
+    BankFile::KeyRegion* keyRegion;
+    BankFile::VelocityRegion* velRegion;
+};
 
+using DrawMappingFieldsFunc = void (*)(RegionMappingContext& context);
+
+struct RegionMappingGroup
+{
+    const char* label;
+    s32 fieldNum;
+    DrawMappingFieldsFunc drawFields;
+};
+
+static constexpr s32 cRegionMappingGroupNum = 4;
+static constexpr s32 cRegionMappingColumnChoices[] = { 4, 2, 1 };
+
+struct RegionMappingLayout
+{
+    s32 columnNum;
+    f32 width;
+    f32 columnX[cRegionMappingGroupNum];
+    f32 labelWidth[cRegionMappingGroupNum];
+};
+
+static void DrawKeyRangeFields(RegionMappingContext& context)
+{
     const f32 spacing = ImGui::GetStyle().ItemInnerSpacing.x;
     const f32 fieldWidth = ImGui::GetFontSize() * cRegionMappingFieldEm;
 
-    RegionLabel(cRegionKeyRangeLabel);
+    s32 keyMin = context.keyRegion->getKeyMin();
+    ImGui::SetNextItemWidth(fieldWidth);
+    SetNextKnobText(FormatKeyText(keyMin).cstr());
+    if (DragField("##KeyMin", ImGuiDataType_S32, &keyMin, cRegionRangeDragSpeed, &cRegionRangeMin, &cRegionRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp))
     {
-        s32 keyMin = keyRegion.getKeyMin();
-        ImGui::SetNextItemWidth(fieldWidth);
-        SetNextKnobText(FormatKeyText(keyMin).cstr());
-        if (DragField("##KeyMin", ImGuiDataType_S32, &keyMin, cRegionRangeDragSpeed, &cRangeMin, &cRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp))
-        {
-            snd::internal::driver::SoundThreadLock lock;
-            const u8 oldKeyMin = keyRegion.getKeyMin();
-            keyRegion.setKeyMin(static_cast<u8>(keyMin), instrument);
+        snd::internal::driver::SoundThreadLock lock;
+        const u8 oldKeyMin = context.keyRegion->getKeyMin();
+        context.keyRegion->setKeyMin(static_cast<u8>(keyMin), *context.instrument);
 
-            if (keyRegion.getKeyMin() != oldKeyMin)
-                SetUnsavedChanges(true);
-        }
-
-        KnobTooltip("%s", FormatKeyName(keyRegion.getKeyMin()).cstr());
-
-        s32 keyMax = keyRegion.getKeyMax();
-        ImGui::SameLine(0.0f, spacing);
-        ImGui::SetNextItemWidth(fieldWidth);
-        SetNextKnobText(FormatKeyText(keyMax).cstr());
-        if (DragField("##KeyMax", ImGuiDataType_S32, &keyMax, cRegionRangeDragSpeed, &cRangeMin, &cRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp))
-        {
-            snd::internal::driver::SoundThreadLock lock;
-            const u8 oldKeyMax = keyRegion.getKeyMax();
-            keyRegion.setKeyMax(static_cast<u8>(keyMax), instrument);
-
-            if (keyRegion.getKeyMax() != oldKeyMax)
-                SetUnsavedChanges(true);
-        }
-
-        KnobTooltip("%s", FormatKeyName(keyRegion.getKeyMax()).cstr());
+        if (context.keyRegion->getKeyMin() != oldKeyMin)
+            SetUnsavedChanges(true);
     }
 
-    NextRegionGroup(cRegionVelocityRangeLabel, 2);
+    KnobTooltip("%s", FormatKeyName(context.keyRegion->getKeyMin()).cstr());
+
+    s32 keyMax = context.keyRegion->getKeyMax();
+    ImGui::SameLine(0.0f, spacing);
+    ImGui::SetNextItemWidth(fieldWidth);
+    SetNextKnobText(FormatKeyText(keyMax).cstr());
+    if (DragField("##KeyMax", ImGuiDataType_S32, &keyMax, cRegionRangeDragSpeed, &cRegionRangeMin, &cRegionRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp))
     {
-        BankFile::VelocityRegion* prev = velRegion.getPrev(keyRegion);
-        BankFile::VelocityRegion* next = velRegion.getNext(keyRegion);
+        snd::internal::driver::SoundThreadLock lock;
+        const u8 oldKeyMax = context.keyRegion->getKeyMax();
+        context.keyRegion->setKeyMax(static_cast<u8>(keyMax), *context.instrument);
 
-        s32 velMin = velRegion.getVelocityMin();
-        ImGui::BeginDisabled(!prev);
-        ImGui::SetNextItemWidth(fieldWidth);
-        if (DragField("##VelMin", ImGuiDataType_S32, &velMin, cRegionRangeDragSpeed, &cRangeMin, &cRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp) && prev)
-        {
-            snd::internal::driver::SoundThreadLock lock;
-            velMin = sead::MathCalcCommon<s32>::clamp2(prev->getVelocityMin() + 1, velMin, velRegion.getVelocityMax());
-
-            if (velMin != velRegion.getVelocityMin())
-            {
-                velRegion.setVelocityMin(static_cast<u8>(velMin));
-                prev->setVelocityMax(static_cast<u8>(velMin - 1));
-                SetUnsavedChanges(true);
-            }
-        }
-        ImGui::EndDisabled();
-
-        s32 velMax = velRegion.getVelocityMax();
-        ImGui::SameLine(0.0f, spacing);
-        ImGui::BeginDisabled(!next);
-        ImGui::SetNextItemWidth(fieldWidth);
-        if (DragField("##VelMax", ImGuiDataType_S32, &velMax, cRegionRangeDragSpeed, &cRangeMin, &cRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp) && next)
-        {
-            snd::internal::driver::SoundThreadLock lock;
-            velMax = sead::MathCalcCommon<s32>::clamp2(velRegion.getVelocityMin(), velMax, next->getVelocityMax() - 1);
-
-            if (velMax != velRegion.getVelocityMax())
-            {
-                velRegion.setVelocityMax(static_cast<u8>(velMax));
-                next->setVelocityMin(static_cast<u8>(velMax + 1));
-                SetUnsavedChanges(true);
-            }
-        }
-        ImGui::EndDisabled();
+        if (context.keyRegion->getKeyMax() != oldKeyMax)
+            SetUnsavedChanges(true);
     }
+
+    KnobTooltip("%s", FormatKeyName(context.keyRegion->getKeyMax()).cstr());
 }
+
+static void DrawVelocityRangeFields(RegionMappingContext& context)
+{
+    const f32 spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+    const f32 fieldWidth = ImGui::GetFontSize() * cRegionMappingFieldEm;
+
+    BankFile::VelocityRegion* prev = context.velRegion->getPrev(*context.keyRegion);
+    BankFile::VelocityRegion* next = context.velRegion->getNext(*context.keyRegion);
+
+    s32 velMin = context.velRegion->getVelocityMin();
+    ImGui::BeginDisabled(!prev);
+    ImGui::SetNextItemWidth(fieldWidth);
+    if (DragField("##VelMin", ImGuiDataType_S32, &velMin, cRegionRangeDragSpeed, &cRegionRangeMin, &cRegionRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp) && prev)
+    {
+        snd::internal::driver::SoundThreadLock lock;
+        velMin = sead::MathCalcCommon<s32>::clamp2(prev->getVelocityMin() + 1, velMin, context.velRegion->getVelocityMax());
+
+        if (velMin != context.velRegion->getVelocityMin())
+        {
+            context.velRegion->setVelocityMin(static_cast<u8>(velMin));
+            prev->setVelocityMax(static_cast<u8>(velMin - 1));
+            SetUnsavedChanges(true);
+        }
+    }
+    ImGui::EndDisabled();
+
+    if (!prev)
+        ImGui::SetItemTooltip("%s", messages::bank::cVelocityMinFixed);
+
+    s32 velMax = context.velRegion->getVelocityMax();
+    ImGui::SameLine(0.0f, spacing);
+    ImGui::BeginDisabled(!next);
+    ImGui::SetNextItemWidth(fieldWidth);
+    if (DragField("##VelMax", ImGuiDataType_S32, &velMax, cRegionRangeDragSpeed, &cRegionRangeMin, &cRegionRangeMax, "%d", ImGuiSliderFlags_AlwaysClamp) && next)
+    {
+        snd::internal::driver::SoundThreadLock lock;
+        velMax = sead::MathCalcCommon<s32>::clamp2(context.velRegion->getVelocityMin(), velMax, next->getVelocityMax() - 1);
+
+        if (velMax != context.velRegion->getVelocityMax())
+        {
+            context.velRegion->setVelocityMax(static_cast<u8>(velMax));
+            next->setVelocityMin(static_cast<u8>(velMax + 1));
+            SetUnsavedChanges(true);
+        }
+    }
+    ImGui::EndDisabled();
+
+    if (!next)
+        ImGui::SetItemTooltip("%s", messages::bank::cVelocityMaxFixed);
+}
+
+static void DrawRootKeyFields(RegionMappingContext& context)
+{
+    DrawRootKeyField(*context.velRegion);
+}
+
+static void DrawKeyGroupFields(RegionMappingContext& context)
+{
+    DrawKeyGroupField(*context.velRegion);
+}
+
+static const RegionMappingGroup cRegionMappingGroups[] = {
+    { messages::bank::cKeyRange,      2, DrawKeyRangeFields      },
+    { messages::bank::cVelocityRange, 2, DrawVelocityRangeFields },
+    { messages::bank::cRootKey,       1, DrawRootKeyFields       },
+    { messages::bank::cKeyGroup,      1, DrawKeyGroupFields      },
+};
+
+static_assert(IM_ARRAYSIZE(cRegionMappingGroups) == cRegionMappingGroupNum);
 
 static void DrawEmptyRegionField(const char* id)
 {
-    static const s32 cZero = 0;
-
-    s32 value = 0;
+    s32 value = cEmptyFieldValue;
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * cRegionMappingFieldEm);
     SetNextKnobText(messages::common::cNoValue);
-    DragField(id, ImGuiDataType_S32, &value, 0.0f, &cZero, &cZero, "%d", ImGuiSliderFlags_AlwaysClamp);
+    DragField(id, ImGuiDataType_S32, &value, 0.0f, &cEmptyFieldValue, &cEmptyFieldValue, "%d", ImGuiSliderFlags_AlwaysClamp);
 }
 
-static void DrawRegionMapping(BankFile::Instrument* instrument)
+static void DrawEmptyMappingFields(s32 fieldNum)
 {
-    BankFile::KeyRegion* keyRegion = nullptr;
-    BankFile::VelocityRegion* velRegion = FindSelectedRegion(instrument, &keyRegion);
-
-    if (!velRegion)
+    for (s32 i = 0; i < fieldNum; i++)
     {
-        const f32 spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        if (i > 0)
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
 
-        ImGui::BeginDisabled();
+        ImGui::PushID(i);
+        DrawEmptyRegionField("##Empty");
+        ImGui::PopID();
+    }
+}
 
-        RegionLabel(cRegionKeyRangeLabel);
-        DrawEmptyRegionField("##KeyMin");
-        ImGui::SameLine(0.0f, spacing);
-        DrawEmptyRegionField("##KeyMax");
+static f32 CalcMappingFieldsWidth(s32 fieldNum)
+{
+    return ImGui::GetFontSize() * cRegionMappingFieldEm * fieldNum + ImGui::GetStyle().ItemInnerSpacing.x * (fieldNum - 1);
+}
 
-        NextRegionGroup(cRegionVelocityRangeLabel, 2);
-        DrawEmptyRegionField("##VelMin");
-        ImGui::SameLine(0.0f, spacing);
-        DrawEmptyRegionField("##VelMax");
+static RegionMappingLayout CalcRegionMappingColumns(s32 columnNum)
+{
+    const f32 gap = ImGui::GetFontSize() * cRegionMappingMinGapEm;
+    const f32 labelSpacing = ImGui::GetStyle().ItemSpacing.x;
 
-        NextRegionGroup(cRegionRootKeyLabel, 1);
-        DrawEmptyRegionField("##RootKey");
+    RegionMappingLayout layout = {};
+    layout.columnNum = columnNum;
 
-        NextRegionGroup(cRegionKeyGroupLabel, 1);
-        DrawEmptyRegionField("##KeyGroup");
+    f32 fieldsWidth[cRegionMappingGroupNum] = {};
 
-        ImGui::EndDisabled();
+    for (s32 i = 0; i < cRegionMappingGroupNum; i++)
+    {
+        const s32 column = i % columnNum;
 
-        return;
+        layout.labelWidth[column] = std::max(layout.labelWidth[column], ImGui::CalcTextSize(cRegionMappingGroups[i].label).x);
+        fieldsWidth[column] = std::max(fieldsWidth[column], CalcMappingFieldsWidth(cRegionMappingGroups[i].fieldNum));
     }
 
-    DrawRegionRanges(*instrument, *keyRegion, *velRegion);
-    velRegion->drawMappingUI();
+    f32 x = 0.0f;
+
+    for (s32 column = 0; column < columnNum; column++)
+    {
+        layout.columnX[column] = x;
+        x += layout.labelWidth[column] + labelSpacing + fieldsWidth[column] + gap;
+    }
+
+    layout.width = x - gap;
+
+    return layout;
+}
+
+static void JustifyRegionMappingColumns(RegionMappingLayout* layout, f32 maxWidth)
+{
+    const f32 spare = maxWidth - layout->width;
+
+    if (layout->columnNum < 2 || spare <= 0.0f)
+        return;
+
+    const f32 extraGap = spare / static_cast<f32>(layout->columnNum - 1);
+
+    for (s32 column = 1; column < layout->columnNum; column++)
+        layout->columnX[column] = ImFloor(layout->columnX[column] + extraGap * column);
+
+    layout->width = maxWidth;
+}
+
+static RegionMappingLayout CalcRegionMappingLayout(f32 maxWidth)
+{
+    RegionMappingLayout layout = {};
+
+    for (s32 columnNum : cRegionMappingColumnChoices)
+    {
+        layout = CalcRegionMappingColumns(columnNum);
+
+        if (layout.width <= maxWidth)
+            break;
+    }
+
+    JustifyRegionMappingColumns(&layout, maxWidth);
+
+    return layout;
+}
+
+static void DrawRegionMappingGrid(RegionMappingContext& context, const RegionMappingLayout& layout)
+{
+    const f32 startX = ImGui::GetCursorPosX();
+    const f32 labelSpacing = ImGui::GetStyle().ItemSpacing.x;
+    const bool hasRegion = context.velRegion != nullptr;
+
+    ImGui::BeginDisabled(!hasRegion);
+
+    for (s32 i = 0; i < cRegionMappingGroupNum; i++)
+    {
+        const RegionMappingGroup& group = cRegionMappingGroups[i];
+        const s32 column = i % layout.columnNum;
+
+        if (column > 0)
+            ImGui::SameLine();
+
+        ImGui::SetCursorPosX(startX + layout.columnX[column]);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(group.label);
+
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(startX + layout.columnX[column] + layout.labelWidth[column] + labelSpacing);
+
+        ImGui::PushID(i);
+
+        if (hasRegion)
+            group.drawFields(context);
+        else
+            DrawEmptyMappingFields(group.fieldNum);
+
+        ImGui::PopID();
+    }
+
+    ImGui::EndDisabled();
+}
+
+static sead::FixedSafeString<160> FormatMidiStatus()
+{
+    const u32 midiCount = MidiConnectedCount();
+
+    sead::FixedSafeString<160> status;
+
+    if (midiCount == 1)
+        status = messages::keyboard::cMidiOn;
+    else if (midiCount > 1)
+        status.format(messages::keyboard::cMidiDevicesFormat, midiCount);
+    else
+        status = messages::keyboard::cMidiOff;
+
+    return status;
+}
+
+static f32 CalcMidiControlsWidth()
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 midiWidth = ImGui::CalcTextSize(ICON_LC_PIANO).x + style.FramePadding.x * 2.0f;
+    const f32 helpWidth = ImGui::CalcTextSize(ICON_LC_KEYBOARD).x + style.FramePadding.x * 2.0f;
+
+    return midiWidth + helpWidth + style.ItemSpacing.x;
+}
+
+static void DrawKeyboardHelpPopup()
+{
+    if (!ImGui::BeginPopup("Keyboard Help"))
+        return;
+
+    ImGui::TextUnformatted(messages::keyboard::cHelpTitle);
+    ImGui::Separator();
+    ImGui::TextUnformatted(messages::keyboard::cHelpLowerRow);
+    ImGui::TextUnformatted(messages::keyboard::cHelpLowerWhite);
+    ImGui::TextUnformatted(messages::keyboard::cHelpLowerBlack);
+    ImGui::TextUnformatted(messages::keyboard::cHelpUpperRow);
+    ImGui::TextUnformatted(messages::keyboard::cHelpUpperWhite);
+    ImGui::TextUnformatted(messages::keyboard::cHelpUpperBlack);
+    ImGui::Separator();
+    ImGui::TextUnformatted(messages::keyboard::cHelpControls);
+    ImGui::TextUnformatted(messages::keyboard::cHelpOctave);
+    ImGui::TextUnformatted(messages::keyboard::cHelpReset);
+    ImGui::EndPopup();
+}
+
+static void DrawMidiButton()
+{
+    const bool connected = MidiConnectedCount() > 0;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, connected ? uicolors::Success() : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    const bool clicked = ImGui::SmallButton(ICON_LC_PIANO "###MidiSettings");
+    ImGui::PopStyleColor();
+
+    if (clicked)
+        OpenPreferencesWindow(PreferencesPage::Midi);
+
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::TextUnformatted(FormatMidiStatus().cstr());
+        ImGui::TextDisabled("%s", messages::keyboard::cMidiSettingsHint);
+        ImGui::EndTooltip();
+    }
+}
+
+static void DrawMidiControls()
+{
+    DrawMidiButton();
+
+    ImGui::SameLine();
+    if (ImGui::SmallButton(ICON_LC_KEYBOARD "###KeyboardHelp"))
+        ImGui::OpenPopup("Keyboard Help");
+
+    ImGui::SetItemTooltip("%s", messages::keyboard::cHelpTitle);
+
+    DrawKeyboardHelpPopup();
+}
+
+static void DrawRegionHeaderRow(BankFile::Instrument* instrument)
+{
+    const f32 inset = ImFloor(ImGui::GetFontSize() * cRegionPanelPadXEm);
+    const RegionMappingLayout layout = CalcRegionMappingLayout(ImGui::GetContentRegionAvail().x - inset * 2.0f);
+
+    RegionMappingContext context = { instrument, nullptr, nullptr };
+    context.velRegion = FindSelectedRegion(instrument, &context.keyRegion);
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + inset);
+    DrawRegionMappingGrid(context, layout);
+}
+
+struct RegionPanelLayout
+{
+    enum class Mode
+    {
+        Wide,
+        Split,
+        Stacked,
+    };
+
+    Mode mode;
+    SampleLayout sampleLayout;
+    f32 height;
+    f32 sampleWidth;
+    f32 pitchWidth;
+    f32 outputWidth;
+    f32 envelopeWidth;
+};
+
+static f32 CalcRegionPanelHeight(f32 contentHeight, f32 paddingY)
+{
+    return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y + contentHeight + paddingY * 2.0f;
+}
+
+static RegionPanelLayout CalcRegionPanelLayout(f32 avail, const ImVec2& padding)
+{
+    const f32 em = ImGui::GetFontSize();
+    const f32 spacingY = ImGui::GetStyle().ItemSpacing.y;
+    const f32 envelopeShrink = em * (cRegionCurveEm - cRegionCurveMinEm);
+    const f32 stripPanelHeight = CalcRegionPanelHeight(CalcRegionStripHeight(), padding.y);
+
+    RegionPanelLayout layout;
+    layout.sampleWidth = CalcInterpolationFieldWidth();
+    layout.pitchWidth = CalcKnobRowWidth(cRegionPitchKnobs, IM_ARRAYSIZE(cRegionPitchKnobs));
+    layout.outputWidth = CalcKnobRowWidth(cRegionOutputKnobs, IM_ARRAYSIZE(cRegionOutputKnobs));
+    layout.envelopeWidth = CalcAdshrEditorWidth(false);
+
+    const f32 sampleMinWidth = CalcInterpolationLabelWidth() + em * cRegionSampleComboMinEm;
+    const f32 envelopeMinWidth = layout.envelopeWidth - envelopeShrink;
+    const f32 knobPanelsWidth = layout.pitchWidth + layout.outputWidth + padding.x * 4.0f;
+
+    if (avail >= sampleMinWidth + knobPanelsWidth + envelopeMinWidth + padding.x * 4.0f)
+    {
+        const f32 sampleRoom = avail - knobPanelsWidth - layout.envelopeWidth - padding.x * 4.0f;
+        const f32 sampleShortfall = std::max(0.0f, layout.sampleWidth - sampleRoom);
+
+        layout.mode = RegionPanelLayout::Mode::Wide;
+        layout.sampleLayout = SampleLayout::Strip;
+        layout.height = stripPanelHeight;
+        layout.envelopeWidth = ImCeil(std::max(envelopeMinWidth, layout.envelopeWidth - sampleShortfall));
+
+        return layout;
+    }
+
+    layout.sampleLayout = CanInlineSampleFields(avail - padding.x * 2.0f) ? SampleLayout::Inline : SampleLayout::Lines;
+
+    const f32 samplePanelHeight = CalcRegionPanelHeight(CalcSampleFieldsHeight(layout.sampleLayout), padding.y);
+
+    if (avail >= knobPanelsWidth + CalcAdshrEditorWidth(true) + padding.x * 2.0f)
+    {
+        layout.mode = RegionPanelLayout::Mode::Split;
+        layout.height = samplePanelHeight + spacingY + stripPanelHeight;
+
+        return layout;
+    }
+
+    layout.mode = RegionPanelLayout::Mode::Stacked;
+    layout.height = samplePanelHeight + (spacingY + stripPanelHeight) * 2.0f;
+
+    return layout;
+}
+
+static void DrawNoRegionPanel(const RegionPanelLayout& layout)
+{
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const ImVec2 size(ImGui::GetContentRegionAvail().x, layout.height);
+    const ImVec2 textSize = ImGui::CalcTextSize(messages::bank::cNoRegionSelected);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    ImGui::Dummy(size);
+    drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
+    drawList->AddText(ImVec2(pos.x + (size.x - textSize.x) * 0.5f, pos.y + (size.y - textSize.y) * 0.5f), ImGui::GetColorU32(ImGuiCol_TextDisabled), messages::bank::cNoRegionSelected);
+}
+
+static void DrawRegionPanelRow(BankFile::VelocityRegion& velRegion, const RegionPanelLayout& layout, bool withSample)
+{
+    const s32 columnNum = withSample ? 4 : 3;
+    const ImGuiTableColumnFlags envelopeFlags = withSample ? ImGuiTableColumnFlags_WidthFixed : ImGuiTableColumnFlags_WidthStretch;
+
+    if (!ImGui::BeginTable(withSample ? "RegionPanels" : "RegionKnobPanels", columnNum, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV))
+        return;
+
+    if (withSample)
+        ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch, layout.sampleWidth);
+
+    ImGui::TableSetupColumn("Pitch", ImGuiTableColumnFlags_WidthFixed, layout.pitchWidth);
+    ImGui::TableSetupColumn("Output", ImGuiTableColumnFlags_WidthFixed, layout.outputWidth);
+    ImGui::TableSetupColumn("Envelope", envelopeFlags, layout.envelopeWidth);
+
+    if (withSample)
+    {
+        ImGui::TableNextColumn();
+        DrawSampleUI(velRegion, layout.sampleLayout);
+    }
+
+    ImGui::TableNextColumn();
+    velRegion.drawPitchUI();
+    ImGui::TableNextColumn();
+    velRegion.drawOutputUI();
+    ImGui::TableNextColumn();
+    velRegion.drawEnvelopeUI();
+
+    ImGui::EndTable();
+}
+
+template <typename DrawPanel>
+static void DrawSingleRegionPanel(const char* id, DrawPanel drawPanel)
+{
+    if (!ImGui::BeginTable(id, 1, ImGuiTableFlags_BordersOuter))
+        return;
+
+    ImGui::TableSetupColumn(id, ImGuiTableColumnFlags_WidthStretch);
+
+    ImGui::TableNextColumn();
+    drawPanel();
+
+    ImGui::EndTable();
+}
+
+static void DrawPitchOutputPanels(BankFile::VelocityRegion& velRegion)
+{
+    if (!ImGui::BeginTable("RegionPitchOutput", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV))
+        return;
+
+    ImGui::TableSetupColumn("Pitch", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Output", ImGuiTableColumnFlags_WidthStretch);
+
+    ImGui::TableNextColumn();
+    velRegion.drawPitchUI();
+    ImGui::TableNextColumn();
+    velRegion.drawOutputUI();
+
+    ImGui::EndTable();
 }
 
 void DrawRegionPanels(BankFile::Instrument* instrument)
@@ -449,127 +851,50 @@ void DrawRegionPanels(BankFile::Instrument* instrument)
     BankFile::KeyRegion* keyRegion = nullptr;
     BankFile::VelocityRegion* velRegion = FindSelectedRegion(instrument, &keyRegion);
 
-    const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
-    const f32 avail = ImGui::GetContentRegionAvail().x;
     const ImVec2 padding(ImFloor(em * cRegionPanelPadXEm), ImFloor(em * cRegionPanelPadYEm));
-    const f32 panelHeight = ImGui::GetFrameHeight() + style.ItemSpacing.y + CalcRegionStripHeight() + padding.y * 2.0f;
-
-    const f32 interpolationWidth = std::max(ImGui::CalcTextSize(messages::bank::cInterpolationPolyphase).x, ImGui::CalcTextSize(messages::common::cLinear).x) + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
-    const f32 sampleWidth = ImGui::CalcTextSize(messages::common::cInterpolation).x + style.ItemSpacing.x + interpolationWidth;
-    const f32 pitchWidth = CalcKnobRowWidth(cRegionPitchKnobs, IM_ARRAYSIZE(cRegionPitchKnobs));
-    const f32 outputWidth = CalcKnobRowWidth(cRegionOutputKnobs, IM_ARRAYSIZE(cRegionOutputKnobs));
-    const f32 envelopeWidth = CalcAdshrEditorWidth(false);
-    const f32 envelopeMinWidth = envelopeWidth - em * (cRegionCurveEm - cRegionCurveMinEm);
-
-    s32 lineNum = 3;
-    if (avail >= sampleWidth + pitchWidth + outputWidth + envelopeWidth + padding.x * 8.0f)
-        lineNum = 1;
-    else if (avail >= pitchWidth + outputWidth + envelopeMinWidth + padding.x * 6.0f)
-        lineNum = 2;
+    const RegionPanelLayout layout = CalcRegionPanelLayout(ImGui::GetContentRegionAvail().x, padding);
 
     if (!velRegion)
     {
-        const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const ImVec2 size(avail, panelHeight * lineNum + style.ItemSpacing.y * (lineNum - 1));
-        const ImVec2 textSize = ImGui::CalcTextSize(messages::bank::cNoRegionSelected);
-
-        ImGui::Dummy(size);
-        ImGui::GetWindowDrawList()->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
-        ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + (size.x - textSize.x) * 0.5f, pos.y + (size.y - textSize.y) * 0.5f), ImGui::GetColorU32(ImGuiCol_TextDisabled), messages::bank::cNoRegionSelected);
+        DrawNoRegionPanel(layout);
         return;
     }
+
+    const auto drawSample = [&]()
+    {
+        DrawSampleUI(*velRegion, layout.sampleLayout);
+    };
+
+    const auto drawEnvelope = [&]()
+    {
+        velRegion->drawEnvelopeUI();
+    };
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, padding);
 
-    if (lineNum == 1)
+    switch (layout.mode)
     {
-        if (ImGui::BeginTable("RegionPanels", 4, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV))
-        {
-            ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch, sampleWidth);
-            ImGui::TableSetupColumn("Pitch", ImGuiTableColumnFlags_WidthFixed, pitchWidth);
-            ImGui::TableSetupColumn("Output", ImGuiTableColumnFlags_WidthFixed, outputWidth);
-            ImGui::TableSetupColumn("Envelope", ImGuiTableColumnFlags_WidthFixed, envelopeWidth);
+    case RegionPanelLayout::Mode::Wide:
+        DrawRegionPanelRow(*velRegion, layout, true);
+        break;
 
-            ImGui::TableNextColumn();
-            velRegion->drawSampleUI();
+    case RegionPanelLayout::Mode::Split:
+        DrawSingleRegionPanel("RegionSample", drawSample);
 
-            ImGui::TableNextColumn();
-            velRegion->drawPitchUI();
+        SetRegionPanelFill(true);
+        DrawRegionPanelRow(*velRegion, layout, false);
+        SetRegionPanelFill(false);
+        break;
 
-            ImGui::TableNextColumn();
-            velRegion->drawOutputUI();
-
-            ImGui::TableNextColumn();
-            velRegion->drawEnvelopeUI();
-
-            ImGui::EndTable();
-        }
-
-        ImGui::PopStyleVar();
-        return;
+    case RegionPanelLayout::Mode::Stacked:
+        SetRegionPanelFill(true);
+        DrawSingleRegionPanel("RegionSample", drawSample);
+        DrawPitchOutputPanels(*velRegion);
+        DrawSingleRegionPanel("RegionEnvelope", drawEnvelope);
+        SetRegionPanelFill(false);
+        break;
     }
-
-    SetRegionPanelFill(true);
-
-    if (ImGui::BeginTable("RegionSample", 1, ImGuiTableFlags_BordersOuter))
-    {
-        ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::TableNextColumn();
-        velRegion->drawSampleUI();
-
-        ImGui::EndTable();
-    }
-
-    if (lineNum == 2)
-    {
-        if (ImGui::BeginTable("RegionKnobs", 3, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV))
-        {
-            ImGui::TableSetupColumn("Pitch", ImGuiTableColumnFlags_WidthFixed, pitchWidth);
-            ImGui::TableSetupColumn("Output", ImGuiTableColumnFlags_WidthFixed, outputWidth);
-            ImGui::TableSetupColumn("Envelope", ImGuiTableColumnFlags_WidthStretch);
-
-            ImGui::TableNextColumn();
-            velRegion->drawPitchUI();
-
-            ImGui::TableNextColumn();
-            velRegion->drawOutputUI();
-
-            ImGui::TableNextColumn();
-            velRegion->drawEnvelopeUI();
-
-            ImGui::EndTable();
-        }
-    }
-    else
-    {
-        if (ImGui::BeginTable("RegionPitchOutput", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV))
-        {
-            ImGui::TableSetupColumn("Pitch", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Output", ImGuiTableColumnFlags_WidthStretch);
-
-            ImGui::TableNextColumn();
-            velRegion->drawPitchUI();
-
-            ImGui::TableNextColumn();
-            velRegion->drawOutputUI();
-
-            ImGui::EndTable();
-        }
-
-        if (ImGui::BeginTable("RegionEnvelope", 1, ImGuiTableFlags_BordersOuter))
-        {
-            ImGui::TableSetupColumn("Envelope", ImGuiTableColumnFlags_WidthStretch);
-
-            ImGui::TableNextColumn();
-            velRegion->drawEnvelopeUI();
-
-            ImGui::EndTable();
-        }
-    }
-
-    SetRegionPanelFill(false);
 
     ImGui::PopStyleVar();
 }
@@ -598,19 +923,17 @@ InstanciateItemCallback CreateInstrumentFunc(bool clear)
 
     if (clear)
     {
-        sAddName = "Instrument";
+        sAddName = messages::common::cInstrument;
         sAddProgramNo = sCurrentEditBank ? FindNextAvailableProgramNo(sCurrentEditBank->getInstrumentList(), nullptr) : 0;
     }
 
     if (sCurrentEditBank)
     {
-        ImGui::SetNextItemWidth(240.0f);
-        ImGui::InputText(messages::common::cName,sAddName.getBuffer(), sAddName.getBufferSize());
+        ImGui::SetNextItemWidth(cAddInstrumentNameWidth);
+        ImGui::InputText(messages::common::cName, sAddName.getBuffer(), sAddName.getBufferSize());
 
-        s16 progStep = 1;
-        s16 progStepFast = 10;
-        ImGui::SetNextItemWidth(120.0f);
-        ImGui::InputScalar(messages::bank::cProgramNumber,ImGuiDataType_S16, &sAddProgramNo, &progStep, &progStepFast);
+        ImGui::SetNextItemWidth(cAddInstrumentProgramWidth);
+        ImGui::InputScalar(messages::bank::cProgramNumber, ImGuiDataType_S16, &sAddProgramNo, &cAddInstrumentProgramStep, &cAddInstrumentProgramStepFast);
 
         if (DrawNextProgramButton("###NextAvailAdd"))
             sAddProgramNo = FindNextAvailableProgramNo(sCurrentEditBank->getInstrumentList(), nullptr);
@@ -620,7 +943,7 @@ InstanciateItemCallback CreateInstrumentFunc(bool clear)
     {
         BankFile::Instrument *instr = new BankFile::Instrument();
         instr->setEnableName(true);
-        instr->getName() = sAddName.isEmpty() ? "Instrument" : sAddName.cstr();
+        instr->getName() = sAddName.isEmpty() ? messages::common::cInstrument : sAddName.cstr();
         instr->setProgramNo(sAddProgramNo);
 
         BankFile::KeyRegion *keyRegion = new BankFile::KeyRegion(0, 127);
@@ -647,14 +970,6 @@ static void DuplicateInstrument(BankFile* bankFile, const BankFile::Instrument* 
 {
     Item::List& bankList = bankFile->getInstrumentList();
 
-    std::unordered_set<s16> used;
-    for (const Item* item : bankList)
-        used.insert(static_cast<const BankFile::Instrument*>(item)->getProgramNo());
-
-    s16 nextProg = 0;
-    while (used.count(nextProg))
-        nextProg++;
-
     BankFile::Instrument* dup = new BankFile::Instrument();
     dup->setEnableName(src->isEnableName());
     dup->getName() = src->getName();
@@ -676,33 +991,33 @@ static void DuplicateInstrument(BankFile* bankFile, const BankFile::Instrument* 
         dup->getKeyRegionList().pushBack(keyRegion);
     }
 
-    dup->setProgramNo(nextProg);
+    dup->setProgramNo(FindNextAvailableProgramNo(bankList));
     bankList.pushBack(dup);
     sBfsar.updateList(bankList);
     SetUnsavedChanges(true);
 }
 
-static const WaveFile *GetInstrumentFirstWave_(const BankFile::Instrument *instr)
+static const WaveFile* GetInstrumentFirstWave(const BankFile::Instrument* instrument)
 {
-    if (!instr || instr->getKeyRegionList().size() == 0)
+    if (!instrument || instrument->getKeyRegionList().size() == 0)
         return nullptr;
 
-    const auto *kr = static_cast<const BankFile::KeyRegion *>(instr->getKeyRegionList().front()->val());
+    const auto* keyRegion = static_cast<const BankFile::KeyRegion*>(instrument->getKeyRegionList().front()->val());
 
-    if (kr->getVelocityRegionList().size() == 0)
+    if (keyRegion->getVelocityRegionList().size() == 0)
         return nullptr;
 
-    const auto *vr = static_cast<const BankFile::VelocityRegion *>(kr->getVelocityRegionList().front()->val());
+    const auto* velRegion = static_cast<const BankFile::VelocityRegion*>(keyRegion->getVelocityRegionList().front()->val());
 
-    if (!vr->getWaveFileRef().isAttached())
+    if (!velRegion->getWaveFileRef().isAttached())
         return nullptr;
 
-    return static_cast<const WaveFile *>(vr->getWaveFileRef().getItem());
+    return static_cast<const WaveFile*>(velRegion->getWaveFileRef().getItem());
 }
 
 static bool CanAutoNameInstrument(const Item* item)
 {
-    const WaveFile* wave = GetInstrumentFirstWave_(static_cast<const BankFile::Instrument*>(item));
+    const WaveFile* wave = GetInstrumentFirstWave(static_cast<const BankFile::Instrument*>(item));
 
     return wave && !wave->getName().isEmpty();
 }
@@ -715,7 +1030,7 @@ static void AutoNameInstruments(const std::vector<Item*>& instruments)
             continue;
 
         BankFile::Instrument* instrument = static_cast<BankFile::Instrument*>(item);
-        const WaveFile* wave = GetInstrumentFirstWave_(instrument);
+        const WaveFile* wave = GetInstrumentFirstWave(instrument);
 
         if (instrument->isEnableName() && instrument->getName() == wave->getName())
             continue;
@@ -761,7 +1076,6 @@ static void InstrumentContextMenuFunc(Item* item)
     if (item && ContextMenuItem(ICON_LC_COPY, messages::common::cDuplicate))
         DuplicateInstrument(sCurrentEditBank, static_cast<BankFile::Instrument*>(item));
 
-    // Edit
     ContextMenuSeparator();
 
     if (item)
@@ -782,7 +1096,6 @@ static void InstrumentContextMenuFunc(Item* item)
     if (ContextMenuItem(ICON_LC_ARROW_DOWN_0_1, messages::menu::cSortByNumber))
         SortInstrumentsByNumber(sCurrentEditBank);
 
-    // Files
     ContextMenuSeparator();
 
     if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::common::cImport))
@@ -792,118 +1105,91 @@ static void InstrumentContextMenuFunc(Item* item)
         RequestExportInstrument(item);
 }
 
+static f32 ClampRegionPaneHeight(f32 regionHeight, f32 totalHeight)
+{
+    return sead::MathCalcCommon<f32>::clamp2(cRegionPaneMinHeight, regionHeight, std::max(cRegionPaneMinHeight, totalHeight - cRegionPaneHeightReserve));
+}
+
+static void DrawInstrumentListPane(Item::List& instrumentList, f32 height)
+{
+    if (ImGui::BeginChild("Instruments", ImVec2(0.0f, height)))
+    {
+        SetNextItemListFooter(&DrawMidiControls, CalcMidiControlsWidth());
+        DrawAllItemsUI("Instrument", messages::common::cInstrument, instrumentList, &CreateInstrumentFunc, nullptr, &InstrumentContextMenuFunc);
+    }
+
+    ImGui::EndChild();
+}
+
+static void DrawRegionSplitter(f32* regionHeight)
+{
+    ImGui::InvisibleButton("##RegionSplitter", ImVec2(ImGui::GetContentRegionAvail().x, cSplitterHeight));
+
+    const bool active = ImGui::IsItemActive();
+    const bool highlighted = active || ImGui::IsItemHovered();
+
+    if (highlighted)
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+
+    if (active)
+        *regionHeight -= ImGui::GetIO().MouseDelta.y;
+
+    const ImVec2 splitterMin = ImGui::GetItemRectMin();
+    const ImVec2 splitterMax = ImGui::GetItemRectMax();
+    const f32 centerY = (splitterMin.y + splitterMax.y) * 0.5f;
+    const ImU32 lineColor = highlighted ? GetPianoRollPalette().splitterHover : ImGui::GetColorU32(ImGuiCol_Separator);
+
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(splitterMin.x + cSplitterLineInset, centerY), ImVec2(splitterMax.x - cSplitterLineInset, centerY), lineColor, cSplitterLineThickness);
+}
+
+static f32 DrawKeyboardPane(f32 regionHeight)
+{
+    const f32 startY = ImGui::GetCursorScreenPos().y;
+    f32 keyboardHeight = 0.0f;
+
+    if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_NoScrollWithMouse))
+    {
+        BankFile::Instrument* instrument = (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::BankFileInstrument)
+            ? static_cast<BankFile::Instrument*>(sSelectedItem)
+            : nullptr;
+
+        DrawRegionHeaderRow(instrument);
+
+        ImGui::Separator();
+
+        const f32 keysHeight = ImFloor(ImGui::GetFontSize() * cPianoKeysHeightEm) + GetPianoRulerHeight();
+        DrawKeyboardWithRegions(ImGui::GetContentRegionAvail().x, keysHeight, regionHeight, cRegionRangeMin, cRegionRangeMax, instrument);
+
+        keyboardHeight = ImGui::GetCursorScreenPos().y - startY + ImGui::GetScrollY() + ImGui::GetStyle().WindowPadding.y;
+    }
+
+    ImGui::EndChild();
+
+    return keyboardHeight;
+}
+
 void BankFile::drawFileUI()
 {
     sCurrentEditBank = this;
 
-    static f32 sKeyboardHeight = 200.0f; // initial guess
-    static f32 sRegionHeight = 128.0f;
-    f32 totalHeight = ImGui::GetContentRegionAvail().y;
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID keyboardHeightId = ImGui::GetID("##KeyboardPaneHeight");
+    const ImGuiID regionHeightId = ImGui::GetID("##RegionPaneHeight");
 
-    sRegionHeight = sead::MathCalcCommon<f32>::clamp2(48.0f, sRegionHeight, std::max(48.0f, totalHeight - 220.0f));
+    const f32 totalHeight = ImGui::GetContentRegionAvail().y;
+    const f32 keyboardHeight = storage->GetFloat(keyboardHeightId, cKeyboardPaneInitialHeight);
+    f32 regionHeight = ClampRegionPaneHeight(storage->GetFloat(regionHeightId, cRegionPaneInitialHeight), totalHeight);
 
-    const f32 kSplitterH = 6.0f;
-    const f32 splitterFootprint = kSplitterH + ImGui::GetStyle().ItemSpacing.y;
+    const f32 splitterFootprint = cSplitterHeight + ImGui::GetStyle().ItemSpacing.y;
+    const f32 listHeight = std::max(ImGui::GetFrameHeight(), totalHeight - keyboardHeight - splitterFootprint);
 
-    const f32 topHeight = std::max(ImGui::GetFrameHeight(), totalHeight - sKeyboardHeight - splitterFootprint);
+    DrawInstrumentListPane(mInstrumentList, listHeight);
+    DrawRegionSplitter(&regionHeight);
 
-    if (ImGui::BeginChild("Instruments", ImVec2(0.0f, topHeight)))
-        DrawAllItemsUI("Instrument", messages::common::cInstrument,mInstrumentList, &CreateInstrumentFunc, nullptr, &InstrumentContextMenuFunc);
+    const f32 measuredKeyboardHeight = DrawKeyboardPane(regionHeight);
 
-    ImGui::EndChild();
+    if (measuredKeyboardHeight > 0.0f)
+        storage->SetFloat(keyboardHeightId, measuredKeyboardHeight);
 
-    ImGui::InvisibleButton("##RegionSplitter", ImVec2(ImGui::GetContentRegionAvail().x, kSplitterH));
-    const bool splitterActive = ImGui::IsItemActive();
-    if (splitterActive || ImGui::IsItemHovered())
-        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-    if (splitterActive)
-        sRegionHeight -= ImGui::GetIO().MouseDelta.y;
-    {
-        const ImVec2 splitterMin = ImGui::GetItemRectMin();
-        const ImVec2 splitterMax = ImGui::GetItemRectMax();
-        const f32 centerY = (splitterMin.y + splitterMax.y) * 0.5f;
-        const ImU32 lineColor = (splitterActive || ImGui::IsItemHovered()) ? GetPianoRollPalette().splitterHover : ImGui::GetColorU32(ImGuiCol_Separator);
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(splitterMin.x + 6.0f, centerY), ImVec2(splitterMax.x - 6.0f, centerY), lineColor, 2.0f);
-    }
-
-    f32 startY = ImGui::GetCursorScreenPos().y;
-    if (ImGui::BeginChild("Keyboard", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_NoScrollWithMouse))
-    {
-        Instrument* instrument = (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::BankFileInstrument)
-            ? static_cast<Instrument *>(sSelectedItem)
-            : nullptr;
-
-        DrawRegionMapping(instrument);
-
-        ImGui::SameLine();
-        {
-            u32 midiCount = MidiConnectedCount();
-            bool connected = midiCount > 0;
-
-            sead::FixedSafeString<160> statusStr;
-            if (midiCount == 1)
-                statusStr.format(messages::keyboard::cMidiOn);
-            else if (midiCount > 1)
-                statusStr.format(messages::keyboard::cMidiDevicesFormat, midiCount);
-            else
-                statusStr.format(messages::keyboard::cMidiOff);
-
-            f32 spacing = ImGui::GetStyle().ItemSpacing.x;
-            f32 statusW = ImGui::CalcTextSize(statusStr.cstr()).x;
-            f32 btnW = ImGui::CalcTextSize(messages::keyboard::cMidiSettings).x + ImGui::GetStyle().FramePadding.x * 2;
-            f32 helpW = ImGui::CalcTextSize(ICON_LC_KEYBOARD).x + ImGui::GetStyle().FramePadding.x * 2;
-
-            float rightX = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
-            f32 midiX = rightX - statusW - btnW - helpW - spacing * 3;
-
-            if (ImGui::GetCursorPosX() > midiX)
-                ImGui::NewLine();
-
-            ImGui::SetCursorPosX(midiX);
-
-            ImGui::AlignTextToFramePadding();
-            ImGui::TextColored(connected ? uicolors::Success() : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), "%s", statusStr.cstr());
-
-            ImGui::SameLine(0.0f, spacing);
-            if (ImGui::SmallButton(messages::keyboard::cMidiSettings))
-                OpenPreferencesWindow(PreferencesPage::Midi);
-
-            ImGui::SameLine();
-            if (ImGui::SmallButton(ICON_LC_KEYBOARD "###KeyboardHelp"))
-                ImGui::OpenPopup("Keyboard Help");
-            ImGui::SetItemTooltip("%s", messages::keyboard::cHelpTitle);
-            if (ImGui::BeginPopup("Keyboard Help"))
-            {
-                ImGui::TextUnformatted(messages::keyboard::cHelpTitle);
-                ImGui::Separator();
-                ImGui::TextUnformatted(messages::keyboard::cHelpLowerRow);
-                ImGui::TextUnformatted(messages::keyboard::cHelpLowerWhite);
-                ImGui::TextUnformatted(messages::keyboard::cHelpLowerBlack);
-                ImGui::TextUnformatted(messages::keyboard::cHelpUpperRow);
-                ImGui::TextUnformatted(messages::keyboard::cHelpUpperWhite);
-                ImGui::TextUnformatted(messages::keyboard::cHelpUpperBlack);
-                ImGui::Separator();
-                ImGui::TextUnformatted(messages::keyboard::cHelpControls);
-                ImGui::TextUnformatted(messages::keyboard::cHelpOctave);
-                ImGui::TextUnformatted(messages::keyboard::cHelpReset);
-                ImGui::EndPopup();
-            }
-        }
-
-        ImGui::Separator();
-
-        f32 width = ImGui::GetContentRegionAvail().x;
-
-        DrawKeyboardWithRegions(
-            width,
-            ImFloor(ImGui::GetFontSize() * cPianoKeysHeightEm) + GetPianoRulerHeight(), // keyboard height
-            sRegionHeight, // region height
-            0,
-            127,
-            instrument);
-
-        f32 endY = ImGui::GetCursorScreenPos().y;
-        sKeyboardHeight = endY - startY + ImGui::GetScrollY() + ImGui::GetStyle().WindowPadding.y;
-    }
-    ImGui::EndChild();
+    storage->SetFloat(regionHeightId, regionHeight);
 }

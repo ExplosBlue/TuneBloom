@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ui/Messages.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
 
@@ -13,10 +12,14 @@ inline constexpr f32 cTrackSilentAlpha   = 0.55f;
 inline constexpr uicolors::Themed<f32> cTrackSelectedAlpha = { 0.10f, 0.06f };
 inline constexpr uicolors::Themed<f32> cTrackIndexAlpha    = { 0.45f, 0.18f };
 
-inline constexpr const char* cTrackMixLabels[]    = { messages::common::cVolume, messages::common::cPan, messages::param::cSurroundPan, messages::stream::cTrackBypass };
-inline constexpr const char* cTrackSendLabels[]   = { messages::param::cSendMain, messages::param::cSendFxA, messages::param::cSendFxB, messages::param::cSendFxC };
-inline constexpr const char* cTrackFilterLabels[] = { messages::common::cLpf, messages::param::cBiquad, messages::stream::cTrackBiquadValue };
-inline constexpr const char* cTrackWaveLabel      = messages::common::cWaveFile;
+inline constexpr u32 cTrackMixLabelCount    = 4;
+inline constexpr u32 cTrackSendLabelCount   = 4;
+inline constexpr u32 cTrackFilterLabelCount = 3;
+
+extern const char* const cTrackMixLabels[cTrackMixLabelCount];
+extern const char* const cTrackSendLabels[cTrackSendLabelCount];
+extern const char* const cTrackFilterLabels[cTrackFilterLabelCount];
+extern const char* const cTrackWaveLabel;
 
 enum class TrackParam
 {

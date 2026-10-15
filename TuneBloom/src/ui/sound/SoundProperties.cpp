@@ -496,7 +496,7 @@ static void DrawSoundOtherSection(Sound* sound)
         DetailTooltip(messages::sound::cRemoteFilterDetail);
     }
     else
-        SetDisabledTooltip(messages::sound::cRemoteFilterNoCtr);
+        ImGui::SetItemTooltip("%s", messages::sound::cRemoteFilterNoCtr);
 
     if (sound->getSoundType() != Sound::SoundType::Strm)
     {

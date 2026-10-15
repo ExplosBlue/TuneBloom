@@ -33,14 +33,15 @@ inline void DrawSoundPanels(const char* id, const f32* widths, s32 panelNum, Dra
 
         ImGui::PushID(begin);
 
-        const bool alone = !stretch || end - begin == 1;
+        const bool wrapped = begin > 0 || end < panelNum;
+        const bool fixedWidth = !stretch || (end - begin == 1 && !wrapped);
         const f32 extra = sead::Mathf::max(0.0f, (avail - lineWidth) / (end - begin));
-        const ImGuiTableFlags flags = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | (alone ? ImGuiTableFlags_NoHostExtendX | ImGuiTableFlags_SizingFixedFit : 0);
+        const ImGuiTableFlags flags = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | (fixedWidth ? ImGuiTableFlags_NoHostExtendX | ImGuiTableFlags_SizingFixedFit : 0);
 
         if (ImGui::BeginTable(id, end - begin, flags))
         {
             for (s32 i = begin; i < end; i++)
-                ImGui::TableSetupColumn(nullptr, alone ? ImGuiTableColumnFlags_WidthFixed : ImGuiTableColumnFlags_WidthStretch, alone ? sead::Mathf::min(widths[i], avail - cellExtra) : widths[i] + extra);
+                ImGui::TableSetupColumn(nullptr, fixedWidth ? ImGuiTableColumnFlags_WidthFixed : ImGuiTableColumnFlags_WidthStretch, fixedWidth ? sead::Mathf::min(widths[i], avail - cellExtra) : widths[i] + extra);
 
             for (s32 i = begin; i < end; i++)
             {

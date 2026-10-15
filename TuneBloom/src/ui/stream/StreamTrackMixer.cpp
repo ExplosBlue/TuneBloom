@@ -244,25 +244,34 @@ static void CalcTrackStripSizes(const TrackContext& ctx, TrackStripLayout* layou
     f32 tableWidth = 0.0f;
     f32 stripWidth = minWidth;
 
+    const auto calcFreeWidth = [&](f32 reservedWidth)
+    {
+        return avail.x - reservedWidth - labelWidth - columnExtra * columnNum - 2.0f;
+    };
+    const auto calcContentWidth = [&](s32 strips)
+    {
+        return labelWidth + stripWidth * strips + columnExtra * (strips + 1) + 2.0f;
+    };
+    const auto fitStrips = [&](f32 freeWidth, f32 stripMin)
+    {
+        stripWidth = ImFloor(sead::Mathf::max(stripMin, freeWidth / stripNum));
+        labelWidth += sead::Mathf::max(0.0f, ImFloor(freeWidth - stripWidth * stripNum));
+    };
+
     if (isShort)
     {
-        stripWidth = sead::Mathf::max(ImFloor(em * cTrackShortStripWidthEm), stateWidth);
-
-        const f32 contentWidth = labelWidth + stripWidth * stripNum + columnExtra * columnNum + 2.0f;
         const f32 detailWidth = CalcTrackDetailWidth(ctx) + style.ItemSpacing.x;
-        const f32 oneStripWidth = labelWidth + stripWidth + columnExtra * 2.0f + 2.0f;
 
-        tableWidth = ImFloor(sead::Mathf::min(contentWidth, sead::Mathf::max(avail.x - detailWidth, oneStripWidth)));
+        fitStrips(calcFreeWidth(detailWidth), sead::Mathf::max(ImFloor(em * cTrackShortStripWidthEm), stateWidth));
+        tableWidth = ImFloor(sead::Mathf::min(calcContentWidth(stripNum), sead::Mathf::max(avail.x - detailWidth, calcContentWidth(1))));
     }
     else
     {
-        const f32 freeWidth = avail.x - labelWidth - columnExtra * columnNum - 2.0f;
-
-        stripWidth = ImFloor(sead::Mathf::clamp2(minWidth, freeWidth / stripNum, ctx.biquadWidth));
+        fitStrips(calcFreeWidth(0.0f), minWidth);
         tableWidth = avail.x;
     }
 
-    const bool scrollX = labelWidth + stripWidth * stripNum + columnExtra * columnNum + 2.0f > tableWidth;
+    const bool scrollX = calcContentWidth(stripNum) > tableWidth;
 
     layout->em = em;
     layout->frameHeight = frameHeight;

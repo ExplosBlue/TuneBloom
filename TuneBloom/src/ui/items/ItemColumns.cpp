@@ -25,6 +25,8 @@ static constexpr s32 cItemAutoWidthFrames = 60;
 static constexpr f32 cItemNameAutoRatio   = 0.95f;
 static constexpr f32 cItemCellPadXEm      = 0.75f;
 static constexpr f32 cItemTextAutoEm      = 18.0f;
+static constexpr f32 cItemSortMarkSizeEm  = 0.6f;
+static constexpr f32 cItemSortMarkGapEm   = 0.25f;
 static constexpr const char* cItemTextEndMark = "...";
 
 static constexpr const char* cItemIdColumnKey      = "ID";
@@ -36,9 +38,53 @@ static f32 sNameMin    = 0.0f;
 
 static const char* sIdColumnKey = nullptr;
 
+static const ImFontGlyph* FindFontGlyph(const char* text)
+{
+    u32 codepoint = 0;
+    ImTextCharFromUtf8(&codepoint, text, nullptr);
+
+    return ImGui::GetFont()->FindGlyph(static_cast<ImWchar>(codepoint));
+}
+
+static f32 GetItemSortMarkSize()
+{
+    return ImFloor(ImGui::GetFontSize() * cItemSortMarkSizeEm);
+}
+
+static f32 GetItemSortMarkFontScale()
+{
+    return GetItemSortMarkSize() / ImGui::GetFont()->FontSize;
+}
+
+f32 GetItemSortMarkGap()
+{
+    return ImFloor(ImGui::GetFontSize() * cItemSortMarkGapEm);
+}
+
 static f32 GetItemSortMarkWidth()
 {
-    return ImGui::CalcTextSize(ICON_LC_CHEVRON_DOWN).x + ImGui::GetStyle().ItemInnerSpacing.x;
+    const ImFontGlyph* glyph = FindFontGlyph(ICON_LC_CHEVRON_DOWN);
+
+    return ImCeil((glyph->X1 - glyph->X0) * GetItemSortMarkFontScale()) + GetItemSortMarkGap();
+}
+
+static f32 CalcSortedTitleWidth(const char* title)
+{
+    return ImGui::CalcTextSize(title).x + GetItemSortMarkWidth();
+}
+
+void DrawItemSortMark(ImDrawList* drawList, const ImVec2& inkPos, bool descending, ImU32 color)
+{
+    const char* markText = descending ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_UP;
+    const ImFontGlyph* mark = FindFontGlyph(markText);
+    const ImFontGlyph* capital = FindFontGlyph("H");
+    const f32 markScale = GetItemSortMarkFontScale();
+    const f32 textScale = ImGui::GetFontSize() / ImGui::GetFont()->FontSize;
+    const f32 capitalCenter = (capital->Y0 + capital->Y1) * 0.5f * textScale;
+    const f32 markCenter = (mark->Y0 + mark->Y1) * 0.5f * markScale;
+    const ImVec2 drawPos(ImFloor(inkPos.x - mark->X0 * markScale), ImFloor(inkPos.y + capitalCenter - markCenter));
+
+    drawList->AddText(ImGui::GetFont(), GetItemSortMarkSize(), drawPos, color, markText);
 }
 
 void RegisterItemColumnTexts()
@@ -54,28 +100,46 @@ void RegisterItemColumnTexts()
 
 f32 GetItemColumnWidth(const ItemColumn& column)
 {
-    const f32 titleWidth  = ImGui::CalcTextSize(column.title).x + GetItemSortMarkWidth();
+    const f32 titleWidth  = ImGui::CalcTextSize(column.title).x;
     const f32 sampleWidth = ImGui::CalcTextSize(column.widthSample).x;
 
     return sead::Mathf::max(titleWidth, sampleWidth) + cItemColumnGap;
 }
 
+bool IsItemListIdProgramNo(Item::ItemType itemType)
+{
+    return itemType == Item::ItemType::BankFileInstrument;
+}
+
 u32 GetItemListId(const Item* item)
 {
-    if (item->getItemType() == Item::ItemType::BankFileInstrument)
+    if (IsItemListIdProgramNo(item->getItemType()))
         return static_cast<u32>(static_cast<const BankFile::Instrument*>(item)->getProgramNo());
 
     return item->getId();
 }
 
+void FormatItemListId(const Item* item, sead::BufferedSafeString* out)
+{
+    out->format("%u", GetItemListId(item));
+}
+
+const char* GetItemListIdConflict(const Item* item)
+{
+    if (IsItemListIdProgramNo(item->getItemType()) && IsProgramNoShared(static_cast<const BankFile::Instrument*>(item)))
+        return messages::bank::cProgramNumberShared;
+
+    return nullptr;
+}
+
 static const char* GetItemIdColumnTitle(Item::ItemType itemType)
 {
-    return itemType == Item::ItemType::BankFileInstrument ? messages::common::cProgram : messages::item::cColumnId;
+    return IsItemListIdProgramNo(itemType) ? messages::common::cProgram : messages::item::cColumnId;
 }
 
 f32 GetItemIdColumnWidth(Item::ItemType itemType)
 {
-    const f32 titleWidth = ImGui::CalcTextSize(GetItemIdColumnTitle(itemType)).x + GetItemSortMarkWidth();
+    const f32 titleWidth = ImGui::CalcTextSize(GetItemIdColumnTitle(itemType)).x;
 
     return sead::Mathf::max(ImGui::CalcTextSize("0000").x, titleWidth);
 }
@@ -84,13 +148,14 @@ void SetupItemIdColumn(Item::ItemType itemType)
 {
     ImGuiTable* table = ImGui::GetCurrentTable();
     ImGuiTableColumn& column = table->Columns[table->DeclColumnsCount];
-    const f32 width = GetItemIdColumnWidth(itemType);
+    const f32 baseWidth = GetItemIdColumnWidth(itemType);
+    const f32 width = column.SortOrder != -1 ? sead::Mathf::max(baseWidth, CalcSortedTitleWidth(GetItemIdColumnTitle(itemType))) : baseWidth;
 
     ImGui::TableSetupColumn(GetItemIdColumnTitle(itemType), ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoResize, width, static_cast<ImGuiID>(ItemColumnId::Id));
 
     column.WidthRequest = width;
 
-    sIdColumnKey = itemType == Item::ItemType::BankFileInstrument ? cItemProgramColumnKey : cItemIdColumnKey;
+    sIdColumnKey = IsItemListIdProgramNo(itemType) ? cItemProgramColumnKey : cItemIdColumnKey;
     ApplyItemColumnHidden(column, sIdColumnKey);
 }
 
@@ -159,7 +224,7 @@ bool IsItemColumnHiddenAtFirst(const ItemColumn& column, bool hideAll)
     return hideAll || (column.flags & cItemColumnFlag_Hidden);
 }
 
-void SetupItemColumns(const ItemColumn* columns, u32 columnCount, bool hideAll)
+void SetupItemColumns(const ItemColumn* columns, u32 columnCount, bool hideAll, const bool* collapsed)
 {
     SEAD_ASSERT(columnCount <= cItemColumnMax);
 
@@ -171,6 +236,9 @@ void SetupItemColumns(const ItemColumn* columns, u32 columnCount, bool hideAll)
 
         if (IsItemColumnHiddenAtFirst(columns[i], hideAll))
             flags |= ImGuiTableColumnFlags_DefaultHide;
+
+        if (collapsed && collapsed[i])
+            flags |= ImGuiTableColumnFlags_Disabled;
 
         ImGuiTableColumn& column = table->Columns[table->DeclColumnsCount];
         const f32 width = GetItemColumnWidth(columns[i]);
@@ -196,7 +264,7 @@ static f32 CalcItemColumnFitWidth(const ItemColumn& column, const std::vector<It
         textWidth = sead::Mathf::max(textWidth, ImGui::CalcTextSize(text.cstr()).x);
     }
 
-    const f32 titleWidth = ImGui::CalcTextSize(column.title).x + GetItemSortMarkWidth();
+    const f32 titleWidth = ImGui::CalcTextSize(column.title).x;
 
     return sead::Mathf::max(titleWidth, textWidth) + cItemColumnGap;
 }
@@ -321,17 +389,23 @@ void DrawItemHeadersRow(const ItemColumn* columns, u32 columnCount, const f32* w
 
     f32 userWidths[cItemColumnMax] = {};
 
-    for (u32 i = 0; widths && i < columnCount; i++)
+    for (u32 i = 0; i < columnCount; i++)
     {
-        userWidths[i] = table->Columns[first + i].WidthRequest;
+        ImGuiTableColumn& column = table->Columns[first + i];
+        const bool growForMark = column.SortOrder != -1 && IsItemColumnAuto(table, first + i);
 
-        if (widths[i] > 0.0f)
-            table->Columns[first + i].WidthRequest = widths[i];
+        userWidths[i] = column.WidthRequest;
+
+        if (widths && widths[i] > 0.0f)
+            column.WidthRequest = widths[i];
+
+        if (growForMark)
+            column.WidthRequest = sead::Mathf::max(column.WidthRequest, CalcSortedTitleWidth(columns[i].title) + cItemColumnGap);
     }
 
     ImGui::TableNextRow(ImGuiTableRowFlags_Headers, ImGui::TableGetHeaderRowHeight());
 
-    for (u32 i = 0; widths && i < columnCount; i++)
+    for (u32 i = 0; i < columnCount; i++)
         table->Columns[first + i].WidthRequest = userWidths[i];
 
     for (s32 i = 0; i < table->ColumnsCount; i++)
@@ -343,7 +417,7 @@ void DrawItemHeadersRow(const ItemColumn* columns, u32 columnCount, const f32* w
         const ImGuiTableColumn& column = table->Columns[i];
         const bool sorted = column.SortOrder != -1;
         const bool alignLeft = i < first || (columns[i - first].flags & cItemColumnFlag_Text);
-        const char* mark = column.SortDirection == ImGuiSortDirection_Ascending ? ICON_LC_CHEVRON_UP : ICON_LC_CHEVRON_DOWN;
+        const bool descending = column.SortDirection != ImGuiSortDirection_Ascending;
 
         if (column.UserID == static_cast<ImGuiID>(ItemColumnId::Action))
             continue;
@@ -368,15 +442,15 @@ void DrawItemHeadersRow(const ItemColumn* columns, u32 columnCount, const f32* w
             ImGui::RenderTextEllipsis(drawList, ImVec2(left, pos.y), ImVec2(titleRight, bottom), titleRight, titleRight, title, nullptr, nullptr);
 
             if (sorted)
-                drawList->AddText(ImVec2(sead::Mathf::min(left + titleWidth, titleRight) + ImGui::GetStyle().ItemInnerSpacing.x, pos.y), markColor, mark);
+                DrawItemSortMark(drawList, ImVec2(sead::Mathf::min(left + titleWidth, titleRight) + GetItemSortMarkGap(), pos.y), descending, markColor);
         }
         else
         {
-            const f32 textX = sead::Mathf::max(right - titleWidth, left);
+            const f32 textX = sead::Mathf::max(right - titleWidth, left + (sorted ? markWidth : 0.0f));
             ImGui::RenderTextEllipsis(drawList, ImVec2(textX, pos.y), ImVec2(right, bottom), right, right, title, nullptr, nullptr);
 
-            if (sorted && textX - markWidth >= left)
-                drawList->AddText(ImVec2(textX - markWidth, pos.y), markColor, mark);
+            if (sorted)
+                DrawItemSortMark(drawList, ImVec2(textX - markWidth, pos.y), descending, markColor);
         }
 
         ImGui::PopID();

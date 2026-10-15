@@ -562,8 +562,8 @@ static void DrawOutputMeter(const ImVec2& avail)
     if (ImGui::IsItemClicked())
         meter.resetPeaks();
 
-    if (ImGui::IsItemHovered() && merged.clip)
-        ImGui::SetTooltip("%s", messages::playback::cMeterResetTooltip);
+    if (merged.clip)
+        ImGui::SetItemTooltip("%s", messages::playback::cMeterResetTooltip);
 
     if (BeginItemContextMenu("##MeterMenu"))
     {

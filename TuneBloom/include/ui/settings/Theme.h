@@ -20,7 +20,7 @@ struct ThemeAdjust
 ThemeAdjust& GetThemeAdjust();
 
 void ApplyTheme();
-void SetWindowShadows(bool enabled);
+void SetWindowShadowOpacity(f32 opacity);
 void CalcThemeColors(ImVec4 accent, bool dark, ImVec4* colors);
 f32 CalcRaisedGradient(bool dark);
 f32 CalcSurfaceGradient(bool dark);

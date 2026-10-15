@@ -11,6 +11,7 @@ inline constexpr f32 cRegionGapEm      = 1.5f;
 inline constexpr f32 cRegionKnobGapEm  = 0.5f;
 inline constexpr f32 cRegionCurveMinEm = 4.0f;
 inline constexpr f32 cRegionCurveEm    = 5.0f;
+inline constexpr f32 cRegionCurveMaxEm = 10.0f;
 
 void SetRegionPanelFill(bool fill);
 bool IsRegionPanelFill();

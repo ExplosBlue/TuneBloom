@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/widgets/Widgets.h>
 
 #include <ui/items/ItemColumns.h>
@@ -42,6 +41,7 @@ static constexpr f32 cBrightButtonMix          = 0.15f;
 static constexpr f32 cIconButtonBorderSize     = 1.0f;
 static constexpr f32 cIconButtonBorderHoverMix = 0.8f;
 static constexpr f32 cVersionFieldEm           = 2.0f;
+static constexpr f32 cDetailTooltipWrapEm      = 32.0f;
 
 static constexpr uicolors::Themed<f32> cIconButtonBorderIdleMix   = { 0.25f, 0.20f };
 static constexpr uicolors::Themed<f32> cIconButtonBorderIdleAlpha = { 0.40f, 0.55f };
@@ -312,7 +312,7 @@ bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing)
     ImGui::EndDisabled();
 
     if (playbackError)
-        SetDisabledTooltip(playbackError);
+        ImGui::SetItemTooltip("%s", playbackError);
 
     return pressed;
 }
@@ -353,10 +353,7 @@ bool DrawRowOpenButton(u32 id, const char* tooltip, const char* disabledReason)
 
     ImGui::EndDisabled();
 
-    if (disabledReason)
-        SetDisabledTooltip(disabledReason);
-    else
-        ImGui::SetItemTooltip("%s", tooltip);
+    ImGui::SetItemTooltip("%s", disabledReason ? disabledReason : tooltip);
 
     return pressed;
 }
@@ -589,33 +586,17 @@ std::string CutPathStart(const std::string& path, size_t maxLength)
     return messages::backup::cPathCutMark + path.substr(path.size() - maxLength + markLength);
 }
 
-// From ImGui Demo
-bool IsItemHoveredAllowDisabled()
-{
-    return ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayNone);
-}
-
 bool IsItemHoveredForDetail()
 {
-    return ImGui::IsItemHovered(ImGuiHoveredFlags_Stationary | ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay);
+    return ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay);
 }
-
-void SetDisabledTooltip(const char* reason)
-{
-    if (IsItemHoveredAllowDisabled())
-    {
-        ImGui::SetTooltip("%s", reason);
-    }
-}
-
-static constexpr f32 cDetailTooltipWrapEm = 32.0f;
 
 static void ShowDetailTooltip(const char* detail, const ImVec2* pos, const ImVec2& pivot)
 {
     if (!detail || ImGui::IsItemActive())
         return;
 
-    if (!ImGui::IsItemHovered(ImGuiHoveredFlags_Stationary | ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay | ImGuiHoveredFlags_AllowWhenDisabled))
+    if (!IsItemHoveredForDetail())
         return;
 
     char name[16];
@@ -663,14 +644,8 @@ void ListItemDetailTooltip(const char* detail)
 
 void HelpMarker(const char* desc)
 {
-    ImGui::TextDisabled(messages::popup::cDetailMarker);
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-        ImGui::TextUnformatted(desc);
-        ImGui::PopTextWrapPos();
-        ImGui::EndTooltip();
-    }
+    ImGui::TextDisabled("%s", messages::popup::cDetailMarker);
+    DetailTooltip(desc);
 }
 
 void InnerFile::drawUI()

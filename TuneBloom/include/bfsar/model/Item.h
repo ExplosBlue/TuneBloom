@@ -7,8 +7,6 @@
 
 #include <snd/snd_SoundArchive.h>
 
-#include <ui/Messages.h>
-
 template <typename T>
 class List : public sead::TList<T>
 {
@@ -341,11 +339,7 @@ public:
     {
     }
 
-    virtual const Item* validate(sead::BufferedSafeString& error) const
-    {
-        error = messages::cNotImplemented;
-        return this;
-    }
+    virtual const Item* validate(sead::BufferedSafeString& error) const;
 
     bool validateName(sead::BufferedSafeString& error) const;
     static bool validateWaveArchive(WaveArchiveType type, const ItemReference& ref, sead::BufferedSafeString& error);

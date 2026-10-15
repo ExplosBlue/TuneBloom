@@ -22,9 +22,18 @@ static constexpr u32 cItemTooltipNameMax = 16;
 
 static constexpr const char* cLoopLengthSample = ICON_LC_REPEAT " 0:00.000";
 
-static s64 CountRefs(const Item* item, Item::ItemType ownerType)
+static const std::vector<const Item*>& GetUniqueItems(std::vector<const Item*>* items)
 {
-    s64 count = 0;
+    std::sort(items->begin(), items->end());
+    items->erase(std::unique(items->begin(), items->end()), items->end());
+
+    return *items;
+}
+
+static std::vector<const Item*>& CollectRefOwners(const Item* item, Item::ItemType ownerType)
+{
+    static std::vector<const Item*> sOwners;
+    sOwners.clear();
 
     for (auto it = item->getReferences().robustBegin(); it != item->getReferences().robustEnd(); ++it)
     {
@@ -34,10 +43,17 @@ static s64 CountRefs(const Item* item, Item::ItemType ownerType)
             continue;
 
         if (ownerType == Item::ItemType::Invalid || ref->getOwner()->getItemType() == ownerType)
-            count++;
+            sOwners.push_back(ref->getOwner());
     }
 
-    return count;
+    GetUniqueItems(&sOwners);
+
+    return sOwners;
+}
+
+static s64 CountRefs(const Item* item, Item::ItemType ownerType)
+{
+    return static_cast<s64>(CollectRefOwners(item, ownerType).size());
 }
 
 static s64 GetRefsKey(const Item* item)
@@ -218,14 +234,6 @@ static void CollectInstrumentWaves(const Item* item, std::vector<const Item*>* w
     });
 }
 
-static const std::vector<const Item*>& GetUniqueWaves(std::vector<const Item*>* waves)
-{
-    std::sort(waves->begin(), waves->end());
-    waves->erase(std::unique(waves->begin(), waves->end()), waves->end());
-
-    return *waves;
-}
-
 static s64 GetBankFileWavesKey(const Item* item)
 {
     static std::vector<const Item*> sWaves;
@@ -234,36 +242,19 @@ static s64 GetBankFileWavesKey(const Item* item)
     for (const Item* instrument : static_cast<const BankFile*>(item)->getInstrumentList())
         CollectInstrumentWaves(instrument, &sWaves);
 
-    return GetUniqueWaves(&sWaves).size();
+    return GetUniqueItems(&sWaves).size();
 }
 
-static const std::vector<const Item*>& GetInstrumentWaves(const Item* item)
+static s64 GetInstrumentRegionsKey(const Item* item)
 {
-    static std::vector<const Item*> sWaves;
-    sWaves.clear();
+    s64 count = 0;
 
-    CollectInstrumentWaves(item, &sWaves);
+    ForEachVelocityRegion(*static_cast<const BankFile::Instrument*>(item), [&](const BankFile::KeyRegion&, const BankFile::VelocityRegion&)
+    {
+        count++;
+    });
 
-    return GetUniqueWaves(&sWaves);
-}
-
-static s64 GetInstrumentWavesKey(const Item* item)
-{
-    return GetInstrumentWaves(item).size();
-}
-
-static const Item* GetInstrumentWaveFile(const Item* item)
-{
-    const std::vector<const Item*>& waves = GetInstrumentWaves(item);
-
-    return waves.size() == 1 ? waves.front() : nullptr;
-}
-
-static s64 GetInstrumentWaveFileKey(const Item* item)
-{
-    const Item* wave = GetInstrumentWaveFile(item);
-
-    return wave ? static_cast<s64>(wave->getId()) : -1;
+    return count;
 }
 
 static s64 GetBankInstrumentsKey(const Item* item)
@@ -448,16 +439,9 @@ static void FormatBankFileWavesColumn(const Item* item, sead::BufferedSafeString
     out->format("%lld", GetBankFileWavesKey(item));
 }
 
-static void FormatInstrumentWavesColumn(const Item* item, sead::BufferedSafeString* out)
+static void FormatInstrumentRegionsColumn(const Item* item, sead::BufferedSafeString* out)
 {
-    out->format("%lld", GetInstrumentWavesKey(item));
-}
-
-static void FormatInstrumentWaveFileColumn(const Item* item, sead::BufferedSafeString* out)
-{
-    const Item* wave = GetInstrumentWaveFile(item);
-
-    out->copy(wave ? wave->getNameOrNull().cstr() : "-");
+    out->format("%lld", GetInstrumentRegionsKey(item));
 }
 
 static void FormatBankInstrumentsColumn(const Item* item, sead::BufferedSafeString* out)
@@ -556,6 +540,27 @@ static void DrawSequenceLabelsTooltip(const Item* item)
     ImGui::EndTooltip();
 }
 
+static void DrawSoundUsesTooltip(const Item* item)
+{
+    std::vector<const Item*>& sounds = CollectRefOwners(item, Item::ItemType::Sound);
+    const u32 nameCount = static_cast<u32>(sounds.size());
+
+    if (nameCount == 0 || !ImGui::BeginTooltip())
+        return;
+
+    std::sort(sounds.begin(), sounds.end(), [](const Item* a, const Item* b)
+    {
+        return a->getId() < b->getId();
+    });
+
+    for (u32 i = 0; i < nameCount && i < cItemTooltipNameMax; i++)
+        ImGui::TextUnformatted(sounds[i]->getFormattedName().cstr());
+
+    DrawTooltipMore(nameCount);
+
+    ImGui::EndTooltip();
+}
+
 static void DrawBankFileInstrumentsTooltip(const Item* item)
 {
     const Item::List& instruments = static_cast<const BankFile*>(item)->getInstrumentList();
@@ -648,8 +653,8 @@ static const ItemColumn cGroupColumns[] = {
 };
 
 static const ItemColumn cPlayerColumns[] = {
-    { "Sounds",      messages::common::cSounds, "0000", &FormatSoundRefsColumn,   &GetSoundRefsKey, cItemColumnFlag_WarnZero },
-    { "Sound Limit", messages::player::cSoundLimit,  "000",  &FormatPlayerLimitColumn, &GetPlayerLimitKey, cItemColumnFlag_Hidden }
+    { "Sound Limit", messages::player::cSoundLimit, "000",  &FormatPlayerLimitColumn, &GetPlayerLimitKey },
+    { "SoundUses",   messages::item::cColumnUses,   "0000", &FormatSoundRefsColumn,   &GetSoundRefsKey, cItemColumnFlag_WarnZero | cItemColumnFlag_Hidden, &DrawSoundUsesTooltip }
 };
 
 static const ItemColumn cWaveArchiveColumns[] = {
@@ -666,8 +671,8 @@ static const ItemColumn cWaveFileColumns[] = {
 };
 
 static const ItemColumn cSequenceFileColumns[] = {
-    { "Sounds", messages::common::cSounds, "0000",      &FormatSoundRefsColumn,      &GetSoundRefsKey, cItemColumnFlag_WarnZero },
-    { "Labels", messages::common::cLabels, "0000",      &FormatSequenceLabelsColumn, &GetSequenceLabelsKey, cItemColumnFlag_Hidden, &DrawSequenceLabelsTooltip },
+    { "Labels",    messages::common::cLabels,   "0000", &FormatSequenceLabelsColumn, &GetSequenceLabelsKey, cItemColumnFlag_None, &DrawSequenceLabelsTooltip },
+    { "SoundUses", messages::item::cColumnUses, "0000", &FormatSoundRefsColumn,      &GetSoundRefsKey,      cItemColumnFlag_WarnZero | cItemColumnFlag_Hidden, &DrawSoundUsesTooltip },
     { "Size",   messages::common::cSize,   messages::unit::cSizeSample, &FormatSequenceSizeColumn,  &GetSequenceSizeKey, cItemColumnFlag_Hidden }
 };
 
@@ -677,14 +682,13 @@ static const ItemColumn cBankFileColumns[] = {
 };
 
 static const ItemColumn cBankColumns[] = {
-    { "Sounds",      messages::common::cSounds,      "0000", &FormatSoundRefsColumn,       &GetSoundRefsKey, cItemColumnFlag_WarnZero },
-    { "Instruments", messages::common::cInstruments, "0000", &FormatBankInstrumentsColumn, &GetBankInstrumentsKey, cItemColumnFlag_Hidden },
+    { "Instruments", messages::common::cInstruments, "0000", &FormatBankInstrumentsColumn, &GetBankInstrumentsKey },
+    { "SoundUses",   messages::item::cColumnUses,    "0000", &FormatSoundRefsColumn,       &GetSoundRefsKey, cItemColumnFlag_WarnZero | cItemColumnFlag_Hidden, &DrawSoundUsesTooltip },
     { "Bank File",   messages::common::cBankFile,    "PLAYER_SE_OBJ_ENAB", &FormatBankFileColumn, &GetBankFileKey, cItemColumnFlag_Text | cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cInstrumentColumns[] = {
-    { "Waves",     messages::item::cColumnWaves,    "0000",               &FormatInstrumentWavesColumn,    &GetInstrumentWavesKey, cItemColumnFlag_WarnZero | cItemColumnFlag_Hidden },
-    { "Wave File", messages::common::cWaveFile, "PLAYER_SE_OBJ_ENAB", &FormatInstrumentWaveFileColumn, &GetInstrumentWaveFileKey, cItemColumnFlag_Text | cItemColumnFlag_TextEnd }
+    { "Regions", messages::item::cColumnRegions, "0000", &FormatInstrumentRegionsColumn, &GetInstrumentRegionsKey, cItemColumnFlag_WarnZero }
 };
 
 const char* GetItemTypeName(Item::ItemType itemType)

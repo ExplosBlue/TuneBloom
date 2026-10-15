@@ -1,7 +1,6 @@
 #include <ui/widgets/TabRowTools.h>
 
 #include <ui/items/ItemColumns.h>
-#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 
@@ -57,10 +56,7 @@ bool DrawTabRowCommand(const char* label, const char* tooltip, const char* disab
     const bool pressed = DrawTabRowTool(label, inTabBar);
     ImGui::EndDisabled();
 
-    if (disabledReason)
-        SetDisabledTooltip(disabledReason);
-    else
-        ImGui::SetItemTooltip("%s", tooltip);
+    ImGui::SetItemTooltip("%s", disabledReason ? disabledReason : tooltip);
 
     return pressed;
 }
@@ -92,7 +88,7 @@ void DrawTabRowCount(const TabRowTitle& title, s32 count)
         return;
 
     const ImRect& barRect = node->TabBar->BarRect;
-    const ImRect& tabRect = window->DockTabItemRect;
+    const ImRect tabRect = window->DockTabItemRect;
     const ImVec2& padding = node->TabBar->FramePadding;
     const sead::FormatFixedSafeString<64> lead(" %s %s ", title.icon, title.title);
     const sead::FormatFixedSafeString<16> text("%d", count);
@@ -110,14 +106,18 @@ void DrawTabRowCount(const TabRowTitle& title, s32 count)
 void SetTabRowDisabled(const char* disabledReason)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
-    const ImGuiDockNode* node = window->DockNode;
-    const ImRect& tabRect = window->DockTabItemRect;
+    ImGuiDockNode* node = window->DockNode;
+    const ImRect tabRect = window->DockTabItemRect;
 
     window->DockTabDisabled = disabledReason != nullptr;
 
     if (!disabledReason || !node || node->IsHiddenTabBar() || node->VisibleWindow == window)
         return;
 
-    if (ImGui::GetCurrentContext()->HoveredWindow == node->HostWindow && ImGui::IsMouseHoveringRect(tabRect.Min, tabRect.Max, false))
-        ImGui::SetTooltip("%s", disabledReason);
+    if (!ImGui::DockNodeBeginAmendTabBar(node))
+        return;
+
+    ImGui::ItemAdd(tabRect, 0, nullptr, ImGuiItemFlags_NoNav);
+    ImGui::SetItemTooltip("%s", disabledReason);
+    ImGui::DockNodeEndAmendTabBar();
 }

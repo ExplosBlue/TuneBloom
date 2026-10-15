@@ -1,4 +1,3 @@
-#define IMGUI_DEFINE_MATH_OPERATORS
 #include <ui/export/Export.h>
 
 #include <ui/widgets/Dialogs.h>

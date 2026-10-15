@@ -142,7 +142,7 @@ static void QueueMidiMessage(MidiInput* self, u8 status, u8 d1, u8 d2)
     }
 
     s32 w = self->mQueueWrite;
-    s32 n = (w + 1) % MidiInput::kQueueSize;
+    s32 n = (w + 1) % MidiInput::cQueueSize;
     if (n != self->mQueueRead)
     {
         self->mQueue[w].msg = msg;
@@ -376,7 +376,7 @@ void MidiInput::poll()
     while (r != w)
     {
         mCallback(mUserData, mQueue[r].msg, mQueue[r].key, mQueue[r].vel);
-        r = (r + 1) % kQueueSize;
+        r = (r + 1) % cQueueSize;
     }
     mQueueRead = r;
 #endif

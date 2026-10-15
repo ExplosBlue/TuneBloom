@@ -78,8 +78,10 @@ const ActionRow cPlaybackRows[] = {
 };
 
 const ActionRow cSearchRows[] = {
-    { messages::common::cFind,        Action::FocusFilter },
-    { messages::keys::cClearSearch, Action::CloseFilter },
+    { messages::common::cFind,           Action::FocusFilter },
+    { messages::keys::cClearSearch,    Action::CloseFilter },
+    { messages::keys::cMatchCase,      Action::ToggleMatchCase },
+    { messages::keys::cMatchWholeWord, Action::ToggleWholeWord },
 };
 
 const ActionRow cPianoRows[] = {
@@ -96,6 +98,7 @@ const MouseRow cMouseRows[] = {
     { messages::keys::cZoomHorizontal, Modifier::ZoomHorizontal,  messages::keys::cKeyWheel },
     { messages::keys::cZoomVertical,   Modifier::ZoomVertical,    messages::keys::cKeyWheel },
     { messages::keys::cPanHorizontal,  Modifier::PanHorizontal,   messages::keys::cKeyWheel },
+    { messages::keys::cFineAdjust,     Modifier::FineAdjust,      messages::keys::cKeyDrag },
 };
 
 const KeyText cKeyTexts[] = {
@@ -288,7 +291,7 @@ void DrawShortcutsDialog()
 
     BeginDialogFooter({messages::common::cClose}, false);
 
-    if (DialogButton(messages::common::cClose) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (DialogButton(messages::common::cClose) || shortcuts::Pressed(Action::CloseDialog))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();

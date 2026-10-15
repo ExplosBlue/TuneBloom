@@ -4,6 +4,8 @@
 
 #include <bfsar/files/WaveFile.h>
 
+#include <imgui/imgui.h>
+
 const char* const cWaveEncodingDetails[cWaveEncodingDetailCount] = { messages::wavefile::cPcm8Detail, messages::wavefile::cPcm16Detail, messages::wavefile::cDspAdpcmDetail };
 
 static_assert(cWaveEncodingDetailCount == IM_ARRAYSIZE(WaveFile::sEncodingTypes));

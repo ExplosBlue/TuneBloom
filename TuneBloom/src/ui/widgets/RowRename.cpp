@@ -1,5 +1,7 @@
 #include <ui/widgets/RowRename.h>
 
+#include <ui/app/Shortcuts.h>
+
 static constexpr s32 cRenameFocusFrames = 4;
 
 static void* sRenameRow = nullptr;
@@ -52,7 +54,7 @@ bool DrawRowRenameField(const char* hint, sead::FixedSafeString<256>* outText, I
         sRenameFocusFrame = frame;
     }
 
-    const bool cancel = ImGui::IsKeyPressed(ImGuiKey_Escape);
+    const bool cancel = shortcuts::Pressed(shortcuts::Action::CancelEdit);
     const ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll | (charFilter ? ImGuiInputTextFlags_CallbackCharFilter : 0);
 
     ImGui::InputTextWithHint("##Rename", hint, sRenameText.getBuffer(), sRenameText.getBufferSize(), flags, charFilter);

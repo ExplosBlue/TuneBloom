@@ -233,11 +233,7 @@ inline constexpr const char* cTrackTableView = "Table View";
 inline constexpr const char* cTrackFold = "Minimize";
 inline constexpr const char* cTrackNoSound = "No Stream Sound Selected";
 inline constexpr const char* cTrackNone = "No Tracks";
-#ifdef __APPLE__
-inline constexpr const char* cTrackSoloTip = "Cmd+click to solo more than one track";
-#else
-inline constexpr const char* cTrackSoloTip = "Ctrl+click to solo more than one track";
-#endif
+inline constexpr const char* cTrackSoloTipFormat = "%s+click to solo more than one track";
 inline constexpr const char* cTrackSurroundPan = "Surround Pan";
 inline constexpr const char* cTrackVolumeFormat = "Volume: %.3f";
 inline constexpr const char* cTrackMainSendFormat = "Main Send: %.3f";
@@ -284,7 +280,6 @@ inline constexpr const char* cTypeNativeDetail = "NintendoWare stream file";
 inline constexpr const char* cTypeInfoDetail   = "Stream type info, no known use";
 inline constexpr const char* cLoopFromWaveFile = "Set by the first track's Wave File";
 
-
 inline constexpr const char* cExtensionTitle = "Extension";
 inline constexpr const char* cPrefetchLabel  = "Prefetch";
 inline constexpr const char* cTypeLabel      = "Stream Type";
@@ -300,7 +295,6 @@ inline constexpr const char* cTrackSoloShort        = "S";
 inline constexpr const char* cTrackMix              = "Mix";
 inline constexpr const char* cTrackChannelsFormat   = "%u ch";
 inline constexpr const char* cTrackNameFormat       = "Track %u";
-
 
 inline constexpr const char* cRegionsWindowTitle    = "Regions";
 inline constexpr const char* cRegionNone            = "No Regions";
@@ -331,7 +325,6 @@ inline constexpr const char* cRegionsRemovedFormat      = "%u past the end of th
 inline constexpr const char* cRegionsReplacedTitle      = "Regions replaced";
 inline constexpr const char* cRegionsReplacedFormat     = "Replaced by the %u in Track 0's new Wave File";
 inline constexpr const char* cSelectedNotStream = "Selected Sound Is Not a Stream";
-
 
 }
 
@@ -377,11 +370,7 @@ inline constexpr const char* cTempoFormat = "Tempo: %.2f x";
 inline constexpr const char* cVolumeFormat = "Volume: %s";
 inline constexpr const char* cTrackVolumeFormat = "Track %u Volume: %s";
 inline constexpr const char* cTrackWaitFormat = "Track %u Volume: %s, Wait %02X/%02X";
-#ifdef __APPLE__
-inline constexpr const char* cTrackSwitchTip = "Click to mute, Cmd+click to solo";
-#else
-inline constexpr const char* cTrackSwitchTip = "Click to mute, Ctrl+click to solo";
-#endif
+inline constexpr const char* cTrackSwitchTipFormat = "Click to mute, %s+click to solo";
 inline constexpr const char* cRightClickReset = "Right-click to reset";
 inline constexpr const char* cOverridesReset = "Reset parameters and variables";
 inline constexpr const char* cSeqVarOverrideFormat = "%s, set when the sequence starts\nRight-click to reset";
@@ -390,7 +379,6 @@ inline constexpr const char* cSeqVarUnusedTooltipFormat = "%s, not used by this 
 
 inline constexpr const char* cMeterResetTooltip = "Click to reset";
 inline constexpr const char* cMeterMerged = "Merged";
-
 
 inline constexpr const char* cPanelTrackVolume = "Track Volume";
 
@@ -533,7 +521,6 @@ inline constexpr const char* cNoFileAttached = "The Bank has no Bank File attach
 inline constexpr const char* cWillHaveNoFile = "This Bank will have no Bank File";
 inline constexpr const char* cOpenFileTip = "Open the Bank File";
 
-
 inline constexpr const char* cNoRegionSelected = "Select a Region";
 inline constexpr const char* cIgnoreNoteOff = "Ignore Note Off";
 inline constexpr const char* cCoarseTooltipFormat = "%+.0f semitones (pitch ratio %.4f)";
@@ -593,7 +580,6 @@ inline constexpr const char* cNextProgramNumberTooltip = "Use the next free prog
 inline constexpr const char* cProgramNumberShared = "Already in use";
 inline constexpr const char* cVelocityMinFixed = "The lowest Velocity Region always starts at 0";
 inline constexpr const char* cVelocityMaxFixed = "The highest Velocity Region always ends at 127";
-
 
 }
 
@@ -904,7 +890,6 @@ inline constexpr const char* cWillHaveNoTracks = "This Sound will have no Tracks
 inline constexpr const char* cImportFileCountFormat = "%u WAV files";
 inline constexpr const char* cStreamNewPathDetail = "Created on save, in the archive's folder";
 
-
 inline constexpr const char* cCreateNoPlayer = "Select a Player, or add one first.";
 inline constexpr const char* cCreateNoImportFile = "Select a WAV file to import.";
 inline constexpr const char* cCreateNoWaveFile = "Select a Wave File.";
@@ -969,7 +954,6 @@ inline constexpr const char* cBiquadBpf512    = "BPF 512";
 inline constexpr const char* cBiquadBpf1024   = "BPF 1024";
 inline constexpr const char* cBiquadBpf2048   = "BPF 2048";
 
-
 inline constexpr const char* cPanelStartLabel = "Start Label";
 
 inline constexpr const char* cStartOfFile              = "(Start of File)";
@@ -1005,9 +989,7 @@ inline constexpr const char* cUnknownOptions  = "Unknown Options";
 inline constexpr const char* cOptionBitFormat = "Option Bit %u";
 inline constexpr const char* cUserParamFormat = "Param %u";
 
-
 inline constexpr const char* cTagLabel = "Tag";
-
 
 inline constexpr const char* cPanCentered    = "Centered";
 inline constexpr const char* cPanLeftFormat  = "%d%% Left";
@@ -1122,7 +1104,6 @@ inline constexpr const char* cStreamNoTracksSkippedFormat = "The Stream Sound '%
 
 namespace project
 {
-
 
 inline constexpr const char* cPlatformTitle = "Platform";
 
@@ -1278,7 +1259,6 @@ inline constexpr const char* cInstrumentImportTitle    = "Import Instrument";
 inline constexpr const char* cInstrumentReplacingFormat = "Replacing: Program %d";
 inline constexpr const char* cWavesToImportFormat      = "Waves to import: %u";
 
-
 inline constexpr const char* cWaveHeaderFormat        = "Import '%s'";
 inline constexpr const char* cWaveReplaceHeaderFormat = "Replace with '%s'";
 inline constexpr const char* cWaveRegionHeaderFormat  = "Import '%s' onto velocity region";
@@ -1368,7 +1348,6 @@ inline constexpr const char* cSelectorAutomaticShared = "Automatic (Shared)";
 inline constexpr const char* cSelectorAutomaticIndividual = "Automatic (Individual)";
 inline constexpr const char* cSelectorInvalid = "Invalid";
 
-
 inline constexpr const char* cNoItemSelected = "No Item Selected";
 
 inline constexpr const char* cTypeStreamSound      = "Stream Sound";
@@ -1401,7 +1380,6 @@ inline constexpr const char* cSoundTypeLabel   = "Sound Type";
 inline constexpr const char* cStartIdLabel     = "Start ID";
 inline constexpr const char* cEndIdLabel       = "End ID";
 inline constexpr const char* cIdRangeTitle     = "ID Range";
-
 
 inline constexpr const char* cErrorInvalidRange       = "The Start and End IDs are invalid";
 inline constexpr const char* cErrorStartExceedsCount  = "The Start ID is above the sound count";
@@ -1486,7 +1464,6 @@ inline constexpr const char* cErrorSequenceLoadDetail =
     "Select 'All', 'Bank and Wave Archive' or 'Sequence'\nwhen the Sequence Sound's Bank uses an automatic Wave Archive";
 inline constexpr const char* cErrorAutomaticLoadAllDetail = "Select 'All' for an automatic Wave Archive";
 
-
 inline constexpr const char* cNoneSelected   = "No Group Selected";
 inline constexpr const char* cAddItem        = "Add Item";
 inline constexpr const char* cAddTitleFormat = "Add %s to Group";
@@ -1519,7 +1496,6 @@ inline constexpr const char* cTooLong          = "Too long to show as a waveform
 inline constexpr const char* cNoData           = "No sample data";
 inline constexpr const char* cLoopReadoutFormat      = "Loop %u:%06.3f";
 inline constexpr const char* cLoopDirtyReadoutFormat = "Loop %u:%06.3f  -  rebuilt on play or save";
-
 
 inline constexpr const char* cEncodingPcm8 = "Pcm8";
 inline constexpr const char* cEncodingPcm16 = "Pcm16";
@@ -1569,7 +1545,6 @@ inline constexpr const char* cEmpty = "No recent files";
 inline constexpr const char* cClear = "Clear Recent Files";
 
 inline constexpr const char* cPinnedTitle = "Pinned";
-
 
 inline constexpr const char* cPin = "Pin";
 inline constexpr const char* cUnpin = "Unpin";
@@ -1874,7 +1849,6 @@ inline constexpr const char* cColumnChange = "Change";
 inline constexpr const char* cAdded        = "Added";
 inline constexpr const char* cRemoved      = "Removed";
 
-
 inline constexpr const char* cCountFormat  = "%d Changes";
 inline constexpr const char* cCountOneFormat = "%d Change";
 inline constexpr const char* cNoChanges    = "No unsaved changes";
@@ -1926,7 +1900,6 @@ inline constexpr const char* cLabelCtr  = "CTR Sound Archive";
 inline constexpr const char* cSystemWiiU   = "Wii U";
 inline constexpr const char* cSystem3ds    = "3DS";
 inline constexpr const char* cSystemSwitch = "Switch";
-
 
 }
 
@@ -2063,7 +2036,6 @@ inline constexpr const char* cDiscord     = "Discord Server";
 namespace keys
 {
 
-
 inline constexpr const char* cGroupLists    = "Item Lists";
 inline constexpr const char* cGroupSearch   = "Search";
 inline constexpr const char* cGroupPiano    = "Piano Keyboard";
@@ -2079,7 +2051,9 @@ inline constexpr const char* cShowSelection  = "Scroll to Selection";
 
 inline constexpr const char* cPlayPause = "Play / Pause";
 
-inline constexpr const char* cClearSearch = "Clear Search";
+inline constexpr const char* cClearSearch    = "Clear Search";
+inline constexpr const char* cMatchCase      = "Match Case";
+inline constexpr const char* cMatchWholeWord = "Match Whole Word";
 
 inline constexpr const char* cZoomIn      = "Zoom In";
 inline constexpr const char* cZoomOut     = "Zoom Out";
@@ -2092,6 +2066,7 @@ inline constexpr const char* cSelectRange    = "Select a Range";
 inline constexpr const char* cZoomHorizontal = "Zoom Horizontally";
 inline constexpr const char* cZoomVertical   = "Zoom Vertically";
 inline constexpr const char* cPanHorizontal  = "Scroll Horizontally";
+inline constexpr const char* cFineAdjust     = "Fine Adjust";
 
 inline constexpr const char* cKeyCmd      = "Cmd";
 inline constexpr const char* cKeyCtrl     = "Ctrl";
@@ -2100,6 +2075,7 @@ inline constexpr const char* cKeyAlt      = "Alt";
 inline constexpr const char* cKeyEscape   = "Esc";
 inline constexpr const char* cKeyClick    = "Click";
 inline constexpr const char* cKeyWheel    = "Wheel";
+inline constexpr const char* cKeyDrag     = "Drag";
 
 }
 

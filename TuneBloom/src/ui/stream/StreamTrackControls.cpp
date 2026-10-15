@@ -278,7 +278,7 @@ static void DrawTrackSoloButton(const TrackContext& ctx, s32 index, const ImVec2
 
     const bool pressed = DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Solo", messages::stream::cTrackSoloShort).cstr(),(soloTracks & bit) != 0, uicolors::PlaybackFill(), size);
 
-    ImGui::SetItemTooltip("%s", messages::stream::cTrackSoloTip);
+    ImGui::SetItemTooltip(messages::stream::cTrackSoloTipFormat, shortcuts::Label(shortcuts::Modifier::ToggleSelection));
 
     if (!pressed)
         return;

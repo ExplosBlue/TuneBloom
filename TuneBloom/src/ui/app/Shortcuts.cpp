@@ -16,6 +16,7 @@ struct ActionBinding
     Action action;
     ImGuiKeyChord chord = ImGuiKey_None;
     bool repeats = false;
+    ImGuiKeyChord alternateChord = ImGuiKey_None;
 };
 
 struct ModifierBinding
@@ -54,6 +55,13 @@ constexpr ActionBinding cActionBindings[] = {
 
     { Action::DuplicateSelection, ImGuiMod_Shortcut | ImGuiKey_D },
     { Action::PlayPause,          ImGuiKey_Space },
+
+    { Action::CloseDialog,        ImGuiKey_Escape },
+    { Action::CancelEdit,         ImGuiKey_Escape },
+    { Action::ConfirmSelection,   ImGuiKey_Enter, false, ImGuiKey_KeypadEnter },
+
+    { Action::ToggleMatchCase,    ImGuiMod_Alt | ImGuiKey_C },
+    { Action::ToggleWholeWord,    ImGuiMod_Alt | ImGuiKey_W },
 };
 
 constexpr ModifierBinding cModifierBindings[] = {
@@ -62,12 +70,16 @@ constexpr ModifierBinding cModifierBindings[] = {
     { Modifier::ZoomHorizontal,  ImGuiMod_Shortcut },
     { Modifier::ZoomVertical,    ImGuiMod_Alt },
     { Modifier::PanHorizontal,   ImGuiMod_Shift },
+    { Modifier::FineAdjust,      ImGuiMod_Shift },
+    { Modifier::FindPrevious,    ImGuiMod_Shift },
+    { Modifier::ResetValue,      ImGuiMod_Alt },
+    { Modifier::TypeValue,       ImGuiMod_Ctrl },
 };
 
 constexpr ImGuiKeyChord cCommandModifiers = ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiMod_Super;
 
-static_assert(IM_ARRAYSIZE(cActionBindings) == static_cast<s32>(Action::PlayPause) + 1);
-static_assert(IM_ARRAYSIZE(cModifierBindings) == static_cast<s32>(Modifier::PanHorizontal) + 1);
+static_assert(IM_ARRAYSIZE(cActionBindings) == static_cast<s32>(Action::ToggleWholeWord) + 1);
+static_assert(IM_ARRAYSIZE(cModifierBindings) == static_cast<s32>(Modifier::TypeValue) + 1);
 
 constexpr s32 cTriggerFrames = 2;
 
@@ -183,12 +195,18 @@ bool Pressed(Action action)
 
     const ActionBinding& binding = FindActionBinding(action);
     const ImGuiInputFlags flags = binding.repeats ? ImGuiInputFlags_Repeat : ImGuiInputFlags_None;
+    const ImGuiKeyChord chords[] = { binding.chord, binding.alternateChord };
 
-    if (!ImGui::IsKeyChordPressed(binding.chord, ImGuiKeyOwner_Any, flags))
-        return false;
+    for (const ImGuiKeyChord chord : chords)
+    {
+        if (chord != ImGuiKey_None && ImGui::IsKeyChordPressed(chord, ImGuiKeyOwner_Any, flags))
+        {
+            ClaimKey(BaseKey(chord));
+            return true;
+        }
+    }
 
-    ClaimKey(BaseKey(binding.chord));
-    return true;
+    return false;
 }
 
 bool Held(Modifier modifier)

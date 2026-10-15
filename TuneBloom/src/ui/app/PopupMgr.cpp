@@ -580,7 +580,7 @@ void PopupMgr::updateErrors()
     if (errorCount != 0 && warningCount != 0)
     {
         ImGui::SameLine();
-        ImGui::TextDisabled(messages::popup::cCountSeparator);
+        ImGui::TextDisabled("%s", messages::popup::cCountSeparator);
         ImGui::SameLine();
     }
 

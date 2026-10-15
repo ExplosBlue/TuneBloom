@@ -21,6 +21,11 @@ static constexpr f32 cPianoViewMoveTime   = 0.25f;
 static constexpr f32 cVelocityTickWidth    = 8.0f;
 static constexpr f32 cVelocityLabelGapEm   = 1.6f;
 static constexpr s32 cVelocityLabelAlpha   = 170;
+static constexpr f32 cWheelPanStep         = 40.0f;
+static constexpr f32 cWheelZoomStep        = 0.2f;
+
+static constexpr s32 cVelocityGridTicks[]  = { 0, 16, 32, 48, 64, 80, 96, 112, 127 };
+static constexpr s32 cVelocityLabelOrder[] = { 127, 0, 64, 32, 96, 16, 48, 80, 112 };
 
 static constexpr uicolors::Themed<f32> cRegionFillAlpha         = { 0.30f, 0.07f };
 static constexpr uicolors::Themed<f32> cRegionSelectedFillAlpha = { 0.50f, 0.14f };
@@ -438,26 +443,24 @@ static void UpdateKeyMapViewInput(KeyMapFrame& frame)
 
     if (ImGui::IsWindowHovered())
     {
-        const f32 kPanStep = 40.0f;
-
         if (io.MouseWheel != 0.0f)
         {
             if (shortcuts::Held(shortcuts::Modifier::ZoomHorizontal))
-                RequestZoom(frame, view.zoomTarget * (1.0f + io.MouseWheel * 0.20f), io.MousePos.x - frame.visibleCanvasPos.x);
+                RequestZoom(frame, view.zoomTarget * (1.0f + io.MouseWheel * cWheelZoomStep), io.MousePos.x - frame.visibleCanvasPos.x);
             else if (shortcuts::Held(shortcuts::Modifier::ZoomVertical))
-                RequestZoomY(frame, view.zoomTargetY * (1.0f + io.MouseWheel * 0.20f), io.MousePos.y - frame.visibleCanvasPos.y);
+                RequestZoomY(frame, view.zoomTargetY * (1.0f + io.MouseWheel * cWheelZoomStep), io.MousePos.y - frame.visibleCanvasPos.y);
             else if (shortcuts::Held(shortcuts::Modifier::PanHorizontal))
             {
-                view.scrollXTarget -= io.MouseWheel * kPanStep;
+                view.scrollXTarget -= io.MouseWheel * cWheelPanStep;
                 view.viewMoveTime = cPianoViewMoveTime;
             }
             else
-                view.scrollYTarget -= io.MouseWheel * kPanStep;
+                view.scrollYTarget -= io.MouseWheel * cWheelPanStep;
         }
 
         if (io.MouseWheelH != 0.0f)
         {
-            view.scrollXTarget -= io.MouseWheelH * kPanStep;
+            view.scrollXTarget -= io.MouseWheelH * cWheelPanStep;
             view.viewMoveTime = cPianoViewMoveTime;
         }
 
@@ -958,10 +961,9 @@ static void DrawKeyMapGrid(const KeyMapFrame& frame)
     }
 
     {
-        static const s32 kVelTicks[] = { 0, 16, 32, 48, 64, 80, 96, 112, 127 };
-        for (s32 i = 0; i < (s32)(sizeof(kVelTicks) / sizeof(kVelTicks[0])); i++)
+        for (const s32 velocity : cVelocityGridTicks)
         {
-            const f32 gy = frame.canvasPos.y + VelToY(frame, (f32)kVelTicks[i]);
+            const f32 gy = frame.canvasPos.y + VelToY(frame, static_cast<f32>(velocity));
             if (gy < frame.canvasPos.y - 0.5f || gy > frame.canvasPos.y + frame.regionHeight + 0.5f)
                 continue;
 
@@ -969,17 +971,15 @@ static void DrawKeyMapGrid(const KeyMapFrame& frame)
             frame.draw->AddLine(ImVec2(frame.visibleCanvasPos.x, gy), ImVec2(frame.visibleCanvasPos.x + cVelocityTickWidth, gy), GetPianoRollPalette().gridLineVelTick, 1.0f);
         }
 
-        static const s32 cVelLabels[] = { 127, 0, 64, 32, 96, 16, 48, 80, 112 };
-
         const f32 fontSize = ImGui::GetFontSize();
         const f32 labelX = frame.visibleCanvasPos.x + cVelocityTickWidth + ImGui::GetStyle().ItemInnerSpacing.x;
         const ImU32 labelColor = uicolors::WithAlpha(GetPianoRollPalette().gridLineVelTick, cVelocityLabelAlpha);
-        f32 labelY[IM_ARRAYSIZE(cVelLabels)];
+        f32 labelY[IM_ARRAYSIZE(cVelocityLabelOrder)];
         s32 labelNum = 0;
 
-        for (s32 i = 0; i < IM_ARRAYSIZE(cVelLabels) && frame.regionHeight >= fontSize; i++)
+        for (s32 i = 0; i < IM_ARRAYSIZE(cVelocityLabelOrder) && frame.regionHeight >= fontSize; i++)
         {
-            const f32 gy = frame.canvasPos.y + VelToY(frame, static_cast<f32>(cVelLabels[i]));
+            const f32 gy = frame.canvasPos.y + VelToY(frame, static_cast<f32>(cVelocityLabelOrder[i]));
             if (gy < frame.canvasPos.y - 0.5f || gy > frame.canvasPos.y + frame.regionHeight + 0.5f)
                 continue;
 
@@ -998,7 +998,7 @@ static void DrawKeyMapGrid(const KeyMapFrame& frame)
             labelY[labelNum++] = y;
 
             char text[8];
-            snprintf(text, sizeof(text), "%d", cVelLabels[i]);
+            snprintf(text, sizeof(text), "%d", cVelocityLabelOrder[i]);
             frame.draw->AddText(ImVec2(labelX, y), labelColor, text);
         }
     }

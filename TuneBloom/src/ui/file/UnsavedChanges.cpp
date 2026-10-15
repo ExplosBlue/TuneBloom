@@ -7,6 +7,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
 #include <ui/items/Selection.h>
+#include <ui/app/Shortcuts.h>
 #include <ui/settings/UiColors.h>
 #include <ui/app/Workspace.h>
 
@@ -444,7 +445,7 @@ void DrawUnsavedChangesDialog()
     if (!canGoTo)
         ImGui::SetItemTooltip("%s", hasSelection ? messages::unsaved::cRemovedReason : messages::unsaved::cNoRowReason);
 
-    if (DialogButton(messages::common::cClose) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (DialogButton(messages::common::cClose) || shortcuts::Pressed(shortcuts::Action::CloseDialog))
         close = true;
 
     if (goTo && hasSelection && GoToRow(sRows[sSelectedRow]))

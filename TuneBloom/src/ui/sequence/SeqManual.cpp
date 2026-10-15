@@ -612,7 +612,8 @@ const TextEditor::Palette& GetSeqPalette()
         set(index, ImVec4(color.x, color.y, color.z, alpha));
     };
 
-    sPalette = IsDarkTheme() ? TextEditor::GetDarkPalette() : TextEditor::GetLightPalette();
+    const uicolors::Themed<const TextEditor::Palette*> basePalettes = { &TextEditor::GetDarkPalette(), &TextEditor::GetLightPalette() };
+    sPalette = *uicolors::Pick(basePalettes);
 
     const ImVec4* colors = ImGui::GetStyle().Colors;
 

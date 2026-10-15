@@ -3,6 +3,7 @@
 #include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
+#include <ui/app/Shortcuts.h>
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
@@ -214,10 +215,7 @@ static void DrawTuneBloomSplash()
 
     BeginDialogFooter({ messages::common::cClose }, false);
 
-    if (DialogButton(messages::common::cClose))
-        ImGui::CloseCurrentPopup();
-
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+    if (DialogButton(messages::common::cClose) || shortcuts::Pressed(shortcuts::Action::CloseDialog))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();

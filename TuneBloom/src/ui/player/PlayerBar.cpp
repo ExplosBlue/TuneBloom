@@ -28,9 +28,11 @@ constexpr f32   cSeekLoopInset        = 3.0f;
 constexpr f32   cSeekGhostAlpha       = 0.35f;
 constexpr f32   cSeekRegionGap        = 5.0f;
 constexpr f32   cSeekRegionHeight     = 4.0f;
-constexpr float cLoopMarkerThickness  = 2.0f;
+constexpr f32   cLoopMarkerThickness  = 2.0f;
 
-constexpr uicolors::Themed<f32> cSeekLoopAlpha = { 0.08f, 0.12f };
+constexpr uicolors::Themed<f32>      cSeekLoopAlpha         = { 0.08f, 0.12f };
+constexpr uicolors::Themed<ImGuiCol> cDisplayBackgroundRole = { ImGuiCol_WindowBg, ImGuiCol_ChildBg };
+constexpr uicolors::Themed<f32>      cDisplayDarken         = { 0.2f, 0.0f };
 
 constexpr f32 cTransportHeightEm   = 2.6f;
 constexpr f32 cTransportButtonEm   = 1.6f;
@@ -42,7 +44,6 @@ constexpr f32 cDisplayTimeEm       = 1.2f;
 constexpr f32 cDisplayPadEm        = 0.5f;
 constexpr f32 cDisplayRowGap       = 4.0f;
 constexpr f32 cDisplayTextRaise    = 1.0f;
-constexpr f32 cDisplayDarken       = 0.2f;
 constexpr f32 cDisplaySeekMinEm    = 4.0f;
 constexpr f32 cDisplayLoopHoverMix = 0.4f;
 constexpr f32 cVolumeSliderWidth   = 120.0f;
@@ -574,7 +575,7 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     const f32 row2 = row1 + em + cDisplayRowGap;
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ImVec4 background = IsDarkTheme() ? ImLerp(style.Colors[ImGuiCol_WindowBg], uicolors::cInkOnLight, cDisplayDarken) : style.Colors[ImGuiCol_ChildBg];
+    const ImVec4 background = ImLerp(style.Colors[uicolors::Pick(cDisplayBackgroundRole)], uicolors::cInkOnLight, uicolors::Pick(cDisplayDarken));
 
     draw->AddRectFilled(min, max, ImGui::GetColorU32(background), style.FrameRounding);
     draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), style.FrameRounding);

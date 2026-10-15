@@ -302,7 +302,7 @@ static void DrawTrackSwitch(u32 trackNo, const ImVec2& size, bool exists)
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
 
-    ImGui::SetItemTooltip("%s", messages::playback::cTrackSwitchTip);
+    ImGui::SetItemTooltip(messages::playback::cTrackSwitchTipFormat, shortcuts::Label(shortcuts::Modifier::ToggleSelection));
 
     if (!pressed)
         return;

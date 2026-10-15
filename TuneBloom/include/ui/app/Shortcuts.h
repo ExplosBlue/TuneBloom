@@ -37,6 +37,13 @@ enum class Action : s32
 
     DuplicateSelection = 22,
     PlayPause = 23,
+
+    CloseDialog = 24,
+    CancelEdit = 25,
+    ConfirmSelection = 26,
+
+    ToggleMatchCase = 27,
+    ToggleWholeWord = 28,
 };
 
 enum class Modifier : s32
@@ -46,6 +53,10 @@ enum class Modifier : s32
     ZoomHorizontal = 2,
     ZoomVertical = 3,
     PanHorizontal = 4,
+    FineAdjust = 5,
+    FindPrevious = 6,
+    ResetValue = 7,
+    TypeValue = 8,
 };
 
 ImGuiKeyChord Chord(Action action);

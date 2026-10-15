@@ -2,6 +2,7 @@
 
 #include <ui/widgets/ContextMenu.h>
 #include <ui/Messages.h>
+#include <ui/app/Shortcuts.h>
 #include <ui/settings/UiColors.h>
 
 #include <libs/IconsLucide.h>
@@ -266,7 +267,7 @@ bool BeginCurveEdit(LoopWaveformState& state, ImVec2 mouse, float width, float h
     if (index < 0 || !IsMouseClicked(ImGuiMouseButton_Left))
         return false;
 
-    if (state.curveHoverTension && GetIO().KeyAlt)
+    if (state.curveHoverTension && shortcuts::Held(shortcuts::Modifier::ResetValue))
     {
         state.curve[index].tension = 0.0f;
         *changed = true;

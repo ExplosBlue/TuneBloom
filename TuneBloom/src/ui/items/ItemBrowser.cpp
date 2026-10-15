@@ -6,6 +6,7 @@
 #include <ui/widgets/ListFilter.h>
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
+#include <ui/app/Shortcuts.h>
 #include <ui/widgets/Widgets.h>
 
 #include <bfsar/player/SoundPlayer.h>
@@ -376,13 +377,13 @@ static void HandleBrowserKeys(BrowserTable* table)
 
     s32 step = 0;
 
-    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, true))
+    if (shortcuts::Pressed(shortcuts::Action::SelectNext))
         step = 1;
-    else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, true))
+    else if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
         step = -1;
-    else if (ImGui::IsKeyPressed(ImGuiKey_PageDown, true))
+    else if (shortcuts::Pressed(shortcuts::Action::SelectPageDown))
         step = cPageRows;
-    else if (ImGui::IsKeyPressed(ImGuiKey_PageUp, true))
+    else if (shortcuts::Pressed(shortcuts::Action::SelectPageUp))
         step = -cPageRows;
 
     if (step == 0)
@@ -585,7 +586,6 @@ static void DrawBrowserFooter(const Item::List& list, Item::ItemType itemType, s
     ImGui::PopStyleVar();
 
     ImGui::SameLine();
-
     if (allowNone)
     {
         BeginDialogFooter({ messages::common::cNone, selectLabel, messages::common::cCancel }, false);
@@ -666,10 +666,10 @@ static bool DrawBrowserPopup(const Item::List& list, Item::ItemType itemType, It
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + footerGap - style.ItemSpacing.y);
     DrawBrowserFooter(list, itemType, rowNum, allowNone, acceptLabel, &result);
 
-    if (sHighlight && (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false)))
+    if (sHighlight && shortcuts::Pressed(shortcuts::Action::ConfirmSelection))
         result.accept = true;
 
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+    if (shortcuts::Pressed(shortcuts::Action::CloseDialog))
         result.close = true;
 
     const bool changed = ApplyBrowserResult(&result, itemPtr);

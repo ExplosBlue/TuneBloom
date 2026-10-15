@@ -14,6 +14,7 @@
 #include <ui/project/ProjectViews.h>
 #include <ui/widgets/Properties.h>
 #include <ui/file/RecentFiles.h>
+#include <ui/app/Shortcuts.h>
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>
 #include <ui/widgets/TimeUtil.h>
@@ -1300,7 +1301,7 @@ void DrawPreferencesWindow()
 
     ImGui::SetCursorScreenPos(ImVec2(origin.x + size.x - closeWidth, ImGui::GetCursorScreenPos().y + ImFloor(em * cFooterGapEm)));
 
-    if (ImGui::Button(messages::common::cClose, ImVec2(closeWidth, 0.0f)) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+    if (ImGui::Button(messages::common::cClose, ImVec2(closeWidth, 0.0f)) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && shortcuts::Pressed(shortcuts::Action::CloseDialog)))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();

@@ -4,6 +4,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
 #include <ui/sequence/SeqManual.h>
+#include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
 
@@ -115,7 +116,6 @@ static bool BeginEditorBar(const ImVec2& editorMin, ImVec2 editorMax, f32 width,
 static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec2& editorMax, bool paneFocused)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
-    const ImGuiIO& io = ImGui::GetIO();
     const f32 em = ImGui::GetFontSize();
     const bool replaceVisible = editor.IsReplaceVisible();
 
@@ -134,10 +134,10 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
         bool wholeWord = editor.IsSearchWholeWord();
         bool findEnter = false;
 
-        if (paneFocused && io.KeyAlt && !io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C, false))
+        if (paneFocused && shortcuts::Pressed(shortcuts::Action::ToggleMatchCase))
             caseSensitive = !caseSensitive;
 
-        if (paneFocused && io.KeyAlt && !io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_W, false))
+        if (paneFocused && shortcuts::Pressed(shortcuts::Action::ToggleWholeWord))
             wholeWord = !wholeWord;
 
         if (BarButton(replaceVisible ? ICON_LC_CHEVRON_DOWN "##ShowReplace" : ICON_LC_CHEVRON_RIGHT "##ShowReplace", replaceVisible ? messages::sequence::cHideReplace : messages::sequence::cShowReplace))
@@ -155,7 +155,7 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
         editor.SetSearchOptions(caseSensitive, wholeWord);
         editor.SetSearchQuery(sFindBuffer);
 
-        if (findEnter && io.KeyShift)
+        if (findEnter && shortcuts::Held(shortcuts::Modifier::FindPrevious))
             editor.FindPrevious();
         else if (findEnter)
             editor.FindNext();
@@ -267,7 +267,7 @@ static void DrawGoToBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
             close = true;
         }
 
-        if (ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        if (ImGui::IsWindowFocused() && shortcuts::Pressed(shortcuts::Action::CloseFilter))
             close = true;
     }
 
@@ -328,12 +328,12 @@ static void DrawLabelsPopup(TextEditor& editor, const ImVec2& editorMin, const I
 
     const s32 rowNum = static_cast<s32>(rows.size());
 
-    if (rowNum > 0 && ImGui::IsKeyPressed(ImGuiKey_DownArrow))
+    if (rowNum > 0 && shortcuts::Pressed(shortcuts::Action::SelectNext))
     {
         sLabelSelected = (sLabelSelected + 1) % rowNum;
         sLabelScroll = true;
     }
-    else if (rowNum > 0 && ImGui::IsKeyPressed(ImGuiKey_UpArrow))
+    else if (rowNum > 0 && shortcuts::Pressed(shortcuts::Action::SelectPrevious))
     {
         sLabelSelected = (sLabelSelected + rowNum - 1) % rowNum;
         sLabelScroll = true;

@@ -1,6 +1,7 @@
 #include <ui/widgets/Knob.h>
 
 #include <ui/Messages.h>
+#include <ui/app/Shortcuts.h>
 #include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
 
@@ -316,13 +317,8 @@ static bool SetKnobValue(ImGuiDataType dataType, void* value, f64 newValue, cons
 
 static f32 CalcKnobDragSpeed(f32 speed)
 {
-    const ImGuiIO& io = ImGui::GetIO();
-
-    if (io.KeyShift)
+    if (shortcuts::Held(shortcuts::Modifier::FineAdjust))
         speed *= cKnobShiftRatio / 10.0f;
-
-    if (io.KeyAlt)
-        speed *= 100.0f;
 
     return speed;
 }
@@ -341,9 +337,9 @@ bool DragField(const char* label, ImGuiDataType dataType, void* value, f32 speed
     bool changed = ImGui::DragScalar(label, dataType, value, CalcKnobDragSpeed(speed), min, max, format, flags | static_cast<ImGuiSliderFlags>(ImGuiSliderFlags_Vertical));
     const ImGuiID id = ImGui::GetItemID();
 
-    const bool altClicked = ImGui::IsItemActivated() && ImGui::GetIO().KeyAlt;
+    const bool resetClicked = ImGui::IsItemActivated() && shortcuts::Held(shortcuts::Modifier::ResetValue);
 
-    if (hasReset && (altClicked || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::TempInputIsActive(id))
+    if (hasReset && (resetClicked || ImGui::IsItemClicked(ImGuiMouseButton_Right)) && !ImGui::TempInputIsActive(id))
     {
         if (SetKnobValue(dataType, value, reset, min, max))
         {
@@ -351,7 +347,7 @@ bool DragField(const char* label, ImGuiDataType dataType, void* value, f32 speed
             changed = true;
         }
 
-        if (altClicked)
+        if (resetClicked)
         {
             ImGui::ClearActiveID();
             GImGui->NavWindowingToggleLayer = false;
@@ -446,11 +442,11 @@ static bool Knob(const char* label, ImGuiDataType dataType, void* value, const v
             ImGui::SetKeyOwner(ImGuiKey_MouseLeft, id);
 
         const bool rightClicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
-        resetClicked = hasReset && (((clicked || doubleClicked) && g.IO.KeyAlt && !g.IO.KeyCtrl) || rightClicked);
+        resetClicked = hasReset && (((clicked || doubleClicked) && shortcuts::Held(shortcuts::Modifier::ResetValue) && !shortcuts::Held(shortcuts::Modifier::TypeValue)) || rightClicked);
 
         if (resetClicked)
             g.NavWindowingToggleLayer = false;
-        else if ((clicked && g.IO.KeyCtrl) || doubleClicked || (g.NavActivateId == id && (g.NavActivateFlags & ImGuiActivateFlags_PreferInput)))
+        else if ((clicked && shortcuts::Held(shortcuts::Modifier::TypeValue)) || doubleClicked || (g.NavActivateId == id && (g.NavActivateFlags & ImGuiActivateFlags_PreferInput)))
             tempInput = true;
 
         if (makeActive && !tempInput && !resetClicked)

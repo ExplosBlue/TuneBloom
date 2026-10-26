@@ -81,6 +81,18 @@ void ShowExportResult(const char* message)
     sShowExportResult = true;
 }
 
+void ShowWavExportResult(bool exported)
+{
+    if (!exported)
+        PopupMgr::instance()->addPopup({ messages::exporting::cWavWriteFailed, nullptr });
+}
+
+void ShowWavBatchExportResult(s32, s32 failureCount)
+{
+    if (failureCount > 0)
+        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cWavsWriteFailedOneFormat : messages::exporting::cWavsWriteFailedFormat, failureCount), nullptr });
+}
+
 void ShowBatchExportResult(s32 total, s32 failureCount, const char* formatName)
 {
     if (failureCount > 0)
@@ -160,21 +172,12 @@ static void ExportBankModels(std::vector<BankFile*>* pending, const char* ext, c
 
 static void ExportPendingWavesToWav()
 {
-    ExportItemsToFiles(&sPendingWavesToWav, { "wav", messages::filedialog::cFilterWave, messages::common::cWave, messages::exporting::cSelectWavFolder },
+    ExportItemsToFiles(&sPendingWavesToWav, { cWavExtension, messages::filedialog::cFilterWave, messages::common::cWave, messages::exporting::cSelectWavFolder },
         [](WaveFile* wave, const sead::SafeString& path)
         {
             return wave->writeWavFile(path);
         },
-        [](bool exported)
-        {
-            if (!exported)
-                PopupMgr::instance()->addPopup({ messages::exporting::cWavWriteFailed, nullptr });
-        },
-        [](s32, s32 failureCount)
-        {
-            if (failureCount > 0)
-                PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cWavsWriteFailedOneFormat : messages::exporting::cWavsWriteFailedFormat, failureCount), nullptr });
-        });
+        &ShowWavExportResult, &ShowWavBatchExportResult);
 }
 
 static void ImportPendingSequenceFile()

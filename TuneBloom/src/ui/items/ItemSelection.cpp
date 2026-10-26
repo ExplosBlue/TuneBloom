@@ -117,10 +117,10 @@ void HandleItemListKeys(ItemListContext& ctx)
         ScrollItemListTo(selectedItem);
     }
 
-    if (shortcuts::Pressed(shortcuts::Action::DuplicateSelection) && current < ctx.rowNum && selectedItem->getItemType() == Item::ItemType::Sound)
+    if (shortcuts::Pressed(shortcuts::Action::DuplicateSelection) && current < ctx.rowNum && CanDuplicateSelection(selectedItem))
         RequestSelectionDuplicate(selectedItem);
 
-    if (shortcuts::Pressed(shortcuts::Action::DeleteSelection) && sSubSelectedItem == nullptr && sSelectedItemIsSubWindow == false)
+    if (shortcuts::Pressed(shortcuts::Action::DeleteSelection) && ctx.removable && sSubSelectedItem == nullptr && sSelectedItemIsSubWindow == false)
     {
         if (!sMultiSelectedItems.empty())
             RequestItemsDelete(sMultiSelectedItems);
@@ -293,6 +293,10 @@ void SelectItem(Item* item)
 
         case Item::ItemType::BankFile:
             tab = UIType::BankFiles;
+            break;
+
+        case Item::ItemType::AudioAsset:
+            tab = UIType::AudioAssets;
             break;
 
         default:

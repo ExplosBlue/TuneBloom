@@ -146,7 +146,7 @@ static bool HasWarning(const std::vector<PopupMgr::ItemMessage>& messages)
 
 static std::string GetArchiveKey()
 {
-    std::string path = sBfsar.getFilePath().cstr();
+    std::string path = GetDocumentPath().cstr();
 
 #if defined(SEAD_PLATFORM_WINDOWS)
     std::replace(path.begin(), path.end(), '/', '\\');
@@ -512,7 +512,7 @@ void PopupMgr::updateErrors()
 
     const bool isSaving = mErrorContext == ErrorContext::Saving;
     const bool hasErrors = errorCount != 0;
-    const bool canIgnore = !isSaving && hasWarnings && !sBfsar.getFilePath().isEmpty();
+    const bool canIgnore = !isSaving && hasWarnings && !GetDocumentPath().isEmpty();
 
     const f32 fontSize = ImGui::GetFontSize();
 

@@ -159,7 +159,7 @@ void WaveImportPanel::drawUndecodableSource(const char* header, WaveFile::Encodi
 
     const f32 labelWidth = CalcLabelWidth({ messages::common::cEncoding, messages::common::cStart, messages::common::cEnd });
 
-    if (BeginGroupBox(messages::common::cFormat))
+    if (encoding && BeginGroupBox(messages::common::cFormat))
     {
         drawEncodingField(encoding, labelWidth);
         EndGroupBox();
@@ -320,6 +320,9 @@ void WaveImportPanel::drawProcessingPanels(f32 fill)
 
 void WaveImportPanel::drawEncodingField(WaveFile::Encoding* encoding, f32 labelWidth)
 {
+    if (!encoding)
+        return;
+
     RowLabel(messages::common::cEncoding, labelWidth);
 
     if (ComboScroll("##Encoding", reinterpret_cast<s32*>(encoding), WaveFile::sEncodingTypes, cWaveEncodingDetails, IM_ARRAYSIZE(cWaveEncodingDetails)))

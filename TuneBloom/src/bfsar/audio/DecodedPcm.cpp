@@ -38,7 +38,7 @@ static float DecodeRiffSample(const u8* raw, u16 format, u32 bytesPerSample)
         {
             s16 value;
             std::memcpy(&value, raw, sizeof(value));
-            return static_cast<float>(sead::Endian::toHostS16(sead::Endian::eLittle, value)) / 32768.0f;
+            return AudioProcessing::fromPcm16(sead::Endian::toHostS16(sead::Endian::eLittle, value));
         }
 
         case 3:
@@ -142,12 +142,12 @@ DecodedPcm decodePcmForPreview(const WaveFile::RiffWaveInfo& info)
         if (needsSwap)
         {
             for (u32 i = 0; i < sampleCount; i++, src += numChannels)
-                dst[i] = static_cast<float>(sead::Endian::toHostS16(info.endian, *src)) / 32768.0f;
+                dst[i] = AudioProcessing::fromPcm16(sead::Endian::toHostS16(info.endian, *src));
         }
         else
         {
             for (u32 i = 0; i < sampleCount; i++, src += numChannels)
-                dst[i] = static_cast<float>(*src) / 32768.0f;
+                dst[i] = AudioProcessing::fromPcm16(*src);
         }
     }
 

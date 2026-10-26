@@ -3,6 +3,7 @@
 #include <ui/widgets/Dialogs.h>
 #include <ui/file/File.h>
 #include <ui/Messages.h>
+#include <ui/app/PopupMgr.h>
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveImportPanel.h>
@@ -44,12 +45,58 @@ void RequestItemsDelete(const std::vector<Item*>& items)
     sDeleteItems = items;
 }
 
-void RequestSelectionDuplicate(Item* sound)
+static bool CanDuplicateItem(const Item* item, const char** outReason)
 {
-    if (IsItemMultiSelected(sound))
+    if (item->getItemType() == Item::ItemType::Sound)
+        return true;
+
+    const char* reason = nullptr;
+    const bool canDuplicate = item->getItemType() == Item::ItemType::AudioAsset && sAudioResource.canDuplicateAsset(*static_cast<const AudioAsset*>(item), &reason);
+
+    if (outReason)
+        *outReason = reason;
+
+    return canDuplicate;
+}
+
+bool OffersItemDuplicate(const Item* item)
+{
+    switch (item->getItemType())
+    {
+        case Item::ItemType::Sound:
+            return true;
+
+        case Item::ItemType::AudioAsset:
+            return sAudioResource.canRemoveAssets();
+
+        default:
+            return false;
+    }
+}
+
+bool CanDuplicateSelection(const Item* item, const char** outReason)
+{
+    if (!OffersItemDuplicate(item))
+        return false;
+
+    if (!IsItemMultiSelected(item))
+        return CanDuplicateItem(item, outReason);
+
+    for (const Item* selected : sMultiSelectedItems)
+    {
+        if (!CanDuplicateItem(selected, outReason))
+            return false;
+    }
+
+    return true;
+}
+
+void RequestSelectionDuplicate(Item* item)
+{
+    if (IsItemMultiSelected(item))
         sDuplicateItems = sMultiSelectedItems;
     else
-        sDuplicateItem = sound;
+        sDuplicateItem = item;
 }
 
 void ForgetItemListRequests(const std::vector<Item*>& removed)
@@ -101,7 +148,7 @@ static void DeleteListItems(ItemListContext& ctx, const std::vector<Item*>& item
         selectedItem = nullptr;
     }
 
-    sBfsar.updateList(ctx.list);
+    RenumberDocumentList(ctx.list);
     SetUnsavedChanges(true);
 }
 
@@ -156,9 +203,8 @@ static void DrawAddItemDialog(ItemListContext& ctx, const ImVec2& center)
 
     const ImGuiWindowFlags addFlags = ImGuiWindowFlags_AlwaysAutoResize;
 
-    // Wave import panel
-    if (&ctx.list == &sBfsar.getWaveFileList())
-        ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
+    if (ctx.addDialogWidth > 0.0f)
+        ImGui::SetNextWindowContentSize(ImVec2(ctx.addDialogWidth, 0.0f));
 
     if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_PLUS " %s###Add", sead::FormatFixedSafeString<64>(messages::item::cAddDialogTitleFormat, ctx.listName).cstr()).cstr(), nullptr, addFlags))
     {
@@ -203,7 +249,7 @@ static void DrawAddItemDialog(ItemListContext& ctx, const ImVec2& center)
                         else
                             ctx.list.pushBack(addedItem);
 
-                        sBfsar.updateList(ctx.list);
+                        RenumberDocumentList(ctx.list);
                     }
 
                     SetUnsavedChanges(true);
@@ -279,7 +325,7 @@ static void ApplyItemReorder(ItemListContext& ctx)
         for (auto it = itemsToMove.rbegin(); it != itemsToMove.rend(); ++it)
             ctx.reorderTarget->insertBack(*it);
 
-        sBfsar.updateList(ctx.list);
+        RenumberDocumentList(ctx.list);
         SetUnsavedChanges(true);
     }
     else if (!isMultiReorder && ctx.reorderTarget->next() != ctx.reorderSource)
@@ -287,9 +333,49 @@ static void ApplyItemReorder(ItemListContext& ctx)
         ctx.reorderSource->erase();
         ctx.reorderTarget->insertBack(ctx.reorderSource);
 
-        sBfsar.updateList(ctx.list);
+        RenumberDocumentList(ctx.list);
         SetUnsavedChanges(true);
     }
+}
+
+static void DuplicateSelectedAssets(ItemListContext& ctx)
+{
+    Item* first = sDuplicateItem ? sDuplicateItem : (sDuplicateItems.empty() ? nullptr : sDuplicateItems.front());
+
+    if (!first || first->list() != &ctx.list || first->getItemType() != Item::ItemType::AudioAsset)
+        return;
+
+    const std::vector<Item*> sources = sDuplicateItem ? std::vector<Item*>{ sDuplicateItem } : sDuplicateItems;
+
+    sDuplicateItem = nullptr;
+    sDuplicateItems.clear();
+
+    std::vector<Item*> copies;
+    const char* firstError = nullptr;
+
+    for (Item* source : sources)
+    {
+        const char* error = nullptr;
+
+        if (AudioAsset* copy = sAudioResource.duplicateAsset(static_cast<AudioAsset*>(source), &error))
+            copies.push_back(copy);
+        else if (!firstError)
+            firstError = error;
+    }
+
+    if (firstError)
+        PopupMgr::instance()->addPopup({ firstError, nullptr });
+
+    if (copies.empty())
+        return;
+
+    SetUnsavedChanges(true);
+
+    *ctx.selection = copies.back();
+    SetSelectionInSubWindow(ctx.isSubWindow);
+
+    sMultiSelectedItems = copies.size() > 1 ? copies : std::vector<Item*>();
+    sMultiSelectAnchor = copies.front();
 }
 
 static void DuplicateSelectedSound(ItemListContext& ctx)
@@ -307,7 +393,7 @@ static void DuplicateSelectedSound(ItemListContext& ctx)
     else
     {
         src->insertBack(dup);
-        sBfsar.updateList(ctx.list);
+        RenumberDocumentList(ctx.list);
     }
     SetUnsavedChanges(true);
 
@@ -366,7 +452,7 @@ static void DuplicateSelectedSounds(ItemListContext& ctx)
 
     if (!orderedSrcs.empty())
     {
-        sBfsar.updateList(ctx.list);
+        RenumberDocumentList(ctx.list);
         SetUnsavedChanges(true);
         if (!newDups.empty())
         {
@@ -390,6 +476,7 @@ void ApplyItemListEdits(ItemListContext& ctx)
     DrawAddItemDialog(ctx, center);
     DrawReferencesDialog(ctx, center);
     ApplyItemReorder(ctx);
+    DuplicateSelectedAssets(ctx);
     DuplicateSelectedSound(ctx);
     DuplicateSelectedSounds(ctx);
 }

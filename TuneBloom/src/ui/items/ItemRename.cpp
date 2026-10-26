@@ -37,6 +37,9 @@ bool CanRenameItem(const Item* item)
         case Item::ItemType::Player:
             return item->isEnableName();
 
+        case Item::ItemType::AudioAsset:
+            return sAudioResource.canRenameAsset(*static_cast<const AudioAsset*>(item));
+
         default:
             return IsItemNameOptional(item);
     }
@@ -68,10 +71,10 @@ ItemRenameResult RenameItem(Item* item, const sead::FixedSafeString<256>& name)
     if (name.isEmpty())
         return ItemRenameResult::Empty;
 
-    if (!sBfsar.validName(name))
+    if (!IsValidDocumentName(name))
         return ItemRenameResult::Invalid;
 
-    if (!sBfsar.validateName(name))
+    if (!IsUniqueDocumentName(name, nullptr))
         return ItemRenameResult::Duplicate;
 
     item->getName() = name;

@@ -23,6 +23,7 @@ public:
     static bool CheckLayout(const void* data, u64 size);
     static bool Build(std::vector<u8>* out, const void* strmFile, u64 strmFileSize, u32 streamBufferTimes);
     static bool BuildFromStreamFile(std::vector<u8>* out, const char* strmFilePath, u32 streamBufferTimes);
+    static bool Rebuild(std::vector<u8>* out, const void* strmFile, u64 strmFileSize, const void* prefetch, u64 prefetchSize);
 
 private:
     bool doRead(const void* fileAddr) override

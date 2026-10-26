@@ -8,6 +8,7 @@
 #include <ui/file/FileFlow.h>
 #include <ui/app/FileTransferMenu.h>
 #include <ui/items/ItemColumns.h>
+#include <ui/items/ItemList.h>
 #include <ui/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/OutputMeter.h>
@@ -291,23 +292,23 @@ static void DrawBackupsMenu()
 
 static void DrawEditMenu()
 {
-    const bool bfsarOpen = sBfsar.isOpen();
-    const bool hasItem = bfsarOpen && sSelectedItem != nullptr;
-    const Item* activeItem = bfsarOpen ? GetActiveSelection() : nullptr;
-    const bool hasSound = activeItem && activeItem->getItemType() == Item::ItemType::Sound;
+    const bool documentOpen = IsDocumentOpen();
+    const bool hasItem = documentOpen && sSelectedItem != nullptr;
+    const Item* activeItem = documentOpen ? GetActiveSelection() : nullptr;
+    const bool canDuplicate = activeItem && CanDuplicateSelection(activeItem);
 
-    if (MenuBarIconItem(ICON_LC_TEXT_CURSOR_INPUT, messages::common::cRename, shortcuts::Label(shortcuts::Action::RenameSelection), hasItem))
+    if (MenuBarIconItem(ICON_LC_TEXT_CURSOR_INPUT, messages::common::cRename, shortcuts::Label(shortcuts::Action::RenameSelection), hasItem && CanRenameItem(sSelectedItem)))
         shortcuts::Trigger(shortcuts::Action::RenameSelection);
 
-    if (MenuBarIconItem(ICON_LC_COPY, messages::common::cDuplicate, shortcuts::Label(shortcuts::Action::DuplicateSelection), hasSound))
+    if (MenuBarIconItem(ICON_LC_COPY, messages::common::cDuplicate, shortcuts::Label(shortcuts::Action::DuplicateSelection), canDuplicate))
         shortcuts::Trigger(shortcuts::Action::DuplicateSelection);
 
-    if (MenuBarIconItem(ICON_LC_LIST_CHECKS, messages::common::cSelectAll, shortcuts::Label(shortcuts::Action::SelectAll), bfsarOpen))
+    if (MenuBarIconItem(ICON_LC_LIST_CHECKS, messages::common::cSelectAll, shortcuts::Label(shortcuts::Action::SelectAll), documentOpen))
         shortcuts::Trigger(shortcuts::Action::SelectAll);
 
     ImGui::Separator();
 
-    if (MenuBarIconItem(ICON_LC_SEARCH, messages::common::cFind, shortcuts::Label(shortcuts::Action::FocusFilter), bfsarOpen))
+    if (MenuBarIconItem(ICON_LC_SEARCH, messages::common::cFind, shortcuts::Label(shortcuts::Action::FocusFilter), documentOpen))
     {
         sMenuFindFrame = ImGui::GetFrameCount() + 1;
         shortcuts::Trigger(shortcuts::Action::FocusFilter);
@@ -387,7 +388,7 @@ static void DrawHelpMenu()
         RequestAbout();
 }
 
-static void DrawRecentFilesMenu(bool bfsarOpen)
+static void DrawRecentFilesMenu(bool documentOpen)
 {
     if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_CLOCK " %s", messages::mainmenu::cOpenRecent).cstr()))
         return;
@@ -396,7 +397,7 @@ static void DrawRecentFilesMenu(bool bfsarOpen)
 
     if (DrawRecentFilesList(&path))
     {
-        if (bfsarOpen)
+        if (documentOpen)
         {
             RequestOpenFile(path.c_str());
         }
@@ -423,87 +424,63 @@ static void FocusInfoWindowForFind()
 
 static void DrawFileMenu()
 {
-    bool bfsarOpen = sBfsar.isOpen();
+    const bool documentOpen = IsDocumentOpen();
+    const bool archiveOpen = sBfsar.isOpen();
+
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FILE " %s", messages::mainmenu::cNew).cstr(), shortcuts::Label(shortcuts::Action::NewProject)))
     {
-        if (bfsarOpen)
-        {
+        if (documentOpen)
             RequestNewFile();
-        }
         else
-        {
             RequestNewFileFormat();
-        }
     }
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER_OPEN " %s", messages::mainmenu::cOpen).cstr(), shortcuts::Label(shortcuts::Action::OpenProject)))
     {
-        if (bfsarOpen)
-        {
+        if (documentOpen)
             RequestOpenFile();
-        }
         else
-        {
             OpenFile();
-        }
     }
 
-    DrawRecentFilesMenu(bfsarOpen);
+    DrawRecentFilesMenu(documentOpen);
 
     ImGui::Separator();
-
-    if (!bfsarOpen)
-    {
-        ImGui::BeginDisabled();
-    }
+    ImGui::BeginDisabled(!documentOpen);
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE " %s", messages::common::cSave).cstr(), shortcuts::Label(shortcuts::Action::SaveProject)))
-    {
         RequestSaveFile();
-    }
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE_ALL " %s", messages::mainmenu::cSaveAs).cstr(), shortcuts::Label(shortcuts::Action::SaveProjectAs)))
-    {
         SaveFileAs();
-    }
 
     if (MenuBarIconItem(ICON_LC_FILE_DIFF, messages::mainmenu::cShowUnsaved, nullptr, gUnsavedChanges))
-    {
         OpenUnsavedChangesDialog();
-    }
 
     DrawBackupsMenu();
 
+    ImGui::EndDisabled();
     ImGui::Separator();
+    ImGui::BeginDisabled(!archiveOpen);
 
     DrawImportMenu();
     DrawExportMenu();
 
-    if (!bfsarOpen)
-    {
-        ImGui::EndDisabled();
-    }
-
+    ImGui::EndDisabled();
     ImGui::Separator();
 
-    const bool hasPath = bfsarOpen && !sBfsar.getFilePath().isEmpty();
+    const bool hasPath = documentOpen && !GetDocumentPath().isEmpty();
 
     if (MenuBarIconItem(ICON_LC_FOLDER_SEARCH, messages::recent::cShowInFileManager, nullptr, hasPath))
-    {
-        ShowInFileManager(sBfsar.getFilePath().cstr());
-    }
+        ShowInFileManager(GetDocumentPath().cstr());
 
     if (MenuBarIconItem(ICON_LC_COPY, messages::mainmenu::cCopyPath, nullptr, hasPath))
-    {
-        ImGui::SetClipboardText(sBfsar.getFilePath().cstr());
-    }
+        ImGui::SetClipboardText(GetDocumentPath().cstr());
 
     ImGui::Separator();
 
-    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, nullptr, bfsarOpen))
-    {
+    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, nullptr, documentOpen))
         RequestCloseFile();
-    }
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_DOOR_OPEN " %s", messages::mainmenu::cExit).cstr()))
     {
@@ -601,7 +578,7 @@ static void DrawMenuBarItems(f32 em)
     const ImVec2 bellRangeY = CalcMenuBarPillRangeY();
     const f32 bellWidth = notify::DrawBell(barMax.x - ImGui::GetStyle().WindowPadding.x, bellRangeY.x, bellRangeY.y);
 
-    if (sBfsar.isOpen())
+    if (IsDocumentOpen())
     {
         const ImGuiStyle& style = ImGui::GetStyle();
 

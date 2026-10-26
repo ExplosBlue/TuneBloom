@@ -329,14 +329,7 @@ static void DrawProjectLimitsUI(f32 em, bool fullColumn)
 void DrawProjectInfoUI()
 {
     const f32 em = ImGui::GetFontSize();
-
-    ImGuiWindow* window = ImGui::GetCurrentWindow();
-    const f32 workMaxX = window->WorkRect.Max.x;
-    const f32 contentMaxX = window->ContentRegionRect.Max.x;
-    const f32 columnMaxX = ImGui::GetCursorScreenPos().x + ImFloor(em * cProjectColumnEm);
-
-    window->WorkRect.Max.x = sead::Mathf::min(workMaxX, columnMaxX);
-    window->ContentRegionRect.Max.x = sead::Mathf::min(contentMaxX, columnMaxX);
+    const PageColumn column = BeginPageColumn(cProjectColumnEm);
 
     const f32 boxExtra = ImFloor(em * cSoundPanelPadXEm) * 2.0f + 2.0f;
     const f32 boxWidth = ImGui::GetContentRegionAvail().x - boxExtra;
@@ -346,6 +339,5 @@ void DrawProjectInfoUI()
     DrawProjectFormatBox(em, stackRows);
     DrawProjectLimitsUI(em, fullColumn);
 
-    window->WorkRect.Max.x = workMaxX;
-    window->ContentRegionRect.Max.x = contentMaxX;
+    EndPageColumn(column);
 }

@@ -19,6 +19,29 @@ static constexpr f32 cPageHeaderGapEm   = 0.5f;
 
 static constexpr f32 cPropertyLabelWidthEm = 7.2f;
 
+PageColumn BeginPageColumn(f32 widthEm)
+{
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const f32 columnMaxX = ImGui::GetCursorScreenPos().x + ImFloor(ImGui::GetFontSize() * widthEm);
+
+    PageColumn column;
+    column.workMaxX = window->WorkRect.Max.x;
+    column.contentMaxX = window->ContentRegionRect.Max.x;
+
+    window->WorkRect.Max.x = sead::Mathf::min(column.workMaxX, columnMaxX);
+    window->ContentRegionRect.Max.x = sead::Mathf::min(column.contentMaxX, columnMaxX);
+
+    return column;
+}
+
+void EndPageColumn(const PageColumn& column)
+{
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+
+    window->WorkRect.Max.x = column.workMaxX;
+    window->ContentRegionRect.Max.x = column.contentMaxX;
+}
+
 bool DrawPageHeader(const char* icon, const char* title, const char* description, const char* action)
 {
     const ImGuiStyle& style = ImGui::GetStyle();

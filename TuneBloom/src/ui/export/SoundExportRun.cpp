@@ -114,9 +114,9 @@ bool StartSoundExport(const std::vector<Sound*>& sounds, const SoundExportOption
     if (single)
     {
         sead::FixedSafeString<512> defaultPath;
-        BuildDefaultExportPath(&defaultPath, sounds[0], "wav");
+        BuildDefaultExportPath(&defaultPath, sounds[0], cWavExtension);
 
-        if (!SaveFileDialogWithExtension(&target, messages::filedialog::cFilterWave, "wav", defaultPath.cstr()))
+        if (!SaveFileDialogWithExtension(&target, messages::filedialog::cFilterWave, cWavExtension, defaultPath.cstr()))
             return false;
     }
     else if (!SelectFolderDialog(&target, messages::exporting::cSelectWavFolder))
@@ -135,7 +135,7 @@ bool StartSoundExport(const std::vector<Sound*>& sounds, const SoundExportOption
         sead::FixedSafeString<512> path(target);
 
         if (!single)
-            BuildExportPathFromDir(&path, target.cstr(), sound, "wav");
+            BuildExportPathFromDir(&path, target.cstr(), sound, cWavExtension);
 
         AddSoundTasks(sound, path);
     }

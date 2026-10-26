@@ -80,7 +80,7 @@ static void BeginDrag(LoopWaveformState& state, Dragging cropHover, Dragging mar
         state.dragging = Dragging::Start;
         state.focus = LoopWaveformState::Focus::Start;
     }
-    else if (editable && endClicked)
+    else if (editable && endClicked && !state.lockEnd)
     {
         state.dragging = Dragging::End;
         state.focus = LoopWaveformState::Focus::End;
@@ -178,7 +178,7 @@ static bool HandleInteraction(LoopWaveformState& state, const WaveformCanvas& ca
     Dragging markerHover = Dragging::None;
 
     if (state.grabMarkers && editable && canvas.hovered)
-        markerHover = FindEdgeHover(state, canvas, loopStart, loopEnd, cMarkerGrabPx, Dragging::Start, Dragging::End);
+        markerHover = FindEdgeHover(state, canvas, loopStart, loopEnd, cMarkerGrabPx, Dragging::Start, state.lockEnd ? Dragging::None : Dragging::End);
 
     if (state.grabMarkers && (IsLoopDrag(state.dragging) || (markerHover != Dragging::None && state.dragging == Dragging::None)))
         SetMouseCursor(ImGuiMouseCursor_ResizeEW);

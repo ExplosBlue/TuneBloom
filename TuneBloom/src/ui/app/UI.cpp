@@ -20,6 +20,7 @@
 #include <ui/settings/Preferences.h>
 #include <ui/project/ProjectViews.h>
 #include <ui/project/References.h>
+#include <ui/resource/ResourceViews.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/ShortcutsDialog.h>
@@ -167,9 +168,17 @@ static void DrawSystemWindow()
     }
 }
 
+static void DrawAudioResourceTab(UIType type)
+{
+    if (type == UIType::ProjectInfo)
+        DrawAudioResourceInfoUI();
+    else
+        DrawAudioAssetsUI();
+}
+
 static void DrawInfoUI()
 {
-    bool notProjUI = sBfsar.isOpen() && sSelectedUIType != UIType::ProjectInfo;
+    bool notProjUI = IsDocumentOpen() && sSelectedUIType != UIType::ProjectInfo;
     if (notProjUI)
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -184,9 +193,17 @@ static void DrawInfoUI()
 
     if (windowOpen)
     {
-        if (!sBfsar.isOpen())
+        if (!IsDocumentOpen())
         {
             DrawStartPage();
+
+            ImGui::End();
+            return;
+        }
+
+        if (IsAudioResourceOpen())
+        {
+            DrawAudioResourceTab(sSelectedUIType);
 
             ImGui::End();
             return;
@@ -471,6 +488,10 @@ static void DrawSelectedItemPropertiesUI()
             break;
         }
 
+        case Item::ItemType::AudioAsset:
+            DrawAudioAssetPropertiesUI(static_cast<AudioAsset*>(sSelectedItem));
+            break;
+
         default:
             break;
     }
@@ -524,6 +545,9 @@ static void DrawPropertiesUI()
 
         if (!sSelectedItem || sSelectedItemIsSubWindow || sSelectedItem->getItemType() != Item::ItemType::WaveFile)
             ReleaseWaveFileView();
+
+        if (!sSelectedItem || sSelectedItemIsSubWindow || sSelectedItem->getItemType() != Item::ItemType::AudioAsset)
+            ReleaseAudioAssetView();
 
         if (!sSelectedItem)
         {
@@ -580,6 +604,7 @@ void DrawUI()
     DrawMidiExportDialog();
     DrawSoundExportProgress();
     DrawWaveFileReplacePopup();
+    DrawAudioResourceDialogs();
 
     WaveImportTick();
 }

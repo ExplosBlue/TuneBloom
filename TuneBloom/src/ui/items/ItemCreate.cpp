@@ -54,13 +54,13 @@ static Item* CreateNamedItem()
         return nullptr;
     }
 
-    if (!sBfsar.validName(sName))
+    if (!IsValidDocumentName(sName))
     {
         ImGui::OpenPopup("###InvalidName");
         return nullptr;
     }
 
-    if (!sBfsar.validateName(sName))
+    if (!IsUniqueDocumentName(sName, nullptr))
     {
         ImGui::OpenPopup("###Dupe");
         return nullptr;
@@ -76,6 +76,9 @@ static Item* CreateNamedItem()
     }
 
     Item* item = sInstanciateItemCallback();
+
+    if (!item)
+        return nullptr;
 
     item->setEnableName(sEnableName);
     if (sEnableName)

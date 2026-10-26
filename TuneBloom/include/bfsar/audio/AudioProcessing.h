@@ -7,12 +7,25 @@
 namespace AudioProcessing
 {
 
+inline float fromPcm16(s16 value)
+{
+    return static_cast<float>(value) / 32768.0f;
+}
+
 inline s16 toPcm16(float value)
 {
     value = value < -1.0f ? -1.0f : (value > 1.0f ? 1.0f : value);
 
     const float scaled = value * (value < 0.0f ? 32768.0f : 32767.0f);
     return static_cast<s16>(static_cast<double>(scaled) + (scaled < 0.0f ? -0.5 : 0.5));
+}
+
+inline s16 restorePcm16(float value)
+{
+    const double scaled = static_cast<double>(value) * 32768.0;
+    const double rounded = scaled < 0.0 ? scaled - 0.5 : scaled + 0.5;
+
+    return static_cast<s16>(rounded < -32768.0 ? -32768.0 : (rounded > 32767.0 ? 32767.0 : rounded));
 }
 
 std::vector<float> resample(const std::vector<float>& data, u32 fromRate, u32 toRate);

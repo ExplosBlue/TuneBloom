@@ -87,7 +87,8 @@ static void ForEachTrackedItem(Func func)
     Item::List* lists[] = {
         &sBfsar.getSoundList(), &sBfsar.getSoundSetList(), &sBfsar.getBankList(), &sBfsar.getWaveArchiveList(),
         &sBfsar.getGroupList(), &sBfsar.getPlayerList(),
-        &sBfsar.getWaveFileList(), &sBfsar.getSequenceFileList(), &sBfsar.getBankFileList()
+        &sBfsar.getWaveFileList(), &sBfsar.getSequenceFileList(), &sBfsar.getBankFileList(),
+        &sAudioResource.getAssetList()
     };
 
     for (Item::List* list : lists)
@@ -111,6 +112,7 @@ static std::string GetListName(const Item* item)
 void CaptureSavedState()
 {
     sBfsar.captureItemBaselines();
+    sAudioResource.captureItemBaselines();
 
     sSavedItems.clear();
 
@@ -124,10 +126,10 @@ static void CollectChanges()
 {
     sRows.clear();
 
-    if (!sBfsar.isOpen())
+    if (!IsDocumentOpen())
         return;
 
-    if (sBfsar.isInfoModified())
+    if (sBfsar.isOpen() && sBfsar.isInfoModified())
         sRows.push_back({ nullptr, Item::ItemType::Invalid, 0, messages::common::cProjectInfo, ChangeKind::Modified, true });
 
     std::unordered_set<u64> present;

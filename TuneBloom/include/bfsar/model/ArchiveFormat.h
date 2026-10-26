@@ -209,3 +209,71 @@ inline bool MatchesInnerFileExtension(const char* path, InnerFileKind kind)
 
     return extension && FindInnerFileFormatByExtension(extension, kind) != nullptr;
 }
+
+enum class ResourceFormat
+{
+    Bars,
+    Bwav
+};
+
+struct ResourceFormatInfo
+{
+    ResourceFormat format;
+    const char* extension;
+    const char* displayName;
+};
+
+inline constexpr ResourceFormatInfo cResourceFormatTable[] = {
+    { ResourceFormat::Bars, "bars", "BARS" },
+    { ResourceFormat::Bwav, "bwav", "BWAV" },
+};
+
+inline constexpr const char* cZstdExtension = "zs";
+inline constexpr const char* cCmpbinExtension = "cmpbin";
+inline constexpr const char* cWavExtension = "wav";
+inline constexpr const char* cResourceStreamFolder = "Stream";
+
+inline const ResourceFormatInfo& GetResourceFormatInfo(ResourceFormat format)
+{
+    return cResourceFormatTable[static_cast<s32>(format)];
+}
+
+inline bool HasFileExtension(const char* path, size_t pathLength, const char* extension)
+{
+    const size_t extensionLength = strlen(extension);
+
+    if (pathLength <= extensionLength || path[pathLength - extensionLength - 1] != '.')
+        return false;
+
+    for (size_t i = 0; i < extensionLength; i++)
+    {
+        if (tolower((unsigned char)path[pathLength - extensionLength + i]) != tolower((unsigned char)extension[i]))
+            return false;
+    }
+
+    return true;
+}
+
+inline bool IsZstdPath(const char* path)
+{
+    return path && HasFileExtension(path, strlen(path), cZstdExtension);
+}
+
+inline const ResourceFormatInfo* FindResourceFormatByPath(const char* path)
+{
+    if (!path)
+        return nullptr;
+
+    size_t length = strlen(path);
+
+    if (HasFileExtension(path, length, cZstdExtension))
+        length -= strlen(cZstdExtension) + 1;
+
+    for (const auto& info : cResourceFormatTable)
+    {
+        if (HasFileExtension(path, length, info.extension))
+            return &info;
+    }
+
+    return nullptr;
+}

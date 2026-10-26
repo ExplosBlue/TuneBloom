@@ -17,13 +17,13 @@ const Item* Item::validate(sead::BufferedSafeString& error) const
 
 bool Item::validateName(sead::BufferedSafeString& error) const
 {
-    if (!sBfsar.validName(getName()))
+    if (!IsValidDocumentName(getName()))
     {
         error = messages::item::cNameInvalidDetail;
         return false;
     }
 
-    if (!sBfsar.validateName(*this))
+    if (!IsUniqueDocumentName(getName(), this))
     {
         error = messages::item::cNameDuplicated;
         return false;

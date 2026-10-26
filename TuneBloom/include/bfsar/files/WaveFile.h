@@ -34,6 +34,13 @@ namespace nw { namespace snd { namespace internal
 
 class WaveFile;
 
+struct WaveFileTarget
+{
+    ArchiveFormat format = ArchiveFormat::BFSAR;
+    u32 version = 0;
+    sead::Endian::Types endian = sead::Endian::eLittle;
+};
+
 void ReleaseWaveFileView();
 void ForgetWaveFileView(const WaveFile* wave);
 
@@ -381,6 +388,14 @@ public:
         mEndian = endian;
     }
 
+    void setStandaloneTarget(const WaveFileTarget& target)
+    {
+        mStandaloneTarget = target;
+        mMd5Dirty = true;
+    }
+
+    WaveFileTarget getTarget() const;
+
 private:
     bool doRead(const void* fileAddr) override;
     u32 doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const override;
@@ -598,6 +613,8 @@ public:
 
 private:
     u32 mOriginalDmaAlignOffset;
+
+    std::optional<WaveFileTarget> mStandaloneTarget;
 
     std::string mMd5Hash;
     bool mMd5Dirty = true;

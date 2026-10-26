@@ -40,7 +40,7 @@ bool Bfsar::validName(const sead::SafeString& name) const
     return true;
 }
 
-bool Bfsar::validateName_(const sead::SafeString& name, const Item* ignoreItem) const
+bool Bfsar::validateName(const sead::SafeString& name, const Item* ignoreItem) const
 {
     if (name.isEmpty())
         return false;
@@ -64,12 +64,12 @@ bool Bfsar::validateName_(const sead::SafeString& name, const Item* ignoreItem) 
 
 bool Bfsar::validateName(const sead::SafeString& name) const
 {
-    return validateName_(name, nullptr);
+    return validateName(name, nullptr);
 }
 
 bool Bfsar::validateName(const Item& item) const
 {
-    return validateName_(item.getName(), &item);
+    return validateName(item.getName(), &item);
 }
 
 struct BfsarValidateContext

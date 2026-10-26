@@ -11,8 +11,9 @@
 #include "snd-ply/snd/SoundSystem.h"
 
 #include "ui/app/UI.h"
-#include "ui/player/OutputMeter.h"
+#include "ui/file/File.h"
 #include "ui/file/LoadProgress.h"
+#include "ui/player/OutputMeter.h"
 #include "ui/Messages.h"
 #include "ui/app/Notifications.h"
 #include "ui/app/PopupMgr.h"
@@ -20,7 +21,6 @@
 #include <app/Utilll.h>
 #include <libs/stb_image.h>
 
-#include <cctype>
 #include <cstring>
 
 #include <core/Debug.h>
@@ -93,25 +93,9 @@ void BfsarTask::prepare()
         if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
             return; // ignore dropped files while a popup is open
 
-        auto hasExtensionCI = [](const char* path, const char* ext) -> bool
-        {
-            size_t pathLen = strlen(path);
-            size_t extLen = strlen(ext);
-            if (pathLen < extLen)
-                return false;
-
-            const char* suffix = path + (pathLen - extLen);
-            for (size_t i = 0; i < extLen; i++)
-            {
-                if (std::tolower((unsigned char)suffix[i]) != std::tolower((unsigned char)ext[i]))
-                    return false;
-            }
-            return true;
-        };
-
         for (s32 i = 0; i < count; i++)
         {
-            if (hasExtensionCI(paths[i], ".bfsar") || hasExtensionCI(paths[i], ".bcsar"))
+            if (IsDocumentPath(paths[i]))
             {
                 sDroppedFilePath = paths[i];
                 return;
@@ -120,7 +104,7 @@ void BfsarTask::prepare()
 
         for (s32 i = 0; i < count; i++)
         {
-            if (hasExtensionCI(paths[i], ".wav"))
+            if (HasFileExtension(paths[i], strlen(paths[i]), cWavExtension))
             {
                 sDroppedWavPath = paths[i];
                 return;

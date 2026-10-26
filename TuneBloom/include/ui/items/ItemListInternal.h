@@ -44,6 +44,9 @@ struct ItemListContext
     ItemRowActionCallback actionCallback = nullptr;
     ItemListFooterCallback footerCallback = nullptr;
     f32 footerWidth = 0.0f;
+    f32 addDialogWidth = 0.0f;
+    bool fixedOrder = false;
+    bool removable = true;
 
     std::vector<Item*> listItems;
     std::vector<Item*> rows;
@@ -102,12 +105,10 @@ bool DrawItemContextMenu(ItemListContext& ctx, Item* item);
 
 void RequestItemDelete(Item* item);
 void RequestItemsDelete(const std::vector<Item*>& items);
-void RequestSelectionDuplicate(Item* sound);
 void SetInsertAfterItem(Item* item);
 void ForgetItemListRequests(const std::vector<Item*>& removed);
 void ApplyItemListEdits(ItemListContext& ctx);
 
-bool CanRenameItem(const Item* item);
 ItemRenameResult RenameItem(Item* item, const sead::FixedSafeString<256>& name);
 void OpenRenamePopup(ItemRenameResult result);
 void DrawRenamePopups();

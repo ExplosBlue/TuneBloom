@@ -27,3 +27,12 @@ void TintGroupBoxCell();
 void GroupBoxGap();
 
 bool DrawPageHeader(const char* icon, const char* title, const char* description, const char* action = nullptr);
+
+struct PageColumn
+{
+    f32 workMaxX = 0.0f;
+    f32 contentMaxX = 0.0f;
+};
+
+PageColumn BeginPageColumn(f32 widthEm);
+void EndPageColumn(const PageColumn& column);

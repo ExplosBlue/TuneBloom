@@ -28,6 +28,8 @@ bool ExportStreamSoundToWav(Sound* sound, const char* path, bool multiChannel, u
 
 void ShowExportResult(const char* message);
 void ShowBatchExportResult(s32 total, s32 failureCount, const char* formatName);
+void ShowWavExportResult(bool exported);
+void ShowWavBatchExportResult(s32 total, s32 failureCount);
 void HideExportResult();
 
 void CancelMidiExport();

@@ -479,6 +479,14 @@ void WaveFile::writeDataBlock_(FileWriter& writer, sead::WriteStream* stream) co
     writer.closeBlock();
 }
 
+WaveFileTarget WaveFile::getTarget() const
+{
+    if (mStandaloneTarget)
+        return *mStandaloneTarget;
+
+    return { sBfsar.getFormat(), sBfsar.getVersionForBfwav(), sBfsar.getEndian() };
+}
+
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
     LOG_FUNC();
@@ -489,9 +497,11 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     LOG_BOOL("isLoop", mIsLoop);
     LOG_BOOL("useOriginalData", mUseOriginalData);
 
-    mFormat = sBfsar.getFormat();
-    mVersion = sBfsar.getVersionForBfwav();
-    mEndian = sBfsar.getEndian();
+    const WaveFileTarget target = getTarget();
+
+    mFormat = target.format;
+    mVersion = target.version;
+    mEndian = target.endian;
 
     FileWriter writer(handle, stream);
     writer.openFile(GetInnerFileMagic(mFormat, InnerFileKind::Wave), 2, mVersion);
@@ -508,8 +518,8 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
 
 const std::string& WaveFile::getMd5Hash() const
 {
-    const bool isStale = mMd5Dirty || mIsLoopDirty || mMd5Format != sBfsar.getFormat() ||
-                         mMd5Version != sBfsar.getVersionForBfwav() || mMd5Endian != sBfsar.getEndian();
+    const WaveFileTarget target = getTarget();
+    const bool isStale = mMd5Dirty || mIsLoopDirty || mMd5Format != target.format || mMd5Version != target.version || mMd5Endian != target.endian;
 
     if (isStale)
         const_cast<WaveFile*>(this)->refreshSerializedHash();
@@ -519,11 +529,13 @@ const std::string& WaveFile::getMd5Hash() const
 
 void WaveFile::setSerializedHash(const std::string& hash)
 {
+    const WaveFileTarget target = getTarget();
+
     mMd5Hash = hash;
     mMd5Dirty = false;
-    mMd5Format = sBfsar.getFormat();
-    mMd5Version = sBfsar.getVersionForBfwav();
-    mMd5Endian = sBfsar.getEndian();
+    mMd5Format = target.format;
+    mMd5Version = target.version;
+    mMd5Endian = target.endian;
 }
 
 void WaveFile::refreshSerializedHash()
@@ -548,12 +560,14 @@ void WaveFile::refreshSerializedHash()
             return;
     }
 
+    const WaveFileTarget target = getTarget();
+
     {
         sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
-        setup(sBfsar.getEndian());
-        setFormat(sBfsar.getFormat());
+        setup(target.endian);
+        setFormat(target.format);
 
-        write(&handle, &stream, sBfsar.getEndian(), true);
+        write(&handle, &stream, target.endian, true);
     }
 
     handle.close();
@@ -568,9 +582,9 @@ void WaveFile::refreshSerializedHash()
         device->unload(buf);
 
         mMd5Dirty = false;
-        mMd5Format = sBfsar.getFormat();
-        mMd5Version = sBfsar.getVersionForBfwav();
-        mMd5Endian = sBfsar.getEndian();
+        mMd5Format = target.format;
+        mMd5Version = target.version;
+        mMd5Endian = target.endian;
     }
 
     ::remove(tempPath);
@@ -654,7 +668,7 @@ void WaveFile::disposeChannels_()
 
 u32 WaveFile::getLoopStartAlignmentFrames(bool forStream) const
 {
-    const bool isCtr = sBfsar.getFormat() == ArchiveFormat::BCSAR;
+    const bool isCtr = getTarget().format == ArchiveFormat::BCSAR;
 
     switch (mEncoding)
     {

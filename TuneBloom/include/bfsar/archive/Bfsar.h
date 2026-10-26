@@ -457,6 +457,8 @@ public:
     //? Check if name is duplicated (Excluding item)
     bool validateName(const Item& item) const;
 
+    bool validateName(const sead::SafeString& name, const Item* ignoreItem) const;
+
     void updateList(Item::List& list);
 
     struct WaveDuplicateGroup
@@ -858,7 +860,6 @@ private:
     void planNonStreamBinarySave(const Sound *sound, const sead::SafeString &archiveDir, const sead::SafeString &sourceDir, bool inPlace, std::unordered_set<std::string> &seen, std::vector<StreamSaveJob> &out, std::vector<SkippedStream> &outSkipped) const;
     void close_();
 
-    bool validateName_(const sead::SafeString &name, const Item *ignoreItem) const;
     bool validateSharedStream_(BfsarValidateContext& ctx, const Sound* sound) const;
     bool validateSounds_(BfsarValidateContext& ctx) const;
     bool validateWaveSoundOwners_(const BfsarValidateContext& ctx) const;

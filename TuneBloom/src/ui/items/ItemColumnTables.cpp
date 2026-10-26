@@ -2,6 +2,7 @@
 
 #include <ui/Messages.h>
 
+#include <aal/AudioAsset.h>
 #include <bfsar/model/Bank.h>
 #include <bfsar/files/BankFile.h>
 #include <bfsar/model/Group.h>
@@ -277,20 +278,25 @@ void FormatItemSize(sead::BufferedSafeString* out, u32 size)
         out->format(messages::unit::cBytesFormat, size);
 }
 
-void FormatWaveFileLength(const Item* item, sead::BufferedSafeString* out)
+static void FormatSampleLength(u32 sampleCount, u32 sampleRate, sead::BufferedSafeString* out)
 {
-    const WaveFile* wave = static_cast<const WaveFile*>(item);
-
-    if (wave->getSampleRate() == 0)
+    if (sampleRate == 0)
     {
         out->copy("-");
         return;
     }
 
-    const f64 seconds = static_cast<f64>(wave->getSampleCount()) / wave->getSampleRate();
+    const f64 seconds = static_cast<f64>(sampleCount) / sampleRate;
     const u32 minutes = static_cast<u32>(seconds / 60.0);
 
-    out->format("%u:%06.3f", minutes, seconds - minutes * 60.0);
+    out->format(messages::wavefile::cTimeFormat, minutes, seconds - minutes * 60.0);
+}
+
+void FormatWaveFileLength(const Item* item, sead::BufferedSafeString* out)
+{
+    const WaveFile* wave = static_cast<const WaveFile*>(item);
+
+    FormatSampleLength(wave->getSampleCount(), wave->getSampleRate(), out);
 }
 
 static void FormatCount(sead::BufferedSafeString* out, s64 count)
@@ -323,6 +329,14 @@ static void FormatSoundTracksColumn(const Item* item, sead::BufferedSafeString* 
     FormatCount(out, GetSoundTracksKey(item));
 }
 
+static void FormatLoopLength(const char* length, bool loop, sead::BufferedSafeString* out)
+{
+    if (loop)
+        out->format(ICON_LC_REPEAT " %s", length);
+    else
+        out->copy(length);
+}
+
 static void FormatLoopLength(const WaveFile* wave, bool loop, sead::BufferedSafeString* out)
 {
     sead::FixedSafeString<32> length("-");
@@ -330,10 +344,7 @@ static void FormatLoopLength(const WaveFile* wave, bool loop, sead::BufferedSafe
     if (wave)
         FormatWaveFileLength(wave, &length);
 
-    if (loop)
-        out->format(ICON_LC_REPEAT " %s", length.cstr());
-    else
-        out->copy(length.cstr());
+    FormatLoopLength(length.cstr(), loop, out);
 }
 
 static void FormatStreamLengthColumn(const Item* item, sead::BufferedSafeString* out)
@@ -399,7 +410,7 @@ static void FormatWaveFileRateColumn(const Item* item, sead::BufferedSafeString*
     out->format(messages::unit::cHertzFormat, static_cast<const WaveFile*>(item)->getSampleRate());
 }
 
-static void FormatChannelCount(sead::BufferedSafeString* out, s64 channels)
+void FormatChannelCount(sead::BufferedSafeString* out, s64 channels)
 {
     if (channels == 1)
         out->copy(messages::common::cMono);
@@ -582,21 +593,116 @@ static void DrawBankFileInstrumentsTooltip(const Item* item)
     ImGui::EndTooltip();
 }
 
-static void DrawLoopTooltip(const WaveFile* wave, bool loop)
+static void DrawLoopStartTooltip(bool loop, u32 loopStartFrame, u32 sampleRate)
 {
     if (!loop)
         return;
 
-    if (!wave || wave->getSampleRate() == 0)
+    if (sampleRate == 0)
     {
         ImGui::SetTooltip("%s", messages::item::cLoopTooltip);
         return;
     }
 
-    const f64 seconds = static_cast<f64>(wave->getOriginalLoopStartFrame()) / wave->getSampleRate();
+    const f64 seconds = static_cast<f64>(loopStartFrame) / sampleRate;
     const u32 minutes = static_cast<u32>(seconds / 60.0);
 
     ImGui::SetTooltip(messages::item::cLoopStartTooltipFormat, minutes, seconds - minutes * 60.0);
+}
+
+static void DrawLoopTooltip(const WaveFile* wave, bool loop)
+{
+    DrawLoopStartTooltip(loop, wave ? wave->getOriginalLoopStartFrame() : 0, wave ? wave->getSampleRate() : 0);
+}
+
+static constexpr const char* cAudioAssetTypeNames[] = { "-", messages::common::cWave, messages::common::cStream };
+
+static const AudioAssetInfo& GetAudioAssetInfo(const Item* item)
+{
+    return static_cast<const AudioAsset*>(item)->getInfo();
+}
+
+static bool IsAudioAssetStream(const AudioAssetInfo& info)
+{
+    return info.isPrefetch || info.kind == AudioAssetKind::StreamPrefetch;
+}
+
+static s64 GetAudioAssetLengthKey(const Item* item)
+{
+    const AudioAssetInfo& info = GetAudioAssetInfo(item);
+
+    return info.sampleRate != 0 ? static_cast<s64>(info.sampleCount) * 1000 / info.sampleRate : 0;
+}
+
+static void FormatAudioAssetLengthColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    const AudioAssetInfo& info = GetAudioAssetInfo(item);
+    sead::FixedSafeString<32> length;
+
+    FormatSampleLength(info.sampleCount, info.sampleRate, &length);
+    FormatLoopLength(length.cstr(), info.isLoop, out);
+}
+
+static void DrawAudioAssetLoopTooltip(const Item* item)
+{
+    const AudioAssetInfo& info = GetAudioAssetInfo(item);
+
+    DrawLoopStartTooltip(info.isLoop, info.loopStartFrame, info.sampleRate);
+}
+
+static s64 GetAudioAssetTypeKey(const Item* item)
+{
+    const AudioAssetInfo& info = GetAudioAssetInfo(item);
+
+    if (info.kind == AudioAssetKind::None || info.kind == AudioAssetKind::Unknown)
+        return 0;
+
+    return IsAudioAssetStream(info) ? 2 : 1;
+}
+
+static void FormatAudioAssetTypeColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    out->copy(cAudioAssetTypeNames[GetAudioAssetTypeKey(item)]);
+}
+
+static s64 GetAudioAssetFormatKey(const Item* item)
+{
+    return static_cast<s64>(GetAudioAssetInfo(item).kind);
+}
+
+static void FormatAudioAssetFormatColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    out->copy(GetAudioAssetKindName(GetAudioAssetInfo(item).kind));
+}
+
+static s64 GetAudioAssetChannelsKey(const Item* item)
+{
+    return GetAudioAssetInfo(item).channelCount;
+}
+
+static void FormatAudioAssetChannelsColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    FormatChannelCount(out, GetAudioAssetChannelsKey(item));
+}
+
+static s64 GetAudioAssetRateKey(const Item* item)
+{
+    return GetAudioAssetInfo(item).sampleRate;
+}
+
+static void FormatAudioAssetRateColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    out->format(messages::unit::cHertzFormat, GetAudioAssetInfo(item).sampleRate);
+}
+
+static s64 GetAudioAssetSizeKey(const Item* item)
+{
+    return GetAudioAssetInfo(item).fileSize;
+}
+
+static void FormatAudioAssetSizeColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    FormatItemSize(out, GetAudioAssetInfo(item).fileSize);
 }
 
 static void DrawStreamLoopTooltip(const Item* item)
@@ -670,6 +776,15 @@ static const ItemColumn cWaveFileColumns[] = {
     { "Size",     messages::common::cSize,     messages::unit::cKilobytesSample, &FormatWaveFileSizeColumn,   &GetWaveFileSizeKey,     cItemColumnFlag_Hidden }
 };
 
+static const ItemColumn cAudioAssetColumns[] = {
+    { "Length",      messages::common::cLength,   cLoopLengthSample,                &FormatAudioAssetLengthColumn,   &GetAudioAssetLengthKey,   cItemColumnFlag_None, &DrawAudioAssetLoopTooltip },
+    { "AssetType",   messages::common::cType,     messages::common::cStream,        &FormatAudioAssetTypeColumn,     &GetAudioAssetTypeKey,     cItemColumnFlag_Text },
+    { "AudioFormat", messages::common::cFormat,   messages::common::cUnknown,       &FormatAudioAssetFormatColumn,   &GetAudioAssetFormatKey,   cItemColumnFlag_Text | cItemColumnFlag_Hidden },
+    { "Channels",    messages::common::cChannels, messages::common::cStereo,        &FormatAudioAssetChannelsColumn, &GetAudioAssetChannelsKey, cItemColumnFlag_Hidden },
+    { "Rate",        messages::item::cColumnRate, messages::unit::cHertzSample,     &FormatAudioAssetRateColumn,     &GetAudioAssetRateKey,     cItemColumnFlag_Hidden },
+    { "Size",        messages::common::cSize,     messages::unit::cKilobytesSample, &FormatAudioAssetSizeColumn,     &GetAudioAssetSizeKey,     cItemColumnFlag_Hidden }
+};
+
 static const ItemColumn cSequenceFileColumns[] = {
     { "Labels",    messages::common::cLabels,   "0000", &FormatSequenceLabelsColumn, &GetSequenceLabelsKey, cItemColumnFlag_None, &DrawSequenceLabelsTooltip },
     { "SoundUses", messages::item::cColumnUses, "0000", &FormatSoundRefsColumn,      &GetSoundRefsKey,      cItemColumnFlag_WarnZero | cItemColumnFlag_Hidden, &DrawSoundUsesTooltip },
@@ -725,6 +840,9 @@ const char* GetItemTypeName(Item::ItemType itemType)
         case Item::ItemType::BankFileInstrument:
             return messages::common::cInstrument;
 
+        case Item::ItemType::AudioAsset:
+            return messages::common::cAudioAsset;
+
         default:
             break;
     }
@@ -739,6 +857,10 @@ const ItemColumn* GetItemColumns(Item::ItemType itemType, u32* outCount)
         case Item::ItemType::WaveFile:
             *outCount = IM_ARRAYSIZE(cWaveFileColumns);
             return cWaveFileColumns;
+
+        case Item::ItemType::AudioAsset:
+            *outCount = IM_ARRAYSIZE(cAudioAssetColumns);
+            return cAudioAssetColumns;
 
         case Item::ItemType::SequenceFile:
             *outCount = IM_ARRAYSIZE(cSequenceFileColumns);

@@ -443,8 +443,10 @@ static void DrawWaveLoopSection(const WaveFile& wave, WaveFileView& view, WaveLo
 
 void WaveFile::drawUI()
 {
-    mVersion = sBfsar.getVersionForBfwav();
-    mEndian = sBfsar.getEndian();
+    const WaveFileTarget target = getTarget();
+
+    mVersion = target.version;
+    mEndian = target.endian;
 
     static Encoding sEncoding = Encoding::DspAdpcm;
 

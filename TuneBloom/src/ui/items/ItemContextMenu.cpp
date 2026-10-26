@@ -36,21 +36,24 @@ bool DrawItemContextMenu(ItemListContext& ctx, Item* item)
         add = true;
     }
 
-    if (item && createCallback && ContextMenuItem(ICON_LC_LIST_PLUS, messages::menu::cInsertAfter))
+    if (item && createCallback && !ctx.fixedOrder && ContextMenuItem(ICON_LC_LIST_PLUS, messages::menu::cInsertAfter))
     {
         SetInsertAfterItem(item);
         sMultiSelectedItems.clear();
         add = true;
     }
 
-    if (item && item->getItemType() == Item::ItemType::Sound)
+    if (item && OffersItemDuplicate(item))
     {
         sead::FixedSafeString<64> label(messages::common::cDuplicate);
 
         if (multiActive)
             label.format(messages::menu::cDuplicateItemsFormat, sMultiSelectedItems.size());
 
-        if (ContextMenuItem(ICON_LC_COPY, label.cstr()))
+        const char* reason = nullptr;
+        const bool canDuplicate = CanDuplicateSelection(item, &reason);
+
+        if (ContextMenuItem(ICON_LC_COPY, label.cstr(), canDuplicate, reason))
             RequestSelectionDuplicate(item);
     }
 
@@ -58,8 +61,7 @@ bool DrawItemContextMenu(ItemListContext& ctx, Item* item)
     if (menuCallback)
         menuCallback(item);
 
-    // Delete or remove
-    if (item)
+    if (item && ctx.removable)
     {
         sead::FixedSafeString<64> label(removeText.label);
 

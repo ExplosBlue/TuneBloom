@@ -7,6 +7,10 @@
 #include <ui/file/UnsavedChanges.h>
 
 #include <bfsar/model/ArchiveFormat.h>
+#include <aal/Bars.h>
+#include <aal/Bwav.h>
+#include <core/ByteView.h>
+#include <bfsar/archive/Cmpbin.h>
 #include <bfsar/io/FileIo.h>
 
 #include <algorithm>
@@ -56,6 +60,9 @@ static constexpr s32 cRenameTries        = 5;
 static constexpr s32 cRenameWaitMs       = 50;
 
 static constexpr u64 cSpaceMargin = 16 * 1024 * 1024;
+
+static constexpr u32 cBarsHeaderFileSize  = 0x04;
+static constexpr u32 cBarsHeaderByteOrder = 0x08;
 
 struct Marker
 {
@@ -124,22 +131,15 @@ static bool IsProcessRunning(u32 pid)
 #endif
 }
 
-static std::string GetArchiveExtension()
-{
-    const ArchiveFormatInfo* info = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
-
-    return info ? info->extension : "bfsar";
-}
-
 std::string GetArchiveName()
 {
-    if (!sBfsar.getFilePath().isEmpty())
-        return fs::path(sBfsar.getFilePath().cstr()).filename().string();
+    if (!GetDocumentPath().isEmpty())
+        return fs::path(GetDocumentPath().cstr()).filename().string();
 
-    if (!sPinnedDir.empty() && !sBfsar.getLoadedArchivePath().isEmpty())
-        return fs::path(sBfsar.getLoadedArchivePath().cstr()).filename().string();
+    if (!sPinnedDir.empty() && !GetDocumentLoadedPath().isEmpty())
+        return fs::path(GetDocumentLoadedPath().cstr()).filename().string();
 
-    return std::string(messages::backup::cUntitled) + "." + GetArchiveExtension();
+    return std::string(messages::backup::cUntitled) + "." + GetDocumentExtension();
 }
 
 static std::string FormatTimeName(std::time_t time)
@@ -160,7 +160,7 @@ static std::string NormalizePath(const char* path)
 
 static std::string GetArchivePath()
 {
-    return sBfsar.getFilePath().isEmpty() ? std::string() : NormalizePath(sBfsar.getFilePath().cstr());
+    return GetDocumentPath().isEmpty() ? std::string() : NormalizePath(GetDocumentPath().cstr());
 }
 
 static std::string GetKeyForPath(const std::string& archivePath)
@@ -201,7 +201,7 @@ static std::string GetKeyForPath(const std::string& archivePath)
 
 static std::string GetArchiveKey()
 {
-    if (!sBfsar.getFilePath().isEmpty())
+    if (!GetDocumentPath().isEmpty())
         return GetKeyForPath(GetArchivePath());
 
     if (sUntitledKey.empty())
@@ -768,11 +768,64 @@ static void LinkUnchangedGroupFiles(const fs::path& dir, const std::string& prev
     }
 }
 
+static bool WriteResourceSnapshot(const fs::path& tempDir, Snapshot* snapshot, Bfsar::BackupResult* result)
+{
+    sead::FixedSafeString<256> error;
+    const Item* invalidItem = nullptr;
+
+    if (!sAudioResource.validate(&error, &invalidItem))
+    {
+        *result = Bfsar::BackupResult::Invalid;
+        return false;
+    }
+
+    std::vector<std::string> streamPaths;
+
+    if (!sAudioResource.writeBackup(tempDir.string(), snapshot->archiveName, &streamPaths))
+    {
+        *result = Bfsar::BackupResult::WriteFailed;
+        return false;
+    }
+
+    for (const std::string& path : streamPaths)
+        snapshot->streams.push_back({ path, 0 });
+
+    *result = Bfsar::BackupResult::Ok;
+    return true;
+}
+
+static bool WriteArchiveSnapshot(const fs::path& tempDir, const std::vector<Snapshot>& previous, Snapshot* snapshot, Bfsar::BackupResult* result)
+{
+    const std::string archivePath = (tempDir / snapshot->archiveName).string();
+
+    *result = sBfsar.saveBackup(archivePath.c_str(), &snapshot->groupFiles);
+
+    if (*result != Bfsar::BackupResult::Ok)
+        return false;
+
+    std::string previousDir;
+    std::vector<Bfsar::BackupStream> previousStreams;
+
+    for (const Snapshot& other : previous)
+    {
+        if (other.kind == Kind::Save)
+            continue;
+
+        previousDir = other.dir;
+        previousStreams = other.streams;
+        break;
+    }
+
+    LinkUnchangedGroupFiles(tempDir, previousDir, snapshot->groupFiles);
+
+    return sBfsar.saveBackupStreams(tempDir.string(), previousDir, previousStreams, &snapshot->streams);
+}
+
 bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
 {
     *result = Bfsar::BackupResult::OpenFailed;
 
-    if (!IsActive() || !sBfsar.isOpen())
+    if (!IsActive() || !IsDocumentOpen())
         return false;
 
     const fs::path keyDir = GetRootDir() / GetArchiveKey();
@@ -789,7 +842,7 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
     snapshot.originalPath = GetArchivePath();
     snapshot.kind = kind;
     snapshot.time = static_cast<s64>(std::time(nullptr));
-    snapshot.saveNames = sBfsar.getSaveMetadata() ? 1 : 0;
+    snapshot.saveNames = IsAudioResourceOpen() ? -1 : (sBfsar.getSaveMetadata() ? 1 : 0);
 
     const fs::path finalDir = MakeSnapshotDir(keyDir, static_cast<std::time_t>(snapshot.time), kind);
     const fs::path tempDir = finalDir.string() + cTempSuffix;
@@ -799,35 +852,13 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
     if (ec)
         return false;
 
-    const std::string archivePath = (tempDir / snapshot.archiveName).string();
+    const bool written = IsAudioResourceOpen() ? WriteResourceSnapshot(tempDir, &snapshot, result) : WriteArchiveSnapshot(tempDir, previous, &snapshot, result);
 
-    *result = sBfsar.saveBackup(archivePath.c_str(), &snapshot.groupFiles);
-
-    if (*result != Bfsar::BackupResult::Ok)
+    if (!written || !FinishSnapshot(tempDir, finalDir, &snapshot))
     {
-        fs::remove_all(tempDir, ec);
-        return false;
-    }
+        if (*result == Bfsar::BackupResult::Ok)
+            *result = Bfsar::BackupResult::WriteFailed;
 
-    std::string previousDir;
-    std::vector<Bfsar::BackupStream> previousStreams;
-
-    for (const Snapshot& other : previous)
-    {
-        if (other.kind == Kind::Save)
-            continue;
-
-        previousDir = other.dir;
-        previousStreams = other.streams;
-        break;
-    }
-
-    LinkUnchangedGroupFiles(tempDir, previousDir, snapshot.groupFiles);
-
-    if (!sBfsar.saveBackupStreams(tempDir.string(), previousDir, previousStreams, &snapshot.streams) ||
-        !FinishSnapshot(tempDir, finalDir, &snapshot))
-    {
-        *result = Bfsar::BackupResult::WriteFailed;
         fs::remove_all(tempDir, ec);
         return false;
     }
@@ -845,6 +876,12 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
 
 bool HasCompleteArchive(const u8* file, u64 size)
 {
+    if (cmpbin::IsZstdFrame(file, size) || aal::IsBwav(file, size))
+        return true;
+
+    if (aal::IsBars(file, size))
+        return ByteView(file, size, ByteView::IsBigEndianMark(file, size, cBarsHeaderByteOrder)).readU32(cBarsHeaderFileSize) <= size;
+
     if (size < sizeof(nw::ut::BinaryFileHeader))
         return false;
 
@@ -1074,9 +1111,29 @@ static void CopyGroupFiles(const std::string& archivePath, const fs::path& destD
     }
 }
 
+static void CopyResourceStreamFiles(const std::string& archivePath, const fs::path& destDir, Snapshot* snapshot)
+{
+    const fs::path sourceDir = fs::path(archivePath).parent_path();
+
+    for (const std::string& relativePath : sAudioResource.getStreamWritePaths(sead::FixedSafeString<512>(archivePath.c_str())))
+    {
+        const fs::path dest = destDir / relativePath;
+        std::error_code ec;
+
+        if (!fs::is_regular_file(sourceDir / relativePath, ec))
+            continue;
+
+        fs::create_directories(dest.parent_path(), ec);
+        fs::copy_file(sourceDir / relativePath, dest, ec);
+
+        if (!ec)
+            snapshot->streams.push_back({ relativePath, 0 });
+    }
+}
+
 void KeepPreviousVersion(const char* destPath)
 {
-    if (!sAutoBackupEnabled || !IsActive() || !sBfsar.isOpen())
+    if (!sAutoBackupEnabled || !IsActive() || !IsDocumentOpen())
         return;
 
     const std::string sourcePath = destPath ? NormalizePath(destPath) : GetArchivePath();
@@ -1137,7 +1194,10 @@ void KeepPreviousVersion(const char* destPath)
     fs::copy_file(source.string() + cNamesSuffix, dest.string() + cNamesSuffix, ec);
     ec.clear();
 
-    CopyGroupFiles(sourcePath, tempDir, &snapshot);
+    if (IsAudioResourceOpen())
+        CopyResourceStreamFiles(sourcePath, tempDir, &snapshot);
+    else
+        CopyGroupFiles(sourcePath, tempDir, &snapshot);
 
     if (FinishSnapshot(tempDir, finalDir, &snapshot))
         Rotate(keyDir);
@@ -1145,10 +1205,10 @@ void KeepPreviousVersion(const char* destPath)
 
 std::vector<Snapshot> ListSnapshots()
 {
-    if (!sBfsar.isOpen())
+    if (!IsDocumentOpen())
         return {};
 
-    if (sBfsar.getFilePath().isEmpty() && sUntitledKey.empty())
+    if (GetDocumentPath().isEmpty() && sUntitledKey.empty())
         return {};
 
     return ListSnapshotsIn(GetRootDir() / GetArchiveKey());
@@ -1158,7 +1218,7 @@ std::string GetFolder()
 {
     std::error_code ec;
 
-    if (sBfsar.isOpen() && (!sBfsar.getFilePath().isEmpty() || !sUntitledKey.empty()))
+    if (IsDocumentOpen() && (!GetDocumentPath().isEmpty() || !sUntitledKey.empty()))
     {
         const fs::path keyDir = GetRootDir() / GetArchiveKey();
 

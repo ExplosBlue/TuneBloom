@@ -146,7 +146,9 @@ public:
 
         GroupItemInfo,
 
-        StreamTrack
+        StreamTrack,
+
+        AudioAsset
     };
 
     static const u32 cInvalidId = nw::snd::SoundArchive::INVALID_ID;
@@ -228,7 +230,7 @@ public:
 
     u32 getIdWithTypeAll() const
     {
-        SEAD_ASSERT(ItemType::Invalid < mItemType && mItemType <= ItemType::StreamTrack);
+        SEAD_ASSERT(ItemType::Invalid < mItemType && mItemType <= ItemType::AudioAsset);
 
         switch (mItemType)
         {
@@ -273,6 +275,9 @@ public:
 
             case ItemType::StreamTrack:
                 return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(14));
+
+            case ItemType::AudioAsset:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(15));
 
             default:
                 break;
@@ -395,4 +400,20 @@ inline u32 ItemReference::getItemId() const
         return mItem->getId();
 
     return Item::cInvalidId;
+}
+
+template <typename IsUniqueName>
+void MakeCopyName(const sead::SafeString& name, IsUniqueName isUniqueName, sead::BufferedSafeString* out)
+{
+    u32 copyNum = 1;
+
+    do
+    {
+        const sead::FormatFixedSafeString<16> suffix("_%u", copyNum);
+        const s32 baseLength = sead::Mathi::min(name.calcLength(), out->getBufferSize() - 1 - suffix.calcLength());
+
+        out->copy(name, baseLength);
+        out->append(suffix);
+        copyNum++;
+    } while (!isUniqueName(*out));
 }

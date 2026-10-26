@@ -1,162 +1,231 @@
 #include <bfsar/archive/Cmpbin.h>
 
-#include <cstring>
+#include <core/ByteBuilder.h>
+#include <core/ByteView.h>
 
 #include <lz4frame.h>
 #include <lz4hc.h>
 #include <zstd.h>
 
+#include <cstring>
+
 namespace cmpbin
 {
 
-    static const u8 cZstdMagic[4] = {0x28, 0xB5, 0x2F, 0xFD};
-    static const u8 cLz4fMagic[4] = {0x04, 0x22, 0x4D, 0x18};
+static constexpr u32 cSizePrefixBytes = sizeof(u32);
+static constexpr u32 cMagicLength     = 4;
+static constexpr u32 cLz4SmallBlock   = 64 * 1024;
+static constexpr u64 cFrameSizeMax    = 512ull * 1024 * 1024;
 
-    static u32 ReadLE32(const u8 *p)
+static constexpr u8 cZstdMagic[cMagicLength] = { 0x28, 0xB5, 0x2F, 0xFD };
+static constexpr u8 cLz4fMagic[cMagicLength] = { 0x04, 0x22, 0x4D, 0x18 };
+
+static bool HasMagic(const void* data, size_t size, size_t offset, const u8* magic)
+{
+    return data && size >= offset + cMagicLength && std::memcmp(static_cast<const u8*>(data) + offset, magic, cMagicLength) == 0;
+}
+
+static bool DecompressZstd(const u8* payload, size_t payloadSize, std::vector<u8>& out)
+{
+    const size_t written = ZSTD_decompress(out.data(), out.size(), payload, payloadSize);
+
+    return !ZSTD_isError(written) && written == out.size();
+}
+
+static bool DecompressZstdStream(const u8* payload, size_t payloadSize, std::vector<u8>& out)
+{
+    ZSTD_DStream* stream = ZSTD_createDStream();
+
+    if (!stream)
+        return false;
+
+    std::vector<u8> chunk(ZSTD_DStreamOutSize());
+    ZSTD_inBuffer input = { payload, payloadSize, 0 };
+    size_t remaining = 1;
+
+    while (input.pos < input.size && remaining != 0)
     {
-        return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
+        ZSTD_outBuffer output = { chunk.data(), chunk.size(), 0 };
+        remaining = ZSTD_decompressStream(stream, &output, &input);
+
+        if (ZSTD_isError(remaining))
+            break;
+
+        out.insert(out.end(), chunk.data(), chunk.data() + output.pos);
+
+        if (out.size() > cFrameSizeMax)
+            break;
     }
 
-    bool IsCompressed(const void *data, size_t size)
+    ZSTD_freeDStream(stream);
+
+    return remaining == 0 && out.size() <= cFrameSizeMax;
+}
+
+static bool DecompressLz4f(const u8* payload, size_t payloadSize, std::vector<u8>& out)
+{
+    LZ4F_dctx* context = nullptr;
+
+    if (LZ4F_isError(LZ4F_createDecompressionContext(&context, LZ4F_getVersion())))
+        return false;
+
+    size_t srcOffset = 0;
+    size_t dstOffset = 0;
+    bool ok = true;
+
+    while (srcOffset < payloadSize)
     {
-        if (!data || size < 8)
-            return false;
+        size_t dstCapacity = out.size() - dstOffset;
+        size_t srcCapacity = payloadSize - srcOffset;
 
-        const u8 *payload = static_cast<const u8 *>(data) + 4;
+        const size_t hint = LZ4F_decompress(context, out.data() + dstOffset, &dstCapacity, payload + srcOffset, &srcCapacity, nullptr);
 
-        return std::memcmp(payload, cZstdMagic, 4) == 0 || std::memcmp(payload, cLz4fMagic, 4) == 0;
-    }
-
-    Codec DetectCodec(const void *data, size_t size)
-    {
-        if (data && size >= 8 && std::memcmp(static_cast<const u8 *>(data) + 4, cZstdMagic, 4) == 0)
-            return Codec::Zstd;
-
-        return Codec::Lz4Frame;
-    }
-
-    static bool DecompressZstd(const u8 *payload, size_t payloadSize, std::vector<u8> &out)
-    {
-        size_t r = ZSTD_decompress(out.data(), out.size(), payload, payloadSize);
-
-        return !ZSTD_isError(r) && r == out.size();
-    }
-
-    static bool DecompressLz4f(const u8 *payload, size_t payloadSize, std::vector<u8> &out)
-    {
-        LZ4F_dctx *dctx = nullptr;
-
-        if (LZ4F_isError(LZ4F_createDecompressionContext(&dctx, LZ4F_getVersion())))
-            return false;
-
-        size_t srcOffset = 0;
-        size_t dstOffset = 0;
-        bool ok = true;
-
-        while (srcOffset < payloadSize)
+        if (LZ4F_isError(hint))
         {
-            size_t dstCap = out.size() - dstOffset;
-            size_t srcCap = payloadSize - srcOffset;
-
-            size_t hint = LZ4F_decompress(dctx, out.data() + dstOffset, &dstCap, payload + srcOffset, &srcCap, nullptr);
-
-            if (LZ4F_isError(hint))
-            {
-                ok = false;
-                break;
-            }
-
-            dstOffset += dstCap;
-            srcOffset += srcCap;
-
-            if (hint == 0)
-                break;
-
-            if (dstCap == 0 && srcCap == 0)
-                break;
+            ok = false;
+            break;
         }
 
-        LZ4F_freeDecompressionContext(dctx);
+        dstOffset += dstCapacity;
+        srcOffset += srcCapacity;
 
-        return ok && dstOffset == out.size();
+        if (hint == 0 || (dstCapacity == 0 && srcCapacity == 0))
+            break;
     }
 
-    bool Decompress(const void *data, size_t size, std::vector<u8> &out)
-    {
+    LZ4F_freeDecompressionContext(context);
+
+    return ok && dstOffset == out.size();
+}
+
+static bool CompressLz4f(const void* data, size_t size, std::vector<u8>& out)
+{
+    LZ4F_preferences_t preferences;
+
+    std::memset(&preferences, 0, sizeof(preferences));
+    preferences.frameInfo.blockMode = LZ4F_blockIndependent;
+    preferences.frameInfo.blockSizeID = size <= cLz4SmallBlock ? LZ4F_max64KB : LZ4F_max1MB;
+    preferences.compressionLevel = LZ4HC_CLEVEL_MAX;
+
+    const size_t bound = LZ4F_compressFrameBound(size, &preferences);
+    out.resize(bound);
+
+    const size_t written = LZ4F_compressFrame(out.data(), bound, data, size, &preferences);
+
+    if (LZ4F_isError(written))
+        return false;
+
+    out.resize(written);
+    return true;
+}
+
+bool IsCompressed(const void* data, size_t size)
+{
+    return HasMagic(data, size, cSizePrefixBytes, cZstdMagic) || HasMagic(data, size, cSizePrefixBytes, cLz4fMagic);
+}
+
+Codec DetectCodec(const void* data, size_t size)
+{
+    return HasMagic(data, size, cSizePrefixBytes, cZstdMagic) ? Codec::Zstd : Codec::Lz4Frame;
+}
+
+bool Decompress(const void* data, size_t size, std::vector<u8>& out)
+{
+    out.clear();
+
+    if (!IsCompressed(data, size))
+        return false;
+
+    const u8* payload = static_cast<const u8*>(data) + cSizePrefixBytes;
+    const size_t payloadSize = size - cSizePrefixBytes;
+    const u32 decompressedSize = ByteView(data, size, false).readU32(0);
+
+    if (decompressedSize == 0)
+        return false;
+
+    out.resize(decompressedSize);
+
+    const bool ok = DetectCodec(data, size) == Codec::Zstd ? DecompressZstd(payload, payloadSize, out) : DecompressLz4f(payload, payloadSize, out);
+
+    if (!ok)
         out.clear();
 
-        if (!IsCompressed(data, size))
-            return false;
+    return ok;
+}
 
-        const u8 *p = static_cast<const u8 *>(data);
-        u32 decompressedSize = ReadLE32(p);
-        const u8 *payload = p + 4;
-        size_t payloadSize = size - 4;
+bool Compress(const void* data, size_t size, Codec codec, std::vector<u8>& out)
+{
+    out.clear();
 
-        if (decompressedSize == 0)
-            return false;
+    if (!data || size == 0)
+        return false;
 
-        out.resize(decompressedSize);
+    std::vector<u8> frame;
+    const bool ok = codec == Codec::Zstd ? CompressZstdFrame(data, size, frame) : CompressLz4f(data, size, frame);
 
-        bool ok = (std::memcmp(payload, cZstdMagic, 4) == 0) ? DecompressZstd(payload, payloadSize, out) : DecompressLz4f(payload, payloadSize, out);
+    if (!ok)
+        return false;
 
-        if (!ok)
-            out.clear();
+    ByteBuilder builder(false);
+    builder.reserve(cSizePrefixBytes + frame.size());
+    builder.appendU32(static_cast<u32>(size));
+    builder.appendBytes(frame.data(), frame.size());
 
-        return ok;
+    out = builder.take();
+    return true;
+}
+
+bool IsZstdFrame(const void* data, size_t size)
+{
+    return HasMagic(data, size, 0, cZstdMagic);
+}
+
+bool DecompressZstdFrame(const void* data, size_t size, std::vector<u8>& out)
+{
+    out.clear();
+
+    if (!IsZstdFrame(data, size))
+        return false;
+
+    const u8* payload = static_cast<const u8*>(data);
+    const unsigned long long contentSize = ZSTD_getFrameContentSize(payload, size);
+
+    if (contentSize == ZSTD_CONTENTSIZE_ERROR || (contentSize != ZSTD_CONTENTSIZE_UNKNOWN && contentSize > cFrameSizeMax))
+        return false;
+
+    bool ok = false;
+
+    if (contentSize == ZSTD_CONTENTSIZE_UNKNOWN)
+    {
+        ok = DecompressZstdStream(payload, size, out);
+    }
+    else
+    {
+        out.resize(static_cast<size_t>(contentSize));
+        ok = DecompressZstd(payload, size, out);
     }
 
-    static void WriteLE32(std::vector<u8> &out, size_t off, u32 v)
-    {
-        out[off + 0] = (u8)(v & 0xFF);
-        out[off + 1] = (u8)((v >> 8) & 0xFF);
-        out[off + 2] = (u8)((v >> 16) & 0xFF);
-        out[off + 3] = (u8)((v >> 24) & 0xFF);
-    }
-
-    bool Compress(const void *data, size_t size, Codec codec, std::vector<u8> &out)
-    {
+    if (!ok)
         out.clear();
 
-        if (!data || size == 0)
-            return false;
+    return ok;
+}
 
-        std::vector<u8> frame;
+bool CompressZstdFrame(const void* data, size_t size, std::vector<u8>& out)
+{
+    const size_t bound = ZSTD_compressBound(size);
+    out.resize(bound);
 
-        if (codec == Codec::Zstd)
-        {
-            size_t bound = ZSTD_compressBound(size);
-            frame.resize(bound);
-            size_t r = ZSTD_compress(frame.data(), bound, data, size, ZSTD_CLEVEL_DEFAULT);
+    const size_t written = ZSTD_compress(out.data(), bound, data, size, ZSTD_CLEVEL_DEFAULT);
 
-            if (ZSTD_isError(r))
-                return false;
-
-            frame.resize(r);
-        }
-        else
-        {
-            LZ4F_preferences_t prefs;
-
-            std::memset(&prefs, 0, sizeof(prefs));
-            prefs.frameInfo.blockMode = LZ4F_blockIndependent;
-            prefs.frameInfo.blockSizeID = size <= 64 * 1024 ? LZ4F_max64KB : LZ4F_max1MB;
-            prefs.compressionLevel = LZ4HC_CLEVEL_MAX;
-
-            size_t bound = LZ4F_compressFrameBound(size, &prefs);
-            frame.resize(bound);
-            size_t r = LZ4F_compressFrame(frame.data(), bound, data, size, &prefs);
-
-            if (LZ4F_isError(r))
-                return false;
-
-            frame.resize(r);
-        }
-
-        out.resize(4 + frame.size());
-        WriteLE32(out, 0, (u32)size);
-        std::memcpy(out.data() + 4, frame.data(), frame.size());
-
-        return true;
+    if (ZSTD_isError(written))
+    {
+        out.clear();
+        return false;
     }
+
+    out.resize(written);
+    return true;
+}
+
 }

@@ -8,10 +8,11 @@ extern sead::FixedSafeString<512> sDroppedFilePath;
 
 namespace {
 
-bool isSoundArchive(NSString* path)
+bool isDocument(NSString* path)
 {
     NSString* ext = [[path pathExtension] lowercaseString];
-    return [ext isEqualToString:@"bfsar"] || [ext isEqualToString:@"bcsar"] || [ext isEqualToString:@"cmpbin"];
+    return [ext isEqualToString:@"bfsar"] || [ext isEqualToString:@"bcsar"] || [ext isEqualToString:@"cmpbin"] ||
+           [ext isEqualToString:@"bars"] || [ext isEqualToString:@"bwav"] || [ext isEqualToString:@"zs"];
 }
 
 void handleOpenURLs(id self, SEL cmd, NSApplication* app, NSArray<NSURL*>* urls)
@@ -22,7 +23,7 @@ void handleOpenURLs(id self, SEL cmd, NSApplication* app, NSArray<NSURL*>* urls)
             continue;
 
         NSString* path = [url path];
-        if (!isSoundArchive(path))
+        if (!isDocument(path))
             continue;
 
         sDroppedFilePath = [path fileSystemRepresentation];

@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <vector>
 
 #include <devenv/seadAssertConfig.h>
 #include <filedevice/seadFileDevice.h>
@@ -26,8 +27,10 @@
 #include "core/TestHooks.h"
 #include "ui/file/SystemShell.h"
 #include "app/Utilll.h"
-#include "bfsar/archive/Bfsar.h"
+#include "aal/Bars.h"
 #include "bfsar/archive/BfsarLayoutCheck.h"
+#include "bfsar/archive/Cmpbin.h"
+#include "ui/file/File.h"
 #include "bfsar/io/FileIo.h"
 
 #include <libs/portable-file-dialogs.h>
@@ -37,8 +40,6 @@
 #include "platform/macos/openFiles.h"
 #endif
 
-extern Bfsar sBfsar;
-extern sead::FixedSafeString<512> sDroppedFilePath;
 static bool sCliMode = false;
 static s32 sAssertDialogNum = 0;
 
@@ -130,6 +131,43 @@ static void dumpItemIds()
     fprintf(stderr, "%u named items\n", total);
 }
 
+[[noreturn]] static void convertAudioResource(const char* inPath, const char* outPath, std::vector<u8> bytes, bool dumpIds)
+{
+    const char* error = nullptr;
+
+    if (!sAudioResource.open(std::move(bytes), sead::FixedSafeString<512>(inPath), &error))
+    {
+        fprintf(stderr, "Failed to parse '%s': %s\n", inPath, error);
+        exitConvert(1);
+    }
+
+    if (dumpIds)
+    {
+        for (const Item* asset : sAudioResource.getAssetList())
+            fprintf(stdout, "asset      0x%08x  %s\n", aal::HashBarsName(asset->getName().cstr()), asset->getName().cstr());
+
+        exitConvert(0);
+    }
+
+    sead::FixedSafeString<256> validateError;
+    const Item* invalid = nullptr;
+
+    if (!sAudioResource.validate(&validateError, &invalid))
+    {
+        fprintf(stderr, "'%s': %s\n", invalid ? invalid->getName().cstr() : inPath, validateError.cstr());
+        exitConvert(1);
+    }
+
+    if (!ensureDir(outPath) || sAudioResource.saveAs(sead::FixedSafeString<512>(outPath), &error) != AudioResource::SaveResult::Saved)
+    {
+        fprintf(stderr, "Failed to save to '%s': %s\n", outPath, error ? error : "");
+        exitConvert(1);
+    }
+
+    fprintf(stdout, "Done: '%s' -> '%s'\n", inPath, outPath);
+    exitConvert(0);
+}
+
 [[noreturn]] static void convertArchive(const char* inPath, const char* outPath)
 {
     const bool dumpIds = strcmp(outPath, "--dump-ids") == 0;
@@ -155,6 +193,14 @@ static void dumpItemIds()
     {
         fprintf(stderr, "Failed to load '%s'\n", inPath);
         exitConvert(1);
+    }
+
+    if (cmpbin::IsZstdFrame(bfsarFile, loadArg.read_size) || AudioResource::IsResourceFile(bfsarFile, loadArg.read_size))
+    {
+        std::vector<u8> bytes(bfsarFile, bfsarFile + loadArg.read_size);
+        device->unload(bfsarFile);
+
+        convertAudioResource(inPath, outPath, std::move(bytes), dumpIds);
     }
 
     if (loadArg.read_size < sizeof(nw::ut::BinaryFileHeader) || !isBfsarBcsar(bfsarFile) || !CheckSoundArchiveHeader(bfsarFile, static_cast<u32>(loadArg.read_size)))

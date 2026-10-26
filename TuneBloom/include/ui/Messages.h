@@ -28,6 +28,7 @@ inline constexpr const char* cWaveFile = "Wave File";
 inline constexpr const char* cBankFile = "Bank File";
 inline constexpr const char* cSequenceFile = "Sequence File";
 inline constexpr const char* cWaveArchive = "Wave Archive";
+inline constexpr const char* cAudioAsset = "Audio Asset";
 inline constexpr const char* cWaveSoundSet = "Wave Sound Set";
 inline constexpr const char* cWaveSound = "Wave Sound";
 inline constexpr const char* cArchive = "Archive";
@@ -97,6 +98,8 @@ inline constexpr const char* cCancel = "Cancel";
 inline constexpr const char* cClose = "Close";
 inline constexpr const char* cDelete = "Delete";
 inline constexpr const char* cDuplicate = "Duplicate";
+inline constexpr const char* cCompressedFilterFormat = "Compressed %s (*.%s.%s)";
+inline constexpr const char* cCompressedFileTypeFormat = "Compressed File (%s)";
 inline constexpr const char* cExport = "Export";
 inline constexpr const char* cImport = "Import";
 inline constexpr const char* cFind = "Find";
@@ -1058,8 +1061,8 @@ inline constexpr const char* cBlockNotFoundFormat = "%s: the %s block could not 
 inline constexpr const char* cNewFileNameFormat = "New.%s";
 inline constexpr const char* cUntitledFileNameFormat = "Untitled.%s";
 inline constexpr const char* cOpenFilter = "Sound Archive (*.bfsar, *.bcsar, *.cmpbin)";
-inline constexpr const char* cFileTypeName = "Nintendo Sound Archive";
-inline constexpr const char* cCompressedFilterFormat = "Compressed %s (*.cmpbin)";
+inline constexpr const char* cOpenFilterAll = "All Supported Files (*.bfsar, *.bcsar, *.cmpbin, *.bars, *.bwav, *.zs)";
+inline constexpr const char* cSoundArchiveTypeFormat = "Nintendo Sound Archive (%s)";
 
 inline constexpr const char* cSaveOpenFailed = "The output file could not be opened";
 inline constexpr const char* cSaveWriteFailed = "The archive could not be written. The file on disk was not changed";
@@ -1128,6 +1131,7 @@ inline constexpr const char* cRowWaveFiles      = "Wave Files";
 inline constexpr const char* cRowSequenceFiles  = "Sequence Files";
 inline constexpr const char* cRowBankFiles      = "Bank Files";
 inline constexpr const char* cRowFileStatistics = "File Statistics";
+inline constexpr const char* cRowAudioAssets    = "Audio Assets";
 
 inline constexpr const char* cInfoWindowTitle       = "Info";
 inline constexpr const char* cPropertiesWindowTitle = "Properties";
@@ -1524,6 +1528,78 @@ inline constexpr const char* cWavInvalidInfo = "The .wav format is invalid";
 
 }
 
+namespace resource
+{
+
+inline constexpr const char* cResourceTypeFormat = "Nintendo Audio Resource (%s)";
+inline constexpr const char* cCompressedResourceTypeFormat = "Compressed Nintendo Audio Resource (%s)";
+inline constexpr const char* cWaveTypeFormat = "Nintendo Wave (%s)";
+inline constexpr const char* cBarsDamaged = "The BARS file is damaged";
+inline constexpr const char* cBarsVersionUnsupported = "This BARS version is not supported";
+inline constexpr const char* cBwavDamaged = "The BWAV file is damaged";
+inline constexpr const char* cBwavVersionUnsupported = "This BWAV version is not supported";
+inline constexpr const char* cBwavCodecUnsupported = "This BWAV codec is not supported";
+inline constexpr const char* cBfstmDamaged = "The BFSTM file is damaged";
+inline constexpr const char* cBfstmNeedsDspAdpcm = "Only DSP-ADPCM streams can be replaced";
+inline constexpr const char* cBfstmRegionsUnsupported = "Streams with regions can't be replaced";
+inline constexpr const char* cBfstmChannelCountMismatch = "The channel count must match the original stream";
+inline constexpr const char* cAmtaDamaged = "The metadata of an Audio Asset is damaged";
+inline constexpr const char* cNameHashCollision = "Two Audio Asset names have the same hash";
+
+inline constexpr const char* cNoAudioFile = "This Audio Asset has no audio file";
+inline constexpr const char* cFormatNotPlayable = "This audio format can't be played";
+inline constexpr const char* cAudioDamaged = "The audio file is damaged";
+inline constexpr const char* cStreamNotLoaded = "The stream file is missing or not loaded";
+inline constexpr const char* cStreamMismatched = "The stream file doesn't match this Audio Asset";
+inline constexpr const char* cStreamsNotSaved = "The archive was saved, but a stream file was not. Save again to retry";
+inline constexpr const char* cBwavNeedsAudio = "The BWAV file has no audio";
+
+inline constexpr const char* cNotResource = "Not a valid BARS or BWAV file";
+inline constexpr const char* cOpenFilter = "Audio Resource (*.bars, *.bwav, *.zs)";
+inline constexpr const char* cDecompressFailed = "Couldn't decompress the zstd file";
+inline constexpr const char* cZstdNotResource = "The zstd file holds no BARS or BWAV file";
+inline constexpr const char* cCompressFailed = "Couldn't compress the file";
+inline constexpr const char* cWriteFailed = "Couldn't write the file";
+inline constexpr const char* cStreamWriteFailed = "Couldn't write a stream file to the Stream folder";
+inline constexpr const char* cEncodeFailed = "Couldn't encode the audio";
+inline constexpr const char* cRenameFailed = "Couldn't rename the metadata of this Audio Asset";
+inline constexpr const char* cReplaceUnsupported = "Only BWAV, BFWAV and BFSTP audio can be replaced";
+inline constexpr const char* cPrefetchBuildFailed = "Couldn't build the start of the stream from the new file";
+inline constexpr const char* cLoopNeedsBwav = "Only BWAV loops can be edited";
+inline constexpr const char* cImportKindMismatch = "The file must have the same format as the current audio";
+inline constexpr const char* cImportUnsupported = "Only BWAV, BFWAV and BFSTM files can be imported";
+inline constexpr const char* cImportNeedsCompleteBwav = "The BWAV must contain the whole sound, not only its start";
+inline constexpr const char* cImportReadFailed = "Couldn't read the file";
+
+inline constexpr const char* cReplaceAudioTitle = "Replace Audio";
+inline constexpr const char* cImportAudioFile = "Import Audio File";
+inline constexpr const char* cExportAudioFile = "Export Audio File";
+inline constexpr const char* cSelectOneAudioAsset = "Select one Audio Asset";
+inline constexpr const char* cExportMixedFormats = "The selected Audio Assets must have the same format";
+
+inline constexpr const char* cStoredInArchive = "Stored";
+inline constexpr const char* cLoopEndFixed = "BWAV loops always end at the last sample";
+inline constexpr const char* cStreamState = "State";
+inline constexpr const char* cStreamLoaded = "Loaded from the Stream folder";
+inline constexpr const char* cStreamMissing = "Not in the Stream folder";
+inline constexpr const char* cStreamDamaged = "The file in the Stream folder is damaged";
+inline constexpr const char* cStreamStateMismatched = "The file in the Stream folder doesn't match";
+inline constexpr const char* cStreamNeedsArchive = "Only the start of a stream. Edit it in its BARS file";
+inline constexpr const char* cStreamPending = "Written to the Stream folder on save";
+inline constexpr const char* cMetadataTitle = "Metadata";
+inline constexpr const char* cMetadataVersionFormat = "AMTA %s";
+
+inline constexpr const char* cResourceVersionFormat = "%u.%u";
+inline constexpr const char* cCompression = "Compression";
+inline constexpr const char* cCompressionDetail = "Save as .zs to compress with zstd";
+inline constexpr const char* cCompressionZstd = "zstd";
+inline constexpr const char* cContentTitle = "Content";
+inline constexpr const char* cStreams = "Streams";
+inline constexpr const char* cStreamsDetail = "Sounds whose full audio is in the Stream folder";
+inline constexpr const char* cStreamsLoadedFormat = "%u of %u in the Stream folder";
+
+}
+
 namespace innerfile
 {
 
@@ -1655,7 +1731,7 @@ inline constexpr const char* cAssociationOn = "Associated";
 inline constexpr const char* cAssociationAdd = "Associate";
 inline constexpr const char* cAssociationRemove = "Remove";
 inline constexpr const char* cAssociationDetail = "Opens sound archive files in TuneBloom";
-inline constexpr const char* cAssociationFailed = "The file association could not be changed.";
+inline constexpr const char* cAssociationFailed = "Couldn't change the file association";
 
 inline constexpr const char* cDeviceLabel = "Playback Device";
 inline constexpr const char* cDeviceEmpty = "No playback device found";

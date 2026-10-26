@@ -51,6 +51,9 @@ static constexpr ItemRemoveText cDefaultRemoveText = { messages::common::cDelete
 static ItemRemoveText sNextListRemoveText = cDefaultRemoveText;
 static ItemListFooterCallback sNextListFooter = nullptr;
 static f32 sNextListFooterWidth = 0.0f;
+static f32 sNextListAddDialogWidth = 0.0f;
+static bool sNextListFixedOrder = false;
+static bool sNextListRemovable = true;
 
 void ScrollItemListTo(Item* item)
 {
@@ -90,6 +93,21 @@ void SetNextItemListAction(ItemRowActionCallback callback)
     sNextListAction = callback;
 }
 
+void SetNextItemListAddDialogWidth(f32 width)
+{
+    sNextListAddDialogWidth = width;
+}
+
+void SetNextItemListFixedOrder()
+{
+    sNextListFixedOrder = true;
+}
+
+void SetNextItemListRemovable(bool removable)
+{
+    sNextListRemovable = removable;
+}
+
 static bool IsItemVisible(Item* item, ItemFilterCallback filterCallback)
 {
     return item && (!filterCallback || filterCallback(item));
@@ -110,6 +128,14 @@ static void CollectItemListRows(ItemListContext& ctx)
     ctx.footerWidth = sNextListFooterWidth;
     sNextListFooter = nullptr;
     sNextListFooterWidth = 0.0f;
+
+    ctx.addDialogWidth = sNextListAddDialogWidth;
+    sNextListAddDialogWidth = 0.0f;
+
+    ctx.fixedOrder = sNextListFixedOrder;
+    ctx.removable = sNextListRemovable;
+    sNextListFixedOrder = false;
+    sNextListRemovable = true;
 
     ctx.listItems.reserve(ctx.list.size());
 
@@ -509,7 +535,7 @@ static void HandleItemRowDoubleClick(ItemListContext& ctx, Item* item, const sea
 
 static void DrawItemRowDragDrop(ItemListContext& ctx, Item* item, const sead::SafeString& name, bool selected, bool isMultiSelected)
 {
-    if (selected && !ctx.sorted)
+    if (selected && !ctx.sorted && !ctx.fixedOrder)
     {
         if (ImGui::BeginDragDropSource())
         {
@@ -529,7 +555,7 @@ static void DrawItemRowDragDrop(ItemListContext& ctx, Item* item, const sead::Sa
         }
     }
 
-    if (!ctx.sorted)
+    if (!ctx.sorted && !ctx.fixedOrder)
     {
         ImGui::PushStyleColor(ImGuiCol_DragDropTarget, uicolors::cTransparentU32);
 

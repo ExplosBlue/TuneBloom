@@ -21,7 +21,7 @@ struct ProjectRow
     bool counted;
 };
 
-static const ProjectRow cProjectRows[] = {
+static const ProjectRow cSoundArchiveRows[] = {
     { UIType::ProjectInfo,       ICON_LC_INFO,           messages::common::cProjectInfo,    0, false, false },
 
     { UIType::AllSounds,         ICON_LC_LIST_MUSIC,     messages::common::cSounds,         1, true,  true  },
@@ -45,10 +45,49 @@ static const ProjectRow cProjectRows[] = {
     { UIType::FileStatistics,    ICON_LC_CHART_AREA,     messages::project::cRowFileStatistics, 5, false, false },
 };
 
+static const ProjectRow cAudioResourceRows[] = {
+    { UIType::ProjectInfo, ICON_LC_INFO,       messages::common::cProjectInfo,      0, false, false },
+    { UIType::AudioAssets, ICON_LC_FILE_AUDIO, messages::project::cRowAudioAssets, 1, false, true  },
+};
+
+struct ProjectRowTable
+{
+    const ProjectRow* rows;
+    s32 count;
+};
+
 static constexpr f32 cProjectBoxPadXEm     = 0.2f;
 static constexpr f32 cProjectBoxPadYEm     = 0.15f;
 static constexpr f32 cProjectRowGapEm      = 0.3f;
 static constexpr f32 cProjectChildIndentEm = 0.7f;
+
+static ProjectRowTable GetProjectRows()
+{
+    if (IsAudioResourceOpen())
+        return { cAudioResourceRows, IM_ARRAYSIZE(cAudioResourceRows) };
+
+    return { cSoundArchiveRows, IM_ARRAYSIZE(cSoundArchiveRows) };
+}
+
+static s32 FindProjectRow(const ProjectRowTable& table, UIType type)
+{
+    for (s32 i = 0; i < table.count; i++)
+    {
+        if (table.rows[i].type == type)
+            return i;
+    }
+
+    return -1;
+}
+
+static void StepProjectRow(const ProjectRowTable& table, s32 step)
+{
+    const s32 current = FindProjectRow(table, sSelectedUIType);
+    const s32 next = current < 0 ? 0 : current + step;
+
+    if (next >= 0 && next < table.count)
+        sSelectedUIType = table.rows[next].type;
+}
 
 static void CountProjectItems(s32* counts)
 {
@@ -95,6 +134,7 @@ static void CountProjectItems(s32* counts)
     at(UIType::WaveFiles)     = static_cast<s32>(sBfsar.getWaveFileList().size());
     at(UIType::SequenceFiles) = static_cast<s32>(sBfsar.getSequenceFileList().size());
     at(UIType::BankFiles)     = static_cast<s32>(sBfsar.getBankFileList().size());
+    at(UIType::AudioAssets)   = static_cast<s32>(sAudioResource.getAssetList().size());
 }
 
 bool DrawNavRow(const char* icon, const char* name, bool selected, const char* value, bool dim, bool title, f32 indent)
@@ -196,8 +236,9 @@ void DrawProjectUI()
         const f32 em = ImGui::GetFontSize();
         const ImGuiStyle& style = ImGui::GetStyle();
 
-        const s32 rowNum = static_cast<s32>(IM_ARRAYSIZE(cProjectRows));
-        const s32 groupNum = cProjectRows[rowNum - 1].group + 1;
+        const ProjectRowTable table = GetProjectRows();
+        const s32 rowNum = table.count;
+        const s32 groupNum = table.rows[rowNum - 1].group + 1;
 
         const f32 rowGap = CalcNavRowGap();
         const f32 roomyPadY = CalcNavBoxPadding(true).y;
@@ -220,8 +261,10 @@ void DrawProjectUI()
             group = -1;
         };
 
-        for (const ProjectRow& row : cProjectRows)
+        for (s32 rowIndex = 0; rowIndex < table.count; rowIndex++)
         {
+            const ProjectRow& row = table.rows[rowIndex];
+
             if (row.group != group)
             {
                 endGroup();
@@ -249,20 +292,10 @@ void DrawProjectUI()
         if (ImGui::IsWindowFocused())
         {
             if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
-            {
-                if (sSelectedUIType > UIType::Min)
-                {
-                    sSelectedUIType = UIType(u32(sSelectedUIType) - 1);
-                }
-            }
+                StepProjectRow(table, -1);
 
             if (shortcuts::Pressed(shortcuts::Action::SelectNext))
-            {
-                if (sSelectedUIType < UIType::Max)
-                {
-                    sSelectedUIType = UIType(u32(sSelectedUIType) + 1);
-                }
-            }
+                StepProjectRow(table, 1);
         }
 
         if (selected)

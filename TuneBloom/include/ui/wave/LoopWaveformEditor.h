@@ -68,6 +68,7 @@ struct LoopWaveformState
     Focus focus = Focus::Start;
 
     bool grabMarkers = false;
+    bool lockEnd = false;
 
     // Peak cache
     u32 dataRevision = 0;

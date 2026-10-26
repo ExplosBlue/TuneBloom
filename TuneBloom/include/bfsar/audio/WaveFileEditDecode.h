@@ -62,7 +62,7 @@ inline DecodedPcm decodeWaveFileForEditing(const WaveFile& wave)
         {
             const s16* src = static_cast<const s16*>(data);
             for (u32 i = 0; i < safeSampleCount; i++)
-                out.channels[c][i] = static_cast<float>(src[i]) / 32768.0f;
+                out.channels[c][i] = AudioProcessing::fromPcm16(src[i]);
         }
         else if (encoding == WaveFile::Encoding::Pcm8)
         {
@@ -90,7 +90,7 @@ inline DecodedPcm decodeWaveFileForEditing(const WaveFile& wave)
                 pcm.data());
 
             for (u32 i = 0; i < safeSampleCount; i++)
-                out.channels[c][i] = static_cast<float>(pcm[i]) / 32768.0f;
+                out.channels[c][i] = AudioProcessing::fromPcm16(pcm[i]);
         }
     }
 

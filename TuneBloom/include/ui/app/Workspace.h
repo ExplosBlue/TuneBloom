@@ -31,7 +31,9 @@ enum class UIType
 
     FileStatistics,
 
-    Max = FileStatistics
+    AudioAssets,
+
+    Max = AudioAssets
 };
 
 extern UIType sSelectedUIType;

@@ -30,7 +30,7 @@
     <array>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Sound Archive</string>
+            <string>Nintendo Sound Archive (BFSAR)</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -40,8 +40,76 @@
             <key>CFBundleTypeExtensions</key>
             <array>
                 <string>bfsar</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Nintendo Sound Archive (BCSAR)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>bcsar</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Compressed File (cmpbin)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
                 <string>cmpbin</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Nintendo Audio Resource (BARS)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>bars</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Nintendo Wave (BWAV)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>bwav</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Compressed File (zs)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>zs</string>
             </array>
         </dict>
     </array>

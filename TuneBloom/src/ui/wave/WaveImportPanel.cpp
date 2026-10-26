@@ -371,3 +371,24 @@ bool WaveImportConfirmCancel(bool cancelClicked)
 {
     return sPanel.confirmCancel(cancelClicked);
 }
+
+WaveImportResult DrawWaveImportBody(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* commitLabel)
+{
+    if (ImGui::IsWindowAppearing())
+        ResetWaveImport();
+
+    DrawWaveImportInfo(encoding, info, header);
+
+    BeginDialogFooter({ commitLabel, messages::common::cCancel }, false);
+
+    const bool commit = DialogButton(commitLabel);
+    const bool cancelClicked = DialogButton(messages::common::cCancel);
+
+    if (commit)
+        return WaveImportResult::Commit;
+
+    if (WaveImportConfirmCancel(cancelClicked))
+        return WaveImportResult::Cancel;
+
+    return WaveImportResult::None;
+}

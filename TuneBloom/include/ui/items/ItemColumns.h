@@ -82,3 +82,4 @@ bool SortItemRows(std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs
 void FormatItemSize(sead::BufferedSafeString* out, u32 size);
 void FormatWaveFileLength(const Item* item, sead::BufferedSafeString* out);
 void FormatWaveFileChannels(const Item* item, sead::BufferedSafeString* out);
+void FormatChannelCount(sead::BufferedSafeString* out, s64 channels);

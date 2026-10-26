@@ -1,5 +1,7 @@
 #include <bfsar/files/BfstpFile.h>
 
+#include <core/ByteBuilder.h>
+#include <core/ByteView.h>
 #include <bfsar/io/FileIo.h>
 
 #include <snd/snd_ElementType.h>
@@ -7,7 +9,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstring>
 
 using nw::snd::internal::StreamSoundFile;
 using nw::snd::internal::Util;
@@ -22,7 +23,6 @@ constexpr u32 cBlockAlignment      = 0x20;
 constexpr u16 cPrefetchBlockCount  = 2;
 constexpr u32 cInvalidOffset       = 0xFFFFFFFF;
 
-// File header
 constexpr u32 cHeaderByteOrder     = offsetof(nw::ut::BinaryFileHeader, byteOrder);
 constexpr u32 cHeaderSize          = offsetof(nw::ut::BinaryFileHeader, headerSize);
 constexpr u32 cHeaderVersion       = offsetof(nw::ut::BinaryFileHeader, version);
@@ -33,7 +33,6 @@ constexpr u32 cBlockRefSize        = sizeof(Util::ReferenceWithSize);
 constexpr u32 cReferenceOffset     = offsetof(Util::Reference, offset);
 constexpr u32 cBlockRefBlockSize   = offsetof(Util::ReferenceWithSize, size);
 
-// INFO block
 constexpr u32 cInfoChannelCount    = offsetof(StreamSoundFile::StreamSoundInfo, channelCount);
 constexpr u32 cInfoBlockCount      = offsetof(StreamSoundFile::StreamSoundInfo, blockCount);
 constexpr u32 cInfoOneBlockBytes   = offsetof(StreamSoundFile::StreamSoundInfo, oneBlockBytes);
@@ -42,7 +41,6 @@ constexpr u32 cInfoSampleOffset    = offsetof(StreamSoundFile::StreamSoundInfo, 
 constexpr u32 cInfoRegionOffset    = offsetof(StreamSoundFile::StreamSoundInfo, regionDataOffset) + cReferenceOffset;
 constexpr u32 cInfoSizeMin         = offsetof(StreamSoundFile::StreamSoundInfo, originalLoopStart);
 
-// PDAT block
 constexpr u32 cPdatCount           = cBlockHeaderSize;
 constexpr u32 cPdatItem            = cPdatCount + sizeof(u32);
 constexpr u32 cPdatItemSize        = 0x14;
@@ -50,106 +48,21 @@ constexpr u32 cPdatItemPrefetchSize = 0x04;
 constexpr u32 cPdatItemSampleRef   = 0x0C;
 constexpr u32 cPdatHeadSize        = cPdatItem + cPdatItemSize;
 
+constexpr u32 cAalPrefetchBlocks    = 3;
 constexpr u64 cStreamHeadReadSize  = 0x400;
 constexpr u32 cStreamReadPassMax   = 3;
-
-class FileView
-{
-public:
-    FileView(const void* data, u64 size)
-        : mData(static_cast<const u8*>(data))
-        , mSize(size)
-        , mIsBig(size > cHeaderByteOrder && mData[cHeaderByteOrder] == 0xFE)
-    {
-    }
-
-    bool has(u64 offset, u64 size) const
-    {
-        return mData && offset <= mSize && size <= mSize - offset;
-    }
-
-    u64 size() const
-    {
-        return mSize;
-    }
-
-    const u8* at(u64 offset) const
-    {
-        return mData + offset;
-    }
-
-    bool isBigEndian() const
-    {
-        return mIsBig;
-    }
-
-    u16 readU16(u64 offset) const
-    {
-        const u8* p = mData + offset;
-
-        return mIsBig ? static_cast<u16>(p[0] << 8 | p[1]) : static_cast<u16>(p[1] << 8 | p[0]);
-    }
-
-    u32 readU32(u64 offset) const
-    {
-        const u8* p = mData + offset;
-
-        if (mIsBig)
-            return static_cast<u32>(p[0]) << 24 | static_cast<u32>(p[1]) << 16 | static_cast<u32>(p[2]) << 8 | p[3];
-
-        return static_cast<u32>(p[3]) << 24 | static_cast<u32>(p[2]) << 16 | static_cast<u32>(p[1]) << 8 | p[0];
-    }
-
-private:
-    const u8* mData;
-    u64 mSize;
-    bool mIsBig;
-};
-
-class FileBuilder
-{
-public:
-    FileBuilder(std::vector<u8>* bytes, bool isBig)
-        : mBytes(*bytes)
-        , mIsBig(isBig)
-    {
-    }
-
-    void writeU16(u64 offset, u16 value)
-    {
-        mBytes[offset + (mIsBig ? 0 : 1)] = static_cast<u8>(value >> 8);
-        mBytes[offset + (mIsBig ? 1 : 0)] = static_cast<u8>(value);
-    }
-
-    void writeU32(u64 offset, u32 value)
-    {
-        for (u32 i = 0; i < sizeof(u32); i++)
-            mBytes[offset + (mIsBig ? sizeof(u32) - 1 - i : i)] = static_cast<u8>(value >> (8 * i));
-    }
-
-    void writeBytes(u64 offset, const void* data, u64 size)
-    {
-        std::memcpy(mBytes.data() + offset, data, size);
-    }
-
-    void writeBlockRef(u32 index, u16 typeId, u32 offset, u32 size)
-    {
-        const u64 ref = cHeaderBlockRefs + index * cBlockRefSize;
-
-        writeU16(ref, typeId);
-        writeU32(ref + cReferenceOffset, offset);
-        writeU32(ref + cBlockRefBlockSize, size);
-    }
-
-private:
-    std::vector<u8>& mBytes;
-    bool mIsBig;
-};
 
 struct FileBlock
 {
     u64 offset = 0;
     u64 size = 0;
+};
+
+struct PrefetchShape
+{
+    u32 version = cPrefetchVersion;
+    u32 blocksPerChannel = 0;
+    u32 sampleRef = cPdatItemSize;
 };
 
 struct PrefetchSource
@@ -163,7 +76,21 @@ struct PrefetchSource
 
 }
 
-static bool FindBlock(const FileView& file, u16 typeId, FileBlock* out)
+static ByteView MakeFileView(const void* data, u64 size)
+{
+    return ByteView(data, size, ByteView::IsBigEndianMark(data, size, cHeaderByteOrder));
+}
+
+static void WriteBlockRef(ByteBuilder* builder, u32 index, u16 typeId, u32 offset, u32 size)
+{
+    const u64 ref = cHeaderBlockRefs + index * cBlockRefSize;
+
+    builder->putU16(ref, typeId);
+    builder->putU32(ref + cReferenceOffset, offset);
+    builder->putU32(ref + cBlockRefBlockSize, size);
+}
+
+static bool FindBlock(const ByteView& file, u16 typeId, FileBlock* out)
 {
     if (!file.has(0, cHeaderBlockRefs))
         return false;
@@ -189,7 +116,7 @@ static bool FindBlock(const FileView& file, u16 typeId, FileBlock* out)
     return false;
 }
 
-static u64 FindStreamInfo(const FileView& file, const FileBlock& info)
+static u64 FindStreamInfo(const ByteView& file, const FileBlock& info)
 {
     const u64 body = info.offset + cBlockHeaderSize;
     const u64 blockEnd = info.offset + info.size;
@@ -217,7 +144,7 @@ static u64 FindStreamInfo(const FileView& file, const FileBlock& info)
     return body + streamInfoOffset;
 }
 
-static bool ReadPrefetchSource(const FileView& file, u32 streamBufferTimes, PrefetchSource* out)
+static bool ReadPrefetchSource(const ByteView& file, u32 blocksPerChannel, PrefetchSource* out)
 {
     if (!file.has(0, cHeaderBlockRefs) || !MatchesInnerFileKind(file.at(0), InnerFileKind::Stream))
         return false;
@@ -254,7 +181,7 @@ static bool ReadPrefetchSource(const FileView& file, u32 streamBufferTimes, Pref
         return false;
 
     const u64 streamSize = ((blockCount - 1) * oneBlockBytes + lastBlockBytes) * channelCount;
-    const u64 prefetchSize = static_cast<u64>(BfstpFile::cBlocksPerBufferTime) * streamBufferTimes * oneBlockBytes * channelCount;
+    const u64 prefetchSize = static_cast<u64>(blocksPerChannel) * oneBlockBytes * channelCount;
 
     out->sampleOffset = data.offset + cBlockHeaderSize + sampleDataOffset;
     out->sampleSize = std::min(prefetchSize, streamSize);
@@ -263,51 +190,61 @@ static bool ReadPrefetchSource(const FileView& file, u32 streamBufferTimes, Pref
     return out->sampleSize != 0 && out->sampleSize <= cInvalidOffset && out->neededSize <= data.offset + data.size;
 }
 
-bool BfstpFile::Build(std::vector<u8>* out, const void* strmFile, u64 strmFileSize, u32 streamBufferTimes)
+static PrefetchShape MakeArchiveShape(u32 streamBufferTimes)
 {
-    const FileView file(strmFile, strmFileSize);
+    PrefetchShape shape;
+    shape.blocksPerChannel = BfstpFile::cBlocksPerBufferTime * streamBufferTimes;
+
+    return shape;
+}
+
+static bool BuildWithShape(std::vector<u8>* out, const void* strmFile, u64 strmFileSize, const PrefetchShape& shape)
+{
+    const ByteView file = MakeFileView(strmFile, strmFileSize);
     PrefetchSource source;
 
     out->clear();
 
-    if (!ReadPrefetchSource(file, streamBufferTimes, &source) || source.neededSize > file.size())
+    if (!ReadPrefetchSource(file, shape.blocksPerChannel, &source) || source.neededSize > file.size())
         return false;
 
     const u32 infoOffset = cFileHeaderSize;
     const u32 infoSize = static_cast<u32>(source.info.size);
     const u32 pdatOffset = infoOffset + infoSize;
-    const u32 sampleOffset = pdatOffset + cPdatHeadSize;
+    const u32 sampleOffset = pdatOffset + cPdatItem + shape.sampleRef;
     const u32 sampleSize = static_cast<u32>(source.sampleSize);
     const u32 streamInfoOffset = infoOffset + static_cast<u32>(source.streamInfoOffset - source.info.offset);
 
-    out->assign(static_cast<size_t>(sampleOffset) + sampleSize, 0);
+    ByteBuilder builder(file.isBigEndian());
+    builder.resize(static_cast<u64>(sampleOffset) + sampleSize);
 
-    FileBuilder builder(out, file.isBigEndian());
+    builder.putBytes(0, GetInnerFileMagic(ArchiveFormat::BFSAR, InnerFileKind::StreamPrefetch), cInnerFileMagicLength);
+    builder.putBytes(cHeaderByteOrder, file.at(cHeaderByteOrder), sizeof(u16));
+    builder.putU16(cHeaderSize, cFileHeaderSize);
+    builder.putU32(cHeaderVersion, shape.version);
+    builder.putU32(cHeaderFileSize, static_cast<u32>(builder.size()));
+    builder.putU16(cHeaderBlockCount, cPrefetchBlockCount);
+    WriteBlockRef(&builder, 0, nw::snd::internal::ElementType_StreamSoundFile_InfoBlock, infoOffset, infoSize);
+    WriteBlockRef(&builder, 1, nw::snd::internal::ElementType_StreamSoundFile_PrefetchDataBlock, pdatOffset, sampleOffset - pdatOffset + sampleSize);
 
-    // File header
-    builder.writeBytes(0, GetInnerFileMagic(ArchiveFormat::BFSAR, InnerFileKind::StreamPrefetch), cInnerFileMagicLength);
-    builder.writeBytes(cHeaderByteOrder, file.at(cHeaderByteOrder), sizeof(u16));
-    builder.writeU16(cHeaderSize, cFileHeaderSize);
-    builder.writeU32(cHeaderVersion, cPrefetchVersion);
-    builder.writeU32(cHeaderFileSize, static_cast<u32>(out->size()));
-    builder.writeU16(cHeaderBlockCount, cPrefetchBlockCount);
-    builder.writeBlockRef(0, nw::snd::internal::ElementType_StreamSoundFile_InfoBlock, infoOffset, infoSize);
-    builder.writeBlockRef(1, nw::snd::internal::ElementType_StreamSoundFile_PrefetchDataBlock, pdatOffset, cPdatHeadSize + sampleSize);
+    builder.putBytes(infoOffset, file.at(source.info.offset), infoSize);
+    builder.putU32(streamInfoOffset + cInfoSampleOffset, sampleOffset);
+    builder.putU32(streamInfoOffset + cInfoRegionOffset, cInvalidOffset);
 
-    // INFO block of the stream file
-    builder.writeBytes(infoOffset, file.at(source.info.offset), infoSize);
-    builder.writeU32(streamInfoOffset + cInfoSampleOffset, sampleOffset);
-    builder.writeU32(streamInfoOffset + cInfoRegionOffset, cInvalidOffset);
+    builder.putBytes(pdatOffset, "PDAT", cInnerFileMagicLength);
+    builder.putU32(pdatOffset + sizeof(u32), sampleOffset - pdatOffset + sampleSize);
+    builder.putU32(pdatOffset + cPdatCount, 1);
+    builder.putU32(pdatOffset + cPdatItem + cPdatItemPrefetchSize, sampleSize);
+    builder.putU32(pdatOffset + cPdatItem + cPdatItemSampleRef + cReferenceOffset, shape.sampleRef);
+    builder.putBytes(sampleOffset, file.at(source.sampleOffset), sampleSize);
 
-    // PDAT block
-    builder.writeBytes(pdatOffset, "PDAT", cInnerFileMagicLength);
-    builder.writeU32(pdatOffset + sizeof(u32), cPdatHeadSize + sampleSize);
-    builder.writeU32(pdatOffset + cPdatCount, 1);
-    builder.writeU32(pdatOffset + cPdatItem + cPdatItemPrefetchSize, sampleSize);
-    builder.writeU32(pdatOffset + cPdatItem + cPdatItemSampleRef + cReferenceOffset, cPdatItemSize);
-    builder.writeBytes(sampleOffset, file.at(source.sampleOffset), sampleSize);
-
+    *out = builder.take();
     return true;
+}
+
+bool BfstpFile::Build(std::vector<u8>* out, const void* strmFile, u64 strmFileSize, u32 streamBufferTimes)
+{
+    return BuildWithShape(out, strmFile, strmFileSize, MakeArchiveShape(streamBufferTimes));
 }
 
 bool BfstpFile::BuildFromStreamFile(std::vector<u8>* out, const char* strmFilePath, u32 streamBufferTimes)
@@ -324,7 +261,7 @@ bool BfstpFile::BuildFromStreamFile(std::vector<u8>* out, const char* strmFilePa
 
         PrefetchSource source;
 
-        if (!ReadPrefetchSource(FileView(strmFile.data(), strmFile.size()), streamBufferTimes, &source))
+        if (!ReadPrefetchSource(MakeFileView(strmFile.data(), strmFile.size()), MakeArchiveShape(streamBufferTimes).blocksPerChannel, &source))
             return false;
 
         if (source.neededSize <= strmFile.size())
@@ -339,7 +276,7 @@ bool BfstpFile::BuildFromStreamFile(std::vector<u8>* out, const char* strmFilePa
     return false;
 }
 
-static bool FindPrefetchSamples(const FileView& file, FileBlock* outSamples)
+static bool FindPrefetchSamples(const ByteView& file, FileBlock* outSamples)
 {
     FileBlock info;
     FileBlock pdat;
@@ -371,7 +308,45 @@ bool BfstpFile::CheckLayout(const void* data, u64 size)
 {
     FileBlock samples;
 
-    return FindPrefetchSamples(FileView(data, size), &samples);
+    return FindPrefetchSamples(MakeFileView(data, size), &samples);
+}
+
+static bool ReadPrefetchShape(const ByteView& prefetch, PrefetchShape* out)
+{
+    FileBlock info;
+    FileBlock pdat;
+    FileBlock samples;
+
+    if (!FindPrefetchSamples(prefetch, &samples) || !FindBlock(prefetch, nw::snd::internal::ElementType_StreamSoundFile_InfoBlock, &info) ||
+        !FindBlock(prefetch, nw::snd::internal::ElementType_StreamSoundFile_PrefetchDataBlock, &pdat))
+        return false;
+
+    const u64 streamInfo = FindStreamInfo(prefetch, info);
+    const u64 channelCount = *prefetch.at(streamInfo + cInfoChannelCount);
+    const u64 blockBytes = channelCount * prefetch.readU32(streamInfo + cInfoOneBlockBytes);
+    const u64 blockCount = prefetch.readU32(streamInfo + cInfoBlockCount);
+
+    if (blockBytes == 0 || blockCount == 0)
+        return false;
+
+    const u64 streamBytes = (blockCount - 1) * blockBytes + channelCount * prefetch.readU32(streamInfo + cInfoLastBlockBytes);
+    const u32 measuredBlocks = static_cast<u32>((samples.size + blockBytes - 1) / blockBytes);
+    const bool holdsWholeStream = samples.size >= streamBytes;
+
+    out->version = prefetch.readU32(cHeaderVersion);
+    out->sampleRef = prefetch.readU32(pdat.offset + cPdatItem + cPdatItemSampleRef + cReferenceOffset);
+    out->blocksPerChannel = holdsWholeStream ? std::max(measuredBlocks, cAalPrefetchBlocks) : measuredBlocks;
+
+    return true;
+}
+
+bool BfstpFile::Rebuild(std::vector<u8>* out, const void* strmFile, u64 strmFileSize, const void* prefetch, u64 prefetchSize)
+{
+    PrefetchShape shape;
+
+    out->clear();
+
+    return ReadPrefetchShape(MakeFileView(prefetch, prefetchSize), &shape) && BuildWithShape(out, strmFile, strmFileSize, shape);
 }
 
 u32 BfstpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const

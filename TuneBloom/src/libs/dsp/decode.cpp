@@ -40,7 +40,7 @@ void decode(uint8_t* src, int16_t* dst, ADPCMINFO* cxt, uint32_t samples)
 
 	for (int i = 0; i < frameCount; i++)
 	{
-		int predictor = GetHighNibble(*src);
+		int predictor = GetHighNibble(*src) & 7;
 		int scale = 1 << GetLowNibble(*src++);
 		short coef1 = coefs[predictor * 2];
 		short coef2 = coefs[predictor * 2 + 1];
@@ -76,7 +76,7 @@ void getLoopContext(uint8_t* src, ADPCMINFO* cxt, uint32_t samples)
 	for (int i = 0; i < frameCount; i++)
 	{
 		ps = *src;
-		int predictor = GetHighNibble(*src);
+		int predictor = GetHighNibble(*src) & 7;
 		int scale = 1 << GetLowNibble(*src++);
 		short coef1 = coefs[predictor * 2];
 		short coef2 = coefs[predictor * 2 + 1];

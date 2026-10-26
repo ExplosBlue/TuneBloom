@@ -115,6 +115,11 @@ public:
         mVersion = version;
     }
 
+    u32 getVersion() const
+    {
+        return mVersion;
+    }
+
     virtual void drawUI();
 
     u32 getWritePos() const

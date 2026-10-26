@@ -18,6 +18,9 @@ struct ItemColumn;
 void SetNextItemListNote(const char* note);
 void SetNextItemListColumns(const ItemColumn* columns, u32 columnCount, bool hideAll = false);
 void SetNextItemListAction(ItemRowActionCallback callback);
+void SetNextItemListAddDialogWidth(f32 width);
+void SetNextItemListFixedOrder();
+void SetNextItemListRemovable(bool removable);
 void SetNextItemListFooter(ItemListFooterCallback callback, f32 width);
 void SetNextItemListRemoveText(const char* label, const char* manyFormat, bool removesData);
 
@@ -25,6 +28,10 @@ void DrawAllItemsUI(const char* id, const char *listName, Item::List &list, Crea
 void DrawItemPropertiesUI(bool labelLeft = false);
 void DrawItemNameRow(Item* item);
 void ApplyRenameShortcut();
+bool CanRenameItem(const Item* item);
+bool OffersItemDuplicate(const Item* item);
+bool CanDuplicateSelection(const Item* item, const char** outReason = nullptr);
+void RequestSelectionDuplicate(Item* item);
 
 Item* GetInsertAfterItem();
 void ClearInsertAfterItem();

@@ -9,16 +9,8 @@ Sound* CloneSound(Sound* src)
     Sound* dup = new Sound();
 
     dup->setEnableName(src->isEnableName());
-    {
-        u32 copyNum = 1;
-        sead::FixedSafeString<256> newName;
-        do {
-            newName = src->getName();
-            newName.appendWithFormat("_%u", copyNum);
-            copyNum++;
-        } while (!sBfsar.validateName(newName));
-        dup->getName() = newName;
-    }
+
+    MakeCopyName(src->getName(), [](const sead::SafeString& name) { return sBfsar.validateName(name); }, &dup->getName());
 
     if (src->getPlayerRef().isAttached())
         dup->getPlayerRef().attach(src->getPlayerRef().getItem());

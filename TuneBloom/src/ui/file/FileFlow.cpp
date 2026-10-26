@@ -7,6 +7,7 @@
 #include <ui/export/Export.h>
 #include <ui/file/File.h>
 #include <ui/file/GroupFileLocate.h>
+#include <ui/resource/ResourceViews.h>
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/app/PopupMgr.h>
@@ -93,6 +94,7 @@ void CancelPendingExportsAndImports()
     CancelSoundExport();
     CancelFileExports();
     CancelBankBundleTransfers();
+    CancelAudioResourceRequests();
     ResetWaveImport();
 
     sPendingUnusedWaves.clear();
@@ -113,12 +115,12 @@ void HandleFileShortcuts()
 {
     if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
     {
-        if (shortcuts::Pressed(shortcuts::Action::SaveProject) && sBfsar.isOpen())
+        if (shortcuts::Pressed(shortcuts::Action::SaveProject) && IsDocumentOpen())
             sWantsSaveDirect = true;
 
         if (shortcuts::Pressed(shortcuts::Action::OpenProject))
         {
-            if (sBfsar.isOpen())
+            if (IsDocumentOpen())
                 sWantsOpen = true;
             else
                 OpenFile();
@@ -126,13 +128,13 @@ void HandleFileShortcuts()
 
         if (shortcuts::Pressed(shortcuts::Action::NewProject))
         {
-            if (sBfsar.isOpen())
+            if (IsDocumentOpen())
                 sWantsNew = true;
             else
                 sNeedsNewFileFormat = true;
         }
 
-        if (shortcuts::Pressed(shortcuts::Action::SaveProjectAs) && sBfsar.isOpen())
+        if (shortcuts::Pressed(shortcuts::Action::SaveProjectAs) && IsDocumentOpen())
             SaveFileAs();
     }
 }
@@ -149,14 +151,10 @@ static void OpenDroppedFile()
                 glfwFocusWindow(fw->getWindowHandle());
             }
 
-            if (sBfsar.isOpen())
-            {
-                sWantsOpen = true; // open with save prompt
-            }
+            if (IsDocumentOpen())
+                sWantsOpen = true;
             else
-            {
-                OpenFile(); // open directly
-            }
+                OpenFile();
         }
     }
 }
@@ -202,7 +200,7 @@ static void DrawSaveChangesDialog()
     if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_SAVE " %s###Save", messages::saving::cSaveTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         BeginDialogMessage(ICON_LC_CIRCLE_HELP);
-        DialogNamedText(messages::saving::cSaveQuestionFormat, backup::GetArchiveName().c_str());
+        DialogNamedText(messages::saving::cSaveQuestionFormat, GetDocumentName().c_str());
         EndDialogMessage();
 
         BeginDialogFooter({messages::dialog::cYes, messages::dialog::cNo, messages::common::cCancel});
@@ -248,7 +246,9 @@ static void StartDirectSave()
     if (sWantsSaveDirect)
     {
         sWantsSaveDirect = false;
-        sPendingUnusedWaves = sBfsar.findUnusedWaveFiles();
+
+        if (sBfsar.isOpen())
+            sPendingUnusedWaves = sBfsar.findUnusedWaveFiles();
 
         if (!sPendingUnusedWaves.empty())
             ImGui::OpenPopup("###RemoveUnusedFiles");

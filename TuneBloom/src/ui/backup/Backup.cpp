@@ -110,7 +110,7 @@ void Update()
             ScanRecoveries();
     }
 
-    if (!sAutoBackupEnabled || !IsActive() || !sBfsar.isOpen() || !gUnsavedChanges)
+    if (!sAutoBackupEnabled || !IsActive() || !IsDocumentOpen() || !gUnsavedChanges)
     {
         sTimerRunning = false;
         return;
@@ -178,7 +178,7 @@ void OnClean()
     sHasLastBackup = false;
     sNoticeShown = Bfsar::BackupResult::Ok;
 
-    if (!sBfsar.isOpen())
+    if (!IsDocumentOpen())
         ForgetArchiveKeys();
 
     if (IsActive())
@@ -187,7 +187,7 @@ void OnClean()
 
 bool CreateBackup()
 {
-    if (!IsActive() || !sBfsar.isOpen())
+    if (!IsActive() || !IsDocumentOpen())
         return false;
 
     Bfsar::BackupResult result;

@@ -303,35 +303,6 @@ static sead::FixedSafeString<32> FormatByteSize(u64 bytes)
     return out;
 }
 
-enum class WaveImportResult
-{
-    None,
-    Commit,
-    Cancel,
-};
-
-static WaveImportResult DrawWaveImportBody(const char* header, WaveFile::Encoding* encoding,
-                                           WaveFile::RiffWaveInfo* info, const char* commitLabel)
-{
-    if (ImGui::IsWindowAppearing())
-        ResetWaveImport();
-
-    DrawWaveImportInfo(encoding, info, header);
-
-    BeginDialogFooter({commitLabel, messages::common::cCancel}, false);
-
-    const bool commit = DialogButton(commitLabel);
-    const bool cancelClicked = DialogButton(messages::common::cCancel);
-
-    if (commit)
-        return WaveImportResult::Commit;
-
-    if (WaveImportConfirmCancel(cancelClicked))
-        return WaveImportResult::Cancel;
-
-    return WaveImportResult::None;
-}
-
 static void MergeDuplicateWaves(std::vector<Bfsar::WaveDuplicateGroup>* groups)
 {
     sSoundPlayer.reset();
@@ -465,6 +436,7 @@ void DrawWaveFilesUI()
         SetNextItemListNote(messages::item::cStreamWavesHidden);
 
     SetNextItemListAction(&WaveFileRowActionFunc);
+    SetNextItemListAddDialogWidth(CalcWaveImportWidth());
 
     DrawAllItemsUI("Wave File", messages::common::cWaveFile, sBfsar.getWaveFileList(),
         &CreateWaveFileFunc, nullptr, &WaveFileContextMenuFunc, &WaveFilesFilter

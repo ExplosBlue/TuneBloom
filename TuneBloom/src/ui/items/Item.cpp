@@ -1,11 +1,12 @@
 #include <ui/items/ItemList.h>
 
 #include <ui/widgets/Dialogs.h>
-#include <ui/file/File.h>
 #include <ui/items/ItemListInternal.h>
 #include <ui/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/app/Shortcuts.h>
+
+#include <bfsar/archive/Bfsar.h>
 
 #include <libs/IconsLucide.h>
 
@@ -17,13 +18,15 @@ const Item* Item::validate(sead::BufferedSafeString& error) const
 
 bool Item::validateName(sead::BufferedSafeString& error) const
 {
-    if (!IsValidDocumentName(getName()))
+    if (!Bfsar::validName(getName()))
     {
         error = messages::item::cNameInvalidDetail;
         return false;
     }
 
-    if (!IsUniqueDocumentName(getName(), this))
+    const Bfsar* archive = getArchive();
+
+    if (archive && !archive->validateName(getName(), this))
     {
         error = messages::item::cNameDuplicated;
         return false;

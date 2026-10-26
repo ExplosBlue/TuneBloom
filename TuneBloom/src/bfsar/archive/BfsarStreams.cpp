@@ -576,11 +576,11 @@ bool Bfsar::stageStreamReload_(StreamReloadContext& ctx, const StreamReloadResul
     if (ctx.isOpus)
     {
         ctx.unloadFile();
-        readWaves = opusstream::AttachStreamWaves(staged, ctx.filePathOverride);
+        readWaves = opusstream::AttachStreamWaves(*this, staged, ctx.filePathOverride);
     }
     else
     {
-        readWaves = ReadStreamWaves(staged, ctx.fileData, ctx.fileSize, nullptr);
+        readWaves = ReadStreamWaves(*this, staged, ctx.fileData, ctx.fileSize, nullptr);
         ctx.unloadFile();
     }
 
@@ -722,7 +722,7 @@ u32 Bfsar::shareStreamWavesWithSiblings(Sound* source, bool tracksFromFile)
         else
             CopyStreamChannelLayout(sourceInfo, &siblingInfo);
 
-        ReadStreamWaves(sibling, nullptr, 0, source);
+        ReadStreamWaves(*this, sibling, nullptr, 0, source);
 
         siblingInfo.copyAllocationFrom(sourceInfo);
 
@@ -799,7 +799,7 @@ void Bfsar::planNonStreamBinarySave(const Sound *sound, const sead::SafeString &
 
     if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus && testhooks::IsOpusReencodeForced(path))
     {
-        if (opusstream::AttachStreamWaves(const_cast<Sound *>(sound)))
+        if (opusstream::AttachStreamWaves(const_cast<Bfsar &>(*this), const_cast<Sound *>(sound)))
             sound->mHasStreamFileBaseline = false;
     }
 

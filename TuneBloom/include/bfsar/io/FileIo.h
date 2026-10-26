@@ -3,6 +3,7 @@
 #include <filedevice/seadFileDevice.h>
 #include <prim/seadSafeString.h>
 
+#include <string>
 #include <vector>
 
 namespace fileio
@@ -26,6 +27,7 @@ bool RenameOver(const char* tempPath, const char* destPath);
 bool CopyFileOver(const char* srcPath, const char* destPath);
 void RemoveFile(const char* path);
 const char* GetTempFolder();
+std::string CanonicalPath(const char* path);
 
 bool OpenForWrite(sead::FileHandle* handle, const sead::SafeString& path);
 

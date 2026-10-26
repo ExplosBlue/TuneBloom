@@ -21,6 +21,6 @@ struct SeqFileLayout
 };
 
 bool CheckSequenceFileLayout(SeqFileLayout& layout, const nw::snd::internal::SequenceSoundFileReader& reader);
-bool DecompileSequenceFile(std::vector<std::string>& outLines, std::unordered_map<u32, u32>& offsetToLine, nw::snd::internal::SequenceSoundFileReader& reader, const SeqFileLayout& layout);
+bool DecompileSequenceFile(std::vector<std::string>& outLines, std::unordered_map<u32, u32>& offsetToLine, nw::snd::internal::SequenceSoundFileReader& reader, const SeqFileLayout& layout, u32 seqVersion);
 
-MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData, nw::snd::internal::SequenceSoundFileReader& reader);
+MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData, nw::snd::internal::SequenceSoundFileReader& reader, u32 seqVersion);

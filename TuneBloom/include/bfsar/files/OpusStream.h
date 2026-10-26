@@ -10,6 +10,7 @@ namespace sead
     class FileHandle;
 }
 
+class Bfsar;
 class Sound;
 
 namespace opusstream
@@ -26,7 +27,7 @@ namespace opusstream
     bool IsOpusStream(const void *data, u32 size);
     bool ReadInfoHeader(const void *data, u32 size, Info &outInfo);
     bool DecodeToPcm16(const void *data, u32 size, Info &outInfo, std::vector<s16 *> &outChannelData, const char **outError);
-    bool AttachStreamWaves(Sound *sound, const sead::SafeString *filePathOverride = nullptr);
+    bool AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride = nullptr);
     bool WriteStreamFile(sead::FileHandle &handle, const Sound *sound);
     u64 ComputeContentSignature(const Sound &sound);
 

@@ -2,9 +2,7 @@
 #import <objc/runtime.h>
 
 #include <platform/macos/openFiles.h>
-#include <prim/seadSafeString.h>
-
-extern sead::FixedSafeString<512> sDroppedFilePath;
+#include <ui/file/OpenQueue.h>
 
 namespace {
 
@@ -26,8 +24,7 @@ void handleOpenURLs(id self, SEL cmd, NSApplication* app, NSArray<NSURL*>* urls)
         if (!isDocument(path))
             continue;
 
-        sDroppedFilePath = [path fileSystemRepresentation];
-        break;
+        openqueue::PushExternal([path fileSystemRepresentation]);
     }
 }
 

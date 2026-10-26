@@ -1,8 +1,9 @@
 #include <bfsar/player/SoundPlayer.h>
 
+#include <bfsar/archive/Bfsar.h>
+#include <bfsar/files/BfwsdFile.h>
 #include <bfsar/files/OpusStream.h>
 
-#include <ui/file/File.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/items/Selection.h>
@@ -19,6 +20,19 @@
 
 static constexpr std::chrono::milliseconds cSeqRescanInterval(250);
 static constexpr s32 cSeqRescanCostFactor = 10;
+
+static const Bfsar& GetSoundArchive(const Sound& sound)
+{
+    const Bfsar* archive = sound.getArchive();
+    SEAD_ASSERT(archive);
+
+    return *archive;
+}
+
+static bool IsWaveSoundFilterSupported(const Bfsar& archive)
+{
+    return BfwsdFile::isFilterSupportedVersion(archive.getVersionForBfwsd(), archive.getFormat());
+}
 
 void SoundPlayer::update()
 {
@@ -120,7 +134,7 @@ static bool GetStreamSoundPlaybackError(const Sound& sound, sead::BufferedSafeSt
 
     if (streamType != Sound::StreamSoundInfo::StreamType::NwStreamBinary && streamType != Sound::StreamSoundInfo::StreamType::Opus)
     {
-        outError->format(messages::stream::cTypeUnsupportedFormat, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream));
+        outError->format(messages::stream::cTypeUnsupportedFormat, GetInnerFileDisplayName(GetSoundArchive(sound).getFormat(), InnerFileKind::Stream));
         return true;
     }
 
@@ -363,9 +377,9 @@ static void SetSoundParam(BasicSoundPlayer* player, const Sound& sound)
     player->setPanCurve(sound.getPanCurve());
 }
 
-static void SetStreamItemParam(StreamSoundPlayer::SetupArg* setupArg, const Sound::StreamSoundInfo& strmSoundInfo)
+static void SetStreamItemParam(StreamSoundPlayer::SetupArg* setupArg, const Sound::StreamSoundInfo& strmSoundInfo, const Bfsar& archive)
 {
-    if (sBfsar.isStreamSendAvailable())
+    if (archive.isStreamSendAvailable())
     {
         setupArg->pitch = strmSoundInfo.getPitch();
         setupArg->mainSend = strmSoundInfo.getMainSend();
@@ -385,14 +399,14 @@ static void SetStreamItemParam(StreamSoundPlayer::SetupArg* setupArg, const Soun
     }
 }
 
-static void SetStreamTrackParam(nw::snd::SoundArchive::StreamTrackInfo* tmp, const Sound::StreamSoundInfo::Track& trackInfo)
+static void SetStreamTrackParam(nw::snd::SoundArchive::StreamTrackInfo* tmp, const Sound::StreamSoundInfo::Track& trackInfo, const Bfsar& archive)
 {
     tmp->volume = trackInfo.getVolume();
     tmp->pan = trackInfo.getPan();
     tmp->span = trackInfo.getSPan();
     tmp->flags = trackInfo.getFlags();
 
-    if (sBfsar.isStreamSendAvailable())
+    if (archive.isStreamSendAvailable())
     {
         tmp->mainSend = trackInfo.getMainSend();
         for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
@@ -409,7 +423,7 @@ static void SetStreamTrackParam(nw::snd::SoundArchive::StreamTrackInfo* tmp, con
         }
     }
 
-    if (sBfsar.isFilterSupportedVersion())
+    if (archive.isFilterSupportedVersion())
     {
         tmp->lpfFreq = trackInfo.getLpfFreq();
         tmp->biquadType = trackInfo.getBiquadType();
@@ -437,7 +451,11 @@ bool SoundPlayer::playStrmSound_(const Sound* sound)
 
     if (streamType == Sound::StreamSoundInfo::StreamType::Opus)
     {
-        if (!opusstream::AttachStreamWaves(const_cast<Sound *>(sound)))
+        Sound* playable = const_cast<Sound*>(sound);
+        Bfsar* archive = playable->getArchive();
+        SEAD_ASSERT(archive);
+
+        if (!opusstream::AttachStreamWaves(*archive, playable))
             return false;
     }
 
@@ -447,7 +465,7 @@ bool SoundPlayer::playStrmSound_(const Sound* sound)
     setupArg.allocChannelCount = strmSoundInfo.getAllocateChannelCount();
     setupArg.allocTrackFlag = strmSoundInfo.getAllocateTrackFlags();
 
-    SetStreamItemParam(&setupArg, strmSoundInfo);
+    SetStreamItemParam(&setupArg, strmSoundInfo, GetSoundArchive(*sound));
 
     const WaveFile* mainWave = nullptr;
     WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
@@ -500,7 +518,7 @@ bool SoundPlayer::playStrmSound_(const Sound* sound)
             }
         }
 
-        SetStreamTrackParam(&tmp, trackInfo);
+        SetStreamTrackParam(&tmp, trackInfo, GetSoundArchive(*sound));
         tmp.channelCount = static_cast<u8>(trackInfo.getChannelCount());
 
         playingTracks[i] = &trackInfo;
@@ -521,6 +539,7 @@ bool SoundPlayer::playStrmSound_(const Sound* sound)
 
         mStreamPlayer->init();
         mCurrentPlayer = mStreamPlayer;
+        mOwner = mOwnerContext;
 
         SetSoundParam(mStreamPlayer, *sound);
 
@@ -612,6 +631,7 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
 
         mSequencePlayer.init();
         mCurrentPlayer = &mSequencePlayer;
+        mOwner = mOwnerContext;
 
         if (sound)
             SetSoundParam(&mSequencePlayer, *sound);
@@ -748,11 +768,12 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
 
         mWavePlayer.init();
         mCurrentPlayer = &mWavePlayer;
+        mOwner = mOwnerContext;
 
         if (sound)
             SetSoundParam(&mWavePlayer, *sound);
 
-        mWavePlayer.prepare(wave, channel, sound, startOffsetSample);
+        mWavePlayer.prepare(wave, channel, sound, sound && IsWaveSoundFilterSupported(GetSoundArchive(*sound)), startOffsetSample);
 
         if (!sound)
             mWavePlayer.setFileScale(scale.volume, scale.pitch);
@@ -860,6 +881,7 @@ void SoundPlayer::refreshPlayingSound_()
         return;
 
     const Sound& sound = *mPlayingSound;
+    const Bfsar& archive = GetSoundArchive(sound);
 
     snd::internal::driver::SoundThreadLock lock;
 
@@ -867,7 +889,7 @@ void SoundPlayer::refreshPlayingSound_()
 
     if (isCurrentPlayerWave() && sound.getSoundType() == Sound::SoundType::Wave)
     {
-        mWavePlayer.setWaveSoundInfo(sound);
+        mWavePlayer.setWaveSoundInfo(sound, IsWaveSoundFilterSupported(archive));
         return;
     }
 
@@ -877,7 +899,7 @@ void SoundPlayer::refreshPlayingSound_()
     const Sound::StreamSoundInfo& strmSoundInfo = sound.getStreamSoundInfo();
 
     StreamSoundPlayer::SetupArg setupArg;
-    SetStreamItemParam(&setupArg, strmSoundInfo);
+    SetStreamItemParam(&setupArg, strmSoundInfo, archive);
     mStreamPlayer->setItemData(setupArg);
 
     const Sound::StreamSoundInfo::Track::List& trackList = strmSoundInfo.getTrackList();
@@ -892,7 +914,7 @@ void SoundPlayer::refreshPlayingSound_()
                 continue;
 
             nw::snd::SoundArchive::StreamTrackInfo trackInfo;
-            SetStreamTrackParam(&trackInfo, *track);
+            SetStreamTrackParam(&trackInfo, *track, archive);
             mStreamPlayer->setTrackDataInfo(trackNo, trackInfo);
             break;
         }

@@ -44,7 +44,7 @@ static void DrawGroupAddMenu(const char* icon, const char* label, Item* after)
 
     for (const GroupAddType& entry : cGroupAddTypes)
     {
-        const bool hasItems = sBfsar.getItemList(entry.type).front() != nullptr;
+        const bool hasItems = ActiveSoundArchive().getItemList(entry.type).front() != nullptr;
 
         if (!ContextMenuItem(entry.icon, entry.label, hasItems, messages::group::cAddNoItems))
             continue;
@@ -86,7 +86,7 @@ static void AddGroupItem(Group* group, Item* item)
     else
         list.pushBack(info);
 
-    sBfsar.updateList(list);
+    ActiveSoundArchive().updateList(list);
     SetUnsavedChanges(true);
     SelectSubItem(info);
 }
@@ -100,7 +100,7 @@ static void DrawGroupItemAdd(Group* group)
     if (sGroupAddType == Item::ItemType::Invalid)
         return;
 
-    const Item::List& list = sBfsar.getItemList(sGroupAddType);
+    const Item::List& list = ActiveSoundArchive().getItemList(sGroupAddType);
 
     if (sGroupAddOpen)
         OpenItemBrowser(cBrowserId, list, nullptr);
@@ -174,7 +174,7 @@ void DrawGroupsUI()
         [&]()
         {
             DrawTabFilterBar();
-            DrawAllItemsUI("Group", messages::common::cGroup, sBfsar.getGroupList(), &CreateGroupFunc, nullptr, &DrawGroupContextMenu, GetItemFilterCallback());
+            DrawAllItemsUI("Group", messages::common::cGroup, ActiveSoundArchive().getGroupList(), &CreateGroupFunc, nullptr, &DrawGroupContextMenu, GetItemFilterCallback());
             HandleGroupFileRequests();
         },
         []()

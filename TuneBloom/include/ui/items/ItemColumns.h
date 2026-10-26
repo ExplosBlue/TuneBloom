@@ -70,6 +70,7 @@ f32 GetItemSortMarkGap();
 void DrawItemSortMark(ImDrawList* drawList, const ImVec2& inkPos, bool descending, ImU32 color);
 void DrawItemHeadersRow(const ItemColumn* columns, u32 columnCount, const f32* widths = nullptr);
 bool EndItemTable(const ItemColumn* columns, u32 columnCount, const std::vector<Item*>& rows, const f32* autoWidths, f32* nameWidth = nullptr);
+f32 CalcItemValueCellWidth(const char* text);
 void DrawItemValueCell(const char* text, u32 flags, s32 index = -1, bool unused = false);
 void DrawItemColumnCells(const Item* item, const ItemColumn* columns, u32 columnCount, bool rowHovered = false);
 void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* text, ImU32 color, bool alignRight = false);
@@ -79,7 +80,7 @@ void PushItemTablePadding();
 void DrawItemCount(s32 shown, s32 total, const char* typeName, const char* note = nullptr);
 bool SortItemRows(std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount);
 
-void FormatItemSize(sead::BufferedSafeString* out, u32 size);
+void FormatItemSize(sead::BufferedSafeString* out, u64 size);
 void FormatWaveFileLength(const Item* item, sead::BufferedSafeString* out);
 void FormatWaveFileChannels(const Item* item, sead::BufferedSafeString* out);
 void FormatChannelCount(sead::BufferedSafeString* out, s64 channels);

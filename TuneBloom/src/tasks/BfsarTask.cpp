@@ -11,8 +11,11 @@
 #include "snd-ply/snd/SoundSystem.h"
 
 #include "ui/app/UI.h"
+#include "ui/browser/FilesPanel.h"
+#include "ui/file/DocumentMgr.h"
 #include "ui/file/File.h"
 #include "ui/file/LoadProgress.h"
+#include "ui/file/OpenQueue.h"
 #include "ui/player/OutputMeter.h"
 #include "ui/Messages.h"
 #include "ui/app/Notifications.h"
@@ -22,6 +25,7 @@
 #include <libs/stb_image.h>
 
 #include <cstring>
+#include <filesystem>
 
 #include <core/Debug.h>
 
@@ -95,11 +99,30 @@ void BfsarTask::prepare()
 
         for (s32 i = 0; i < count; i++)
         {
-            if (IsDocumentPath(paths[i]))
+            std::error_code error;
+
+            if (std::filesystem::is_directory(paths[i], error))
             {
-                sDroppedFilePath = paths[i];
+                RequestFilesPanelRoot(paths[i]);
                 return;
             }
+        }
+
+        bool hasDocument = false;
+
+        for (s32 i = 0; i < count; i++)
+        {
+            if (IsDocumentPath(paths[i]))
+            {
+                openqueue::PushExternal(paths[i]);
+                hasDocument = true;
+            }
+        }
+
+        if (hasDocument)
+        {
+            glfwFocusWindow(window);
+            return;
         }
 
         for (s32 i = 0; i < count; i++)
@@ -167,7 +190,7 @@ void BfsarTask::exit()
 {
     sead::CurrentHeapSetter chs(sead::HeapMgr::getUnboundHeap());
 
-    CloseFile();
+    CloseAllDocuments();
 
     OutputMeter::instance().uninstall();
     snd::SoundSystem::finalize();

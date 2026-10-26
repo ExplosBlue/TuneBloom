@@ -2,11 +2,10 @@
 
 #include <core/Debug.h>
 
+#include <bfsar/archive/Bfsar.h>
 #include <bfsar/io/FileWriter.h>
 #include <bfsar/io/FlagParameters.h>
 #include <bfsar/io/WaveIdTableWriter.h>
-
-#include <ui/app/UI.h>
 
 #include <snd/snd_WaveSoundFile.h>
 
@@ -59,7 +58,12 @@ static const WaveFile* GetSoundWaveFile(const Sound& sound)
 
 static void CollectWaveSounds(WaveSoundWriteContext& context, const SoundSet& soundSet)
 {
-    for (const Item::ListNode* itemNode = sBfsar.getItem(soundSet.getStartId(), sBfsar.getSoundList()); itemNode && itemNode->val()->getId() <= soundSet.getEndId(); itemNode = sBfsar.getSoundList().next(itemNode))
+    const Bfsar* archive = soundSet.getArchive();
+    SEAD_ASSERT(archive);
+
+    const Item::List& soundList = archive->getSoundList();
+
+    for (const Item::ListNode* itemNode = archive->getItem(soundSet.getStartId(), soundList); itemNode && itemNode->val()->getId() <= soundSet.getEndId(); itemNode = soundList.next(itemNode))
     {
         SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
         const Sound* sound = static_cast<const Sound*>(itemNode->val());

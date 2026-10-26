@@ -3,10 +3,7 @@
 #include "snd/BankR.h"
 #include "snd/DisposeCallbackMgr.h"
 
-#include "bfsar/files/BfwsdFile.h"
 #include "bfsar/model/Sound.h"
-
-#include <ui/app/UI.h>
 
 WaveSoundPlayer::WaveSoundPlayer()
     : mIsRegisterPlayerCallback(false)
@@ -107,7 +104,7 @@ void WaveSoundPlayer::prepare(s32 index, const PrepareArg& arg, snd::UpdateType 
     mActiveFlag = true;
 }
 
-void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, const Sound* sound, u32 startOffsetSample, snd::UpdateType updateType)
+void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, const Sound* sound, bool isFilterSupported, u32 startOffsetSample, snd::UpdateType updateType)
 {
     mStartOffset = startOffsetSample;
     mUpdateType = updateType;
@@ -127,7 +124,7 @@ void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, const So
     nw::snd::internal::WaveInfo waveInfo;
     nw::snd::internal::GetWaveInfoFromWaveFile(&waveInfo, waveFile, channelIdx);
 
-    startChannel(&waveInfo, sound);
+    startChannel(&waveInfo, sound, isFilterSupported);
 
     mActiveFlag = true;
 }
@@ -148,7 +145,7 @@ void WaveSoundPlayer::setBankNoteInfo(u8 key, u8 velocity, const BankFile::Veloc
     BankR::applyVelocityRegion(mChannel, velocityRegion, 0, true);
 }
 
-void WaveSoundPlayer::setWaveSoundInfo(const Sound& sound)
+void WaveSoundPlayer::setWaveSoundInfo(const Sound& sound, bool isFilterSupported)
 {
     const Sound::WaveSoundInfo& waveSoundInfo = sound.getWaveSoundInfo();
 
@@ -170,7 +167,7 @@ void WaveSoundPlayer::setWaveSoundInfo(const Sound& sound)
         mWaveSoundInfo.fxSend[i] = waveSoundInfo.getFxSend(i);
     }
 
-    if (BfwsdFile::isFilterSupportedVersion(sBfsar.getVersionForBfwsd(), sBfsar.getFormat()))
+    if (isFilterSupported)
     {
         mWaveSoundInfo.lpfFreq = waveSoundInfo.getLpfFreq();
         mWaveSoundInfo.biquadType = waveSoundInfo.getBiquadType();
@@ -261,7 +258,7 @@ void WaveSoundPlayer::update()
     updateChannel();
 }
 
-bool WaveSoundPlayer::startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr, const Sound* sound)
+bool WaveSoundPlayer::startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr, const Sound* sound, bool isFilterSupported)
 {
     nw::snd::internal::WaveInfo waveInfo;
     if (waveInfoPtr)
@@ -293,7 +290,7 @@ bool WaveSoundPlayer::startChannel(const nw::snd::internal::WaveInfo* waveInfoPt
         {
             SEAD_ASSERT(sound->getSoundType() == Sound::SoundType::Wave);
 
-            setWaveSoundInfo(*sound);
+            setWaveSoundInfo(*sound, isFilterSupported);
         }
     }
     else

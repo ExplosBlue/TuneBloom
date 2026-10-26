@@ -13,6 +13,7 @@
 #include <core/TestHooks.h>
 
 #include <ui/widgets/Dialogs.h>
+#include <ui/browser/FilesPanel.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/player/OutputMeter.h>
 #include <ui/sequence/SeqManual.h>
@@ -180,6 +181,7 @@ void ImGuiTask::calc()
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
+    testhooks::ApplyInputOverrides();
     ImGui::NewFrame();
 
     testhooks::Update();
@@ -240,6 +242,7 @@ static void SetupImGuiStyle()
     LoadThemeConfig();
     LoadStartupConfig();
     LoadRecentFiles();
+    LoadFilesPanelConfig();
     LoadArchiveConfig();
     LoadBackupConfig();
     LoadInterfaceConfig();

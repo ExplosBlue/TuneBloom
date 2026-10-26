@@ -232,7 +232,7 @@ void DrawStreamRegionLane(WaveFile* wave, ImGui::LoopWaveformState& state)
     lane.origin = ImGui::GetCursorScreenPos();
     lane.width = sead::Mathf::max(1.0f, ImGui::GetContentRegionAvail().x);
     lane.height = ImFloor(ImGui::GetFontSize() * cLaneHeightEm);
-    lane.editable = sBfsar.getFormat() == ArchiveFormat::BFSAR;
+    lane.editable = ActiveSoundArchive().getFormat() == ArchiveFormat::BFSAR;
 
     GetPlayingStreamRegions(wave, &lane.playingNo, &lane.nextNo);
 

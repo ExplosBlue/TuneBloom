@@ -2,6 +2,7 @@
 
 #include <ui/settings/ConfigFile.h>
 #include <ui/widgets/Dialogs.h>
+#include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/GroupFileLocate.h>
@@ -187,6 +188,15 @@ PopupMgr::PopupMgr()
 void PopupMgr::addPopup(const PopupInfo& info)
 {
     mPopups.pushBack(info);
+}
+
+void PopupMgr::forgetAllItems()
+{
+    for (s32 i = 0; i < mPopups.size(); i++)
+    {
+        mPopups(i).item = nullptr;
+        mPopups(i).super = nullptr;
+    }
 }
 
 void PopupMgr::forgetItem(const Item* item)
@@ -477,11 +487,44 @@ static void DrawIgnoreWarningsCheck(f32 fontSize, f32 viewLeft, bool* ignore)
     ImGui::SetItemTooltip("%s", messages::popup::cIgnoreWarningsDetail);
 }
 
-void PopupMgr::updateErrors()
+static void ClearGeneratedWaveArchives()
+{
+    if (Bfsar* archive = FindActiveSoundArchive())
+        archive->clearGenWaveArchiveList();
+}
+
+void PopupMgr::moveProcessedErrors(ItemErrors* target)
 {
     if (mProcessedErrors.empty())
+        return;
+
+    target->context = mErrorContext;
+
+    for (auto& entry : mProcessedErrors)
     {
-        sBfsar.clearGenWaveArchiveList();
+        std::vector<ItemMessage>& itemMessages = target->items[entry.first];
+        itemMessages.insert(itemMessages.end(), entry.second.begin(), entry.second.end());
+    }
+
+    discardProcessedErrors();
+}
+
+void PopupMgr::discardProcessedErrors()
+{
+    mProcessedErrors.clear();
+    mErrorContext = ErrorContext::Opening;
+}
+
+void PopupMgr::updateErrors()
+{
+    if (IsDocumentOpen())
+        moveProcessedErrors(&ActiveDocumentState().itemErrors);
+
+    ItemErrors& errors = ActiveDocumentState().itemErrors;
+
+    if (errors.items.empty())
+    {
+        ClearGeneratedWaveArchives();
         return;
     }
 
@@ -490,12 +533,12 @@ void PopupMgr::updateErrors()
         if (IsGroupFileLocatePending())
             return;
 
-        if (mErrorContext == ErrorContext::Opening)
-            removeIgnoredWarnings();
+        if (errors.context == ErrorContext::Opening)
+            removeIgnoredWarnings(&errors);
 
-        if (mProcessedErrors.empty())
+        if (errors.items.empty())
         {
-            sBfsar.clearGenWaveArchiveList();
+            ClearGeneratedWaveArchives();
             return;
         }
 
@@ -506,11 +549,11 @@ void PopupMgr::updateErrors()
     bool hasWarnings = false;
     size_t errorCount = 0;
 
-    const std::vector<ListEntry> entries = BuildErrorEntries(mProcessedErrors, &errorCount, &hasWarnings);
+    const std::vector<ListEntry> entries = BuildErrorEntries(errors.items, &errorCount, &hasWarnings);
 
     const size_t warningCount = entries.size() - errorCount;
 
-    const bool isSaving = mErrorContext == ErrorContext::Saving;
+    const bool isSaving = errors.context == ErrorContext::Saving;
     const bool hasErrors = errorCount != 0;
     const bool canIgnore = !isSaving && hasWarnings && !GetDocumentPath().isEmpty();
 
@@ -595,11 +638,10 @@ void PopupMgr::updateErrors()
     if (DialogButton(messages::dialog::cOk))
     {
         if (canIgnore && sIgnore)
-            ignoreProcessedWarnings();
+            ignoreProcessedWarnings(errors);
 
         mCurrentProcessItem = nullptr;
-        mErrorContext = ErrorContext::Opening;
-        mProcessedErrors.clear();
+        errors = ItemErrors();
         mPopupOpen = false;
         sSelected = 0;
         ImGui::CloseCurrentPopup();
@@ -611,8 +653,7 @@ void PopupMgr::updateErrors()
 void PopupMgr::closeFile()
 {
     mCurrentProcessItem = nullptr;
-    mErrorContext = ErrorContext::Opening;
-    mProcessedErrors.clear();
+    discardProcessedErrors();
 }
 
 void PopupMgr::loadIgnoredWarnings()
@@ -665,13 +706,13 @@ void PopupMgr::clearIgnoredWarnings()
     saveIgnoredWarnings();
 }
 
-void PopupMgr::removeIgnoredWarnings()
+void PopupMgr::removeIgnoredWarnings(ItemErrors* errors)
 {
     const auto ignored = mIgnoredWarnings.find(GetArchiveKey());
     if (ignored == mIgnoredWarnings.end())
         return;
 
-    for (auto it = mProcessedErrors.begin(); it != mProcessedErrors.end();)
+    for (auto it = errors->items.begin(); it != errors->items.end();)
     {
         const Item* item = it->first;
         std::vector<ItemMessage>& itemMessages = it->second;
@@ -682,13 +723,13 @@ void PopupMgr::removeIgnoredWarnings()
         }), itemMessages.end());
 
         if (itemMessages.empty())
-            it = mProcessedErrors.erase(it);
+            it = errors->items.erase(it);
         else
             ++it;
     }
 }
 
-void PopupMgr::ignoreProcessedWarnings()
+void PopupMgr::ignoreProcessedWarnings(const ItemErrors& errors)
 {
     const std::string archive = GetArchiveKey();
     if (archive.empty())
@@ -696,7 +737,7 @@ void PopupMgr::ignoreProcessedWarnings()
 
     std::set<std::string>& ignored = mIgnoredWarnings[archive];
 
-    for (const auto& entry : mProcessedErrors)
+    for (const auto& entry : errors.items)
     {
         for (const ItemMessage& message : entry.second)
         {

@@ -13,6 +13,13 @@ static constexpr u32 makeVersion(u32 major, u32 minor, u32 patch)
 #include <prim/seadPtrUtil.h>
 #include <prim/seadRuntimeTypeInfo.h>
 
+struct InnerFileTarget
+{
+    ArchiveFormat format = ArchiveFormat::BFSAR;
+    u32 version = 0;
+    sead::Endian::Types endian = sead::Endian::eLittle;
+};
+
 class InnerFile
 {
     SEAD_RTTI_BASE(InnerFile);

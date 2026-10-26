@@ -49,9 +49,9 @@ public:
     void deinit(bool stop = false);
     void fadeOut();
     void prepare(s32 index, const PrepareArg& arg, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
-    void prepare(const WaveFile& waveFile, s32 channelIdx = -1, const Sound* sound = nullptr, u32 startOffsetSample = 0, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
+    void prepare(const WaveFile& waveFile, s32 channelIdx = -1, const Sound* sound = nullptr, bool isFilterSupported = false, u32 startOffsetSample = 0, snd::UpdateType updateType = snd::UpdateType::AudioFrame);
     void setBankNoteInfo(u8 key, u8 velocity, const BankFile::VelocityRegion& velocityRegion);
-    void setWaveSoundInfo(const Sound& sound);
+    void setWaveSoundInfo(const Sound& sound, bool isFilterSupported);
 
     void setFileScale(f32 volume, f32 pitch)
     {
@@ -69,7 +69,7 @@ public:
 
     snd::internal::driver::Channel* getChannel() const { return mChannel; }
 
-    bool startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr = nullptr, const Sound* sound = nullptr);
+    bool startChannel(const nw::snd::internal::WaveInfo* waveInfoPtr = nullptr, const Sound* sound = nullptr, bool isFilterSupported = false);
     void closeChannel(bool stop = false);
     void updateChannel();
 

@@ -216,7 +216,7 @@ void Group::ItemInfo::drawUI()
         Item* oldItem = mItemRef.getItem();
         Item* item = oldItem;
         PropertyRow(messages::common::cItem);
-        if (ItemSelector("##Item", sBfsar.getItemList(mItemRefType), &item, false))
+        if (ItemSelector("##Item", ActiveSoundArchive().getItemList(mItemRefType), &item, false))
         {
             mItemRef.attach(item);
             SetUnsavedChanges(true);
@@ -630,9 +630,11 @@ const Item* Group::ItemInfo::validate(sead::BufferedSafeString& error) const
 
             const bool isStream = sound->getSoundType() == Sound::SoundType::Strm;
 
-            if (!sBfsar.isV3Bfsar() && !(isStream && sound->getStreamSoundInfo().hasPrefetch()))
+            const Bfsar* archive = sound->getArchive();
+
+            if (archive && !archive->isV3Bfsar() && !(isStream && sound->getStreamSoundInfo().hasPrefetch()))
             {
-                error = isStream && sBfsar.isStreamPrefetchBuildable() ? messages::group::cErrorStreamNeedsPrefetch : messages::group::cErrorSoundNotSequence;
+                error = isStream && archive->isStreamPrefetchBuildable() ? messages::group::cErrorStreamNeedsPrefetch : messages::group::cErrorSoundNotSequence;
                 return this;
             }
 
@@ -642,9 +644,13 @@ const Item* Group::ItemInfo::validate(sead::BufferedSafeString& error) const
         case ItemType::SoundSet:
         {
             const SoundSet* soundSet = static_cast<const SoundSet*>(mItemRef.getItem());
-            if (soundSet->getSoundSetType() == SoundSet::SoundSetType::Seq)
+            const Bfsar* archive = soundSet->getArchive();
+
+            if (archive && soundSet->getSoundSetType() == SoundSet::SoundSetType::Seq)
             {
-                for (const Item::ListNode* itemNode = sBfsar.getItem(soundSet->getStartId(), sBfsar.getSoundList()); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = sBfsar.getSoundList().next(itemNode))
+                const Item::List& soundList = archive->getSoundList();
+
+                for (const Item::ListNode* itemNode = archive->getItem(soundSet->getStartId(), soundList); itemNode && itemNode->val()->getId() <= soundSet->getEndId(); itemNode = soundList.next(itemNode))
                 {
                     SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
                     const Sound* sound = static_cast<const Sound*>(itemNode->val());

@@ -223,6 +223,8 @@ static void DeleteVelocityRegion(BankFile::KeyRegion* keyRegion, BankFile::Veloc
 
 static void SplitKeyRegion(BankFile::Instrument* instrument, BankFile::KeyRegion* keyRegion)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     snd::internal::driver::SoundThreadLock lock;
 
     u8 newKeyMax = keyRegion->getKeyMax();
@@ -242,7 +244,7 @@ static void SplitKeyRegion(BankFile::Instrument* instrument, BankFile::KeyRegion
 
     keyRegion->insertBack(newKeyRegion);
 
-    sBfsar.updateList(instrument->getKeyRegionList());
+    archive.updateList(instrument->getKeyRegionList());
 
     for (Item* item : keyRegion->getVelocityRegionList())
     {
@@ -258,7 +260,7 @@ static void SplitKeyRegion(BankFile::Instrument* instrument, BankFile::KeyRegion
         newKeyRegion->getVelocityRegionList().pushBack(newVelRegion);
     }
 
-    sBfsar.updateList(newKeyRegion->getVelocityRegionList());
+    archive.updateList(newKeyRegion->getVelocityRegionList());
     SetUnsavedChanges(true);
 }
 
@@ -284,7 +286,7 @@ static void SplitVelocityRegion(BankFile::KeyRegion* keyRegion, BankFile::Veloci
 
     velocityRegion->insertBack(newVelRegion);
 
-    sBfsar.updateList(keyRegion->getVelocityRegionList());
+    ActiveSoundArchive().updateList(keyRegion->getVelocityRegionList());
     SetUnsavedChanges(true);
 }
 
@@ -1047,7 +1049,7 @@ static void AddKeyRegion(KeyMapFrame& frame)
     newRegion->setEnableName(true);
     newRegion->getName() = "KeyRegion";
 
-    sBfsar.updateList(frame.instrument->getKeyRegionList());
+    ActiveSoundArchive().updateList(frame.instrument->getKeyRegionList());
     SetUnsavedChanges(true);
 
     BankFile::VelocityRegion* newVelRegion = new BankFile::VelocityRegion(0, 127);

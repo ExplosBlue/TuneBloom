@@ -2,15 +2,13 @@
 
 #include <ui/settings/Config.h>
 #include <ui/settings/ConfigFile.h>
+#include <ui/file/Document.h>
+#include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/Messages.h>
 #include <ui/file/UnsavedChanges.h>
 
 #include <bfsar/model/ArchiveFormat.h>
-#include <aal/Bars.h>
-#include <aal/Bwav.h>
-#include <core/ByteView.h>
-#include <bfsar/archive/Cmpbin.h>
 #include <bfsar/io/FileIo.h>
 
 #include <algorithm>
@@ -61,9 +59,6 @@ static constexpr s32 cRenameWaitMs       = 50;
 
 static constexpr u64 cSpaceMargin = 16 * 1024 * 1024;
 
-static constexpr u32 cBarsHeaderFileSize  = 0x04;
-static constexpr u32 cBarsHeaderByteOrder = 0x08;
-
 struct Marker
 {
     fs::path path;
@@ -71,9 +66,17 @@ struct Marker
     std::string dir;
 };
 
-static std::string sUntitledKey;
-static std::string sPinnedDir;
 static std::vector<Recovery> sRecoveries;
+
+static std::string& GetUntitledKey()
+{
+    return ActiveDocumentState().backup.untitledKey;
+}
+
+static std::string& GetPinnedDir()
+{
+    return ActiveDocumentState().backup.pinnedDir;
+}
 
 fs::path GetRootDir()
 {
@@ -133,11 +136,8 @@ static bool IsProcessRunning(u32 pid)
 
 std::string GetArchiveName()
 {
-    if (!GetDocumentPath().isEmpty())
-        return fs::path(GetDocumentPath().cstr()).filename().string();
-
-    if (!sPinnedDir.empty() && !GetDocumentLoadedPath().isEmpty())
-        return fs::path(GetDocumentLoadedPath().cstr()).filename().string();
+    if (const Document* document = ActiveDocument())
+        return document->archiveName();
 
     return std::string(messages::backup::cUntitled) + "." + GetDocumentExtension();
 }
@@ -204,29 +204,32 @@ static std::string GetArchiveKey()
     if (!GetDocumentPath().isEmpty())
         return GetKeyForPath(GetArchivePath());
 
-    if (sUntitledKey.empty())
-        sUntitledKey = cUntitledPrefix + FormatTimeName(std::time(nullptr)) + "-" + std::to_string(GetProcessId());
+    std::string& untitledKey = GetUntitledKey();
 
-    return sUntitledKey;
+    if (untitledKey.empty())
+        untitledKey = cUntitledPrefix + FormatTimeName(std::time(nullptr)) + "-" + std::to_string(GetProcessId());
+
+    return untitledKey;
 }
 
 void PinSnapshot(const std::string& snapshotDir)
 {
-    sPinnedDir = snapshotDir;
+    GetPinnedDir() = snapshotDir;
 }
 
 void SetUntitledKey(const std::string& key)
 {
-    sUntitledKey = key;
+    GetUntitledKey() = key;
 }
 
 void ForgetArchiveKeys()
 {
-    sUntitledKey.clear();
-    sPinnedDir.clear();
+    DocumentState::Backup& state = ActiveDocumentState().backup;
+    state.untitledKey.clear();
+    state.pinnedDir.clear();
 }
 
-static bool IsSafeRelativePath(const std::string& path)
+bool IsSafeRelativePath(const std::string& path)
 {
     const fs::path relative(path);
 
@@ -605,7 +608,7 @@ static std::vector<std::string> ListMarkedDirs()
 
 static bool IsProtected(const Snapshot& snapshot, const std::vector<std::string>& markedDirs)
 {
-    if (!sPinnedDir.empty() && IsSameDir(snapshot.dir, sPinnedDir))
+    if (!GetPinnedDir().empty() && IsSameDir(snapshot.dir, GetPinnedDir()))
         return true;
 
     for (const std::string& dir : markedDirs)
@@ -672,7 +675,9 @@ static void Rotate(const fs::path& keyDir)
 
 fs::path GetMarkerPath()
 {
-    return GetRootDir() / (cMarkerPrefix + std::to_string(GetProcessId()) + cMarkerSuffix);
+    const std::string documentSuffix = "-" + std::to_string(ActiveDocumentState().serial);
+
+    return GetRootDir() / (cMarkerPrefix + std::to_string(GetProcessId()) + documentSuffix + cMarkerSuffix);
 }
 
 static void WriteMarkerFile(const fs::path& path, const std::string& snapshotDir)
@@ -741,7 +746,7 @@ static bool FinishSnapshot(const fs::path& tempDir, const fs::path& finalDir, Sn
     return true;
 }
 
-static void LinkUnchangedGroupFiles(const fs::path& dir, const std::string& previousDir, const std::vector<std::string>& groupFiles)
+void LinkUnchangedGroupFiles(const fs::path& dir, const std::string& previousDir, const std::vector<std::string>& groupFiles)
 {
     if (previousDir.empty())
         return;
@@ -768,64 +773,26 @@ static void LinkUnchangedGroupFiles(const fs::path& dir, const std::string& prev
     }
 }
 
-static bool WriteResourceSnapshot(const fs::path& tempDir, Snapshot* snapshot, Bfsar::BackupResult* result)
+static void FindPreviousStreams(const std::vector<Snapshot>& previous, Document::BackupWrite* write)
 {
-    sead::FixedSafeString<256> error;
-    const Item* invalidItem = nullptr;
-
-    if (!sAudioResource.validate(&error, &invalidItem))
-    {
-        *result = Bfsar::BackupResult::Invalid;
-        return false;
-    }
-
-    std::vector<std::string> streamPaths;
-
-    if (!sAudioResource.writeBackup(tempDir.string(), snapshot->archiveName, &streamPaths))
-    {
-        *result = Bfsar::BackupResult::WriteFailed;
-        return false;
-    }
-
-    for (const std::string& path : streamPaths)
-        snapshot->streams.push_back({ path, 0 });
-
-    *result = Bfsar::BackupResult::Ok;
-    return true;
-}
-
-static bool WriteArchiveSnapshot(const fs::path& tempDir, const std::vector<Snapshot>& previous, Snapshot* snapshot, Bfsar::BackupResult* result)
-{
-    const std::string archivePath = (tempDir / snapshot->archiveName).string();
-
-    *result = sBfsar.saveBackup(archivePath.c_str(), &snapshot->groupFiles);
-
-    if (*result != Bfsar::BackupResult::Ok)
-        return false;
-
-    std::string previousDir;
-    std::vector<Bfsar::BackupStream> previousStreams;
-
     for (const Snapshot& other : previous)
     {
         if (other.kind == Kind::Save)
             continue;
 
-        previousDir = other.dir;
-        previousStreams = other.streams;
-        break;
+        write->previousDir = other.dir;
+        write->previousStreams = other.streams;
+        return;
     }
-
-    LinkUnchangedGroupFiles(tempDir, previousDir, snapshot->groupFiles);
-
-    return sBfsar.saveBackupStreams(tempDir.string(), previousDir, previousStreams, &snapshot->streams);
 }
 
 bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
 {
     *result = Bfsar::BackupResult::OpenFailed;
 
-    if (!IsActive() || !IsDocumentOpen())
+    Document* document = ActiveDocument();
+
+    if (!IsActive() || !document)
         return false;
 
     const fs::path keyDir = GetRootDir() / GetArchiveKey();
@@ -842,7 +809,7 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
     snapshot.originalPath = GetArchivePath();
     snapshot.kind = kind;
     snapshot.time = static_cast<s64>(std::time(nullptr));
-    snapshot.saveNames = IsAudioResourceOpen() ? -1 : (sBfsar.getSaveMetadata() ? 1 : 0);
+    snapshot.saveNames = document->getBackupNamesSetting();
 
     const fs::path finalDir = MakeSnapshotDir(keyDir, static_cast<std::time_t>(snapshot.time), kind);
     const fs::path tempDir = finalDir.string() + cTempSuffix;
@@ -852,7 +819,11 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
     if (ec)
         return false;
 
-    const bool written = IsAudioResourceOpen() ? WriteResourceSnapshot(tempDir, &snapshot, result) : WriteArchiveSnapshot(tempDir, previous, &snapshot, result);
+    Document::BackupWrite write;
+    write.dir = tempDir.string();
+    FindPreviousStreams(previous, &write);
+
+    const bool written = document->writeBackup(write, &snapshot, result);
 
     if (!written || !FinishSnapshot(tempDir, finalDir, &snapshot))
     {
@@ -863,7 +834,7 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
         return false;
     }
 
-    if (kind != Kind::Manual || gUnsavedChanges)
+    if (kind != Kind::Manual || HasUnsavedChanges())
         WriteMarker(snapshot.dir);
 
     Rotate(keyDir);
@@ -872,27 +843,6 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
         *outDir = snapshot.dir;
 
     return true;
-}
-
-bool HasCompleteArchive(const u8* file, u64 size)
-{
-    if (cmpbin::IsZstdFrame(file, size) || aal::IsBwav(file, size))
-        return true;
-
-    if (aal::IsBars(file, size))
-        return ByteView(file, size, ByteView::IsBigEndianMark(file, size, cBarsHeaderByteOrder)).readU32(cBarsHeaderFileSize) <= size;
-
-    if (size < sizeof(nw::ut::BinaryFileHeader))
-        return false;
-
-    const u8* mark = file + offsetof(nw::ut::BinaryFileHeader, byteOrder);
-    const u8* field = file + offsetof(nw::ut::BinaryFileHeader, fileSize);
-    const bool isLittle = mark[0] == 0xFF && mark[1] == 0xFE;
-
-    const u32 headerSize = isLittle ? static_cast<u32>(field[3]) << 24 | static_cast<u32>(field[2]) << 16 | static_cast<u32>(field[1]) << 8 | static_cast<u32>(field[0])
-                                    : static_cast<u32>(field[0]) << 24 | static_cast<u32>(field[1]) << 16 | static_cast<u32>(field[2]) << 8 | static_cast<u32>(field[3]);
-
-    return headerSize == size;
 }
 
 static bool HasCompleteArchiveFile(const Snapshot& snapshot)
@@ -915,7 +865,7 @@ static bool HasCompleteArchiveFile(const Snapshot& snapshot)
     std::error_code ec;
     const std::uintmax_t size = fs::file_size(path, ec);
 
-    return headerRead && !ec && HasCompleteArchive(header, size);
+    return headerRead && !ec && Document::IsCompleteFile(header, size);
 }
 
 static bool FindCompleteSnapshot(const fs::path& keyDir, Snapshot* out)
@@ -1089,51 +1039,11 @@ void DiscardRecovery(const Recovery& recovery)
         fs::remove_all(keyDir, ec);
 }
 
-static void CopyGroupFiles(const std::string& archivePath, const fs::path& destDir, Snapshot* snapshot)
-{
-    const fs::path sourceDir = fs::path(archivePath).parent_path();
-
-    for (const std::string& path : sBfsar.getGroupFileSavePaths(archivePath.c_str()))
-    {
-        const std::string relativePath = fs::path(path).lexically_relative(sourceDir).generic_string();
-
-        if (!IsSafeRelativePath(relativePath))
-            continue;
-
-        const fs::path dest = destDir / relativePath;
-        std::error_code ec;
-
-        fs::create_directories(dest.parent_path(), ec);
-        fs::copy_file(path, dest, ec);
-
-        if (!ec)
-            snapshot->groupFiles.push_back(relativePath);
-    }
-}
-
-static void CopyResourceStreamFiles(const std::string& archivePath, const fs::path& destDir, Snapshot* snapshot)
-{
-    const fs::path sourceDir = fs::path(archivePath).parent_path();
-
-    for (const std::string& relativePath : sAudioResource.getStreamWritePaths(sead::FixedSafeString<512>(archivePath.c_str())))
-    {
-        const fs::path dest = destDir / relativePath;
-        std::error_code ec;
-
-        if (!fs::is_regular_file(sourceDir / relativePath, ec))
-            continue;
-
-        fs::create_directories(dest.parent_path(), ec);
-        fs::copy_file(sourceDir / relativePath, dest, ec);
-
-        if (!ec)
-            snapshot->streams.push_back({ relativePath, 0 });
-    }
-}
-
 void KeepPreviousVersion(const char* destPath)
 {
-    if (!sAutoBackupEnabled || !IsActive() || !IsDocumentOpen())
+    Document* document = ActiveDocument();
+
+    if (!sAutoBackupEnabled || !IsActive() || !document)
         return;
 
     const std::string sourcePath = destPath ? NormalizePath(destPath) : GetArchivePath();
@@ -1194,10 +1104,7 @@ void KeepPreviousVersion(const char* destPath)
     fs::copy_file(source.string() + cNamesSuffix, dest.string() + cNamesSuffix, ec);
     ec.clear();
 
-    if (IsAudioResourceOpen())
-        CopyResourceStreamFiles(sourcePath, tempDir, &snapshot);
-    else
-        CopyGroupFiles(sourcePath, tempDir, &snapshot);
+    document->copyPreviousSidecars(sourcePath, tempDir.string(), &snapshot);
 
     if (FinishSnapshot(tempDir, finalDir, &snapshot))
         Rotate(keyDir);
@@ -1208,7 +1115,7 @@ std::vector<Snapshot> ListSnapshots()
     if (!IsDocumentOpen())
         return {};
 
-    if (GetDocumentPath().isEmpty() && sUntitledKey.empty())
+    if (GetDocumentPath().isEmpty() && GetUntitledKey().empty())
         return {};
 
     return ListSnapshotsIn(GetRootDir() / GetArchiveKey());
@@ -1218,7 +1125,7 @@ std::string GetFolder()
 {
     std::error_code ec;
 
-    if (IsDocumentOpen() && (!GetDocumentPath().isEmpty() || !sUntitledKey.empty()))
+    if (IsDocumentOpen() && (!GetDocumentPath().isEmpty() || !GetUntitledKey().empty()))
     {
         const fs::path keyDir = GetRootDir() / GetArchiveKey();
 

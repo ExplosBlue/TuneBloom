@@ -47,7 +47,6 @@ struct SoundExportOptions
 };
 
 bool StartSoundExport(const std::vector<Sound*>& sounds, const SoundExportOptions& options);
-bool IsSoundExportRunning();
 void CancelSoundExportRun();
 
 void BuildTrackExportPath(sead::BufferedSafeString* outPath, const char* path, u32 trackNo);

@@ -565,7 +565,7 @@ void Bfsar::readStreamFileWaves_(BfsarOpenContext& ctx, Sound* sound, const Byte
     const auto it = ctx.streamSounds.find(sound->mStreamSoundInfo.mPath.cstr());
     const Sound* sourceSound = it != ctx.streamSounds.end() ? it->second : nullptr;
 
-    if (!ReadStreamWaves(sound, strmFile.data(), static_cast<u32>(strmFile.size()), sourceSound) || !StreamWavesCoverLayout(sound->mStreamSoundInfo))
+    if (!ReadStreamWaves(*this, sound, strmFile.data(), static_cast<u32>(strmFile.size()), sourceSound) || !StreamWavesCoverLayout(sound->mStreamSoundInfo))
     {
         StreamLoopInfoBatch::Flush();
         detachStreamWaves(sound);

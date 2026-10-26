@@ -39,6 +39,8 @@ Item* sWavDropTargetVel = nullptr;
 
 static void ImportNativeWaveFile(const sead::SafeString& path, const sead::SafeString& name)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     if (!device)
     {
@@ -65,6 +67,7 @@ static void ImportNativeWaveFile(const sead::SafeString& path, const sead::SafeS
     PatchWaveFileHeader(fileData);
 
     WaveFile* newWave = new WaveFile();
+    newWave->setArchive(&archive);
     newWave->setEnableName(true);
     newWave->getName() = name;
 
@@ -76,12 +79,12 @@ static void ImportNativeWaveFile(const sead::SafeString& path, const sead::SafeS
         return;
     }
 
-    newWave->setFormat(sBfsar.getFormat());
-    newWave->setVersion(sBfsar.getVersionForBfwav());
+    newWave->setFormat(archive.getFormat());
+    newWave->setVersion(archive.getVersionForBfwav());
     newWave->refreshSerializedHash();
     device->unload(fileData);
 
-    AddFileToList(sBfsar.getWaveFileList(), newWave);
+    AddFileToList(archive.getWaveFileList(), newWave);
 }
 
 InstanciateItemCallback CreateWaveFileFunc(bool clear)
@@ -134,6 +137,7 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
     return []() -> Item*
     {
         WaveFile* waveFile = new WaveFile();
+        waveFile->setArchive(&ActiveSoundArchive());
         waveFile->setEnableName(true);
         waveFile->getName() = sFileName;
 
@@ -314,7 +318,7 @@ static void MergeDuplicateWaves(std::vector<Bfsar::WaveDuplicateGroup>* groups)
 
     ForgetRemovedItems(mergedWaves);
 
-    Bfsar::WaveMergeResult r = sBfsar.mergeDuplicateWaves(*groups);
+    Bfsar::WaveMergeResult r = ActiveSoundArchive().mergeDuplicateWaves(*groups);
     groups->clear();
 
     if (r.duplicatesRemoved > 0)
@@ -407,6 +411,8 @@ static void DrawMergeDuplicatesDialog(std::vector<Bfsar::WaveDuplicateGroup>* gr
 
 void DrawWaveFilesUI()
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     static std::vector<Bfsar::WaveDuplicateGroup> sPendingDedup;
 
     if (BeginListOptions(!sWaveFilesIncludeStream))
@@ -422,7 +428,7 @@ void DrawWaveFilesUI()
     if (sMergeDuplicatesRequest)
     {
         sMergeDuplicatesRequest = false;
-        sPendingDedup = sBfsar.findDuplicateWaves();
+        sPendingDedup = archive.findDuplicateWaves();
 
         if (sPendingDedup.empty())
             notify::Add(notify::Kind::Info, messages::item::cNoDuplicates);
@@ -438,7 +444,7 @@ void DrawWaveFilesUI()
     SetNextItemListAction(&WaveFileRowActionFunc);
     SetNextItemListAddDialogWidth(CalcWaveImportWidth());
 
-    DrawAllItemsUI("Wave File", messages::common::cWaveFile, sBfsar.getWaveFileList(),
+    DrawAllItemsUI("Wave File", messages::common::cWaveFile, archive.getWaveFileList(),
         &CreateWaveFileFunc, nullptr, &WaveFileContextMenuFunc, &WaveFilesFilter
     );
 }
@@ -537,7 +543,10 @@ void DrawWavRegionDropImport()
             if (!sDropInfo.isLoop)
                 sDropInfo.loopStartFrame = 0;
 
+            Bfsar& archive = ActiveSoundArchive();
+
             WaveFile* wave = new WaveFile();
+            wave->setArchive(&archive);
             wave->setEnableName(true);
             wave->getName() = sDropName;
 
@@ -548,8 +557,8 @@ void DrawWavRegionDropImport()
 
             if (success)
             {
-                sBfsar.getWaveFileList().pushBack(wave);
-                sBfsar.updateList(sBfsar.getWaveFileList());
+                archive.getWaveFileList().pushBack(wave);
+                archive.updateList(archive.getWaveFileList());
 
                 if (sDropTarget)
                     sDropTarget->getWaveFileRef().attach(wave);

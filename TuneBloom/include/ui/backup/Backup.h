@@ -32,6 +32,7 @@ struct Snapshot
 
 void Update();
 void OnClean();
+void OnDocumentClosed();
 void KeepPreviousVersion(const char* destPath = nullptr);
 
 std::vector<Snapshot> ListSnapshots();

@@ -38,7 +38,12 @@ bool CanRenameItem(const Item* item)
             return item->isEnableName();
 
         case Item::ItemType::AudioAsset:
-            return sAudioResource.canRenameAsset(*static_cast<const AudioAsset*>(item));
+        {
+            const AudioAsset* asset = static_cast<const AudioAsset*>(item);
+            const AudioResource* resource = asset->getResource();
+
+            return resource && resource->canRenameAsset(*asset);
+        }
 
         default:
             return IsItemNameOptional(item);

@@ -36,6 +36,22 @@ public:
         Severity severity = Severity::Error;
     };
 
+    struct ItemOrder
+    {
+        bool operator()(const Item* a, const Item* b) const
+        {
+            return a->getIdWithTypeAll() < b->getIdWithTypeAll();
+        }
+    };
+
+    using ItemMessageMap = std::map<Item*, std::vector<ItemMessage>, ItemOrder>;
+
+    struct ItemErrors
+    {
+        ErrorContext context = ErrorContext::Opening;
+        ItemMessageMap items;
+    };
+
     struct PopupInfo
     {
     private:
@@ -68,8 +84,12 @@ private:
 public:
     void addPopup(const PopupInfo& info);
     void forgetItem(const Item* item);
+    void forgetAllItems();
     void update();
     void closeFile();
+
+    void moveProcessedErrors(ItemErrors* target);
+    void discardProcessedErrors();
 
     void clearIgnoredWarnings();
 
@@ -122,8 +142,8 @@ private:
 
     void loadIgnoredWarnings();
     void saveIgnoredWarnings() const;
-    void removeIgnoredWarnings();
-    void ignoreProcessedWarnings();
+    void removeIgnoredWarnings(ItemErrors* errors);
+    void ignoreProcessedWarnings(const ItemErrors& errors);
 
 private:
     sead::FixedRingBuffer<PopupInfo, 10> mPopups;
@@ -134,15 +154,7 @@ private:
     Item* mCurrentProcessItem;
     ErrorContext mErrorContext;
 
-    struct Cmp
-    {
-        bool operator()(const Item* a, const Item* b) const
-        {
-            return a->getIdWithTypeAll() < b->getIdWithTypeAll();
-        }
-    };
-
-    std::map<Item*, std::vector<ItemMessage>, Cmp> mProcessedErrors;
+    ItemMessageMap mProcessedErrors;
 
     std::map<std::string, std::set<std::string>> mIgnoredWarnings;
 };

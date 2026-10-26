@@ -16,7 +16,7 @@ class Sound;
 
 namespace opusstream
 {
-    bool AttachStreamWaves(Sound *sound, const sead::SafeString *filePathOverride);
+    bool AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
 }
 
 class Sound : public Item
@@ -1418,5 +1418,5 @@ private:
 
     friend class Bfsar;
     friend class SoundSet;
-    friend bool opusstream::AttachStreamWaves(Sound *sound, const sead::SafeString *filePathOverride);
+    friend bool opusstream::AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
 };

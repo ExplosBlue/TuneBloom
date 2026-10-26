@@ -1014,6 +1014,7 @@ inline constexpr const char* cWaveSoundNeedsWaveSoundSet = "A Wave Sound must be
 inline constexpr const char* cSharedStreamTrackCountFormat = "Shares its stream path with '%s'\nBoth must have the same number of Tracks";
 inline constexpr const char* cSharedStreamWaveFileFormat = "Shares its stream path with '%s'\nTracks must use the same Wave File";
 inline constexpr const char* cSharedStreamTracksIdenticalFormat = "Shares its stream path with '%s'\nTracks must be identical";
+inline constexpr const char* cOtherArchiveItemFormat = "Uses '%s' from another sound archive";
 
 }
 
@@ -1058,7 +1059,6 @@ inline constexpr const char* cOpenStageNames         = "Names";
 inline constexpr const char* cCmpbinDecompressFailed = "The cmpbin file could not be decompressed";
 inline constexpr const char* cBlockNotFoundFormat = "%s: the %s block could not be found";
 
-inline constexpr const char* cNewFileNameFormat = "New.%s";
 inline constexpr const char* cUntitledFileNameFormat = "Untitled.%s";
 inline constexpr const char* cOpenFilter = "Sound Archive (*.bfsar, *.bcsar, *.cmpbin)";
 inline constexpr const char* cOpenFilterAll = "All Supported Files (*.bfsar, *.bcsar, *.cmpbin, *.bars, *.bwav, *.zs)";
@@ -1282,6 +1282,55 @@ inline constexpr const char* cNoSelection = "No Wave File selected";
 inline constexpr const char* cBrowseTip   = "Click to choose from a list";
 inline constexpr const char* cSamples     = "Samples";
 inline constexpr const char* cUsedBy      = "Used By";
+
+}
+
+namespace files
+{
+
+inline constexpr const char* cWindowTitle = "Files";
+
+inline constexpr const char* cChooseFolder      = "Choose Folder";
+inline constexpr const char* cChooseFolderTitle = "Choose a Folder to Browse";
+inline constexpr const char* cRescan            = "Scan Again";
+inline constexpr const char* cSearchHint        = "Search files";
+
+inline constexpr const char* cEmpty       = "No folder open";
+inline constexpr const char* cEmptyDetail = "Choose a game's romfs or a mod folder to browse its sound files";
+inline constexpr const char* cNoAudio     = "No sound files in this folder";
+inline constexpr const char* cNoMatch     = "No files match the search";
+inline constexpr const char* cRootMissing = "This folder no longer exists";
+
+inline constexpr const char* cKindArchives  = "Archives";
+inline constexpr const char* cKindResources = "Resources";
+inline constexpr const char* cKindWaves     = "Waves";
+inline constexpr const char* cKindStreams   = "Streams";
+
+inline constexpr const char* cKindFilterFormat = "%s (%u)";
+
+inline constexpr const char* cColumnName   = "Name";
+inline constexpr const char* cColumnFormat = "Format";
+inline constexpr const char* cColumnSize   = "Size";
+
+inline constexpr const char* cIndexingFormat     = "Scanning... %u files";
+inline constexpr const char* cSummaryFormat      = "%u files, %s";
+inline constexpr const char* cSummaryOneFormat   = "1 file, %s";
+inline constexpr const char* cShownFormat        = "%u of %u files";
+inline constexpr const char* cFileCountFormat    = "%u files";
+inline constexpr const char* cFileCountOne       = "1 file";
+inline constexpr const char* cSoundCountFormat   = "%u Sounds";
+inline constexpr const char* cSoundCountOne      = "1 Sound";
+inline constexpr const char* cMatchSummaryFormat = "%s, %s";
+
+inline constexpr const char* cOpen = "Open";
+
+inline constexpr const char* cFormatVersionFormat = "%s %s";
+inline constexpr const char* cCompressed          = "zstd compressed";
+inline constexpr const char* cAssetCountFormat    = "%u Audio Assets";
+inline constexpr const char* cAssetCountOne       = "1 Audio Asset";
+inline constexpr const char* cStreamStart         = "Start of a stream";
+inline constexpr const char* cLooping             = "Loops";
+inline constexpr const char* cSoundInFileFormat   = "%s in %s";
 
 }
 
@@ -1929,6 +1978,10 @@ inline constexpr const char* cCountFormat  = "%d Changes";
 inline constexpr const char* cCountOneFormat = "%d Change";
 inline constexpr const char* cNoChanges    = "No unsaved changes";
 
+inline constexpr const char* cDontSave       = "Don't Save";
+inline constexpr const char* cExitHeadingFormat = "%d files have unsaved changes";
+inline constexpr const char* cExitHeadingOne    = "1 file has unsaved changes";
+
 inline constexpr const char* cNoRowReason   = "Select a row first";
 inline constexpr const char* cRemovedReason = "The item is no longer in the archive";
 
@@ -2072,6 +2125,7 @@ inline constexpr const char* cNew         = "New";
 inline constexpr const char* cOpen        = "Open";
 inline constexpr const char* cOpenRecent  = "Open Recent";
 inline constexpr const char* cSaveAs      = "Save As";
+inline constexpr const char* cSaveAll     = "Save All";
 inline constexpr const char* cExit        = "Exit";
 inline constexpr const char* cPreferences = "Preferences";
 inline constexpr const char* cAbout       = "About";
@@ -2109,6 +2163,20 @@ inline constexpr const char* cDiscord     = "Discord Server";
 
 }
 
+namespace documents
+{
+
+inline constexpr const char* cPreview      = "Preview";
+inline constexpr const char* cPreviewHint  = "Double-click to keep open";
+inline constexpr const char* cUnloaded     = "Unloaded";
+inline constexpr const char* cUnloadedHint = "Reloads when selected";
+inline constexpr const char* cKeepOpen     = "Keep Open";
+inline constexpr const char* cCloseOthers  = "Close Others";
+inline constexpr const char* cOpenFiles    = "Open Files";
+inline constexpr const char* cSwitchLocked = "Close the open dialog first";
+
+}
+
 namespace keys
 {
 
@@ -2118,12 +2186,15 @@ inline constexpr const char* cGroupPiano    = "Piano Keyboard";
 inline constexpr const char* cGroupMouse    = "Mouse";
 
 inline constexpr const char* cCloseFileWindow = "Close File Window";
+inline constexpr const char* cCloseFile       = "Close File";
 
 inline constexpr const char* cPreviousItem   = "Previous Item";
 inline constexpr const char* cNextItem       = "Next Item";
 inline constexpr const char* cFirstItem      = "First Item";
 inline constexpr const char* cLastItem       = "Last Item";
 inline constexpr const char* cShowSelection  = "Scroll to Selection";
+inline constexpr const char* cCollapseFolder = "Collapse Folder";
+inline constexpr const char* cExpandFolder   = "Expand Folder";
 
 inline constexpr const char* cPlayPause = "Play / Pause";
 

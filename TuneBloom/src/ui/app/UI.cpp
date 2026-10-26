@@ -2,10 +2,13 @@
 
 #include <ui/app/About.h>
 #include <ui/backup/Backup.h>
+#include <ui/file/DocumentState.h>
+#include <ui/file/DocumentTabs.h>
 #include <ui/export/Export.h>
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
 #include <ui/project/FileLists.h>
+#include <ui/browser/FilesPanel.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/StartPage.h>
 #include <ui/items/ItemList.h>
@@ -40,14 +43,17 @@
 
 #include <bfsar/files/BankFile.h>
 
-UIType sSelectedUIType = UIType::ProjectInfo;
-
 static bool sShowSystemWindow = false;
 static bool sResetLayoutRequest = false;
 
+UIType GetUITab()
+{
+    return ActiveDocumentState().tab;
+}
+
 void SetUITab(UIType type)
 {
-    sSelectedUIType = type;
+    ActiveDocumentState().tab = type;
 }
 
 void FocusInfoWindow()
@@ -101,6 +107,7 @@ static void DockBuilder(ImGuiID dockspaceId, const ImVec2& dockspaceSize)
     ImGuiID dock1Bottom = ImGui::DockBuilderSplitNode(dock1, ImGuiDir_Down, 0.50f, nullptr, &dock1);
 
     ImGui::DockBuilderDockWindow("###ProjectWindow", dock1);
+    ImGui::DockBuilderDockWindow(cFilesWindowId, dock1);
     ImGui::DockBuilderDockWindow("###OutputMeterWindow", dock1Bottom);
     ImGui::DockBuilderDockWindow("###InfoWindow", mainDockId);
     ImGui::DockBuilderDockWindow("###SubInfoWindow", dockDownMain);
@@ -135,6 +142,8 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
     ImGui::Begin(label, NULL, host_window_flags);
     ImGui::PopStyleVar(3);
 
+    DrawDocumentTabStrip();
+
     ImGuiID dockspace_id = ImGui::GetID("DockSpace");
 
     if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr || sResetLayoutRequest)
@@ -168,116 +177,25 @@ static void DrawSystemWindow()
     }
 }
 
-static void DrawAudioResourceTab(UIType type)
-{
-    if (type == UIType::ProjectInfo)
-        DrawAudioResourceInfoUI();
-    else
-        DrawAudioAssetsUI();
-}
-
 static void DrawInfoUI()
 {
-    bool notProjUI = IsDocumentOpen() && sSelectedUIType != UIType::ProjectInfo;
+    Document* document = ActiveDocument();
+    const bool notProjUI = document && GetUITab() != UIType::ProjectInfo;
+
     if (notProjUI)
-    {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    }
 
-    bool windowOpen = ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_PEN " %s###InfoWindow", messages::project::cInfoWindowTitle).cstr(), nullptr, notProjUI ? 0 : ImGuiWindowFlags_NoScrollbar);
+    const bool windowOpen = ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_PEN " %s###InfoWindow", messages::project::cInfoWindowTitle).cstr(), nullptr, notProjUI ? 0 : ImGuiWindowFlags_NoScrollbar);
 
     if (notProjUI)
-    {
         ImGui::PopStyleVar();
-    }
 
     if (windowOpen)
     {
-        if (!IsDocumentOpen())
-        {
+        if (document)
+            document->drawInfo(GetUITab());
+        else
             DrawStartPage();
-
-            ImGui::End();
-            return;
-        }
-
-        if (IsAudioResourceOpen())
-        {
-            DrawAudioResourceTab(sSelectedUIType);
-
-            ImGui::End();
-            return;
-        }
-
-        switch (sSelectedUIType)
-        {
-            case UIType::ProjectInfo:
-                DrawProjectInfoUI();
-                break;
-
-            case UIType::AllSounds:
-                DrawAllSoundsUI();
-                break;
-
-            case UIType::StreamSounds:
-                DrawStreamSoundsUI();
-                break;
-
-            case UIType::WaveSounds:
-                DrawWaveSoundsUI();
-                break;
-
-            case UIType::SequenceSounds:
-                DrawSequenceSoundsUI();
-                break;
-
-            case UIType::AllSoundSets:
-                DrawAllSoundSetsUI();
-                break;
-
-            case UIType::WaveSoundSets:
-                DrawWaveSoundSetsUI();
-                break;
-
-            case UIType::SequenceSoundSets:
-                DrawSequenceSoundSetsUI();
-                break;
-
-            case UIType::Banks:
-                DrawBanksUI();
-                break;
-
-            case UIType::WaveArchives:
-                DrawWaveArchivesUI();
-                break;
-
-            case UIType::Groups:
-                DrawGroupsUI();
-                break;
-
-            case UIType::Players:
-                DrawPlayersUI();
-                break;
-
-            case UIType::WaveFiles:
-                DrawWaveFilesUI();
-                break;
-
-            case UIType::SequenceFiles:
-                DrawSequenceFilesUI();
-                break;
-
-            case UIType::BankFiles:
-                DrawBankFilesUI();
-                break;
-
-            case UIType::FileStatistics:
-                DrawFileStatisticsUI();
-                break;
-
-            default:
-                break;
-        }
     }
 
     ImGui::End();
@@ -295,13 +213,13 @@ Sound* GetSelectedStreamSound()
 
 bool IsStreamPanelShown()
 {
-    if (!sBfsar.isOpen())
+    if (!IsSoundArchiveOpen())
         return false;
 
-    if (sSelectedUIType == UIType::StreamSounds)
+    if (GetUITab() == UIType::StreamSounds)
         return true;
 
-    return sSelectedUIType == UIType::AllSounds && GetSelectedStreamSound() != nullptr;
+    return GetUITab() == UIType::AllSounds && GetSelectedStreamSound() != nullptr;
 }
 
 static void DrawSubInfoUI()
@@ -575,6 +493,7 @@ void DrawUI()
     ImGuiID dockspaceId = DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_AutoHideTabBar);
 
     DrawProjectUI();
+    DrawFilesPanel();
     DrawInfoUI();
     DrawSubInfoUI();
     DrawStreamRegionsWindow();

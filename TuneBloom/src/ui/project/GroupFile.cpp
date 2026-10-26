@@ -37,6 +37,8 @@ static void DrawShowFileButton(const std::string& path)
 
 void DrawGroupFileRow(const Group* group)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     PropertyRow(messages::group::cGroupFileLabel);
 
     if (group->getExternalFileState() == Group::ExternalFileState::Missing)
@@ -46,7 +48,7 @@ void DrawGroupFileRow(const Group* group)
     }
 
     const bool isOnDisk = group->getExternalFileState() == Group::ExternalFileState::Loaded;
-    const std::string path = sBfsar.getGroupFileSavePath(group);
+    const std::string path = archive.getGroupFileSavePath(group);
 
     const f32 buttonWidth = isOnDisk ? ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.x : 0.0f;
     const f32 textWidth = ImGui::GetContentRegionAvail().x - buttonWidth;
@@ -63,7 +65,7 @@ void DrawGroupFileRow(const Group* group)
     if (isOnDisk)
         DrawShowFileButton(path);
 
-    const u32 extraFileCount = sBfsar.getGroupExtraFileCount(group);
+    const u32 extraFileCount = archive.getGroupExtraFileCount(group);
 
     if (extraFileCount == 0)
         return;
@@ -100,12 +102,12 @@ void DrawGroupContextMenu(Item* item)
 
 static void ExportGroupFile(Group* group)
 {
-    const char* extension = GetInnerFileExtension(sBfsar.getFormat(), InnerFileKind::Group);
+    const char* extension = GetInnerFileExtension(ActiveSoundArchive().getFormat(), InnerFileKind::Group);
     const sead::FormatFixedSafeString<64> filterName(messages::archive::cGroupFileFilterFormat, extension);
-    const std::string fileName = std::filesystem::path(sBfsar.getGroupFileSavePath(group)).filename().string();
+    const std::string fileName = std::filesystem::path(ActiveSoundArchive().getGroupFileSavePath(group)).filename().string();
     sead::FixedSafeString<512> path;
 
-    if (!SaveFileDialogWithExtension(&path, filterName.cstr(), extension, fileName.c_str()) || !sBfsar.exportGroupFile(group, path))
+    if (!SaveFileDialogWithExtension(&path, filterName.cstr(), extension, fileName.c_str()) || !ActiveSoundArchive().exportGroupFile(group, path))
         return;
 
     const std::string exportedName = std::filesystem::path(path.cstr()).filename().string();
@@ -115,7 +117,7 @@ static void ExportGroupFile(Group* group)
 
 void NotifyDeletedGroupFiles()
 {
-    for (const std::string& path : sBfsar.takeDeletedGroupFiles())
+    for (const std::string& path : ActiveSoundArchive().takeDeletedGroupFiles())
     {
         const std::string fileName = std::filesystem::path(path).filename().string();
 

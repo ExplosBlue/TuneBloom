@@ -45,13 +45,22 @@ void RequestItemsDelete(const std::vector<Item*>& items)
     sDeleteItems = items;
 }
 
+static const AudioResource* GetAssetResource(const Item* item)
+{
+    if (item->getItemType() != Item::ItemType::AudioAsset)
+        return nullptr;
+
+    return static_cast<const AudioAsset*>(item)->getResource();
+}
+
 static bool CanDuplicateItem(const Item* item, const char** outReason)
 {
     if (item->getItemType() == Item::ItemType::Sound)
         return true;
 
     const char* reason = nullptr;
-    const bool canDuplicate = item->getItemType() == Item::ItemType::AudioAsset && sAudioResource.canDuplicateAsset(*static_cast<const AudioAsset*>(item), &reason);
+    const AudioResource* resource = GetAssetResource(item);
+    const bool canDuplicate = resource && resource->canDuplicateAsset(*static_cast<const AudioAsset*>(item), &reason);
 
     if (outReason)
         *outReason = reason;
@@ -67,7 +76,11 @@ bool OffersItemDuplicate(const Item* item)
             return true;
 
         case Item::ItemType::AudioAsset:
-            return sAudioResource.canRemoveAssets();
+        {
+            const AudioResource* resource = GetAssetResource(item);
+
+            return resource && resource->canRemoveAssets();
+        }
 
         default:
             return false;
@@ -345,6 +358,7 @@ static void DuplicateSelectedAssets(ItemListContext& ctx)
     if (!first || first->list() != &ctx.list || first->getItemType() != Item::ItemType::AudioAsset)
         return;
 
+    AudioResource* resource = static_cast<AudioAsset*>(first)->getResource();
     const std::vector<Item*> sources = sDuplicateItem ? std::vector<Item*>{ sDuplicateItem } : sDuplicateItems;
 
     sDuplicateItem = nullptr;
@@ -357,7 +371,7 @@ static void DuplicateSelectedAssets(ItemListContext& ctx)
     {
         const char* error = nullptr;
 
-        if (AudioAsset* copy = sAudioResource.duplicateAsset(static_cast<AudioAsset*>(source), &error))
+        if (AudioAsset* copy = resource->duplicateAsset(static_cast<AudioAsset*>(source), &error))
             copies.push_back(copy);
         else if (!firstError)
             firstError = error;

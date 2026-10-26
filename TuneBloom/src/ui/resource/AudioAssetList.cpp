@@ -47,7 +47,12 @@ static std::vector<AudioAsset*> sPendingFileExports;
 
 static bool IsResourceAsset(const AudioAsset* asset)
 {
-    for (const Item* item : sAudioResource.getAssetList())
+    const AudioResource* resource = FindActiveAudioResource();
+
+    if (!resource)
+        return false;
+
+    for (const Item* item : resource->getAssetList())
     {
         if (item == asset)
             return true;
@@ -86,7 +91,7 @@ static bool CommitAudioImport(AssetAudioImport* import, AudioAsset* asset, Item*
         import->info.loopStartFrame = 0;
 
     const char* error = nullptr;
-    const bool replaced = sAudioResource.replaceAudio(asset, import->info, import->encoding, &error);
+    const bool replaced = ActiveAudioResource().replaceAudio(asset, import->info, import->encoding, &error);
 
     if (!tempPath.empty())
         fileio::RemoveFile(tempPath.c_str());
@@ -125,7 +130,7 @@ static void ImportAssetFile(AudioAsset* asset)
 
     const char* error = nullptr;
 
-    if (!sAudioResource.replaceFile(asset, std::move(bytes), &error))
+    if (!ActiveAudioResource().replaceFile(asset, std::move(bytes), &error))
     {
         PopupMgr::instance()->addPopup({ error, asset });
         return;
@@ -205,7 +210,7 @@ static bool CanExportWavs(const std::vector<AudioAsset*>& assets, sead::Buffered
 
 static void PlayAsset(AudioAsset* asset)
 {
-    sAudioResource.loadStreamFile(asset);
+    ActiveAudioResource().loadStreamFile(asset);
 
     const WaveFile* wave = asset->getPreviewWave();
 
@@ -246,7 +251,7 @@ static void AudioAssetContextMenuFunc(Item* item)
     const bool single = assets.size() == 1;
 
     const char* replaceReason = messages::resource::cSelectOneAudioAsset;
-    const bool canReplace = single && sAudioResource.canReplaceAudio(*asset, &replaceReason);
+    const bool canReplace = single && ActiveAudioResource().canReplaceAudio(*asset, &replaceReason);
 
     if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace, canReplace, replaceReason))
         RequestAssetReplace(asset);
@@ -272,7 +277,7 @@ static Item* InstanciateAudioAsset()
     if (!sCreateTemplate || !IsResourceAsset(sCreateTemplate))
         return nullptr;
 
-    AudioAsset* asset = sAudioResource.createAsset(*sCreateTemplate);
+    AudioAsset* asset = ActiveAudioResource().createAsset(*sCreateTemplate);
 
     if (!CommitAudioImport(&sCreateImport, asset, nullptr))
     {
@@ -302,7 +307,7 @@ static InstanciateItemCallback CreateAudioAssetFunc(bool clear)
     if (clear)
     {
         ResetWaveImport();
-        sCreateTemplate = sAudioResource.findTemplateAsset(sSelectedItem);
+        sCreateTemplate = ActiveAudioResource().findTemplateAsset(sSelectedItem);
         sCreateNeedsFile = true;
     }
 
@@ -365,13 +370,15 @@ static void DrawAssetReplacePopup()
 
 void DrawAudioAssetsUI()
 {
+    AudioResource& resource = ActiveAudioResource();
+
     SetNextItemListAction(&AudioAssetRowActionFunc);
     SetNextItemListAddDialogWidth(CalcWaveImportWidth());
     SetNextItemListFixedOrder();
-    SetNextItemListRemovable(sAudioResource.canRemoveAssets());
+    SetNextItemListRemovable(resource.canRemoveAssets());
 
-    DrawAllItemsUI("Audio Asset", messages::common::cAudioAsset, sAudioResource.getAssetList(),
-        sAudioResource.canAddAssets() ? &CreateAudioAssetFunc : nullptr, nullptr, &AudioAssetContextMenuFunc, GetItemFilterCallback()
+    DrawAllItemsUI("Audio Asset", messages::common::cAudioAsset, resource.getAssetList(),
+        resource.canAddAssets() ? &CreateAudioAssetFunc : nullptr, nullptr, &AudioAssetContextMenuFunc, GetItemFilterCallback()
     );
 }
 

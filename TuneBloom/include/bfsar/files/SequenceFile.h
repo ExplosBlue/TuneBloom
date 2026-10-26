@@ -154,6 +154,8 @@ public:
         return mSeqTextInfo;
     }
 
+    InnerFileTarget getTarget() const;
+
     const std::string& getMd5Hash();
     void setSerializedHash(const std::string& hash);
 

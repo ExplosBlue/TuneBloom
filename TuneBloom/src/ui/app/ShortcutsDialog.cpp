@@ -56,21 +56,25 @@ const ActionRow cArchiveRows[] = {
     { messages::common::cOpenArchive,     Action::OpenProject },
     { messages::common::cSave,            Action::SaveProject },
     { messages::mainmenu::cSaveAs,          Action::SaveProjectAs },
+    { messages::mainmenu::cSaveAll,         Action::SaveAllProjects },
+    { messages::keys::cCloseFile,           Action::CloseProject },
     { messages::keys::cCloseFileWindow, Action::CloseFileWindow },
 };
 
 const ActionRow cListRows[] = {
-    { messages::common::cSelectAll,     Action::SelectAll },
-    { messages::keys::cPreviousItem,  Action::SelectPrevious },
-    { messages::keys::cNextItem,      Action::SelectNext },
-    { messages::common::cPageUp,        Action::SelectPageUp },
-    { messages::common::cPageDown,      Action::SelectPageDown },
-    { messages::keys::cFirstItem,     Action::SelectFirst },
-    { messages::keys::cLastItem,      Action::SelectLast },
-    { messages::keys::cShowSelection, Action::ScrollToSelection },
-    { messages::common::cRename,        Action::RenameSelection },
-    { messages::common::cDuplicate,     Action::DuplicateSelection },
-    { messages::common::cDelete,        Action::DeleteSelection },
+    { messages::common::cSelectAll,    Action::SelectAll },
+    { messages::keys::cPreviousItem,   Action::SelectPrevious },
+    { messages::keys::cNextItem,       Action::SelectNext },
+    { messages::common::cPageUp,       Action::SelectPageUp },
+    { messages::common::cPageDown,     Action::SelectPageDown },
+    { messages::keys::cFirstItem,      Action::SelectFirst },
+    { messages::keys::cLastItem,       Action::SelectLast },
+    { messages::keys::cCollapseFolder, Action::CollapseFolder },
+    { messages::keys::cExpandFolder,   Action::ExpandFolder },
+    { messages::keys::cShowSelection,  Action::ScrollToSelection },
+    { messages::common::cRename,       Action::RenameSelection },
+    { messages::common::cDuplicate,    Action::DuplicateSelection },
+    { messages::common::cDelete,       Action::DeleteSelection },
 };
 
 const ActionRow cPlaybackRows[] = {

@@ -9,8 +9,6 @@
 
 #include <cstring>
 
-extern Bfsar sBfsar;
-
 bool WriteExportFile(const char* path, const std::vector<u8>& data)
 {
     return fileio::WriteWholeFileAtomic(path, data.data(), data.size());
@@ -33,13 +31,15 @@ std::vector<const Sound*> GetSeqSoundsOfSet(const SoundSet& soundSet)
 {
     std::vector<const Sound*> sounds;
 
-    if (soundSet.getIsEmpty() || soundSet.getSoundSetType() != SoundSet::SoundSetType::Seq)
+    const Bfsar* archive = soundSet.getArchive();
+
+    if (!archive || soundSet.getIsEmpty() || soundSet.getSoundSetType() != SoundSet::SoundSetType::Seq)
         return sounds;
 
     u32 startId = soundSet.getStartId();
     u32 endId = soundSet.getEndId();
 
-    auto& soundList = sBfsar.getSoundList();
+    const Item::List& soundList = archive->getSoundList();
     for (auto it = soundList.begin(); it != soundList.end(); ++it)
     {
         const Sound* sound = static_cast<const Sound*>(*it);

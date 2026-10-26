@@ -57,7 +57,7 @@ void SequenceFile::onOpenFileWindow()
 
     if (!anyBankSet)
     {
-        for (const Item *soundItem : sBfsar.getSoundList())
+        for (const Item *soundItem : ActiveSoundArchive().getSoundList())
         {
             const Sound *sound = static_cast<const Sound *>(soundItem);
 
@@ -145,8 +145,10 @@ void SequenceFile::deleteEditor_()
 
 void SequenceFile::drawUI()
 {
-    mVersion = sBfsar.getVersionForBfseq();
-    mEndian = sBfsar.getEndian();
+    Bfsar& archive = ActiveSoundArchive();
+
+    mVersion = archive.getVersionForBfseq();
+    mEndian = archive.getEndian();
 
     DrawItemNameRow(this);
 }
@@ -308,7 +310,7 @@ void SequenceFile::drawBankSelector_(const char* name, f32 width)
 
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 22.0f);
         ImGui::PushID(i);
-        const bool changed = ItemSelector("", sBfsar.getBankList(), &bank, true);
+        const bool changed = ItemSelector("", ActiveSoundArchive().getBankList(), &bank, true);
         ImGui::PopID();
 
         if (changed)

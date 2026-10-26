@@ -6,7 +6,6 @@
 
 static sead::Framework* sFramework = nullptr;
 static sead::Texture* sIcon = nullptr;
-static sead::FixedSafeString<512> sLastTitlePath;
 
 namespace util {
 
@@ -53,15 +52,6 @@ bool updateTitle(const char* path, bool dirty)
         return false;
     }
 
-    if (path)
-    {
-        sLastTitlePath = path;
-    }
-    else
-    {
-        sLastTitlePath.clear();
-    }
-
     sead::FixedSafeString<512> title;
     title.format("%s %s", cAppName.cstr(), cAppVersion.cstr());
 
@@ -72,11 +62,6 @@ bool updateTitle(const char* path, bool dirty)
 
     fw->setCaption(title);
     return true;
-}
-
-void refreshTitleDirty(bool dirty)
-{
-    updateTitle(sLastTitlePath.isEmpty() ? nullptr : sLastTitlePath.cstr(), dirty);
 }
 
 } // namespace util

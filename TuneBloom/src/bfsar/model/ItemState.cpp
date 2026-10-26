@@ -2,7 +2,7 @@
 
 #include <bfsar/archive/Bfsar.h>
 
-#include <ui/app/UI.h>
+#include <ui/file/UnsavedChanges.h>
 
 void Item::captureBaseline()
 {
@@ -41,10 +41,12 @@ u64 SoundSet::computeStateSignature() const
     hash.mixValue(mSoundSetType);
     hash.mixValue(mIsEmpty);
 
-    if (!mIsEmpty)
+    const Bfsar* archive = getArchive();
+
+    if (!mIsEmpty && archive)
     {
-        hash.mixItem(sBfsar.getItem(mStartId, sBfsar.getSoundList()));
-        hash.mixItem(sBfsar.getItem(mEndId, sBfsar.getSoundList()));
+        hash.mixItem(archive->getItem(mStartId, archive->getSoundList()));
+        hash.mixItem(archive->getItem(mEndId, archive->getSoundList()));
         hash.mixValue(mEndId - mStartId);
     }
 

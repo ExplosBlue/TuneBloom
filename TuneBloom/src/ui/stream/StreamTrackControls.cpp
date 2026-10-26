@@ -296,7 +296,7 @@ void DrawTrackWaveSelector(Sound::StreamSoundInfo::Track* track, f32 width, bool
     Item* waveFile = track->getWaveFileRef().getItem();
 
     ImGui::SetNextItemWidth(width);
-    if (ItemSelector("##WaveFile", sBfsar.getWaveFileList(), &waveFile, false, compact))
+    if (ItemSelector("##WaveFile", ActiveSoundArchive().getWaveFileList(), &waveFile, false, compact))
     {
         track->getWaveFileRef().attach(waveFile);
         SetUnsavedChanges(true);

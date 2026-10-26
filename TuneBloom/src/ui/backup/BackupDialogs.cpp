@@ -311,7 +311,7 @@ static void DrawRecoverDialog()
 {
     const f32 em = ImGui::GetFontSize();
 
-    const bool hasUnsavedArchive = IsDocumentOpen() && gUnsavedChanges;
+    const bool hasUnsavedArchive = IsDocumentOpen() && HasUnsavedChanges();
 
     if (HasRecovery() && !hasUnsavedArchive && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup))
         ImGui::OpenPopup("###BackupRecover");

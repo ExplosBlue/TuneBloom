@@ -57,14 +57,21 @@ static bool IsReady(const LocateRow& row)
 static void SetRowFile(LocateRow* row, const sead::SafeString& path)
 {
     row->path = path.cstr();
-    row->check = sBfsar.checkGroupFile(path);
+    row->check = ActiveSoundArchive().checkGroupFile(path);
 }
 
 void OpenGroupFileLocate()
 {
     sRows.clear();
+    sWantsOpen = false;
+    sIsReloading = false;
 
-    for (Item* item : sBfsar.getGroupList())
+    Bfsar* archive = FindActiveSoundArchive();
+
+    if (!archive)
+        return;
+
+    for (Item* item : archive->getGroupList())
     {
         const Group* group = static_cast<const Group*>(item);
 
@@ -73,7 +80,6 @@ void OpenGroupFileLocate()
     }
 
     sWantsOpen = !sRows.empty();
-    sIsReloading = false;
 }
 
 bool IsGroupFileLocatePending()
@@ -83,7 +89,7 @@ bool IsGroupFileLocatePending()
 
 static void BrowseRowFile(LocateRow* row)
 {
-    const char* extension = GetInnerFileExtension(sBfsar.getFormat(), InnerFileKind::Group);
+    const char* extension = GetInnerFileExtension(ActiveSoundArchive().getFormat(), InnerFileKind::Group);
 
     const sead::FormatFixedSafeString<64> filterName(messages::archive::cGroupFileFilterFormat, extension);
     const sead::FormatFixedSafeString<32> filterPattern("*.%s", extension);
@@ -108,7 +114,7 @@ static void SearchFolder()
         if (IsReady(row))
             continue;
 
-        const std::string path = sBfsar.findGroupFileInFolder(sead::SafeString(row.groupName.c_str()), folder);
+        const std::string path = ActiveSoundArchive().findGroupFileInFolder(sead::SafeString(row.groupName.c_str()), folder);
 
         if (!path.empty())
             SetRowFile(&row, sead::SafeString(path.c_str()));
@@ -117,15 +123,15 @@ static void SearchFolder()
 
 static void LoadFiles()
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     for (const LocateRow& row : sRows)
     {
         if (IsReady(row))
-            sBfsar.setGroupFilePath(sead::SafeString(row.groupName.c_str()), sead::SafeString(row.path.c_str()), sRemember);
+            archive.setGroupFilePath(sead::SafeString(row.groupName.c_str()), sead::SafeString(row.path.c_str()), sRemember);
     }
 
-    const sead::FixedSafeString<512> archivePath(sBfsar.getFilePath());
-
-    RequestOpenFile(archivePath.cstr());
+    RequestReloadDocument(ActiveDocument());
 
     sIsReloading = true;
     sReloadFrame = ImGui::GetFrameCount();

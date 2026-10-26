@@ -214,7 +214,7 @@ bool Bfsar::exportGroupFile(Group* group, const sead::SafeString& path)
 
     recompileInvalidSequences_();
 
-    if (!validate_())
+    if (!validate())
         return false;
 
     GroupFileSave save;

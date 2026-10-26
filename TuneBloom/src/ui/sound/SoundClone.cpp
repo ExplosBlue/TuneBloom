@@ -10,7 +10,7 @@ Sound* CloneSound(Sound* src)
 
     dup->setEnableName(src->isEnableName());
 
-    MakeCopyName(src->getName(), [](const sead::SafeString& name) { return sBfsar.validateName(name); }, &dup->getName());
+    MakeCopyName(src->getName(), [](const sead::SafeString& name) { return ActiveSoundArchive().validateName(name); }, &dup->getName());
 
     if (src->getPlayerRef().isAttached())
         dup->getPlayerRef().attach(src->getPlayerRef().getItem());

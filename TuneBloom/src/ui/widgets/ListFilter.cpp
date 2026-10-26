@@ -1,6 +1,7 @@
 #include <ui/widgets/ListFilter.h>
 
 #include <ui/widgets/ContextMenu.h>
+#include <ui/file/DocumentState.h>
 #include <ui/items/ItemList.h>
 #include <ui/Messages.h>
 #include <ui/app/Shortcuts.h>
@@ -14,38 +15,32 @@
 #include <algorithm>
 #include <string>
 
-struct TabFilterState
-{
-    sead::FixedSafeString<256> filter;
-    bool caseSensitive = false;
-};
+static constexpr s32 cListPane   = 0;
+static constexpr s32 cDetailPane = 1;
 
-static TabFilterState sTabFilterState[(size_t)UIType::Max + 1][2];
-
-static TabFilterState &GetTabFilter(int pane)
+static DocumentState::TabFilter& GetTabFilter(s32 pane)
 {
-    return sTabFilterState[(size_t)sSelectedUIType][pane];
+    return ActiveDocumentState().filters[static_cast<size_t>(GetUITab())][pane];
 }
 
-static TabFilterState &GetCurrentTabFilter()
+static DocumentState::TabFilter& GetCurrentTabFilter()
 {
-    return GetTabFilter(0);
+    return GetTabFilter(cListPane);
 }
 
-static TabFilterState &GetCurrentDetailTabFilter()
+static DocumentState::TabFilter& GetCurrentDetailTabFilter()
 {
-    return GetTabFilter(1);
+    return GetTabFilter(cDetailPane);
 }
 
-static void CloseFilterPane_(int pane)
+static void CloseFilterPane(s32 pane)
 {
-    TabFilterState &state = GetTabFilter(pane);
-    state.filter.clear();
+    GetTabFilter(pane).filter.clear();
 }
 
 void CloseFilter()
 {
-    CloseFilterPane_(0);
+    CloseFilterPane(cListPane);
 }
 
 static bool sTextFilterEnabled = true;
@@ -55,38 +50,34 @@ void SetItemTextFilterEnabled(bool enabled)
     sTextFilterEnabled = enabled;
 }
 
-static bool ItemMatchesFilterPane_(const Item *item, int pane)
+static bool ItemMatchesFilterPane(const Item* item, s32 pane)
 {
-    TabFilterState &state = GetTabFilter(pane);
+    DocumentState::TabFilter& state = GetTabFilter(pane);
 
     if (state.filter.isEmpty() || !sTextFilterEnabled)
-    {
         return true;
-    }
 
     return ImGui::TextMatchesQuery(item->getFormattedName().cstr(), state.filter.cstr(), state.caseSensitive);
 }
 
 bool ItemMatchesFilter(const Item* item)
 {
-    return ItemMatchesFilterPane_(item, 0);
+    return ItemMatchesFilterPane(item, cListPane);
 }
 
 bool ItemMatchesDetailFilter(const Item* item)
 {
-    return ItemMatchesFilterPane_(item, 1);
+    return ItemMatchesFilterPane(item, cDetailPane);
 }
 
 ItemFilterCallback GetItemFilterCallback()
 {
-    TabFilterState& state = GetCurrentTabFilter();
-    return !state.filter.isEmpty() ? &ItemMatchesFilter : nullptr;
+    return GetCurrentTabFilter().filter.isEmpty() ? nullptr : &ItemMatchesFilter;
 }
 
 ItemFilterCallback GetDetailFilterCallback()
 {
-    TabFilterState& state = GetCurrentDetailTabFilter();
-    return !state.filter.isEmpty() ? &ItemMatchesDetailFilter : nullptr;
+    return GetCurrentDetailTabFilter().filter.isEmpty() ? nullptr : &ItemMatchesDetailFilter;
 }
 
 static bool DrawSearchToggle(const char* label, const char* tooltip, bool* value, f32 size)
@@ -279,24 +270,24 @@ f32 BeginListRow()
     return style.WindowPadding.x;
 }
 
-static void DrawTabFilterBarPane_(int pane, const SearchFieldExtra* extra = nullptr)
+static void DrawTabFilterBarPane(s32 pane, const SearchFieldExtra* extra = nullptr)
 {
-    TabFilterState& tabFilter = GetTabFilter(pane);
+    DocumentState::TabFilter& tabFilter = GetTabFilter(pane);
 
     const bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
     const bool setFocus = focused && shortcuts::Pressed(shortcuts::Action::FocusFilter);
 
     if (focused && !ImGui::GetIO().WantTextInput && shortcuts::Pressed(shortcuts::Action::CloseFilter))
-        CloseFilterPane_(pane);
+        CloseFilterPane(pane);
 
     const f32 padding = BeginListRow();
 
-    ListSearchField(pane == 0 ? "##Search" : "##SearchDetail", tabFilter.filter.getBuffer(), tabFilter.filter.getBufferSize(), ImGui::GetContentRegionAvail().x - padding, &tabFilter.caseSensitive, setFocus, extra);
+    ListSearchField(pane == cListPane ? "##Search" : "##SearchDetail", tabFilter.filter.getBuffer(), tabFilter.filter.getBufferSize(), ImGui::GetContentRegionAvail().x - padding, &tabFilter.caseSensitive, setFocus, extra);
 }
 
 void DrawTabFilterBar(const SearchFieldExtra* extra)
 {
-    DrawTabFilterBarPane_(0, extra);
+    DrawTabFilterBarPane(cListPane, extra);
 }
 
 bool BeginListOptions(bool active)
@@ -317,5 +308,5 @@ bool BeginListOptions(bool active)
 
 void DrawDetailTabFilterBar()
 {
-    DrawTabFilterBarPane_(1);
+    DrawTabFilterBarPane(cDetailPane);
 }

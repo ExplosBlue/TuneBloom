@@ -77,7 +77,7 @@ static void SetRefText(RefEntry* entry, const Item* item, const char* separator 
 
 static bool FindVelocityRegionOwner(const Item* region, Item** outBankFile, Item** outInstrument)
 {
-    for (Item* bfItem : sBfsar.getBankFileList())
+    for (Item* bfItem : ActiveSoundArchive().getBankFileList())
     {
         BankFile* bankFile = static_cast<BankFile*>(bfItem);
         for (Item* instItem : bankFile->getInstrumentList())
@@ -104,7 +104,7 @@ static bool FindVelocityRegionOwner(const Item* region, Item** outBankFile, Item
 
 static Item* FindStreamTrackSound(const Item* track)
 {
-    for (Item* soundItem : sBfsar.getSoundList())
+    for (Item* soundItem : ActiveSoundArchive().getSoundList())
     {
         Sound* sound = static_cast<Sound*>(soundItem);
         if (sound->getSoundType() != Sound::SoundType::Strm)
@@ -173,7 +173,7 @@ static bool BuildBankRegionRefEntry(RefEntry* entry, const Item* region)
     if (!FindVelocityRegionOwner(region, &bankFile, &instrument))
         return false;
 
-    for (Item* bankItem : sBfsar.getBankList())
+    for (Item* bankItem : ActiveSoundArchive().getBankList())
     {
         Bank* bank = static_cast<Bank*>(bankItem);
         if (bank->getFileRef().getItem() != bankFile)
@@ -273,10 +273,9 @@ static void NavigateToRefEntry(RefEntry* entry)
             default: break;
         }
 
-        size_t newIdx = (size_t)sSelectedUIType;
-        sSelectedItemArr[newIdx] = entry->navigateItem;
-        sSubSelectedItemArr[newIdx] = entry->selectSubItem;
-        sSelectedItemIsSubWindowArr[newIdx] = entry->selectSubItem != nullptr;
+        sSelectedItem = entry->navigateItem;
+        sSubSelectedItem = entry->selectSubItem;
+        sSelectedItemIsSubWindow = entry->selectSubItem != nullptr;
     }
 }
 
@@ -361,7 +360,7 @@ bool DrawReferencesUI(Item* item, f32 reserveBelow)
 
 static void FormatInnerVersion(sead::BufferedSafeString* out, u32 version)
 {
-    if (GetArchiveVersionByteCount(sBfsar.getFormat()) == 4)
+    if (GetArchiveVersionByteCount(ActiveSoundArchive().getFormat()) == 4)
         out->format("%u.%u.%u.%u", (version >> 24) & 0xFF, (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
     else
         out->format("%u.%u.%u", (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
@@ -369,6 +368,8 @@ static void FormatInnerVersion(sead::BufferedSafeString* out, u32 version)
 
 void DrawArchiveInfoUI(Item::ItemType itemType)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     if (!BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Archive", messages::common::cArchive).cstr(), nullptr, nullptr, false, 1, messages::innerfile::cArchiveDetail))
         return;
 
@@ -377,22 +378,22 @@ void DrawArchiveInfoUI(Item::ItemType itemType)
     switch (itemType)
     {
         case Item::ItemType::WaveFile:
-            version = sBfsar.getVersionForBfwav();
+            version = archive.getVersionForBfwav();
             break;
 
         case Item::ItemType::SequenceFile:
-            version = sBfsar.getVersionForBfseq();
+            version = archive.getVersionForBfseq();
             break;
 
         default:
-            version = sBfsar.getVersionForBfbnk();
+            version = archive.getVersionForBfbnk();
             break;
     }
 
     sead::FixedSafeString<24> text;
 
     PropertyRow(messages::innerfile::cByteOrder);
-    ImGui::TextUnformatted(sBfsar.getEndian() == sead::Endian::eBig ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian);
+    ImGui::TextUnformatted(archive.getEndian() == sead::Endian::eBig ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian);
 
     FormatInnerVersion(&text, version);
     PropertyRow(messages::common::cVersion);
@@ -400,7 +401,7 @@ void DrawArchiveInfoUI(Item::ItemType itemType)
 
     if (itemType == Item::ItemType::WaveFile)
     {
-        FormatInnerVersion(&text, sBfsar.getVersionForBfstm());
+        FormatInnerVersion(&text, archive.getVersionForBfstm());
         PropertyRow(messages::innerfile::cStreamVersion);
         ImGui::TextUnformatted(text.cstr());
     }

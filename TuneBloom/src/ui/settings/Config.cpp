@@ -20,14 +20,16 @@
 #include <string>
 #include <vector>
 
-static constexpr const char* cThemeSection     = "theme";
-static constexpr const char* cMidiSection      = "midi";
-static constexpr const char* cAudioSection     = "audio";
-static constexpr const char* cArchiveSection   = "archive";
-static constexpr const char* cBackupSection    = "backup";
-static constexpr const char* cInterfaceSection = "interface";
-static constexpr const char* cStartupSection   = "startup";
-static constexpr const char* cSessionSection   = "session";
+static constexpr const char* cThemeSection        = "theme";
+static constexpr const char* cMidiSection         = "midi";
+static constexpr const char* cAudioSection        = "audio";
+static constexpr const char* cArchiveSection      = "archive";
+static constexpr const char* cBackupSection       = "backup";
+static constexpr const char* cInterfaceSection    = "interface";
+static constexpr const char* cStartupSection      = "startup";
+static constexpr const char* cSessionSection      = "session";
+static constexpr const char* cSessionActiveKey    = "lastArchive";
+static constexpr const char* cSessionDocumentsKey = "documents";
 
 static constexpr s32 cBackupIntervalMin     = 1;
 static constexpr s32 cBackupIntervalMax     = 60;
@@ -399,22 +401,41 @@ void LoadStartupConfig()
     json::Value session;
     LoadConfigSection(cStateFile, cSessionSection, &session);
 
-    if (const std::string* path = session.findString("lastArchive"))
+    if (const std::string* path = session.findString(cSessionActiveKey))
         sStartupSettings.lastArchive = *path;
+
+    sStartupSettings.sessionDocuments.clear();
+
+    if (const json::Value* documents = session.findArray(cSessionDocumentsKey))
+    {
+        for (const json::Value& document : documents->items)
+        {
+            if (document.isString() && !document.string.empty())
+                sStartupSettings.sessionDocuments.push_back(document.string);
+        }
+    }
 }
 
-void SetLastArchive(const char* path)
+void SetSessionDocuments(const std::vector<std::string>& documents, const std::string& active)
 {
-    if (!path || sStartupSettings.lastArchive == path)
+    const std::string lastArchive = active.empty() ? sStartupSettings.lastArchive : active;
+
+    if (sStartupSettings.lastArchive == lastArchive && sStartupSettings.sessionDocuments == documents)
         return;
 
-    sStartupSettings.lastArchive = path;
+    sStartupSettings.lastArchive = lastArchive;
+    sStartupSettings.sessionDocuments = documents;
 
     if (testhooks::IsEnabled())
         return;
 
     json::Value session;
-    session.setString("lastArchive", path);
+    session.setString(cSessionActiveKey, lastArchive.c_str());
+
+    json::Value& list = session.setArray(cSessionDocumentsKey);
+
+    for (const std::string& document : documents)
+        list.pushString(document.c_str());
 
     SaveConfigSection(cStateFile, cSessionSection, session);
 }
@@ -422,6 +443,7 @@ void SetLastArchive(const char* path)
 void ResetAllSettings()
 {
     const std::string lastArchive = sStartupSettings.lastArchive;
+    const std::vector<std::string> sessionDocuments = sStartupSettings.sessionDocuments;
 
     gAccentColor = uicolors::cAccentDefault;
     SetDarkTheme(systemtheme::isDark());
@@ -441,6 +463,7 @@ void ResetAllSettings()
     sMidiSettings = MidiSettings();
     sStartupSettings = StartupSettings();
     sStartupSettings.lastArchive = lastArchive;
+    sStartupSettings.sessionDocuments = sessionDocuments;
 
     ApplyAudioConfig();
     ApplyInterfaceConfig();

@@ -152,7 +152,9 @@ std::string SequenceFile::getLabelFromParsedOffset(u32 offset, u32 allocTrackFla
 
 void SequenceFile::invalidatePlayer_() const
 {
-    if (sBfsar.getCliMode())
+    const Bfsar* archive = getArchive();
+
+    if (archive && archive->getCliMode())
         return;
 
     if (sSoundPlayer.getSequencePlayer().isPlayingFile(*this))
@@ -199,7 +201,7 @@ bool SequenceFile::doRead(const void* fileAddr)
 
     std::vector<std::string> lines;
     std::unordered_map<u32, u32> offsetToLine;
-    if (!DecompileSequenceFile(lines, offsetToLine, reader, layout))
+    if (!DecompileSequenceFile(lines, offsetToLine, reader, layout, getTarget().version))
     {
         LOG_FMT("doRead: DecompileSequenceFile failed");
         return false;
@@ -348,10 +350,18 @@ u32 SequenceFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, b
     return fileSize;
 }
 
+InnerFileTarget SequenceFile::getTarget() const
+{
+    if (const Bfsar* archive = getArchive())
+        return archive->getSequenceFileTarget();
+
+    return {};
+}
+
 const std::string& SequenceFile::getMd5Hash()
 {
-    const bool isStale = mMd5Dirty || mMd5Format != sBfsar.getFormat() ||
-                         mMd5Version != sBfsar.getVersionForBfseq() || mMd5Endian != sBfsar.getEndian();
+    const InnerFileTarget target = getTarget();
+    const bool isStale = mMd5Dirty || mMd5Format != target.format || mMd5Version != target.version || mMd5Endian != target.endian;
 
     if (isStale)
         refreshSerializedHash();
@@ -361,11 +371,13 @@ const std::string& SequenceFile::getMd5Hash()
 
 void SequenceFile::setSerializedHash(const std::string& hash)
 {
+    const InnerFileTarget target = getTarget();
+
     mMd5Hash = hash;
     mMd5Dirty = false;
-    mMd5Format = sBfsar.getFormat();
-    mMd5Version = sBfsar.getVersionForBfseq();
-    mMd5Endian = sBfsar.getEndian();
+    mMd5Format = target.format;
+    mMd5Version = target.version;
+    mMd5Endian = target.endian;
 }
 
 void SequenceFile::refreshSerializedHash()
@@ -389,13 +401,15 @@ void SequenceFile::refreshSerializedHash()
             return;
     }
 
+    const InnerFileTarget target = getTarget();
+
     {
         sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
-        mEndian = sBfsar.getEndian();
-        mVersion = sBfsar.getVersionForBfseq();
-        setFormat(sBfsar.getFormat());
+        mEndian = target.endian;
+        mVersion = target.version;
+        setFormat(target.format);
 
-        write(&handle, &stream, sBfsar.getEndian(), true);
+        write(&handle, &stream, target.endian, true);
     }
 
     handle.close();

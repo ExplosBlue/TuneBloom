@@ -468,7 +468,7 @@ static void ApplyRegionEdit(const RegionTable& view, const RegionEdit& edit)
 
 static bool HasRegionSupport(const Sound* sound)
 {
-    if (sBfsar.getFormat() != ArchiveFormat::BFSAR)
+    if (ActiveSoundArchive().getFormat() != ArchiveFormat::BFSAR)
         return false;
 
     return !sound || sound->getStreamSoundInfo().getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary;

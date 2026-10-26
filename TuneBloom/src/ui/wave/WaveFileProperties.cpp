@@ -443,7 +443,7 @@ static void DrawWaveLoopSection(const WaveFile& wave, WaveFileView& view, WaveLo
 
 void WaveFile::drawUI()
 {
-    const WaveFileTarget target = getTarget();
+    const InnerFileTarget target = getTarget();
 
     mVersion = target.version;
     mEndian = target.endian;

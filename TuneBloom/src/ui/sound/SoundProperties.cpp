@@ -478,7 +478,7 @@ static void DrawSoundOtherSection(Sound* sound)
 
     const f32 stripHeight = CalcRegionStripHeight();
 
-    const bool remoteFilterUsed = sBfsar.getFormat() != ArchiveFormat::BCSAR;
+    const bool remoteFilterUsed = ActiveSoundArchive().getFormat() != ArchiveFormat::BCSAR;
     u8 remoteFilter = sound->getRemoteFilter();
 
     ImGui::BeginDisabled(!remoteFilterUsed);
@@ -520,18 +520,20 @@ static void DrawSoundOtherSection(Sound* sound)
 
 void DrawSoundPropertiesUI()
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     Sound* sound = static_cast<Sound*>(sSelectedItem);
 
     {
         Item* player = sound->getPlayerRef().getItem();
-        if (ItemSelectorRow(messages::common::cPlayer,sBfsar.getPlayerList(), &player))
+        if (ItemSelectorRow(messages::common::cPlayer,archive.getPlayerList(), &player))
         {
             sound->getPlayerRef().attach(player);
             SetUnsavedChanges(true);
         }
     }
 
-    if (sBfsar.isV3Bfsar())
+    if (archive.isV3Bfsar())
     {
         char tag[0x20];
         sound->getV3Tag(tag, sizeof(tag));
@@ -549,7 +551,7 @@ void DrawSoundPropertiesUI()
 
     const Sound::SoundType soundType = sound->getSoundType();
 
-    if (soundType == Sound::SoundType::Strm && sBfsar.isStreamSendAvailable())
+    if (soundType == Sound::SoundType::Strm && archive.isStreamSendAvailable())
         DrawStreamExtensionUI(sound->getStreamSoundInfo());
 
     if (soundType == Sound::SoundType::Wave)

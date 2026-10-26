@@ -176,7 +176,7 @@ static void DrawWaveFileField(BankFile::VelocityRegion& velRegion, f32 width)
     ImGui::SetNextItemWidth(width - TrailingButtonsWidth(1));
 
     Item* waveFile = velRegion.getWaveFileRef().getItem();
-    if (ItemSelector("##RegionWave", sBfsar.getWaveFileList(), &waveFile))
+    if (ItemSelector("##RegionWave", ActiveSoundArchive().getWaveFileList(), &waveFile))
     {
         velRegion.getWaveFileRef().attach(waveFile);
         SetUnsavedChanges(true);
@@ -344,9 +344,11 @@ void BankFile::Instrument::drawUI()
 
 void BankFile::drawUI()
 {
-    mVersion = sBfsar.getVersionForBfbnk();
-    mEndian = sBfsar.getEndian();
-    mFormat = sBfsar.getFormat();
+    Bfsar& archive = ActiveSoundArchive();
+
+    mVersion = archive.getVersionForBfbnk();
+    mEndian = archive.getEndian();
+    mFormat = archive.getFormat();
 
     HelpMarker(messages::innerfile::cArchiveDetail);
 
@@ -993,7 +995,7 @@ static void DuplicateInstrument(BankFile* bankFile, const BankFile::Instrument* 
 
     dup->setProgramNo(FindNextAvailableProgramNo(bankList));
     bankList.pushBack(dup);
-    sBfsar.updateList(bankList);
+    ActiveSoundArchive().updateList(bankList);
     SetUnsavedChanges(true);
 }
 
@@ -1064,7 +1066,7 @@ static void SortInstrumentsByNumber(BankFile* bankFile)
     for (BankFile::Instrument* instrument : instruments)
         list.pushBack(instrument);
 
-    sBfsar.updateList(list);
+    ActiveSoundArchive().updateList(list);
     SetUnsavedChanges(true);
 }
 

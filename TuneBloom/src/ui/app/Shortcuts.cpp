@@ -62,6 +62,12 @@ constexpr ActionBinding cActionBindings[] = {
 
     { Action::ToggleMatchCase,    ImGuiMod_Alt | ImGuiKey_C },
     { Action::ToggleWholeWord,    ImGuiMod_Alt | ImGuiKey_W },
+
+    { Action::CollapseFolder,     ImGuiKey_LeftArrow,  true },
+    { Action::ExpandFolder,       ImGuiKey_RightArrow, true },
+
+    { Action::CloseProject,       ImGuiMod_Shortcut | ImGuiKey_W },
+    { Action::SaveAllProjects,    ImGuiMod_Shortcut | ImGuiMod_Alt | ImGuiKey_S },
 };
 
 constexpr ModifierBinding cModifierBindings[] = {
@@ -78,7 +84,7 @@ constexpr ModifierBinding cModifierBindings[] = {
 
 constexpr ImGuiKeyChord cCommandModifiers = ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiMod_Super;
 
-static_assert(IM_ARRAYSIZE(cActionBindings) == static_cast<s32>(Action::ToggleWholeWord) + 1);
+static_assert(IM_ARRAYSIZE(cActionBindings) == static_cast<s32>(Action::SaveAllProjects) + 1);
 static_assert(IM_ARRAYSIZE(cModifierBindings) == static_cast<s32>(Modifier::TypeValue) + 1);
 
 constexpr s32 cTriggerFrames = 2;
@@ -212,6 +218,11 @@ bool Pressed(Action action)
 bool Held(Modifier modifier)
 {
     return ImGui::IsKeyDown(FindModifierBinding(modifier).key);
+}
+
+bool Claimed(Action action)
+{
+    return Claimed(BaseKey(Chord(action)));
 }
 
 bool Claimed(ImGuiKey key)

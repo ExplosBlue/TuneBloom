@@ -1,13 +1,16 @@
 #include <ui/items/Selection.h>
 
-#include <ui/app/Workspace.h>
+#include <ui/file/DocumentState.h>
 
-Item* sSelectedItemArr[(size_t)UIType::Max + 1] = {};
-Item* sSubSelectedItemArr[(size_t)UIType::Max + 1] = {};
-bool sSelectedItemIsSubWindowArr[(size_t)UIType::Max + 1] = {};
+SelectionState& GetTabSelection(UIType tab)
+{
+    return ActiveDocumentState().selections[static_cast<size_t>(tab)];
+}
 
-std::vector<Item*> sMultiSelectedItemsArr[(size_t)UIType::Max + 1];
-Item* sMultiSelectAnchorArr[(size_t)UIType::Max + 1] = {};
+SelectionState& GetActiveTabSelection()
+{
+    return GetTabSelection(GetUITab());
+}
 
 Item* GetActiveSelection()
 {
@@ -16,12 +19,6 @@ Item* GetActiveSelection()
 
 void ClearSelection()
 {
-    for (size_t i = 0; i <= (size_t)UIType::Max; i++)
-    {
-        sSelectedItemArr[i] = nullptr;
-        sSubSelectedItemArr[i] = nullptr;
-        sSelectedItemIsSubWindowArr[i] = false;
-        sMultiSelectedItemsArr[i].clear();
-        sMultiSelectAnchorArr[i] = nullptr;
-    }
+    for (SelectionState& selection : ActiveDocumentState().selections)
+        selection = SelectionState();
 }

@@ -80,6 +80,7 @@ bool SoundPlayer::playBankNotePoly(u8 key, u8 velocity, const BankFile::Velocity
 
     mBankVoiceKey[slot] = static_cast<s32>(key);
     mBankVoiceHeld[slot] = false;
+    mBankOwner = mOwnerContext;
     mBankVoiceAge[slot] = ++mBankVoiceCounter;
 
     return true;

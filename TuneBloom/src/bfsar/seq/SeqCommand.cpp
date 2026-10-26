@@ -7,7 +7,8 @@
 
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
-#include <ui/app/UI.h>
+
+static constexpr u32 cExtendedModMinVersion = 0x00020000;
 
 static SeqArgBase* nw__snd__internal__driver__MmlParser__ReadArg(const u8** ptr, MmlParser::SeqArgType argType, bool hasSign = false)
 {
@@ -73,9 +74,9 @@ static void InvalidateSeqFile()
     }
 }
 
-static void CheckMultiModVersion(u32 cmd, u32 cmdex)
+static void CheckMultiModVersion(u32 cmd, u32 cmdex, u32 seqVersion)
 {
-    if (sBfsar.getVersionForBfseq() < 0x00020000)
+    if (seqVersion < cExtendedModMinVersion)
     {
         sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandExVersionFormat, cmd, cmdex);
         PopupMgr::instance()->pushCurrentItemError(msg);
@@ -83,7 +84,7 @@ static void CheckMultiModVersion(u32 cmd, u32 cmdex)
     }
 }
 
-MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData, nw::snd::internal::SequenceSoundFileReader& reader)
+MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData, nw::snd::internal::SequenceSoundFileReader& reader, u32 seqVersion)
 {
     MmlParser::SeqArgType argType = MmlParser::SEQ_ARG_NONE;
     MmlParser::SeqArgType argType2 = MmlParser::SEQ_ARG_NONE;
@@ -236,7 +237,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                     cmdInst = new MmlCommandBankSelect(arg1, conditional);
                     break;
                 case MmlCommand::MML_MOD_PHASE:
-                    if (sBfsar.getVersionForBfseq() < 0x00020000)
+                    if (seqVersion < cExtendedModMinVersion)
                     {
                         PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_phase"));
                         InvalidateSeqFile();
@@ -244,7 +245,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                     cmdInst = new MmlCommandModPhase(arg1, conditional);
                     break;
                 case MmlCommand::MML_MOD_CURVE:
-                    if (sBfsar.getVersionForBfseq() < 0x00020000)
+                    if (seqVersion < cExtendedModMinVersion)
                     {
                         PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_curve"));
                         InvalidateSeqFile();
@@ -486,7 +487,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                     }
 
                     if (cmdInst)
-                        CheckMultiModVersion(cmd, cmdex);
+                        CheckMultiModVersion(cmd, cmdex, seqVersion);
 
                     break;
                 }
@@ -536,7 +537,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                     }
 
                     if (cmdInst)
-                        CheckMultiModVersion(cmd, cmdex);
+                        CheckMultiModVersion(cmd, cmdex, seqVersion);
 
                     break;
                 }

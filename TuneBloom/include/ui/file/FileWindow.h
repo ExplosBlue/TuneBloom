@@ -57,3 +57,4 @@ private:
 FileWindow* OpenFileWindow(Item* item);
 void CloseAllFileWindows();
 void DrawFileWindows(ImGuiID dockspaceId);
+bool IsFileWindowFocused();

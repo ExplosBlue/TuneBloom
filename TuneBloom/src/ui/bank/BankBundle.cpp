@@ -466,7 +466,7 @@ static void ReportFailedBundledWaves(u32 failedWaveCount)
 
 static WaveFile* FindWaveFileByName(const char* name)
 {
-    for (const auto& node : sBfsar.getWaveFileList())
+    for (const auto& node : ActiveSoundArchive().getWaveFileList())
         if (node->getName() == name)
             return static_cast<WaveFile*>(node);
 
@@ -475,14 +475,16 @@ static WaveFile* FindWaveFileByName(const char* name)
 
 void PatchWaveFileHeader(u8* waveData)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     nw::ut::BinaryFileHeader* header = reinterpret_cast<nw::ut::BinaryFileHeader*>(waveData);
     const bool isLittle = waveData[4] == 0xFF;
-    const u32 version = sBfsar.getVersionForBfwav();
+    const u32 version = archive.getVersionForBfwav();
 
     for (u32 i = 0; i < 4; i++)
         waveData[8 + i] = (version >> (isLittle ? i * 8 : 24 - i * 8)) & 0xFF;
 
-    const char* magic = GetInnerFileMagic(sBfsar.getFormat(), InnerFileKind::Wave);
+    const char* magic = GetInnerFileMagic(archive.getFormat(), InnerFileKind::Wave);
 
     for (u32 i = 0; i < 4; i++)
         header->signature[i] = magic[i];
@@ -490,6 +492,8 @@ void PatchWaveFileHeader(u8* waveData)
 
 static void ReadBundledWaves(BundleReader* reader, u32 waveCount, std::unordered_map<std::string, WaveFile*>* waveMap)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     u32 failedWaveCount = 0;
 
     for (u32 i = 0; !reader->oob && i < waveCount; i++)
@@ -518,6 +522,7 @@ static void ReadBundledWaves(BundleReader* reader, u32 waveCount, std::unordered
         PatchWaveFileHeader(waveData);
 
         WaveFile* newWave = new WaveFile();
+        newWave->setArchive(&archive);
         newWave->setEnableName(true);
         newWave->getName() = waveName.c_str();
 
@@ -528,11 +533,11 @@ static void ReadBundledWaves(BundleReader* reader, u32 waveCount, std::unordered
             continue;
         }
 
-        newWave->setFormat(sBfsar.getFormat());
-        newWave->setVersion(sBfsar.getVersionForBfwav());
+        newWave->setFormat(archive.getFormat());
+        newWave->setVersion(archive.getVersionForBfwav());
         newWave->refreshSerializedHash();
-        sBfsar.getWaveFileList().pushBack(newWave);
-        sBfsar.updateList(sBfsar.getWaveFileList());
+        archive.getWaveFileList().pushBack(newWave);
+        archive.updateList(archive.getWaveFileList());
         SetUnsavedChanges(true);
         (*waveMap)[waveName.c_str()] = newWave;
     }
@@ -613,7 +618,7 @@ void ExportPendingBankBundles()
 
 static const BankFile* FindInstrumentBank(const BankFile::Instrument* instr)
 {
-    for (const auto& node : sBfsar.getBankFileList())
+    for (const auto& node : ActiveSoundArchive().getBankFileList())
     {
         const BankFile* bank = static_cast<const BankFile*>(node);
 
@@ -820,7 +825,7 @@ static void CommitInstrumentImport()
     else
         sInstrumentImport.targetBank->getInstrumentList().pushBack(instr);
 
-    sBfsar.updateList(sInstrumentImport.targetBank->getInstrumentList());
+    ActiveSoundArchive().updateList(sInstrumentImport.targetBank->getInstrumentList());
     SetUnsavedChanges(true);
 }
 
@@ -915,6 +920,8 @@ bool BeginBankBundleImport()
 
 static const char* CommitBankBundleImport()
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     BundleReader reader = { sBankBundleImport.fileData, sBankBundleImport.fileSize, sBankBundleImport.dataOffset };
 
     std::unordered_map<std::string, WaveFile*> waveMap;
@@ -930,7 +937,7 @@ static const char* CommitBankBundleImport()
     BankFile* newBank = new BankFile();
     newBank->setEnableName(true);
     newBank->getName() = sBankBundleImport.nameEdit.isEmpty() ? "Bank" : sBankBundleImport.nameEdit.cstr();
-    newBank->setup(sBfsar.getEndian(), sBfsar.getFormat(), sBfsar.getVersionForBfbnk());
+    newBank->setup(archive.getEndian(), archive.getFormat(), archive.getVersionForBfbnk());
 
     for (u32 i = 0; !reader.oob && i < instrumentCount; i++)
     {
@@ -948,8 +955,8 @@ static const char* CommitBankBundleImport()
         return messages::import::cBankBundleCorrupt;
     }
 
-    sBfsar.getBankFileList().pushBack(newBank);
-    sBfsar.updateList(sBfsar.getBankFileList());
+    archive.getBankFileList().pushBack(newBank);
+    archive.updateList(archive.getBankFileList());
     SetUnsavedChanges(true);
     SelectItem(newBank);
 

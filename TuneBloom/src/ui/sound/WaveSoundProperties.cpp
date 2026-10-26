@@ -8,7 +8,7 @@ void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)
 {
     {
         Item* waveFile = waveSoundInfo.getWaveFileRef().getItem();
-        if (ItemSelectorRow(messages::common::cWaveFile,sBfsar.getWaveFileList(), &waveFile, false, TrailingButtonsWidth(1)))
+        if (ItemSelectorRow(messages::common::cWaveFile,ActiveSoundArchive().getWaveFileList(), &waveFile, false, TrailingButtonsWidth(1)))
         {
             waveSoundInfo.getWaveFileRef().attach(waveFile);
             SetUnsavedChanges(true);

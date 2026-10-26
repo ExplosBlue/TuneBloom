@@ -25,6 +25,7 @@ struct SeqCompileState
     }
 
     bool setCursorPos = true;
+    InnerFileTarget target;
 
     std::unordered_map<std::string, std::pair<u32, MmlCommandBase*>> globalLabels; // <global label, <line, command after it>>
     std::unordered_map<std::string, std::unordered_map<std::string, std::pair<u32, MmlCommandBase*>>> scopedLocalLabels; // <global label, <local label, <line, command after it>>>
@@ -180,7 +181,7 @@ bool SequenceFile::parseLines_(SeqCompileState& state)
         }
 
         std::string errorMsg;
-        MmlCommandBase* cmd = ParseSeqCommand(cmdStr, args, errorMsg);
+        MmlCommandBase* cmd = ParseSeqCommand(cmdStr, args, state.target, errorMsg);
         if (!cmd)
         {
             setCompileError_(state, i, errorMsg);
@@ -376,8 +377,11 @@ void SequenceFile::compile_(bool setCursorPos)
     {
         LOG_FMT("--- sequence code for %s ---\n%s\n--- end sequence code ---", getNameOrNull().cstr(), mSeqText->cstr());
     }
-    mVersion = sBfsar.getVersionForBfseq();
-    mEndian = sBfsar.getEndian();
+
+    const InnerFileTarget target = getTarget();
+
+    mVersion = target.version;
+    mEndian = target.endian;
     mIsValid = false;
     mLabelsStartInfo.clear();
     mLabels.clear();
@@ -385,6 +389,7 @@ void SequenceFile::compile_(bool setCursorPos)
 
     SeqCompileState state;
     state.setCursorPos = setCursorPos;
+    state.target = target;
 
     if (!parseLines_(state))
         return;
@@ -413,7 +418,9 @@ bool SequenceFile::recompileIfInvalid_()
 
 void SequenceFile::syncRenamedLabels_()
 {
-    if (mCompiledLabels.size() != mLabels.size())
+    Bfsar* archive = getArchive();
+
+    if (!archive || mCompiledLabels.size() != mLabels.size())
         return;
 
     for (u32 i = 0; i < mLabels.size(); i++)
@@ -430,7 +437,7 @@ void SequenceFile::syncRenamedLabels_()
         if (std::find(mCompiledLabels.begin(), mCompiledLabels.end(), newLabel) != mCompiledLabels.end())
             continue;
 
-        for (Item* item : sBfsar.getSoundList())
+        for (Item* item : archive->getSoundList())
         {
             Sound* sound = static_cast<Sound*>(item);
             if (sound->getSoundType() != Sound::SoundType::Seq)

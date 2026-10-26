@@ -2,37 +2,32 @@
 
 #include <ui/backup/Backup.h>
 #include <ui/settings/Config.h>
+#include <ui/file/DocumentMgr.h>
+#include <ui/file/DocumentState.h>
 #include <ui/file/FileDialogs.h>
 #include <ui/file/FileFlow.h>
-#include <ui/file/FileWindow.h>
 #include <ui/file/GroupFileLocate.h>
-#include <ui/project/ItemViews.h>
-#include <ui/widgets/ListFilter.h>
 #include <ui/file/LoadProgress.h>
 #include <ui/Messages.h>
-#include <ui/player/PlayerViews.h>
+#include <ui/file/OpenQueue.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/file/RecentFiles.h>
 #include <core/TestHooks.h>
-#include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/app/Workspace.h>
 
-#include <filedevice/seadFileDeviceMgr.h>
+#include <bfsar/files/InnerFile.h>
+#include <core/Debug.h>
+
 #include <filedevice/seadPath.h>
 #include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 
 #include <app/Utilll.h>
 
-#include <core/Debug.h>
-
-#include <string>
-#include <filesystem>
-#include <vector>
 #include <cstring>
-
-#include <bfsar/files/InnerFile.h>
-#include <bfsar/archive/Cmpbin.h>
+#include <filesystem>
+#include <string>
+#include <vector>
 
 bool CreateDirectoryRecursively(const std::string& directory)
 {
@@ -48,55 +43,50 @@ bool CreateDirectoryRecursively(const std::string& directory)
     return fs::create_directories(directory, ec);
 }
 
-Bfsar sBfsar;
-AudioResource sAudioResource;
-
-sead::FixedSafeString<512> sDroppedFilePath;
-
 bool IsDocumentOpen()
 {
-    return sAudioResource.isOpen() || sBfsar.isOpen();
+    return ActiveDocument() != nullptr;
 }
 
 bool IsAudioResourceOpen()
 {
-    return sAudioResource.isOpen();
+    return FindActiveAudioResource() != nullptr;
 }
 
 const sead::SafeString& GetDocumentPath()
 {
-    return sAudioResource.isOpen() ? sAudioResource.getFilePath() : sBfsar.getFilePath();
+    const Document* document = ActiveDocument();
+
+    return document ? document->filePath() : sead::SafeString::cEmptyString;
 }
 
 const sead::SafeString& GetDocumentLoadedPath()
 {
-    return sAudioResource.isOpen() ? sAudioResource.getFilePath() : sBfsar.getLoadedArchivePath();
+    const Document* document = ActiveDocument();
+
+    return document ? document->loadedPath() : sead::SafeString::cEmptyString;
 }
 
 const char* GetDocumentExtension()
 {
-    if (sAudioResource.isOpen())
-        return GetResourceFormatInfo(sAudioResource.getFormat()).extension;
+    const Document* document = ActiveDocument();
 
-    const ArchiveFormatInfo* info = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
-
-    return info ? info->extension : GetInnerFileExtension(ArchiveFormat::BFSAR, InnerFileKind::SoundArchive);
+    return document ? document->extension() : GetInnerFileExtension(ArchiveFormat::BFSAR, InnerFileKind::SoundArchive);
 }
 
 void RenumberDocumentList(Item::List& list)
 {
-    if (sAudioResource.isOpen() && &list == &sAudioResource.getAssetList())
-        sAudioResource.renumberAssets();
+    if (Document* document = ActiveDocument())
+        document->renumber(list);
     else
-        sBfsar.updateList(list);
+        Bfsar::updateList(list);
 }
 
 std::string GetDocumentName()
 {
-    if (sAudioResource.isOpen())
-        return std::filesystem::path(sAudioResource.getFilePath().cstr()).filename().string();
+    const Document* document = ActiveDocument();
 
-    return backup::GetArchiveName();
+    return document ? document->displayName() : backup::GetArchiveName();
 }
 
 bool IsDocumentPath(const char* path)
@@ -111,75 +101,28 @@ bool IsDocumentPath(const char* path)
 
 bool IsValidDocumentName(const sead::SafeString& name)
 {
-    return sAudioResource.isOpen() ? sAudioResource.validName(name) : sBfsar.validName(name);
+    const Document* document = ActiveDocument();
+
+    return document && document->isValidName(name);
 }
 
 bool IsUniqueDocumentName(const sead::SafeString& name, const Item* ignoreItem)
 {
-    return sAudioResource.isOpen() ? sAudioResource.validateName(name, ignoreItem) : sBfsar.validateName(name, ignoreItem);
-}
+    const Document* document = ActiveDocument();
 
-bool ValidBFSARHeader(const void* file)
-{
-    return ValidBFSARHeader(file, sizeof(nw::snd::internal::SoundArchiveFile::FileHeader));
-}
-
-bool ValidBFSARHeader(const void* file, u32 size)
-{
-    const bool hasHeader = size >= sizeof(nw::snd::internal::SoundArchiveFile::FileHeader);
-
-    bool isFSAR = hasHeader && sead::MemUtil::compare(file, "FSAR", 4) == 0;
-    bool isCSAR = hasHeader && sead::MemUtil::compare(file, "CSAR", 4) == 0;
-
-    const u8* byteOrderMark = static_cast<const u8*>(file) + offsetof(nw::ut::BinaryFileHeader, byteOrder);
-    const bool hasByteOrder = hasHeader && ((byteOrderMark[0] == 0xFF && byteOrderMark[1] == 0xFE) || (byteOrderMark[0] == 0xFE && byteOrderMark[1] == 0xFF));
-
-    if ((!isFSAR && !isCSAR) || !hasByteOrder)
-    {
-        PopupMgr::instance()->addPopup({ messages::archive::cNotArchive, nullptr });
-        return false;
-    }
-
-    const nw::snd::internal::SoundArchiveFile::FileHeader& header = *reinterpret_cast<const nw::snd::internal::SoundArchiveFile::FileHeader*>(file);
-
-    //? Setup global file endian
-    {
-        const void* byteOrder = sead::PtrUtil::addOffset(&header, offsetof(nw::ut::BinaryFileHeader, byteOrder));
-        sFileEndian = sead::Endian::markToEndian(*(u16*)byteOrder);
-    }
-
-    //? Only check version for FSAR (BFSAR) files
-    if (isFSAR)
-    {
-        bool inLegacyRange = header.version >= 0x00010000 && header.version < 0x00030000;
-        bool isV3 = header.version == 0x03000000;
-
-        if (!(inLegacyRange || isV3))
-        {
-            sead::FormatFixedSafeString<64> msg(messages::archive::cBfsarVersionUnsupportedFormat,(u32)header.version);
-            PopupMgr::instance()->addPopup({msg, nullptr});
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool NewFile(ArchiveFormat format)
-{
-    return NewFile(format, getDefaultPlatformForFormat(format));
+    return document && document->isUniqueName(name, ignoreItem);
 }
 
 bool NewFile(ArchiveFormat format, ArchivePlatform platform)
 {
-    CloseFile();
+    Document* document = Document::Create(format, platform);
 
-    sBfsar.create(format, platform);
+    AddDocument(document, false);
 
-    const ArchiveFormatInfo* info = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
+    const Bfsar& archive = ActiveSoundArchive();
+    const ArchiveFormatInfo* info = getFormatInfo(archive.getFormat(), archive.getPlatform());
 
     LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", info->fmtName).cstr());
-    util::updateTitle(sead::FormatFixedSafeString<64>(messages::archive::cNewFileNameFormat, info->extension).cstr(), true);
 
     SetUnsavedChanges(true);
 
@@ -187,144 +130,104 @@ bool NewFile(ArchiveFormat format, ArchivePlatform platform)
     return true;
 }
 
-bool NewFile()
-{
-    return NewFile(sBfsar.getFormat(), sBfsar.getPlatform());
-}
-
 static constexpr f64 cPendingOpenDelay      = 0.12;
 static constexpr s32 cPendingOpenFirstFrame = 4;
 
-static sead::FixedSafeString<512> sNextOpenPath;
-static sead::FixedSafeString<512> sPendingOpenPath;
+static openqueue::Request sPendingOpen;
+static bool sHasPendingOpen = false;
 static f64 sPendingOpenTime = 0.0;
+static sead::FixedSafeString<512> sStartupFile;
 
-void SetNextOpenPath(const char* path)
+void SetStartupFile(const char* path)
 {
-    sNextOpenPath = path;
-}
-
-void ClearNextOpenPath()
-{
-    sNextOpenPath.clear();
-}
-
-bool OpenFile(const char* path)
-{
-    SetNextOpenPath(path);
-    return OpenFile();
+    if (path && std::strlen(path) < static_cast<size_t>(sStartupFile.getBufferSize()))
+        sStartupFile = path;
 }
 
 bool OpenFile()
 {
     sead::FixedSafeString<512> filePath;
 
-    if (!sNextOpenPath.isEmpty())
-    {
-        filePath = sNextOpenPath;
-        sNextOpenPath.clear();
-    }
-    else if (!sDroppedFilePath.isEmpty())
-    {
-        filePath = sDroppedFilePath;
-        sDroppedFilePath.clear();
-    }
-    else
-    {
-        const u32 filterCount = 3;
-        FileFilter filters[filterCount] = {
-            { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bars *.bwav *.zs" },
-            { messages::archive::cOpenFilter, "*.bfsar *.bcsar *.cmpbin" },
-            { messages::resource::cOpenFilter, "*.bars *.bwav *.zs" }
-        };
+    const u32 filterCount = 3;
+    FileFilter filters[filterCount] = {
+        { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bars *.bwav *.zs" },
+        { messages::archive::cOpenFilter, "*.bfsar *.bcsar *.cmpbin" },
+        { messages::resource::cOpenFilter, "*.bars *.bwav *.zs" }
+    };
 
-        if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
-        {
-            return false;
-        }
-    }
+    if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
+        return false;
 
-    sPendingOpenPath = filePath;
-    sPendingOpenTime = ImGui::GetTime();
+    openqueue::Push(filePath.cstr());
 
     return true;
 }
 
 void MarkArchiveInSync()
 {
-    const sead::SafeString& filePath = GetDocumentPath();
-
-    sead::FixedSafeString<512> fileName;
-    sead::Path::getFileName(&fileName, filePath);
-
-    util::updateTitle(fileName.cstr(), false);
+    Document* document = ActiveDocument();
 
     SetUnsavedChanges(false);
+    RefreshWindowTitle();
 
-    AddRecentFile(filePath.cstr());
+    if (!document)
+        return;
 
-    if (!filePath.isEmpty())
-        SetLastArchive(filePath.cstr());
+    RefreshDocumentPath(document);
+
+    if (document->filePath().isEmpty())
+        return;
+
+    if (!document->state().isPreview)
+        AddRecentFile(document->filePath().cstr());
+
+    RecordDocumentSession();
 }
 
 void RunStartupAction()
 {
+    if (!sStartupFile.isEmpty())
+    {
+        openqueue::Push(sStartupFile.cstr());
+        sStartupFile.clear();
+        return;
+    }
+
     const StartupSettings& settings = GetStartupSettings();
 
-    if (settings.action == StartupAction::StartPage || testhooks::IsEnabled() || !sDroppedFilePath.isEmpty())
+    if (settings.action == StartupAction::StartPage || testhooks::IsEnabled() || !openqueue::IsEmpty())
         return;
 
-    if (settings.lastArchive.empty() || settings.lastArchive.size() >= static_cast<size_t>(sDroppedFilePath.getBufferSize()))
-        return;
+    std::vector<std::string> documents = settings.sessionDocuments;
 
-    std::error_code ec;
+    if (documents.empty() && !settings.lastArchive.empty())
+        documents.push_back(settings.lastArchive);
 
-    if (std::filesystem::is_regular_file(settings.lastArchive, ec))
-        sDroppedFilePath = settings.lastArchive.c_str();
+    std::error_code error;
+
+    for (const std::string& document : documents)
+    {
+        if (std::filesystem::is_regular_file(document, error))
+            openqueue::Push(document.c_str());
+    }
+
+    if (documents.size() > 1 && std::filesystem::is_regular_file(settings.lastArchive, error))
+        openqueue::Push(settings.lastArchive.c_str());
 }
 
-static bool LoadAudioResource(const sead::SafeString& filePath, std::vector<u8> bytes)
+static bool FinishSave(SaveResult result, const char* error)
 {
-    CloseFile();
-
-    const char* error = nullptr;
-
-    if (!sAudioResource.open(std::move(bytes), filePath, &error))
+    if (result == SaveResult::Failed)
     {
-        PopupMgr::instance()->addPopup({ error, nullptr });
-        CloseFile();
+        if (error)
+            PopupMgr::instance()->addPopup({ error, nullptr });
+
         return false;
     }
 
     MarkArchiveInSync();
 
-    SetUITab(UIType::AudioAssets);
-    return true;
-}
-
-static bool ValidateAudioResource()
-{
-    sead::FixedSafeString<256> error;
-    const Item* item = nullptr;
-
-    if (sAudioResource.validate(&error, &item))
-        return true;
-
-    PopupMgr::instance()->addPopup({ error, const_cast<Item*>(item) });
-    return false;
-}
-
-static bool FinishAudioResourceSave(AudioResource::SaveResult result, const char* error)
-{
-    if (result == AudioResource::SaveResult::Failed)
-    {
-        PopupMgr::instance()->addPopup({ error, nullptr });
-        return false;
-    }
-
-    MarkArchiveInSync();
-
-    if (result == AudioResource::SaveResult::Saved)
+    if (result == SaveResult::Saved)
         return true;
 
     SetUnsavedChanges(true);
@@ -333,297 +236,183 @@ static bool FinishAudioResourceSave(AudioResource::SaveResult result, const char
     return false;
 }
 
-static bool SaveAudioResource()
+static bool CheckDocumentFile(const Document::File& file)
 {
-    if (!ValidateAudioResource())
-        return false;
+    sead::Endian::Types endian = sead::Endian::eBig;
 
-    backup::KeepPreviousVersion();
+    if (Document::PeekEndian(file, &endian))
+        PrepareParseEndian(endian);
 
     const char* error = nullptr;
-    const AudioResource::SaveResult result = sAudioResource.save(&error);
 
-    return FinishAudioResourceSave(result, error);
+    if (Document::Check(file, &error))
+        return true;
+
+    if (error)
+        PopupMgr::instance()->addPopup({ error, nullptr });
+
+    return false;
 }
 
-static void AddInnerExtension(sead::BufferedSafeString* path, const char* innerExtension, const char* outerExtension)
+static bool LoadDocumentFile(const sead::SafeString& filePath, bool isPreview, Document* replaced)
 {
-    const size_t length = strlen(path->cstr());
-    const size_t outerLength = strlen(outerExtension) + 1;
-    std::error_code error;
+    Document::File file;
 
-    if (!HasFileExtension(path->cstr(), length, outerExtension) || HasFileExtension(path->cstr(), length - outerLength, innerExtension) ||
-        std::filesystem::exists(path->cstr(), error))
-        return;
-
-    const std::string named = std::string(path->cstr(), length - outerLength) + "." + innerExtension + "." + outerExtension;
-
-    if (named.size() < static_cast<size_t>(path->getBufferSize()) && !std::filesystem::exists(named, error))
-        path->copy(named.c_str());
-}
-
-static bool SaveAudioResourceAs()
-{
-    if (!ValidateAudioResource())
-        return false;
-
-    const ResourceFormatInfo& format = GetResourceFormatInfo(sAudioResource.getFormat());
-
-    const sead::FormatFixedSafeString<32> pattern("*.%s", format.extension);
-    const sead::FormatFixedSafeString<64> filterName("%s (%s)", format.displayName, pattern.cstr());
-    const sead::FormatFixedSafeString<32> compressedPattern("*.%s", cZstdExtension);
-    const sead::FormatFixedSafeString<96> compressedName(messages::common::cCompressedFilterFormat, format.displayName, format.extension, cZstdExtension);
-
-    FileFilter filters[] = {
-        { filterName.cstr(), pattern.cstr() },
-        { compressedName.cstr(), compressedPattern.cstr() }
-    };
-
-    sead::FixedSafeString<512> path;
-
-    if (!SaveFileDialog(&path, nullptr, IM_ARRAYSIZE(filters), filters, format.extension, GetDocumentPath().cstr()))
-        return false;
-
-    AddInnerExtension(&path, format.extension, cZstdExtension);
-
-    backup::KeepPreviousVersion(path.cstr());
-
-    const char* error = nullptr;
-    const AudioResource::SaveResult result = sAudioResource.saveAs(path, &error);
-
-    return FinishAudioResourceSave(result, error);
-}
-
-static bool LoadArchiveFile(const sead::SafeString& filePath)
-{
-    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-    SEAD_ASSERT(device);
-
-    LOG_STR(filePath.cstr());
-    sead::FileDevice::LoadArg arg;
-    arg.path = filePath;
-
-    u8* bfsarFile = device->tryLoad(arg);
-    if (!bfsarFile)
+    if (const char* error = Document::Load(filePath, &file))
     {
-        PopupMgr::instance()->addPopup({ messages::archive::cOpenFailed });
+        Document::Free(&file);
+        PopupMgr::instance()->addPopup({ error, nullptr });
         return false;
     }
 
-    u32 fileSize = static_cast<u32>(arg.read_size);
-
-    if (cmpbin::IsZstdFrame(bfsarFile, fileSize) || AudioResource::IsResourceFile(bfsarFile, fileSize))
+    if (!CheckDocumentFile(file))
     {
-        const char* error = AudioResource::GetResourceDataError(bfsarFile, fileSize);
-        std::vector<u8> bytes(bfsarFile, bfsarFile + fileSize);
-        device->unload(bfsarFile);
-
-        if (error)
-        {
-            PopupMgr::instance()->addPopup({ error, nullptr });
-            return false;
-        }
-
-        return LoadAudioResource(filePath, std::move(bytes));
-    }
-
-    bool wasCmpbin = false;
-    cmpbin::Codec cmpbinCodec = cmpbin::Codec::Lz4Frame;
-
-    if (cmpbin::IsCompressed(bfsarFile, fileSize))
-    {
-        wasCmpbin = true;
-        cmpbinCodec = cmpbin::DetectCodec(bfsarFile, fileSize);
-
-        std::vector<u8> decompressed;
-        if (!cmpbin::Decompress(bfsarFile, fileSize, decompressed))
-        {
-            delete bfsarFile;
-            PopupMgr::instance()->addPopup({messages::archive::cCmpbinDecompressFailed});
-            return false;
-        }
-
-        delete bfsarFile;
-
-        u8 *buf = new u8[decompressed.size()];
-        std::memcpy(buf, decompressed.data(), decompressed.size());
-        bfsarFile = buf;
-        fileSize = static_cast<u32>(decompressed.size());
-    }
-
-    if (!ValidBFSARHeader(bfsarFile, fileSize))
-    {
-        delete bfsarFile;
+        Document::Free(&file);
         return false;
     }
 
-    CloseFile();
+    Document* document = nullptr;
 
-    if (!sBfsar.open(bfsarFile, fileSize, filePath, nullptr)) //? bfsarFile is freed here
     {
-        sead::FormatFixedSafeString<1024> msg(messages::archive::cCorruptFormat, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::SoundArchive), PopupMgr::instance()->getCorruptInfo().cstr());
-        PopupMgr::instance()->addPopup({msg, nullptr});
-        CloseFile();
+        DocumentFocus focus(nullptr);
+        document = Document::Open(&file, filePath);
+    }
+
+    if (!document)
+    {
+        PopupMgr::instance()->discardProcessedErrors();
         return false;
     }
 
-    if (wasCmpbin)
-        sBfsar.setCmpbinPreferZstd(cmpbinCodec == cmpbin::Codec::Zstd);
+    PopupMgr::instance()->moveProcessedErrors(&document->state().itemErrors);
+
+    if (replaced)
+        ReplaceDocument(replaced, document);
+    else
+        AddDocument(document, isPreview);
 
     MarkArchiveInSync();
 
-    SetUITab(UIType::ProjectInfo);
+    SetUITab(document->defaultTab());
     return true;
 }
 
-bool IsOpenPending()
+static void OpenRequestedFile(const openqueue::Request& request)
 {
-    return !sPendingOpenPath.isEmpty();
-}
+    Document* openDocument = FindOpenDocument(request.path.c_str());
 
-void UpdatePendingOpen()
-{
-    if (sPendingOpenPath.isEmpty())
+    if (openDocument && request.mode != openqueue::Mode::Reload)
+    {
+        ActivateDocument(openDocument);
+
+        if (request.mode == openqueue::Mode::Pin)
+            PinDocument(openDocument);
+
         return;
+    }
 
-    if (ImGui::GetFrameCount() < cPendingOpenFirstFrame)
+    if (request.path.size() >= static_cast<size_t>(sStartupFile.getBufferSize()))
+    {
+        PopupMgr::instance()->addPopup({ messages::archive::cOpenFailed, nullptr });
         return;
+    }
 
-    if (!testhooks::IsEnabled() && ImGui::GetTime() - sPendingOpenTime < cPendingOpenDelay)
-        return;
-
-    const sead::FixedSafeString<512> filePath(sPendingOpenPath);
-    sPendingOpenPath.clear();
+    const sead::FixedSafeString<512> filePath(request.path.c_str());
 
     sead::FixedSafeString<512> fileName;
     sead::Path::getFileName(&fileName, filePath);
 
     loadprogress::Begin(fileName.cstr());
-    LoadArchiveFile(filePath);
+    const bool loaded = LoadDocumentFile(filePath, request.mode == openqueue::Mode::Preview, openDocument);
     loadprogress::End();
 
-    OpenGroupFileLocate();
+    if (loaded)
+        OpenGroupFileLocate();
+}
+
+bool IsOpenPending()
+{
+    return sHasPendingOpen || !openqueue::IsEmpty();
+}
+
+void UpdatePendingOpen()
+{
+    if (ImGui::GetFrameCount() < cPendingOpenFirstFrame || IsDocumentSwitchLocked())
+        return;
+
+    UpdatePendingActivation();
+
+    if (!sHasPendingOpen)
+    {
+        if (!openqueue::Take(&sPendingOpen))
+            return;
+
+        sHasPendingOpen = true;
+        sPendingOpenTime = ImGui::GetTime();
+    }
+
+    if (!testhooks::IsEnabled() && ImGui::GetTime() - sPendingOpenTime < cPendingOpenDelay)
+        return;
+
+    const openqueue::Request request = sPendingOpen;
+    sHasPendingOpen = false;
+
+    OpenRequestedFile(request);
 }
 
 bool SaveFile()
 {
-    LOG_BOOL("isOpen", sBfsar.isOpen());
+    LOG_BOOL("isOpen", IsDocumentOpen());
 
     if (testhooks::IsEnabled())
         return false;
 
-    if (sAudioResource.isOpen())
-        return SaveAudioResource();
+    Document* document = ActiveDocument();
+
+    if (!document || !document->prepareSave())
+        return false;
 
     backup::KeepPreviousVersion();
 
-    if (sBfsar.isOpen() && sBfsar.save())
-    {
-        MarkArchiveInSync();
-        NotifyDeletedGroupFiles();
-        return true;
-    }
-    return false;
+    const char* error = nullptr;
+
+    if (!FinishSave(document->save(&error), error))
+        return false;
+
+    document->finishSave();
+    return true;
 }
 
 bool SaveFileAs()
 {
-    if (sAudioResource.isOpen())
-        return SaveAudioResourceAs();
+    Document* document = ActiveDocument();
 
-    if (!sBfsar.isOpen())
+    if (!document || !document->prepareSaveAs())
         return false;
-
-    if (!sBfsar.validate_())
-        return false;
-
-    const ArchiveFormatInfo* info = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
-
-    if (!info)
-    {
-        LOG_STR("SaveFileAs: invalid archive format info");
-        return false;
-    }
-
-    sead::FixedSafeString<64> filterPattern;
-    filterPattern.format("*.%s", info->extension);
-
-    sead::FixedSafeString<128> filterName;
-    filterName.format("%s (%s)", info->label, filterPattern.cstr());
-
-    sead::FixedSafeString<128> cmpbinName;
-    FileFilter filters[2] = {{filterName.cstr(), filterPattern.cstr()}, {"", ""}};
-    u32 filterCount = 1;
-
-    if (sBfsar.isV3Bfsar())
-    {
-        cmpbinName.format(messages::common::cCompressedFilterFormat, info->label, info->extension, cCmpbinExtension);
-        filters[1] = {cmpbinName.cstr(), "*.cmpbin"};
-        filterCount = 2;
-    }
-
-    sead::FixedSafeString<512> defaultPath;
-
-    if (sBfsar.getFilePath().isEmpty())
-    {
-        std::error_code ec;
-        std::filesystem::path cwd = std::filesystem::current_path(ec);
-
-        if (ec)
-            defaultPath.format(messages::archive::cUntitledFileNameFormat, info->extension);
-        else
-            defaultPath = (cwd / sead::FormatFixedSafeString<64>(messages::archive::cUntitledFileNameFormat, info->extension).cstr()).string().c_str();
-    }
-    else
-        defaultPath = sBfsar.getFilePath();
 
     sead::FixedSafeString<512> path;
 
-    if (!SaveFileDialog(&path, nullptr, filterCount, filters, info->extension, defaultPath.cstr()))
+    if (!document->chooseSaveAsPath(&path))
         return false;
-
-    AddInnerExtension(&path, info->extension, cCmpbinExtension);
-
-    LOG_STR(path.cstr());
 
     backup::KeepPreviousVersion(path.cstr());
 
-    if (!sBfsar.saveAs(path))
-    {
-        LOG_STR("SaveFileAs failed to write archive");
-        return false;
-    }
+    const char* error = nullptr;
 
-    MarkArchiveInSync();
-
-    return true;
+    return FinishSave(document->saveAs(path, &error), error);
 }
 
 bool CloseFile()
 {
-    PopupMgr::instance()->closeFile();
-
-    CancelPendingExportsAndImports();
-
-    ClearSelection();
-    CloseAllFileWindows();
-    CloseFilter();
-
-    sSoundPlayer.reset();
-
-    sBfsar.close();
-    sAudioResource.close();
-
-    SetUnsavedChanges(false);
-
-    util::updateTitle(nullptr, false);
+    if (Document* document = ActiveDocument())
+        CloseDocument(document);
 
     return true;
 }
 
 bool Exit()
 {
-    CloseFile();
+    CloseAllDocuments();
 
     GetRecentFiles().clear();
 

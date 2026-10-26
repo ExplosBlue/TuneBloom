@@ -21,6 +21,10 @@
 
 static constexpr u32 cItemTooltipNameMax = 16;
 
+static constexpr u64 cBytesPerKilobyte = 1024;
+static constexpr u64 cBytesPerMegabyte = cBytesPerKilobyte * 1024;
+static constexpr u64 cBytesPerGigabyte = cBytesPerMegabyte * 1024;
+
 static constexpr const char* cLoopLengthSample = ICON_LC_REPEAT " 0:00.000";
 
 static const std::vector<const Item*>& GetUniqueItems(std::vector<const Item*>* items)
@@ -268,14 +272,16 @@ static s64 GetBankInstrumentsKey(const Item* item)
     return GetBankFileInstrumentsKey(bankFile);
 }
 
-void FormatItemSize(sead::BufferedSafeString* out, u32 size)
+void FormatItemSize(sead::BufferedSafeString* out, u64 size)
 {
-    if (size >= 1024 * 1024)
-        out->format(messages::unit::cMegabytesFormat, static_cast<f32>(size) / (1024.0f * 1024.0f));
-    else if (size >= 1024)
-        out->format(messages::unit::cKilobytesFormat, static_cast<f32>(size) / 1024.0f);
+    if (size >= cBytesPerGigabyte)
+        out->format(messages::unit::cGigabytesFormat, static_cast<f64>(size) / static_cast<f64>(cBytesPerGigabyte));
+    else if (size >= cBytesPerMegabyte)
+        out->format(messages::unit::cMegabytesFormat, static_cast<f32>(size) / static_cast<f32>(cBytesPerMegabyte));
+    else if (size >= cBytesPerKilobyte)
+        out->format(messages::unit::cKilobytesFormat, static_cast<f32>(size) / static_cast<f32>(cBytesPerKilobyte));
     else
-        out->format(messages::unit::cBytesFormat, size);
+        out->format(messages::unit::cBytesFormat, static_cast<u32>(size));
 }
 
 static void FormatSampleLength(u32 sampleCount, u32 sampleRate, sead::BufferedSafeString* out)

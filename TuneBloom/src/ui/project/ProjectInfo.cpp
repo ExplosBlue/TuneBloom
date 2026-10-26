@@ -66,6 +66,8 @@ static void DrawProjectRow(const char* label, bool stackRows)
 
 static void DrawProjectPlatformUI(f32 em)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     static char sLabels[IM_ARRAYSIZE(cFormatTable)][64];
     static u32 sVersionForEntry[IM_ARRAYSIZE(cFormatTable)] = {};
     const char *labels[IM_ARRAYSIZE(cFormatTable)];
@@ -83,10 +85,10 @@ static void DrawProjectPlatformUI(f32 em)
     for (int i = 0; i < IM_ARRAYSIZE(cFormatTable); i++)
         labels[i] = sLabels[i];
 
-    const ArchiveFormatInfo *current = getFormatInfo(sBfsar.getFormat(), sBfsar.getPlatform());
+    const ArchiveFormatInfo *current = getFormatInfo(archive.getFormat(), archive.getPlatform());
 
     s32 selected = current ? (s32)(current - cFormatTable) : 0;
-    sVersionForEntry[selected] = sBfsar.getVersion();
+    sVersionForEntry[selected] = archive.getVersion();
 
     f32 platformWidth = 0.0f;
     for (int i = 0; i < IM_ARRAYSIZE(cFormatTable); i++)
@@ -120,10 +122,10 @@ static void DrawProjectPlatformUI(f32 em)
     {
         const ArchiveFormatInfo &info = cFormatTable[selected];
 
-        sBfsar.setFormat(info.format);
-        sBfsar.setPlatform(info.platform);
-        sBfsar.setEndian(info.endian);
-        sBfsar.setVersion(sVersionForEntry[selected]);
+        archive.setFormat(info.format);
+        archive.setPlatform(info.platform);
+        archive.setEndian(info.endian);
+        archive.setVersion(sVersionForEntry[selected]);
 
         SetUnsavedChanges(true);
     }
@@ -131,6 +133,8 @@ static void DrawProjectPlatformUI(f32 em)
 
 static void DrawProjectFormatBox(f32 em, bool stackRows)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(ImFloor(em * cSoundPanelPadXEm), ImFloor(em * cSoundPanelPadYEm)));
 
     const bool boxOpen = ImGui::BeginTable("ProjectFormat", 1, ImGuiTableFlags_BordersOuter);
@@ -141,18 +145,18 @@ static void DrawProjectFormatBox(f32 em, bool stackRows)
     DrawProjectPlatformUI(em);
 
     {
-        u32 version = sBfsar.getVersion();
+        u32 version = archive.getVersion();
 
         DrawProjectRow(messages::common::cVersion, stackRows);
-        if (DrawVersionUI(&version, sBfsar.getFormat(), false))
+        if (DrawVersionUI(&version, archive.getFormat(), false))
         {
-            sBfsar.setVersion(version);
+            archive.setVersion(version);
             SetUnsavedChanges(true);
         }
     }
 
     {
-        bool stringTable = sBfsar.isIncludeStringTable();
+        bool stringTable = archive.isIncludeStringTable();
         DrawProjectRow(messages::project::cStringTable, stackRows);
         DetailTooltip(messages::project::cStringTableDetail);
 
@@ -161,7 +165,7 @@ static void DrawProjectFormatBox(f32 em, bool stackRows)
 
         if (stringTableChanged)
         {
-            sBfsar.setIncludeStringTable(stringTable);
+            archive.setIncludeStringTable(stringTable);
             SetUnsavedChanges(true);
         }
     }
@@ -170,7 +174,7 @@ static void DrawProjectFormatBox(f32 em, bool stackRows)
         DrawProjectRow(messages::common::cOptions, stackRows);
         DetailTooltip(messages::project::cOptionsDetail);
 
-        const bool optionsChanged = ImGui::InputScalar("##Options", ImGuiDataType_U32, &sBfsar.getSoundArchivePlayerInfo().options);
+        const bool optionsChanged = ImGui::InputScalar("##Options", ImGuiDataType_U32, &archive.getSoundArchivePlayerInfo().options);
         DetailTooltip(messages::project::cOptionsDetail);
 
         if (optionsChanged)
@@ -185,11 +189,13 @@ static void DrawProjectFormatBox(f32 em, bool stackRows)
 
 static LimitLayout CalcLimitLayout(f32 em)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     LimitLayout layout = {};
 
-    layout.hasBufferTimes = sBfsar.isStreamPrefetchAvailable();
+    layout.hasBufferTimes = archive.isStreamPrefetchAvailable();
 
-    layout.playerInfo = &sBfsar.getSoundArchivePlayerInfo();
+    layout.playerInfo = &archive.getSoundArchivePlayerInfo();
     layout.labels[0] = messages::common::cSounds;
     layout.labels[1] = messages::common::cTracks;
     layout.labels[2] = messages::common::cChannels;

@@ -1,0 +1,12 @@
+#pragma once
+
+#include <string>
+
+namespace pathtext
+{
+
+const char* FileName(const char* path);
+std::string Folder(const std::string& path);
+std::string FitToWidth(const std::string& path, float width);
+
+}

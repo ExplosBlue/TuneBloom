@@ -1,5 +1,6 @@
 #include <ui/items/ItemListInternal.h>
 
+#include <ui/file/DocumentState.h>
 #include <ui/file/FileWindow.h>
 #include <ui/items/ItemSelector.h>
 #include <ui/widgets/ListFilter.h>
@@ -40,7 +41,6 @@ struct ItemRowName
     bool isModified = false;
 };
 
-static Item* sScrollItem = nullptr;
 static const char* sNextListNote = nullptr;
 static const ItemColumn* sNextListColumns = nullptr;
 static u32 sNextListColumnCount = 0;
@@ -57,12 +57,12 @@ static bool sNextListRemovable = true;
 
 void ScrollItemListTo(Item* item)
 {
-    sScrollItem = item;
+    ActiveDocumentState().scrollItem = item;
 }
 
 Item* GetItemListScrollTarget()
 {
-    return sScrollItem;
+    return ActiveDocumentState().scrollItem;
 }
 
 void SetNextItemListRemoveText(const char* label, const char* manyFormat, bool removesData)
@@ -734,9 +734,9 @@ static void DrawItemListRow(ItemListContext& ctx, Item* item)
     if (detailHovered && row.isModified)
         ImGui::SetTooltip("%s", messages::item::cModifiedTooltip);
 
-    if (sScrollItem == item)
+    if (GetItemListScrollTarget() == item)
     {
-        sScrollItem = nullptr;
+        ScrollItemListTo(nullptr);
         ImGui::ScrollToItem(ImGuiScrollFlags_KeepVisibleCenterY);
     }
 
@@ -777,7 +777,7 @@ static void DrawItemListRows(ItemListContext& ctx)
 
     clipper.Begin(ctx.rowNum);
 
-    IncludeItemRow(clipper, ctx, sScrollItem);
+    IncludeItemRow(clipper, ctx, GetItemListScrollTarget());
     IncludeItemRow(clipper, ctx, GetRenamedItem(ctx.tableId));
     IncludeItemRow(clipper, ctx, GetItemListIdEditedItem(ctx.tableId));
 

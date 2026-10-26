@@ -21,7 +21,7 @@ using InnerFileLabel = sead::FormatFixedSafeString<64>;
 
 static InnerFileLabel GetInnerFileLabel(InnerFileKind kind)
 {
-    return InnerFileLabel(messages::mainmenu::cInnerFileFormat, GetInnerFileFormat(sBfsar.getFormat(), kind).displayName);
+    return InnerFileLabel(messages::mainmenu::cInnerFileFormat, GetInnerFileFormat(ActiveSoundArchive().getFormat(), kind).displayName);
 }
 
 static void DrawSoundExportItems(Item* item)
@@ -108,7 +108,7 @@ void DrawExportMenu()
     if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_OUTPUT " %s", messages::common::cExport).cstr()))
         return;
 
-    Item* item = sBfsar.isOpen() ? GetActiveSelection() : nullptr;
+    Item* item = IsSoundArchiveOpen() ? GetActiveSelection() : nullptr;
 
     switch (item ? item->getItemType() : Item::ItemType::Invalid)
     {

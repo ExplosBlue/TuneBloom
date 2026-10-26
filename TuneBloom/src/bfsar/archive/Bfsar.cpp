@@ -64,6 +64,16 @@ Bfsar::Bfsar()
 
     , mGenWaveArchiveList()
 {
+    mSoundList.setArchive(this);
+    mSoundSetList.setArchive(this);
+    mBankList.setArchive(this);
+    mWaveArchiveList.setArchive(this);
+    mGroupList.setArchive(this);
+    mPlayerList.setArchive(this);
+    mWaveFileList.setArchive(this);
+    mSequenceFileList.setArchive(this);
+    mBankFileList.setArchive(this);
+    mGenWaveArchiveList.setArchive(this);
 }
 
 Bfsar::~Bfsar()
@@ -227,26 +237,19 @@ void Bfsar::recompileInvalidSequences_()
     }
 }
 
-bool Bfsar::save()
+SaveResult Bfsar::save()
 {
     LOG_FUNC();
-    if (!mOpen)
-        return false;
 
-    if (testhooks::IsEnabled())
-        return false;
-
-    if (!mFilePath)
-    {
-        return SaveFileAs();
-    }
+    if (!mOpen || !mFilePath || testhooks::IsEnabled())
+        return SaveResult::Failed;
 
     recompileInvalidSequences_();
 
-    if (!validate_())
-        return false;
+    if (!validate())
+        return SaveResult::Failed;
 
-    return saveArchiveFile_(*mFilePath);
+    return saveArchiveFile_(*mFilePath) ? SaveResult::Saved : SaveResult::Failed;
 }
 
 static bool HasCmpbinExtension_(const sead::SafeString &path)
@@ -521,18 +524,18 @@ void Bfsar::cancelPendingSaveFinalize()
     mPendingSaveChangesPath = false;
 }
 
-bool Bfsar::saveAs(const sead::SafeString &filePath)
+SaveResult Bfsar::saveAs(const sead::SafeString &filePath)
 {
     LOG_FUNC();
     LOG_STR(filePath.cstr());
 
     if (!mOpen)
-        return false;
+        return SaveResult::Failed;
 
     recompileInvalidSequences_();
 
-    if (!validate_())
-        return false;
+    if (!validate())
+        return SaveResult::Failed;
 
     sead::HeapSafeString* previousPath = mFilePath;
     mFilePath = new sead::HeapSafeString(nullptr, filePath);
@@ -550,13 +553,13 @@ bool Bfsar::saveAs(const sead::SafeString &filePath)
             mFilePath = previousPath;
         }
 
-        return false;
+        return SaveResult::Failed;
     }
 
     delete previousPath;
     setLoadedArchivePath_(filePath);
 
-    return true;
+    return SaveResult::Saved;
 }
 
 Bfsar::BackupResult Bfsar::saveBackup(const sead::SafeString &path, std::vector<std::string> *outGroupFiles)
@@ -566,7 +569,7 @@ Bfsar::BackupResult Bfsar::saveBackup(const sead::SafeString &path, std::vector<
 
     recompileInvalidSequences_();
 
-    if (!validate_(false))
+    if (!validate(false))
         return BackupResult::Invalid;
 
     if (path.calcLength() > fileio::cPathLengthMax)

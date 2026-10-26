@@ -4,11 +4,15 @@
 #include <ui/bank/BankBundle.h>
 #include <ui/settings/Config.h>
 #include <ui/widgets/Dialogs.h>
+#include <ui/file/DocumentMgr.h>
+#include <ui/file/DocumentState.h>
 #include <ui/export/Export.h>
 #include <ui/file/File.h>
+#include <ui/file/FileWindow.h>
 #include <ui/file/GroupFileLocate.h>
 #include <ui/resource/ResourceViews.h>
 #include <ui/Messages.h>
+#include <ui/file/OpenQueue.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/items/Selection.h>
@@ -20,22 +24,27 @@
 
 #include <libs/IconsLucide.h>
 
-#include <framework/glfw/seadGameFrameworkBaseGlfw.h>
-
-#include <app/Utilll.h>
-
+#include <algorithm>
 #include <cstdio>
 #include <vector>
 
-static bool sWantsNew = false;
-static bool sWantsOpen = false;
-static bool sWantsClose = false;
+static bool sWantsOpenDialog = false;
 static bool sWantsExit = false;
+static bool sWantsExitWithoutSaving = false;
 static bool sNeedsNewFileFormat = false;
 static bool sWantsSaveDirect = false;
 static bool (*sPendingFileAction)() = nullptr;
 static bool sSaveInUseRemember = false;
 static bool sSaveInUseRetryFailed = false;
+
+static Document* sCloseRequest = nullptr;
+static bool sCloseRequestReopens = false;
+static Document* sClosingDocument = nullptr;
+static bool sClosingDocumentReopens = false;
+
+static std::vector<Document*> sSaveQueue;
+static Document* sSavingDocument = nullptr;
+static bool sExitAfterSaving = false;
 
 void RequestSaveFile()
 {
@@ -44,34 +53,61 @@ void RequestSaveFile()
 
 void RequestNewFile()
 {
-    sWantsNew = true;
+    sNeedsNewFileFormat = true;
 }
 
 void RequestOpenFile()
 {
-    sWantsOpen = true;
+    sWantsOpenDialog = true;
 }
 
 void RequestOpenFile(const char* path)
 {
-    SetNextOpenPath(path);
-    sWantsOpen = true;
+    openqueue::Push(path);
+}
+
+void RequestPreviewFile(const char* path)
+{
+    openqueue::Push(path, openqueue::Mode::Preview);
 }
 
 void RequestCloseFile()
 {
-    sWantsClose = true;
+    RequestCloseDocument(ActiveDocument());
 }
 
-void RequestNewFileFormat()
+void RequestCloseDocument(Document* document)
 {
-    sNeedsNewFileFormat = true;
+    sCloseRequest = document;
+    sCloseRequestReopens = false;
 }
 
-static bool NewFileFormatTrigger()
+void RequestReloadDocument(Document* document)
 {
-    sNeedsNewFileFormat = true;
-    return true;
+    sCloseRequest = document;
+    sCloseRequestReopens = true;
+}
+
+void RequestSaveAll()
+{
+    sSaveQueue.clear();
+
+    for (Document* document : GetOpenDocuments())
+    {
+        if (document->state().unsaved)
+            sSaveQueue.push_back(document);
+    }
+}
+
+void RequestExitAfterSaveAll()
+{
+    RequestSaveAll();
+    sExitAfterSaving = true;
+}
+
+void RequestExitWithoutSaving()
+{
+    sWantsExitWithoutSaving = true;
 }
 
 bool TryExit()
@@ -80,11 +116,34 @@ bool TryExit()
     return false;
 }
 
+void ForgetDocumentRequests(const Document* document)
+{
+    if (sCloseRequest == document)
+        sCloseRequest = nullptr;
+
+    if (sClosingDocument == document)
+        sClosingDocument = nullptr;
+
+    if (sSavingDocument == document)
+        sSavingDocument = nullptr;
+
+    sSaveQueue.erase(std::remove(sSaveQueue.begin(), sSaveQueue.end(), document), sSaveQueue.end());
+}
+
+static bool IsOpenDocument(const Document* document)
+{
+    const std::vector<Document*>& documents = GetOpenDocuments();
+
+    return document && std::find(documents.begin(), documents.end(), document) != documents.end();
+}
+
 static bool (*sFileAction)() = nullptr;
 
 static bool ShouldWarnAboutMissingMetadata()
 {
-    return sBfsar.isOpen() && !sBfsar.getSaveMetadata() && sBfsar.hasMetadataNames();
+    const Bfsar* archive = FindActiveSoundArchive();
+
+    return archive && !archive->getSaveMetadata() && archive->hasMetadataNames();
 }
 
 static std::vector<WaveFile*> sPendingUnusedWaves;
@@ -113,50 +172,26 @@ static void ProceedDirectSave()
 
 void HandleFileShortcuts()
 {
-    if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
-    {
-        if (shortcuts::Pressed(shortcuts::Action::SaveProject) && IsDocumentOpen())
-            sWantsSaveDirect = true;
+    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
+        return;
 
-        if (shortcuts::Pressed(shortcuts::Action::OpenProject))
-        {
-            if (IsDocumentOpen())
-                sWantsOpen = true;
-            else
-                OpenFile();
-        }
+    if (shortcuts::Pressed(shortcuts::Action::SaveProject) && IsDocumentOpen())
+        sWantsSaveDirect = true;
 
-        if (shortcuts::Pressed(shortcuts::Action::NewProject))
-        {
-            if (IsDocumentOpen())
-                sWantsNew = true;
-            else
-                sNeedsNewFileFormat = true;
-        }
+    if (shortcuts::Pressed(shortcuts::Action::SaveAllProjects) && HasUnsavedDocuments())
+        RequestSaveAll();
 
-        if (shortcuts::Pressed(shortcuts::Action::SaveProjectAs) && IsDocumentOpen())
-            SaveFileAs();
-    }
-}
+    if (shortcuts::Pressed(shortcuts::Action::OpenProject))
+        sWantsOpenDialog = true;
 
-static void OpenDroppedFile()
-{
-    if (!sDroppedFilePath.isEmpty())
-    {
-        if (!ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
-        {
-            sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
-            if (fw)
-            {
-                glfwFocusWindow(fw->getWindowHandle());
-            }
+    if (shortcuts::Pressed(shortcuts::Action::NewProject))
+        sNeedsNewFileFormat = true;
 
-            if (IsDocumentOpen())
-                sWantsOpen = true;
-            else
-                OpenFile();
-        }
-    }
+    if (shortcuts::Pressed(shortcuts::Action::SaveProjectAs) && IsDocumentOpen())
+        SaveFileAs();
+
+    if (IsDocumentOpen() && !IsFileWindowFocused() && shortcuts::Pressed(shortcuts::Action::CloseProject))
+        RequestCloseFile();
 }
 
 static bool TakeRequest(bool* request)
@@ -167,30 +202,120 @@ static bool TakeRequest(bool* request)
     return requested;
 }
 
-static void StartFileAction()
+static bool FinishDocumentClose()
 {
-    bool (*action)() = nullptr;
+    Document* document = sClosingDocument;
+    sClosingDocument = nullptr;
 
-    if (TakeRequest(&sWantsNew))
-        action = &NewFileFormatTrigger;
-    else if (TakeRequest(&sWantsOpen))
-        action = &OpenFile;
-    else if (TakeRequest(&sWantsClose))
-        action = &CloseFile;
-    else if (TakeRequest(&sWantsExit))
-        action = &Exit;
+    if (!IsOpenDocument(document))
+        return false;
 
-    if (!action)
+    if (sClosingDocumentReopens)
+        openqueue::Push(document->filePath().cstr(), openqueue::Mode::Reload);
+    else
+        CloseDocument(document);
+
+    return true;
+}
+
+static void CancelDocumentClose()
+{
+    sClosingDocument = nullptr;
+    sPendingFileAction = nullptr;
+}
+
+static void StartDocumentClose()
+{
+    Document* document = sCloseRequest;
+    sCloseRequest = nullptr;
+
+    if (!IsOpenDocument(document))
         return;
 
-    if (!gUnsavedChanges)
+    sClosingDocument = document;
+    sClosingDocumentReopens = sCloseRequestReopens;
+
+    if (!document->state().unsaved)
     {
-        action();
+        FinishDocumentClose();
         return;
     }
 
+    ActivateDocument(document);
+
+    sFileAction = &FinishDocumentClose;
     ImGui::OpenPopup("###Save");
-    sFileAction = action;
+}
+
+static void StartFileAction()
+{
+    if (IsDocumentSwitchLocked())
+        return;
+
+    if (TakeRequest(&sWantsOpenDialog))
+    {
+        OpenFile();
+        return;
+    }
+
+    if (TakeRequest(&sWantsExitWithoutSaving))
+    {
+        Exit();
+        return;
+    }
+
+    if (TakeRequest(&sWantsExit))
+    {
+        if (HasUnsavedDocuments())
+            OpenExitChangesDialog();
+        else
+            Exit();
+
+        return;
+    }
+
+    if (sCloseRequest)
+        StartDocumentClose();
+}
+
+static void UpdateSaveAll()
+{
+    if (sSaveQueue.empty() && !sSavingDocument && !sExitAfterSaving)
+        return;
+
+    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) || sWantsSaveDirect)
+        return;
+
+    if (sSavingDocument)
+    {
+        const bool failed = IsOpenDocument(sSavingDocument) && sSavingDocument->state().unsaved;
+        sSavingDocument = nullptr;
+
+        if (failed)
+        {
+            sSaveQueue.clear();
+            sExitAfterSaving = false;
+            return;
+        }
+    }
+
+    while (!sSaveQueue.empty())
+    {
+        Document* document = sSaveQueue.front();
+        sSaveQueue.erase(sSaveQueue.begin());
+
+        if (!IsOpenDocument(document) || !document->state().unsaved)
+            continue;
+
+        ActivateDocument(document);
+
+        sSavingDocument = document;
+        sWantsSaveDirect = true;
+        return;
+    }
+
+    if (TakeRequest(&sExitAfterSaving))
+        Exit();
 }
 
 static void DrawSaveChangesDialog()
@@ -216,9 +341,10 @@ static void DrawSaveChangesDialog()
             else
             {
                 if (SaveFile())
-                {
                     sFileAction();
-                }
+                else
+                    CancelDocumentClose();
+
                 ImGui::CloseCurrentPopup();
             }
         }
@@ -231,10 +357,8 @@ static void DrawSaveChangesDialog()
 
         if (DialogButton(messages::common::cCancel))
         {
+            CancelDocumentClose();
             ImGui::CloseCurrentPopup();
-
-            sDroppedFilePath.clear(); // clear dropped file path to prevent multiple popups
-            ClearNextOpenPath();
         }
 
         ImGui::EndPopup();
@@ -247,8 +371,8 @@ static void StartDirectSave()
     {
         sWantsSaveDirect = false;
 
-        if (sBfsar.isOpen())
-            sPendingUnusedWaves = sBfsar.findUnusedWaveFiles();
+        if (Bfsar* archive = FindActiveSoundArchive())
+            sPendingUnusedWaves = archive->findUnusedWaveFiles();
 
         if (!sPendingUnusedWaves.empty())
             ImGui::OpenPopup("###RemoveUnusedFiles");
@@ -267,31 +391,30 @@ static void DrawMetadataWarningDialog()
             ImGui::Text(ICON_LC_TRIANGLE_ALERT "%s", messages::archive::cMetadataWarningDetail);
             ImGui::Separator();
 
-            bool saveMeta = sBfsar.getSaveMetadata();
-            ImGui::Checkbox(messages::archive::cMetadataWarningCheckbox, &saveMeta);
-            if (saveMeta != sBfsar.getSaveMetadata())
-                sBfsar.setSaveMetadata(saveMeta);
+            Bfsar& archive = ActiveSoundArchive();
+            bool saveMeta = archive.getSaveMetadata();
+
+            if (ImGui::Checkbox(messages::archive::cMetadataWarningCheckbox, &saveMeta))
+                archive.setSaveMetadata(saveMeta);
 
             BeginDialogFooter({messages::common::cSave, messages::common::cCancel});
 
             if (DialogButton(messages::common::cSave))
             {
-                if (SaveFile())
-                {
-                    if (sPendingFileAction)
-                    {
-                        sPendingFileAction();
-                        sPendingFileAction = nullptr;
-                    }
-                }
+                bool (*pendingAction)() = sPendingFileAction;
+                sPendingFileAction = nullptr;
+
+                if (!SaveFile())
+                    CancelDocumentClose();
+                else if (pendingAction)
+                    pendingAction();
+
                 ImGui::CloseCurrentPopup();
             }
 
             if (DialogButton(messages::common::cCancel))
             {
-                sPendingFileAction = nullptr;
-                sDroppedFilePath.clear();
-                ClearNextOpenPath();
+                CancelDocumentClose();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -302,7 +425,12 @@ static void DrawMetadataWarningDialog()
 
 static void DrawMetadataUpgradeDialog()
 {
-    if (sBfsar.hasPendingMetadataUpgrade() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
+    Bfsar* archive = FindActiveSoundArchive();
+
+    if (!archive)
+        return;
+
+    if (archive->hasPendingMetadataUpgrade() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
         ImGui::OpenPopup("###MetadataUpgrade");
 
     {
@@ -310,8 +438,8 @@ static void DrawMetadataUpgradeDialog()
 
         if (BeginDialog(sead::FormatFixedSafeString<96>(ICON_LC_FILE_JSON " %s###MetadataUpgrade", messages::archive::cMetadataUpgradeTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            const u32 loaded = sBfsar.getMetadataUpgradeLoadedCount();
-            const u32 missing = sBfsar.getMetadataUpgradeMissingCount();
+            const u32 loaded = archive->getMetadataUpgradeLoadedCount();
+            const u32 missing = archive->getMetadataUpgradeMissingCount();
 
             ImGui::TextUnformatted(messages::archive::cMetadataUpgradeDetail);
 
@@ -324,13 +452,13 @@ static void DrawMetadataUpgradeDialog()
 
             if (DialogButton(messages::dialog::cUpdate))
             {
-                if (!sBfsar.upgradeMetadata())
+                if (!archive->upgradeMetadata())
                 {
-                    sead::FormatFixedSafeString<1024> msg(messages::archive::cMetadataUpgradeFailedFormat, sead::FormatFixedSafeString<1100>("%s.metadata.json", sBfsar.getFilePath().cstr()).cstr());
+                    sead::FormatFixedSafeString<1024> msg(messages::archive::cMetadataUpgradeFailedFormat, sead::FormatFixedSafeString<1100>("%s.metadata.json", archive->getFilePath().cstr()).cstr());
                     PopupMgr::instance()->addPopup({msg});
                 }
 
-                sBfsar.dismissMetadataUpgrade();
+                archive->dismissMetadataUpgrade();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -338,7 +466,7 @@ static void DrawMetadataUpgradeDialog()
 
             if (DialogButton(messages::dialog::cLater))
             {
-                sBfsar.dismissMetadataUpgrade();
+                archive->dismissMetadataUpgrade();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -351,7 +479,12 @@ static void DrawMetadataUpgradeDialog()
 
 static void DrawSaveInUseDialog()
 {
-    if (sBfsar.hasPendingSaveFinalize() && !ImGui::IsPopupOpen("###SaveFileInUse"))
+    Bfsar* archive = FindActiveSoundArchive();
+
+    if (!archive)
+        return;
+
+    if (archive->hasPendingSaveFinalize() && !ImGui::IsPopupOpen("###SaveFileInUse"))
     {
         sSaveInUseRemember = false;
         sSaveInUseRetryFailed = false;
@@ -367,7 +500,7 @@ static void DrawSaveInUseDialog()
 
             ImGui::Separator();
 
-            ImGui::TextDisabled("%s", sBfsar.getPendingSaveFinalizePath().cstr());
+            ImGui::TextDisabled("%s", archive->getPendingSaveFinalizePath().cstr());
 
             if (sSaveInUseRetryFailed)
                 ImGui::TextColored(uicolors::Marker(), "%s", messages::saving::cInUseStill);
@@ -380,7 +513,7 @@ static void DrawSaveInUseDialog()
 
             if (DialogButton(messages::dialog::cSaveAnyway))
             {
-                if (sBfsar.forcePendingSaveFinalize())
+                if (archive->forcePendingSaveFinalize())
                 {
                     if (sSaveInUseRemember)
                     {
@@ -399,7 +532,7 @@ static void DrawSaveInUseDialog()
 
             if (DialogButton(messages::dialog::cTryAgain))
             {
-                if (sBfsar.retryPendingSaveFinalize())
+                if (archive->retryPendingSaveFinalize())
                 {
                     MarkArchiveInSync();
                     ImGui::CloseCurrentPopup();
@@ -412,7 +545,7 @@ static void DrawSaveInUseDialog()
 
             if (DialogButton(messages::common::cCancel))
             {
-                sBfsar.cancelPendingSaveFinalize();
+                archive->cancelPendingSaveFinalize();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -447,7 +580,7 @@ static void DrawRemoveUnusedFilesDialog()
 
                 ForgetRemovedItems(std::vector<Item*>(sPendingUnusedWaves.begin(), sPendingUnusedWaves.end()));
 
-                if (sBfsar.removeUnusedWaveFiles(sPendingUnusedWaves) > 0)
+                if (ActiveSoundArchive().removeUnusedWaveFiles(sPendingUnusedWaves) > 0)
                     SetUnsavedChanges(true);
 
                 sPendingUnusedWaves.clear();
@@ -521,8 +654,10 @@ static void DrawNewFileFormatDialog()
             if (create)
             {
                 NewFile(info.format, info.platform);
-                sBfsar.setVersion(sVersion);
-                sBfsar.setIncludeStringTable(sIncludeStringTable);
+
+                Bfsar& archive = ActiveSoundArchive();
+                archive.setVersion(sVersion);
+                archive.setIncludeStringTable(sIncludeStringTable);
                 SetUnsavedChanges(true);
                 ImGui::CloseCurrentPopup();
             }
@@ -534,9 +669,9 @@ static void DrawNewFileFormatDialog()
 
 void DrawFileFlow()
 {
-    OpenDroppedFile();
     StartFileAction();
     DrawSaveChangesDialog();
+    UpdateSaveAll();
     StartDirectSave();
     DrawGroupFileLocateDialog();
     DrawMetadataWarningDialog();

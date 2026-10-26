@@ -72,6 +72,7 @@ struct StartupSettings
     StartupAction action = StartupAction::StartPage;
     s32 recentFileCount = cRecentFileCountDefault;
     std::string lastArchive;
+    std::vector<std::string> sessionDocuments;
 };
 
 extern f32 gMasterVolume;
@@ -116,6 +117,6 @@ f32 ScaleSize(f32 size);
 StartupSettings& GetStartupSettings();
 void SaveStartupConfig();
 void LoadStartupConfig();
-void SetLastArchive(const char* path);
+void SetSessionDocuments(const std::vector<std::string>& documents, const std::string& active);
 
 void ResetAllSettings();

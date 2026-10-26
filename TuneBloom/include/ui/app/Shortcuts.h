@@ -44,6 +44,12 @@ enum class Action : s32
 
     ToggleMatchCase = 27,
     ToggleWholeWord = 28,
+
+    CollapseFolder = 29,
+    ExpandFolder = 30,
+
+    CloseProject = 31,
+    SaveAllProjects = 32,
 };
 
 enum class Modifier : s32
@@ -66,5 +72,6 @@ bool Pressed(Action action);
 void Trigger(Action action);
 bool Held(Modifier modifier);
 bool Claimed(ImGuiKey key);
+bool Claimed(Action action);
 
 }

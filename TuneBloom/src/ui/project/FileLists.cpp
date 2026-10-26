@@ -26,7 +26,7 @@ void AddFileToList(Item::List& list, Item* file)
         list.pushBack(file);
 
     ClearInsertAfterItem();
-    sBfsar.updateList(list);
+    ActiveSoundArchive().updateList(list);
     SetUnsavedChanges(true);
     SelectItem(file);
 }
@@ -61,7 +61,7 @@ void DrawSequenceFilesUI()
 
     SetNextItemListAction(&SequenceFileRowActionFunc);
 
-    DrawAllItemsUI("Sequence File", messages::common::cSequenceFile,sBfsar.getSequenceFileList(),
+    DrawAllItemsUI("Sequence File", messages::common::cSequenceFile,ActiveSoundArchive().getSequenceFileList(),
         &CreateSequenceFileFunc, nullptr, &SequenceFileContextMenuFunc, GetItemFilterCallback(), true
     );
 }
@@ -95,7 +95,7 @@ void DrawBankFilesUI()
     DrawAllItemsUI(
         "Bank File",
         messages::common::cBankFile,
-        sBfsar.getBankFileList(),
+        ActiveSoundArchive().getBankFileList(),
         &CreateBankFileFunc,
         nullptr,
         &BankFileContextMenuFunc, 

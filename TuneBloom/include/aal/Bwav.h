@@ -15,7 +15,8 @@ inline constexpr u32 cBwavChannelMax          = 16;
 enum class BwavCodec : u16
 {
     Pcm16 = 0,
-    DspAdpcm = 1
+    DspAdpcm = 1,
+    Opus = 2
 };
 
 enum class BwavPan : u16
@@ -74,6 +75,7 @@ Bwav MakeBwavPrefetch(const Bwav& full, u32 sampleCount, u16 prefetchFlag);
 bool IsBwavComplete(const Bwav& bwav);
 
 bool CanSetBwavLoop(const Bwav& bwav, bool isLoop, u32 loopStartFrame);
+void CopyBwavLoop(const Bwav& source, Bwav* target);
 void SetBwavLoop(Bwav* bwav, bool isLoop, u32 loopStartFrame);
 void DecodeBwavChannel(const Bwav& bwav, u32 channelIndex, std::vector<s16>* out);
 Bwav EncodeBwav(const std::vector<std::vector<s16>>& channels, u32 sampleRate, bool isLoop, u32 loopStartFrame);

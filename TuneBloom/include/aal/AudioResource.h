@@ -1,6 +1,7 @@
 #pragma once
 
 #include <aal/AudioAsset.h>
+#include <core/SaveResult.h>
 #include <bfsar/files/WaveFile.h>
 
 #include <prim/seadSafeString.h>
@@ -17,20 +18,12 @@ public:
         Bwav
     };
 
-    enum class SaveResult
-    {
-        Failed,
-        Saved,
-        StreamsFailed
-    };
-
     static constexpr s32 cNameLengthMax = 128;
 
     AudioResource();
     ~AudioResource();
 
     static bool IsResourceFile(const void* data, u64 size);
-    static bool IsResourceData(const void* data, u64 size);
     static const char* GetResourceDataError(const void* data, u64 size);
 
     bool open(std::vector<u8> bytes, const sead::SafeString& path, const char** outError);

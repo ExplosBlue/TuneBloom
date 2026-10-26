@@ -129,7 +129,7 @@ static void ExportInnerFiles(std::vector<T*>* pending, InnerFileKind kind, const
     if (pending->empty())
         return;
 
-    const InnerFileFormatInfo& format = GetInnerFileFormat(sBfsar.getFormat(), kind);
+    const InnerFileFormatInfo& format = GetInnerFileFormat(ActiveSoundArchive().getFormat(), kind);
     const char* formatName = format.displayName;
     const sead::FormatFixedSafeString<64> filterName(messages::filedialog::cFilterFileFormat, formatName, format.extension);
 
@@ -187,7 +187,8 @@ static void ImportPendingSequenceFile()
 
     sPendingSequenceImport = false;
 
-    const InnerFileFormatInfo& format = GetInnerFileFormat(sBfsar.getFormat(), InnerFileKind::Sequence);
+    Bfsar& archive = ActiveSoundArchive();
+    const InnerFileFormatInfo& format = GetInnerFileFormat(archive.getFormat(), InnerFileKind::Sequence);
     const sead::FormatFixedSafeString<64> filterName(messages::filedialog::cFilterFileFormat, format.displayName, format.extension);
 
     sead::FixedSafeString<512> path;
@@ -209,15 +210,16 @@ static void ImportPendingSequenceFile()
     GetFileStem(&fileName, path);
 
     SequenceFile* sequence = new SequenceFile();
+    sequence->setArchive(&archive);
     sequence->setEnableName(true);
     sequence->getName() = fileName;
-    sequence->setFormat(sBfsar.getFormat());
-    sequence->setVersion(sBfsar.getVersionForBfseq());
+    sequence->setFormat(archive.getFormat());
+    sequence->setVersion(archive.getVersionForBfseq());
 
     if (sequence->read(fileData))
     {
-        sequence->setFormat(sBfsar.getFormat());
-        AddFileToList(sBfsar.getSequenceFileList(), sequence);
+        sequence->setFormat(archive.getFormat());
+        AddFileToList(archive.getSequenceFileList(), sequence);
     }
     else
     {

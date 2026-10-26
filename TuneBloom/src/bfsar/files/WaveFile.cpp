@@ -479,12 +479,15 @@ void WaveFile::writeDataBlock_(FileWriter& writer, sead::WriteStream* stream) co
     writer.closeBlock();
 }
 
-WaveFileTarget WaveFile::getTarget() const
+InnerFileTarget WaveFile::getTarget() const
 {
     if (mStandaloneTarget)
         return *mStandaloneTarget;
 
-    return { sBfsar.getFormat(), sBfsar.getVersionForBfwav(), sBfsar.getEndian() };
+    if (const Bfsar* archive = getArchive())
+        return archive->getWaveFileTarget();
+
+    return {};
 }
 
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
@@ -497,7 +500,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
     LOG_BOOL("isLoop", mIsLoop);
     LOG_BOOL("useOriginalData", mUseOriginalData);
 
-    const WaveFileTarget target = getTarget();
+    const InnerFileTarget target = getTarget();
 
     mFormat = target.format;
     mVersion = target.version;
@@ -518,7 +521,7 @@ u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool 
 
 const std::string& WaveFile::getMd5Hash() const
 {
-    const WaveFileTarget target = getTarget();
+    const InnerFileTarget target = getTarget();
     const bool isStale = mMd5Dirty || mIsLoopDirty || mMd5Format != target.format || mMd5Version != target.version || mMd5Endian != target.endian;
 
     if (isStale)
@@ -529,7 +532,7 @@ const std::string& WaveFile::getMd5Hash() const
 
 void WaveFile::setSerializedHash(const std::string& hash)
 {
-    const WaveFileTarget target = getTarget();
+    const InnerFileTarget target = getTarget();
 
     mMd5Hash = hash;
     mMd5Dirty = false;
@@ -560,7 +563,7 @@ void WaveFile::refreshSerializedHash()
             return;
     }
 
-    const WaveFileTarget target = getTarget();
+    const InnerFileTarget target = getTarget();
 
     {
         sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);

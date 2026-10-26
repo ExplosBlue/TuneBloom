@@ -12,6 +12,7 @@ class WaveFile;
 
 void RequestExportSounds(const std::vector<Sound*>& sounds);
 void CancelSoundExport();
+bool IsSoundExportRunning();
 void DrawSoundExportDialog();
 void DrawSoundExportProgress();
 void DrawSoundExportProgressPreview(f32 fraction);

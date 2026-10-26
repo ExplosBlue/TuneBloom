@@ -1,5 +1,6 @@
 #include <ui/file/FileWindow.h>
 
+#include <ui/file/DocumentState.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/app/Shortcuts.h>
@@ -10,25 +11,32 @@
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
 
-static ItemList sFileWindows;
+static bool sFileWindowFocused = false;
+
+static ItemList& GetFileWindows()
+{
+    return ActiveDocumentState().fileWindows;
+}
 
 void CloseAllFileWindows()
 {
-    sFileWindows.clear();
+    GetFileWindows().clear();
 }
 
 void DrawFileWindows(ImGuiID dockspaceId)
 {
-    for (auto it = sFileWindows.robustBegin(); it != sFileWindows.robustEnd(); ++it)
+    ItemList& fileWindows = GetFileWindows();
+
+    for (auto it = fileWindows.robustBegin(); it != fileWindows.robustEnd(); ++it)
     {
         FileWindow* window = static_cast<FileWindow*>(it->val());
         SEAD_ASSERT(window);
 
         if (!window->isOpen() || !window->getFileRef().isAttached())
         {
-            auto* neighbourNode = sFileWindows.prev(window);
+            auto* neighbourNode = fileWindows.prev(window);
             if (!neighbourNode)
-                neighbourNode = sFileWindows.next(window);
+                neighbourNode = fileWindows.next(window);
 
             const Item* neighbourFile = neighbourNode ? static_cast<FileWindow*>(neighbourNode->val())->getFileRef().getItem() : nullptr;
             if (neighbourFile)
@@ -38,7 +46,9 @@ void DrawFileWindows(ImGuiID dockspaceId)
         }
     }
 
-    for (Item* item : sFileWindows)
+    bool anyFocused = false;
+
+    for (Item* item : fileWindows)
     {
         FileWindow* window = static_cast<FileWindow*>(item);
 
@@ -58,7 +68,10 @@ void DrawFileWindows(ImGuiID dockspaceId)
 
         bool visible = ImGui::Begin(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%p", file->getFormattedName().cstr(), file).cstr(), window->getOpenPtr(), flags);
 
-        if (visible && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && shortcuts::Pressed(shortcuts::Action::CloseFileWindow) && !dirty)
+        const bool focused = visible && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+        anyFocused = anyFocused || focused;
+
+        if (focused && shortcuts::Pressed(shortcuts::Action::CloseFileWindow) && !dirty)
             *window->getOpenPtr() = false;
 
         if (!window->isOpen() && dirty)
@@ -91,6 +104,13 @@ void DrawFileWindows(ImGuiID dockspaceId)
         }
         ImGui::End();
     }
+
+    sFileWindowFocused = anyFocused;
+}
+
+bool IsFileWindowFocused()
+{
+    return sFileWindowFocused;
 }
 
 FileWindow* OpenFileWindow(Item* item)
@@ -102,7 +122,7 @@ FileWindow* OpenFileWindow(Item* item)
     {
         FileWindow* window = new FileWindow(item);
 
-        sFileWindows.pushBack(window);
+        GetFileWindows().pushBack(window);
 
         return window;
     }

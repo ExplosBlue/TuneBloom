@@ -6,18 +6,23 @@
 
 #include <vector>
 
-extern Item* sSelectedItemArr[];
-extern Item* sSubSelectedItemArr[];
-extern bool sSelectedItemIsSubWindowArr[];
+struct SelectionState
+{
+    Item* selectedItem = nullptr;
+    Item* subSelectedItem = nullptr;
+    bool selectedItemIsSubWindow = false;
+    std::vector<Item*> multiSelectedItems;
+    Item* multiSelectAnchor = nullptr;
+};
 
-extern std::vector<Item*> sMultiSelectedItemsArr[];
-extern Item* sMultiSelectAnchorArr[];
+SelectionState& GetTabSelection(UIType tab);
+SelectionState& GetActiveTabSelection();
 
-#define sSelectedItem sSelectedItemArr[(size_t)sSelectedUIType]
-#define sSubSelectedItem sSubSelectedItemArr[(size_t)sSelectedUIType]
-#define sSelectedItemIsSubWindow sSelectedItemIsSubWindowArr[(size_t)sSelectedUIType]
-#define sMultiSelectedItems sMultiSelectedItemsArr[(size_t)sSelectedUIType]
-#define sMultiSelectAnchor sMultiSelectAnchorArr[(size_t)sSelectedUIType]
+#define sSelectedItem (GetActiveTabSelection().selectedItem)
+#define sSubSelectedItem (GetActiveTabSelection().subSelectedItem)
+#define sSelectedItemIsSubWindow (GetActiveTabSelection().selectedItemIsSubWindow)
+#define sMultiSelectedItems (GetActiveTabSelection().multiSelectedItems)
+#define sMultiSelectAnchor (GetActiveTabSelection().multiSelectAnchor)
 
 void SelectItem(Item* item);
 void SelectSubItem(Item* item);

@@ -33,7 +33,7 @@ public:
     static bool IsComplete(const void *data, u32 size);
 };
 
-bool ReadStreamWaves(Sound *sound, const void *strmFile, u32 strmFileSize, const Sound *srcSound);
+bool ReadStreamWaves(Bfsar &archive, Sound *sound, const void *strmFile, u32 strmFileSize, const Sound *srcSound);
 void MixWaveChannelData(StateHash &hash, const WaveFile &wave);
 
 class StreamLoopInfoBatch

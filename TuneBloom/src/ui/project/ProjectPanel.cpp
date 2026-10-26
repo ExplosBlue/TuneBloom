@@ -61,14 +61,6 @@ static constexpr f32 cProjectBoxPadYEm     = 0.15f;
 static constexpr f32 cProjectRowGapEm      = 0.3f;
 static constexpr f32 cProjectChildIndentEm = 0.7f;
 
-static ProjectRowTable GetProjectRows()
-{
-    if (IsAudioResourceOpen())
-        return { cAudioResourceRows, IM_ARRAYSIZE(cAudioResourceRows) };
-
-    return { cSoundArchiveRows, IM_ARRAYSIZE(cSoundArchiveRows) };
-}
-
 static s32 FindProjectRow(const ProjectRowTable& table, UIType type)
 {
     for (s32 i = 0; i < table.count; i++)
@@ -82,34 +74,34 @@ static s32 FindProjectRow(const ProjectRowTable& table, UIType type)
 
 static void StepProjectRow(const ProjectRowTable& table, s32 step)
 {
-    const s32 current = FindProjectRow(table, sSelectedUIType);
+    const s32 current = FindProjectRow(table, GetUITab());
     const s32 next = current < 0 ? 0 : current + step;
 
     if (next >= 0 && next < table.count)
-        sSelectedUIType = table.rows[next].type;
+        SetUITab(table.rows[next].type);
 }
 
-static void CountProjectItems(s32* counts)
+static s32& CountAt(s32* counts, UIType type)
 {
-    auto at = [counts](UIType type) -> s32&
-    {
-        return counts[static_cast<size_t>(type)];
-    };
+    return counts[static_cast<size_t>(type)];
+}
 
-    for (const Item* item : sBfsar.getSoundList())
+static void CountSoundArchiveItems(Bfsar& archive, s32* counts)
+{
+    for (const Item* item : archive.getSoundList())
     {
         switch (static_cast<const Sound*>(item)->getSoundType())
         {
             case Sound::SoundType::Strm:
-                at(UIType::StreamSounds)++;
+                CountAt(counts, UIType::StreamSounds)++;
                 break;
 
             case Sound::SoundType::Wave:
-                at(UIType::WaveSounds)++;
+                CountAt(counts, UIType::WaveSounds)++;
                 break;
 
             case Sound::SoundType::Seq:
-                at(UIType::SequenceSounds)++;
+                CountAt(counts, UIType::SequenceSounds)++;
                 break;
 
             default:
@@ -117,24 +109,37 @@ static void CountProjectItems(s32* counts)
         }
     }
 
-    for (const Item* item : sBfsar.getSoundSetList())
+    for (const Item* item : archive.getSoundSetList())
     {
         if (static_cast<const SoundSet*>(item)->getSoundSetType() == SoundSet::SoundSetType::Seq)
-            at(UIType::SequenceSoundSets)++;
+            CountAt(counts, UIType::SequenceSoundSets)++;
         else
-            at(UIType::WaveSoundSets)++;
+            CountAt(counts, UIType::WaveSoundSets)++;
     }
 
-    at(UIType::AllSounds)     = static_cast<s32>(sBfsar.getSoundList().size());
-    at(UIType::AllSoundSets)  = static_cast<s32>(sBfsar.getSoundSetList().size());
-    at(UIType::Banks)         = static_cast<s32>(sBfsar.getBankList().size());
-    at(UIType::WaveArchives)  = static_cast<s32>(sBfsar.getWaveArchiveList().size());
-    at(UIType::Groups)        = static_cast<s32>(sBfsar.getGroupList().size());
-    at(UIType::Players)       = static_cast<s32>(sBfsar.getPlayerList().size());
-    at(UIType::WaveFiles)     = static_cast<s32>(sBfsar.getWaveFileList().size());
-    at(UIType::SequenceFiles) = static_cast<s32>(sBfsar.getSequenceFileList().size());
-    at(UIType::BankFiles)     = static_cast<s32>(sBfsar.getBankFileList().size());
-    at(UIType::AudioAssets)   = static_cast<s32>(sAudioResource.getAssetList().size());
+    CountAt(counts, UIType::AllSounds)     = static_cast<s32>(archive.getSoundList().size());
+    CountAt(counts, UIType::AllSoundSets)  = static_cast<s32>(archive.getSoundSetList().size());
+    CountAt(counts, UIType::Banks)         = static_cast<s32>(archive.getBankList().size());
+    CountAt(counts, UIType::WaveArchives)  = static_cast<s32>(archive.getWaveArchiveList().size());
+    CountAt(counts, UIType::Groups)        = static_cast<s32>(archive.getGroupList().size());
+    CountAt(counts, UIType::Players)       = static_cast<s32>(archive.getPlayerList().size());
+    CountAt(counts, UIType::WaveFiles)     = static_cast<s32>(archive.getWaveFileList().size());
+    CountAt(counts, UIType::SequenceFiles) = static_cast<s32>(archive.getSequenceFileList().size());
+    CountAt(counts, UIType::BankFiles)     = static_cast<s32>(archive.getBankFileList().size());
+}
+
+static ProjectRowTable GetProjectRows(s32* counts)
+{
+    if (const AudioResource* resource = FindActiveAudioResource())
+    {
+        CountAt(counts, UIType::AudioAssets) = static_cast<s32>(resource->getAssetList().size());
+        return { cAudioResourceRows, IM_ARRAYSIZE(cAudioResourceRows) };
+    }
+
+    if (Bfsar* archive = FindActiveSoundArchive())
+        CountSoundArchiveItems(*archive, counts);
+
+    return { cSoundArchiveRows, IM_ARRAYSIZE(cSoundArchiveRows) };
 }
 
 bool DrawNavRow(const char* icon, const char* name, bool selected, const char* value, bool dim, bool title, f32 indent)
@@ -218,7 +223,7 @@ static bool DrawProjectRow(const ProjectRow& row, s32 count, f32 indent)
     const sead::FormatFixedSafeString<16> text("%d", count);
 
     ImGui::PushID(static_cast<s32>(row.type));
-    const bool pressed = DrawNavRow(row.icon, row.name, sSelectedUIType == row.type, row.counted ? text.cstr() : nullptr, row.counted && count == 0, row.title, indent);
+    const bool pressed = DrawNavRow(row.icon, row.name, GetUITab() == row.type, row.counted ? text.cstr() : nullptr, row.counted && count == 0, row.title, indent);
     ImGui::PopID();
 
     return pressed;
@@ -231,12 +236,11 @@ void DrawProjectUI()
         bool selected = false;
 
         s32 counts[static_cast<size_t>(UIType::Max) + 1] = {};
-        CountProjectItems(counts);
+        const ProjectRowTable table = GetProjectRows(counts);
 
         const f32 em = ImGui::GetFontSize();
         const ImGuiStyle& style = ImGui::GetStyle();
 
-        const ProjectRowTable table = GetProjectRows();
         const s32 rowNum = table.count;
         const s32 groupNum = table.rows[rowNum - 1].group + 1;
 
@@ -278,7 +282,7 @@ void DrawProjectUI()
 
             if (DrawProjectRow(row, counts[static_cast<size_t>(row.type)], indent))
             {
-                sSelectedUIType = row.type;
+                SetUITab(row.type);
                 selected = true;
             }
 

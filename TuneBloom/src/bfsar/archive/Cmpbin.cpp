@@ -32,38 +32,71 @@ static bool DecompressZstd(const u8* payload, size_t payloadSize, std::vector<u8
     return !ZSTD_isError(written) && written == out.size();
 }
 
-static bool DecompressZstdStream(const u8* payload, size_t payloadSize, std::vector<u8>& out)
+enum class StreamResult
+{
+    Complete,
+    Limit,
+    Failed
+};
+
+static StreamResult StreamZstd(const u8* payload, size_t payloadSize, u64 limit, std::vector<u8>& out)
 {
     ZSTD_DStream* stream = ZSTD_createDStream();
 
     if (!stream)
-        return false;
+        return StreamResult::Failed;
 
     std::vector<u8> chunk(ZSTD_DStreamOutSize());
     ZSTD_inBuffer input = { payload, payloadSize, 0 };
-    size_t remaining = 1;
+    StreamResult result = StreamResult::Failed;
 
-    while (input.pos < input.size && remaining != 0)
+    while (input.pos < input.size)
     {
         ZSTD_outBuffer output = { chunk.data(), chunk.size(), 0 };
-        remaining = ZSTD_decompressStream(stream, &output, &input);
+        const size_t remaining = ZSTD_decompressStream(stream, &output, &input);
 
         if (ZSTD_isError(remaining))
             break;
 
         out.insert(out.end(), chunk.data(), chunk.data() + output.pos);
 
-        if (out.size() > cFrameSizeMax)
+        if (out.size() >= limit)
+        {
+            result = StreamResult::Limit;
             break;
+        }
+
+        if (remaining == 0)
+        {
+            result = StreamResult::Complete;
+            break;
+        }
     }
 
     ZSTD_freeDStream(stream);
 
-    return remaining == 0 && out.size() <= cFrameSizeMax;
+    return result;
 }
 
-static bool DecompressLz4f(const u8* payload, size_t payloadSize, std::vector<u8>& out)
+static bool DecompressZstdStream(const u8* payload, size_t payloadSize, std::vector<u8>& out)
 {
+    return StreamZstd(payload, payloadSize, cFrameSizeMax + 1, out) == StreamResult::Complete;
+}
+
+static bool PeekZstd(const u8* payload, size_t payloadSize, size_t limit, std::vector<u8>& out)
+{
+    StreamZstd(payload, payloadSize, limit, out);
+
+    if (out.size() > limit)
+        out.resize(limit);
+
+    return !out.empty();
+}
+
+static bool DecompressLz4fInto(const u8* payload, size_t payloadSize, std::vector<u8>& out, size_t* outWritten)
+{
+    *outWritten = 0;
+
     LZ4F_dctx* context = nullptr;
 
     if (LZ4F_isError(LZ4F_createDecompressionContext(&context, LZ4F_getVersion())))
@@ -95,7 +128,27 @@ static bool DecompressLz4f(const u8* payload, size_t payloadSize, std::vector<u8
 
     LZ4F_freeDecompressionContext(context);
 
-    return ok && dstOffset == out.size();
+    *outWritten = dstOffset;
+
+    return ok;
+}
+
+static bool DecompressLz4f(const u8* payload, size_t payloadSize, std::vector<u8>& out)
+{
+    size_t written = 0;
+
+    return DecompressLz4fInto(payload, payloadSize, out, &written) && written == out.size();
+}
+
+static bool PeekLz4f(const u8* payload, size_t payloadSize, size_t limit, std::vector<u8>& out)
+{
+    size_t written = 0;
+
+    out.resize(limit);
+    DecompressLz4fInto(payload, payloadSize, out, &written);
+    out.resize(written);
+
+    return !out.empty();
 }
 
 static bool CompressLz4f(const void* data, size_t size, std::vector<u8>& out)
@@ -209,6 +262,29 @@ bool DecompressZstdFrame(const void* data, size_t size, std::vector<u8>& out)
         out.clear();
 
     return ok;
+}
+
+bool PeekZstdFrame(const void* data, size_t size, size_t limit, std::vector<u8>& out)
+{
+    out.clear();
+
+    if (!IsZstdFrame(data, size) || limit == 0)
+        return false;
+
+    return PeekZstd(static_cast<const u8*>(data), size, limit, out);
+}
+
+bool Peek(const void* data, size_t size, size_t limit, std::vector<u8>& out)
+{
+    out.clear();
+
+    if (!IsCompressed(data, size) || limit == 0)
+        return false;
+
+    const u8* payload = static_cast<const u8*>(data) + cSizePrefixBytes;
+    const size_t payloadSize = size - cSizePrefixBytes;
+
+    return DetectCodec(data, size) == Codec::Zstd ? PeekZstd(payload, payloadSize, limit, out) : PeekLz4f(payload, payloadSize, limit, out);
 }
 
 bool CompressZstdFrame(const void* data, size_t size, std::vector<u8>& out)

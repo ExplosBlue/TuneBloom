@@ -287,15 +287,17 @@ static void DrawWaveSoundPanel(SoundPanel panel, Sound::WaveSoundInfo& waveSound
 
 void DrawSoundMixPanels(Sound* sound)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     const Sound::SoundType soundType = sound->getSoundType();
     const bool isWave = soundType == Sound::SoundType::Wave;
-    const bool hasPitchAndSend = isWave || (soundType == Sound::SoundType::Strm && sBfsar.isStreamSendAvailable());
+    const bool hasPitchAndSend = isWave || (soundType == Sound::SoundType::Strm && archive.isStreamSendAvailable());
 
     SoundPanel panels[5];
     f32 widths[5];
     s32 panelNum = 0;
 
-    const bool hasFilter = isWave && BfwsdFile::isFilterSupportedVersion(sBfsar.getVersionForBfwsd(), sBfsar.getFormat());
+    const bool hasFilter = isWave && BfwsdFile::isFilterSupportedVersion(archive.getVersionForBfwsd(), archive.getFormat());
     const bool twoLines = isWave && !hasFilter;
 
     const auto addPanel = [&](SoundPanel panel, f32 width)

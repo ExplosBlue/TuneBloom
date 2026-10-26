@@ -6,6 +6,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/app/MenuBar.h>
 #include <ui/Messages.h>
+#include <ui/file/PathText.h>
 #include <core/TestHooks.h>
 #include <ui/file/SystemShell.h>
 #include <ui/widgets/TimeUtil.h>
@@ -310,33 +311,11 @@ void RegisterRecentFilesSettings()
     ImGui::AddSettingsHandler(&handler);
 }
 
-static const char* GetPathFileName(const char* path)
-{
-    const char* name = path;
-
-    for (const char* c = path; *c != '\0'; c++)
-    {
-        if (*c == '/' || *c == '\\')
-            name = c + 1;
-    }
-
-    return name;
-}
-
-static std::string GetPathFolder(const std::string& path)
-{
-    const char* name = GetPathFileName(path.c_str());
-    if (name == path.c_str())
-        return std::string();
-
-    return std::string(path.c_str(), name - 1);
-}
-
 static std::string GetRecentFolderName(const std::string& path)
 {
-    const std::string folder = GetPathFolder(path);
+    const std::string folder = pathtext::Folder(path);
 
-    return GetPathFileName(folder.c_str());
+    return pathtext::FileName(folder.c_str());
 }
 
 static std::vector<RecentFileInfo>& GetRecentFileInfos()
@@ -349,7 +328,7 @@ static RecentFileInfo ReadRecentFileInfo(const std::string& path)
 {
     namespace fs = std::filesystem;
 
-    RecentFileInfo info = { path, GetPathFolder(path), std::string(), 0, 0 };
+    RecentFileInfo info = { path, pathtext::Folder(path), std::string(), 0, 0 };
 
     std::error_code ec;
     const fs::path file(path);
@@ -368,7 +347,7 @@ static RecentFileInfo ReadRecentFileInfo(const std::string& path)
         info.bytes = static_cast<u64>(bytes);
 
         sead::FixedSafeString<32> size;
-        FormatItemSize(&size, static_cast<u32>(std::min<std::uintmax_t>(bytes, 0xFFFFFFFFu)));
+        FormatItemSize(&size, info.bytes);
         info.size = size.cstr();
     }
 
@@ -413,7 +392,7 @@ static s32 CompareRecentFiles(const std::string& a, const std::string& b, Recent
     case RecentSort::Folder:
     {
         const s32 order = ComparePathText(GetRecentFolderName(a).c_str(), GetRecentFolderName(b).c_str());
-        return order != 0 ? order : ComparePathText(GetPathFolder(a).c_str(), GetPathFolder(b).c_str());
+        return order != 0 ? order : ComparePathText(pathtext::Folder(a).c_str(), pathtext::Folder(b).c_str());
     }
 
     case RecentSort::Modified:
@@ -445,7 +424,7 @@ static void SortRecentFiles(std::vector<const std::string*>* rows, RecentSort so
         s32 order = CompareRecentFiles(*a, *b, sort);
 
         if (order == 0)
-            order = ComparePathText(GetPathFileName(a->c_str()), GetPathFileName(b->c_str()));
+            order = ComparePathText(pathtext::FileName(a->c_str()), pathtext::FileName(b->c_str()));
 
         return descending ? order > 0 : order < 0;
     });
@@ -527,7 +506,7 @@ static void DrawRecentFileName(const std::string& path, bool missing, bool grip,
     drawList->AddText(pos, ImGui::GetColorU32(missing ? dimColor : GetItemValueColor()), icon);
 
     ImGui::PushStyleColor(ImGuiCol_Text, missing ? dimColor : ImGui::GetStyleColorVec4(ImGuiCol_Text));
-    ImGui::RenderTextEllipsis(drawList, ImVec2(nameLeft, pos.y), ImVec2(right, pos.y + ImGui::GetFontSize()), right, right, GetPathFileName(path.c_str()), nullptr, nullptr);
+    ImGui::RenderTextEllipsis(drawList, ImVec2(nameLeft, pos.y), ImVec2(right, pos.y + ImGui::GetFontSize()), right, right, pathtext::FileName(path.c_str()), nullptr, nullptr);
     ImGui::PopStyleColor();
 }
 
@@ -809,7 +788,7 @@ bool DrawRecentFilesList(std::string* outPath)
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
-    const f32 nameWidth = CalcRecentTextWidth([](const std::string& path) { return std::string(GetPathFileName(path.c_str())); }, em * cRecentNameMaxEm);
+    const f32 nameWidth = CalcRecentTextWidth([](const std::string& path) { return std::string(pathtext::FileName(path.c_str())); }, em * cRecentNameMaxEm);
     const f32 folderWidth = CalcRecentTextWidth(GetRecentFolderName, em * cRecentFolderMaxEm);
     const f32 width = ImFloor(CalcRecentNameOffset() + nameWidth + em * cRecentFolderGapEm + folderWidth + style.ItemSpacing.x + CalcRecentRowHeight());
 
@@ -1012,7 +991,7 @@ static void CalcRecentTableWidths(const ItemColumn* columns, f32* widths, bool* 
     const f32 folderMin = em * cRecentTableFolderMinEm;
 
     const f32 nameMin = em * cRecentTableNameMinEm;
-    const f32 nameNeed = CalcRecentNameOffset() + cell + em + CalcRecentTextWidth([](const std::string& path) { return std::string(GetPathFileName(path.c_str())); }, em * cRecentNameMaxEm);
+    const f32 nameNeed = CalcRecentNameOffset() + cell + em + CalcRecentTextWidth([](const std::string& path) { return std::string(pathtext::FileName(path.c_str())); }, em * cRecentNameMaxEm);
 
     widths[1] = GetItemColumnWidth(columns[1]);
     widths[2] = GetItemColumnWidth(columns[2]);

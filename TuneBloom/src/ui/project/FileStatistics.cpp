@@ -169,14 +169,6 @@ static f32 CalcShare(u64 size, u64 totalSize)
     return totalSize > 0 ? static_cast<f32>(static_cast<f64>(size) / static_cast<f64>(totalSize) * 100.0) : 0.0f;
 }
 
-static void FormatTotalSize(sead::BufferedSafeString* out, u64 size)
-{
-    if (size >= 1024ull * 1024ull * 1024ull)
-        out->format(messages::unit::cGigabytesFormat, static_cast<f64>(size) / (1024.0 * 1024.0 * 1024.0));
-    else
-        FormatItemSize(out, static_cast<u32>(size));
-}
-
 template <typename T>
 static void LayoutTreemap(T* nodes, size_t nodeNum, ImRect area)
 {
@@ -281,7 +273,7 @@ static void CollectGroups(StatGroup* groups, u64* totalSize, u32* fileNum)
         groups[i].blocks.clear();
     }
 
-    for (Item* item : sBfsar.getWaveFileList())
+    for (Item* item : ActiveSoundArchive().getWaveFileList())
     {
         WaveFile* wave = static_cast<WaveFile*>(item);
 
@@ -374,7 +366,7 @@ static void DrawUseTiles(const StatGroup* groups, u64 totalSize, s32 isolated, f
     {
         const u32 fileNum = static_cast<u32>(groups[i].blocks.size());
 
-        FormatTotalSize(&sizes[i], groups[i].size);
+        FormatItemSize(&sizes[i], groups[i].size);
         files[i].format(fileNum == 1 ? messages::item::cStatsFilesOneFormat : messages::item::cStatsFilesFormat, fileNum);
         shares[i].format(messages::item::cStatsShareFormat, CalcShare(groups[i].size, totalSize));
 
@@ -510,7 +502,7 @@ static const StatBlock* DrawRegion(ImDrawList* drawList, StatGroup& group, const
         const f32 textY = rect.Min.y + cBlockPadY;
 
         sead::FixedSafeString<32> sizeText;
-        FormatTotalSize(&sizeText, group.size);
+        FormatItemSize(&sizeText, group.size);
 
         const f32 sizeWidth = ImGui::CalcTextSize(sizeText.cstr()).x;
         const bool showSize = ImGui::CalcTextSize(title).x + em + sizeWidth <= right - left;
@@ -685,7 +677,7 @@ static void DrawTotalLine(const StatGroup* groups, u64 totalSize, u32 fileNum, s
     }
 
     sead::FixedSafeString<32> sizeText;
-    FormatTotalSize(&sizeText, totalSize);
+    FormatItemSize(&sizeText, totalSize);
 
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().CellPadding.x);
     ImGui::TextDisabled(fileNum == 1 ? messages::item::cStatsTotalOneFormat : messages::item::cStatsTotalFormat, sizeText.cstr(), fileNum);

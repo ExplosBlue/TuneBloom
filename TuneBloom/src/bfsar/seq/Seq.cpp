@@ -129,7 +129,7 @@ static void DeleteCommands(const std::map<u32, MmlCommandBase*>& commands)
     }
 }
 
-bool DecompileSequenceFile(std::vector<std::string>& outLines, std::unordered_map<u32, u32>& offsetToLine, SequenceSoundFileReader& reader, const SeqFileLayout& layout)
+bool DecompileSequenceFile(std::vector<std::string>& outLines, std::unordered_map<u32, u32>& offsetToLine, SequenceSoundFileReader& reader, const SeqFileLayout& layout, u32 seqVersion)
 {
     reader.createLabelCache();
 
@@ -149,7 +149,7 @@ bool DecompileSequenceFile(std::vector<std::string>& outLines, std::unordered_ma
     {
         u32 offset = static_cast<u32>(trackPtr - seqData);
 
-        commands[offset] = nw__snd__internal__driver__MmlParser__Parse(trackPtr, reader);
+        commands[offset] = nw__snd__internal__driver__MmlParser__Parse(trackPtr, reader, seqVersion);
     }
 
     const auto& labelCache = reader.mLabelCache;

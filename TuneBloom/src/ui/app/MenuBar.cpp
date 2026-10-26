@@ -4,6 +4,7 @@
 #include <ui/backup/Backup.h>
 #include <ui/settings/Config.h>
 #include <ui/widgets/ContextMenu.h>
+#include <ui/file/DocumentMgr.h>
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
 #include <ui/app/FileTransferMenu.h>
@@ -388,7 +389,7 @@ static void DrawHelpMenu()
         RequestAbout();
 }
 
-static void DrawRecentFilesMenu(bool documentOpen)
+static void DrawRecentFilesMenu()
 {
     if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_CLOCK " %s", messages::mainmenu::cOpenRecent).cstr()))
         return;
@@ -396,14 +397,7 @@ static void DrawRecentFilesMenu(bool documentOpen)
     std::string path;
 
     if (DrawRecentFilesList(&path))
-    {
-        if (documentOpen)
-        {
-            RequestOpenFile(path.c_str());
-        }
-        else
-            OpenFile(path.c_str());
-    }
+        RequestOpenFile(path.c_str());
 
     ImGui::EndMenu();
 }
@@ -425,25 +419,15 @@ static void FocusInfoWindowForFind()
 static void DrawFileMenu()
 {
     const bool documentOpen = IsDocumentOpen();
-    const bool archiveOpen = sBfsar.isOpen();
+    const bool archiveOpen = IsSoundArchiveOpen();
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FILE " %s", messages::mainmenu::cNew).cstr(), shortcuts::Label(shortcuts::Action::NewProject)))
-    {
-        if (documentOpen)
-            RequestNewFile();
-        else
-            RequestNewFileFormat();
-    }
+        RequestNewFile();
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER_OPEN " %s", messages::mainmenu::cOpen).cstr(), shortcuts::Label(shortcuts::Action::OpenProject)))
-    {
-        if (documentOpen)
-            RequestOpenFile();
-        else
-            OpenFile();
-    }
+        RequestOpenFile();
 
-    DrawRecentFilesMenu(documentOpen);
+    DrawRecentFilesMenu();
 
     ImGui::Separator();
     ImGui::BeginDisabled(!documentOpen);
@@ -454,7 +438,10 @@ static void DrawFileMenu()
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE_ALL " %s", messages::mainmenu::cSaveAs).cstr(), shortcuts::Label(shortcuts::Action::SaveProjectAs)))
         SaveFileAs();
 
-    if (MenuBarIconItem(ICON_LC_FILE_DIFF, messages::mainmenu::cShowUnsaved, nullptr, gUnsavedChanges))
+    if (MenuBarIconItem(ICON_LC_FILE_STACK, messages::mainmenu::cSaveAll, shortcuts::Label(shortcuts::Action::SaveAllProjects), HasUnsavedDocuments()))
+        RequestSaveAll();
+
+    if (MenuBarIconItem(ICON_LC_FILE_DIFF, messages::mainmenu::cShowUnsaved, nullptr, HasUnsavedChanges()))
         OpenUnsavedChangesDialog();
 
     DrawBackupsMenu();
@@ -479,7 +466,7 @@ static void DrawFileMenu()
 
     ImGui::Separator();
 
-    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, nullptr, documentOpen))
+    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, shortcuts::Label(shortcuts::Action::CloseProject), documentOpen))
         RequestCloseFile();
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_DOOR_OPEN " %s", messages::mainmenu::cExit).cstr()))
@@ -491,16 +478,16 @@ static void DrawFileMenu()
 static void DrawSaveStatusChip(f32 chipRight, f32 textY)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
-    const sead::FormatFixedSafeString<64> statusLabel(gUnsavedChanges ? ICON_LC_FILE " %s" : ICON_LC_CHECK_CHECK " %s", gUnsavedChanges ? messages::mainmenu::cUnsaved : messages::mainmenu::cSaved);
+    const sead::FormatFixedSafeString<64> statusLabel(HasUnsavedChanges() ? ICON_LC_FILE " %s" : ICON_LC_CHECK_CHECK " %s", HasUnsavedChanges() ? messages::mainmenu::cUnsaved : messages::mainmenu::cSaved);
     const char* statusText = statusLabel.cstr();
-    const ImVec4 statusColor = gUnsavedChanges ? uicolors::Warning() : style.Colors[ImGuiCol_TextDisabled];
+    const ImVec4 statusColor = HasUnsavedChanges() ? uicolors::Warning() : style.Colors[ImGuiCol_TextDisabled];
 
     const ImVec2 rangeY = CalcMenuBarPillRangeY();
     const f32 chipLeft = chipRight - ImGui::CalcTextSize(statusText).x - style.ItemSpacing.x * 2.0f;
 
     ImGuiCol chipColor = ImGuiCol_FrameBg;
 
-    if (gUnsavedChanges)
+    if (HasUnsavedChanges())
     {
         ImGui::SetCursorScreenPos(ImVec2(chipLeft, rangeY.x));
 

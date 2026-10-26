@@ -3,6 +3,7 @@
 #include <core/ByteBuilder.h>
 #include <core/ByteView.h>
 #include <ui/Messages.h>
+#include <bfsar/audio/NxOpus.h>
 
 #include <libs/dsp/dsp.h>
 
@@ -43,12 +44,25 @@ static constexpr u32 cAdpcmFrameSamples   = 14;
 static constexpr u32 cSupportedVersion    = 1;
 static constexpr u16 cByteOrderMark       = 0xFEFF;
 static constexpr u32 cStereoChannelCount  = 2;
+static constexpr u32 cOpusPrefetchTail    = 256;
+static constexpr u32 cOpusPrefetchAudio   = 240;
 
 static constexpr char cBwavMagic[] = "BWAV";
 
+struct ChannelDataSize
+{
+    u64 exact = 0;
+    u64 stored = 0;
+};
+
+static u64 GetOpusPrefetchSampleCount(u32 sampleCount)
+{
+    return sampleCount == 0 ? 0 : static_cast<u64>(sampleCount) + cOpusPrefetchTail;
+}
+
 static u64 GetExactSampleBytes(BwavCodec codec, u32 sampleCount)
 {
-    if (codec == BwavCodec::Pcm16)
+    if (codec != BwavCodec::DspAdpcm)
         return static_cast<u64>(sampleCount) * sizeof(s16);
 
     return getBytesForAdpcmSamples(sampleCount);
@@ -59,11 +73,42 @@ static u64 GetSampleBytes(BwavCodec codec, u32 sampleCount)
     if (codec == BwavCodec::Pcm16)
         return static_cast<u64>(sampleCount) * sizeof(s16);
 
+    if (codec == BwavCodec::Opus)
+        return GetOpusPrefetchSampleCount(sampleCount) * sizeof(s16);
+
     return (static_cast<u64>(sampleCount) + cAdpcmFrameSamples - 1) / cAdpcmFrameSamples * cAdpcmFrameBytes;
+}
+
+static bool HoldsOpusPackets(const BwavChannel& channel)
+{
+    return channel.codec == BwavCodec::Opus && nxopus::HasInfoChunk(channel.data.data(), channel.data.size());
+}
+
+static bool MeasureChannelData(const ByteView& view, u64 infoOffset, ChannelDataSize* out)
+{
+    const BwavCodec codec = static_cast<BwavCodec>(view.readU16(infoOffset + cChannelCodec));
+    const u32 sampleCount = view.readU32(infoOffset + cChannelSamples);
+    const u64 dataOffset = view.readU32(infoOffset + cChannelDataOffset);
+
+    if (codec == BwavCodec::Opus && sampleCount != 0 && dataOffset < view.size() && nxopus::HasInfoChunk(view.at(dataOffset), view.size() - dataOffset))
+    {
+        out->exact = nxopus::Measure(view.at(dataOffset), view.size() - dataOffset);
+        out->stored = out->exact;
+
+        return out->exact != 0;
+    }
+
+    out->exact = GetExactSampleBytes(codec, sampleCount);
+    out->stored = GetSampleBytes(codec, sampleCount);
+
+    return true;
 }
 
 static u32 GetStoredSampleCount(const BwavChannel& channel)
 {
+    if (HoldsOpusPackets(channel))
+        return channel.sampleCount;
+
     const u64 bytes = channel.data.size();
     u64 available = bytes / sizeof(s16);
 
@@ -78,7 +123,7 @@ static u32 GetStoredSampleCount(const BwavChannel& channel)
 
 static bool IsSupportedCodec(u16 codec)
 {
-    return codec == static_cast<u16>(BwavCodec::Pcm16) || codec == static_cast<u16>(BwavCodec::DspAdpcm);
+    return codec == static_cast<u16>(BwavCodec::Pcm16) || codec == static_cast<u16>(BwavCodec::DspAdpcm) || codec == static_cast<u16>(BwavCodec::Opus);
 }
 
 static u64 GetChannelInfoOffset(u32 channelIndex)
@@ -97,7 +142,8 @@ static std::vector<u32> LayoutChannelData(const Bwav& bwav, bool useFullSamples)
     {
         offsets.push_back(offset);
 
-        const u32 bytes = static_cast<u32>(useFullSamples ? GetSampleBytes(channel.codec, channel.sampleCount) : channel.data.size());
+        const bool useSampleBytes = useFullSamples && !HoldsOpusPackets(channel);
+        const u32 bytes = static_cast<u32>(useSampleBytes ? GetSampleBytes(channel.codec, channel.sampleCount) : channel.data.size());
         offset = sead::Mathu::roundUpPow2(offset + bytes, cSampleAlignment);
     }
 
@@ -128,6 +174,51 @@ static void UpdateLoopContext(BwavChannel* channel)
     channel->loopPredScale = channel->data[frameOffset];
     channel->loopYn1 = info.loop_yn1;
     channel->loopYn2 = info.loop_yn2;
+}
+
+static void DecodeOpusPackets(const BwavChannel& channel, std::vector<s16>* out)
+{
+    std::vector<std::vector<s16>> decoded;
+    nxopus::Info info;
+
+    if (nxopus::Decode(channel.data.data(), channel.data.size(), nxopus::PreSkip::Keep, &decoded, &info) != nxopus::Error::None)
+    {
+        out->clear();
+        return;
+    }
+
+    *out = std::move(decoded.front());
+    out->resize(channel.sampleCount, 0);
+}
+
+static std::vector<u8> MakeOpusPrefetchData(const BwavChannel& source, u32 sampleCount, bool isBigEndian, u32* outTailAudio)
+{
+    std::vector<s16> decoded;
+    DecodeOpusPackets(source, &decoded);
+
+    const u64 audioCount = std::min<u64>(sampleCount == 0 ? 0 : static_cast<u64>(sampleCount) + cOpusPrefetchAudio, decoded.size());
+    const u64 totalCount = GetOpusPrefetchSampleCount(sampleCount);
+
+    ByteBuilder builder(isBigEndian);
+
+    for (u64 i = 0; i < totalCount; i++)
+        builder.appendU16(static_cast<u16>(i < audioCount ? decoded[i] : 0));
+
+    *outTailAudio = audioCount > sampleCount ? static_cast<u32>(audioCount - sampleCount) : 0;
+    return builder.take();
+}
+
+static void SetOpusPrefetchTail(BwavChannel* channel, u32 tailAudio, u32 tailOffset, bool isBigEndian)
+{
+    ByteBuilder builder(isBigEndian);
+    builder.appendU32(tailAudio);
+    builder.appendU32(tailOffset);
+
+    const std::vector<u8> fields = builder.take();
+    const ByteView view(fields.data(), fields.size(), isBigEndian);
+
+    for (u32 i = 0; i < fields.size() / sizeof(s16); i++)
+        channel->coefficients[i] = view.readS16(i * sizeof(s16));
 }
 
 static BwavPan GetEncodePan(u32 channelIndex, u32 channelCount)
@@ -233,24 +324,24 @@ bool ReadBwav(const void* data, u64 size, Bwav* out, const char** outError)
         ReadChannelInfo(view, infoOffset, &channel);
 
         const u64 dataOffset = view.readU32(infoOffset + cChannelDataOffset);
-        const u64 exactBytes = GetExactSampleBytes(channel.codec, channel.sampleCount);
+        ChannelDataSize dataSize;
 
-        if (channel.sampleCount > channel.fullSampleCount)
+        if (channel.sampleCount > channel.fullSampleCount || !MeasureChannelData(view, infoOffset, &dataSize))
         {
             *outError = messages::resource::cBwavDamaged;
             return false;
         }
 
-        if (exactBytes == 0)
+        if (dataSize.exact == 0)
             continue;
 
-        if (!view.has(dataOffset, exactBytes))
+        if (!view.has(dataOffset, dataSize.exact))
         {
             *outError = messages::resource::cBwavDamaged;
             return false;
         }
 
-        const u64 storedBytes = std::min<u64>(GetSampleBytes(channel.codec, channel.sampleCount), size - dataOffset);
+        const u64 storedBytes = std::min<u64>(dataSize.stored, size - dataOffset);
 
         channel.data.assign(view.at(dataOffset), view.at(dataOffset) + storedBytes);
         dataEnd = std::max(dataEnd, dataOffset + storedBytes);
@@ -313,21 +404,20 @@ u64 MeasureBwav(const void* data, u64 size)
     for (u32 i = 0; i < channelCount; i++)
     {
         const u64 infoOffset = GetChannelInfoOffset(i);
-        const u16 codec = view.readU16(infoOffset + cChannelCodec);
+        ChannelDataSize dataSize;
 
-        if (!IsSupportedCodec(codec))
+        if (!IsSupportedCodec(view.readU16(infoOffset + cChannelCodec)) || !MeasureChannelData(view, infoOffset, &dataSize))
             return 0;
 
         const u64 dataOffset = view.readU32(infoOffset + cChannelDataOffset);
-        const u64 sampleBytes = GetSampleBytes(static_cast<BwavCodec>(codec), view.readU32(infoOffset + cChannelSamples));
 
-        if (sampleBytes == 0)
+        if (dataSize.stored == 0)
             continue;
 
         if (dataOffset > size)
             return 0;
 
-        end = std::max(end, dataOffset + std::min(sampleBytes, size - dataOffset));
+        end = std::max(end, dataOffset + std::min(dataSize.stored, size - dataOffset));
     }
 
     return end;
@@ -359,6 +449,8 @@ Bwav MakeBwavPrefetch(const Bwav& full, u32 sampleCount, u16 prefetchFlag)
     prefetch.prefetchFlag = prefetchFlag;
     prefetch.channels.reserve(full.channels.size());
 
+    std::vector<u32> opusTailAudio(full.channels.size(), 0);
+
     for (u32 i = 0; i < full.channels.size(); i++)
     {
         const BwavChannel& source = full.channels[i];
@@ -368,10 +460,27 @@ Bwav MakeBwavPrefetch(const Bwav& full, u32 sampleCount, u16 prefetchFlag)
         channel.sampleCount = std::min(source.sampleCount, sampleCount);
         channel.fullDataOffset = fullOffsets[i];
 
-        const u64 bytes = std::min<u64>(GetSampleBytes(source.codec, channel.sampleCount), source.data.size());
-        channel.data.assign(source.data.begin(), source.data.begin() + static_cast<s64>(bytes));
+        if (HoldsOpusPackets(source))
+        {
+            channel.data = MakeOpusPrefetchData(source, channel.sampleCount, full.isBigEndian, &opusTailAudio[i]);
+        }
+        else
+        {
+            const u64 bytes = std::min<u64>(GetSampleBytes(source.codec, channel.sampleCount), source.data.size());
+            channel.data.assign(source.data.begin(), source.data.begin() + static_cast<s64>(bytes));
+        }
 
         prefetch.channels.push_back(std::move(channel));
+    }
+
+    const std::vector<u32> offsets = LayoutChannelData(prefetch, false);
+
+    for (u32 i = 0; i < prefetch.channels.size(); i++)
+    {
+        BwavChannel& channel = prefetch.channels[i];
+
+        if (HoldsOpusPackets(full.channels[i]) && channel.sampleCount != 0)
+            SetOpusPrefetchTail(&channel, opusTailAudio[i], offsets[i] + channel.sampleCount * static_cast<u32>(sizeof(s16)), prefetch.isBigEndian);
     }
 
     return prefetch;
@@ -402,6 +511,21 @@ bool CanSetBwavLoop(const Bwav& bwav, bool isLoop, u32 loopStartFrame)
     return !bwav.channels.empty();
 }
 
+void CopyBwavLoop(const Bwav& source, Bwav* target)
+{
+    for (u32 i = 0; i < std::min(source.channels.size(), target->channels.size()); i++)
+    {
+        const BwavChannel& from = source.channels[i];
+        BwavChannel& to = target->channels[i];
+
+        to.loopEndFrame = from.loopEndFrame;
+        to.loopStartFrame = from.loopStartFrame;
+        to.loopPredScale = from.loopPredScale;
+        to.loopYn1 = from.loopYn1;
+        to.loopYn2 = from.loopYn2;
+    }
+}
+
 void SetBwavLoop(Bwav* bwav, bool isLoop, u32 loopStartFrame)
 {
     for (BwavChannel& channel : bwav->channels)
@@ -416,11 +540,18 @@ void SetBwavLoop(Bwav* bwav, bool isLoop, u32 loopStartFrame)
 void DecodeBwavChannel(const Bwav& bwav, u32 channelIndex, std::vector<s16>* out)
 {
     const BwavChannel& channel = bwav.channels[channelIndex];
+
+    if (HoldsOpusPackets(channel))
+    {
+        DecodeOpusPackets(channel, out);
+        return;
+    }
+
     const u32 sampleCount = GetStoredSampleCount(channel);
 
     out->assign(sampleCount, 0);
 
-    if (channel.codec == BwavCodec::Pcm16)
+    if (channel.codec != BwavCodec::DspAdpcm)
     {
         const ByteView view(channel.data.data(), channel.data.size(), bwav.isBigEndian);
 

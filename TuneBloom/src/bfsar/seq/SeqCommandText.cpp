@@ -1,9 +1,9 @@
 #include <bfsar/seq/SeqParseUtil.h>
 
+#include <bfsar/files/InnerFile.h>
 #include <bfsar/seq/SeqCommand.h>
 
 #include <ui/Messages.h>
-#include <ui/app/UI.h>
 
 #include <core/Debug.h>
 
@@ -1160,7 +1160,7 @@ static const NamedCommandInfo* FindCommandInfo(const std::string& cmd)
     return nullptr;
 }
 
-MmlCommandBase* ParseSeqCommand(const std::string& str, const std::vector<std::string>& args, std::string& errorMsg)
+MmlCommandBase* ParseSeqCommand(const std::string& str, const std::vector<std::string>& args, const InnerFileTarget& target, std::string& errorMsg)
 {
     LOG_FUNC();
 
@@ -1174,10 +1174,10 @@ MmlCommandBase* ParseSeqCommand(const std::string& str, const std::vector<std::s
     const std::string& cmdName = named->first;
     const CommandInfo& cmdInfo = named->second;
 
-    if (cmdInfo.version > sBfsar.getVersionForBfseq())
+    if (cmdInfo.version > target.version)
     {
-        errorMsg = std::format(messages::sequence::cCommandVersionFormat, cmdName, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Sequence), cmdInfo.version);
-        errorMsg += std::format(messages::sequence::cErrorCurrentVersionFormat, sBfsar.getVersionForBfseq());
+        errorMsg = std::format(messages::sequence::cCommandVersionFormat, cmdName, GetInnerFileDisplayName(target.format, InnerFileKind::Sequence), cmdInfo.version);
+        errorMsg += std::format(messages::sequence::cErrorCurrentVersionFormat, target.version);
         return nullptr;
     }
 

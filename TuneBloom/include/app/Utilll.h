@@ -19,7 +19,6 @@ extern const sead::SafeString cAppVersion;
 extern const bool cIsCommitBuild;
 
 bool updateTitle(const char* path, bool dirty = false);
-void refreshTitleDirty(bool dirty);
 
 bool isAssertDialogOpen();
 

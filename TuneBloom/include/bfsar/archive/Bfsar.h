@@ -5,6 +5,7 @@
 #include <bfsar/files/BankFile.h>
 #include <bfsar/model/Group.h>
 #include <bfsar/model/Player.h>
+#include <core/SaveResult.h>
 #include <bfsar/files/SequenceFile.h>
 #include <bfsar/model/Sound.h>
 #include <bfsar/model/SoundSet.h>
@@ -111,8 +112,8 @@ public:
         messages::Message message;
     };
 
-    bool save();
-    bool saveAs(const sead::SafeString &filePath);
+    SaveResult save();
+    SaveResult saveAs(const sead::SafeString &filePath);
     enum class BackupResult
     {
         Ok,
@@ -178,6 +179,11 @@ public:
             return *mFilePath;
 
         return sead::SafeString::cEmptyString;
+    }
+
+    bool hasFilePath() const
+    {
+        return mFilePath != nullptr;
     }
 
     const sead::SafeString &getLoadedArchivePath() const
@@ -351,6 +357,11 @@ public:
         return mSoundList;
     }
 
+    const Sound::List& getSoundList() const
+    {
+        return mSoundList;
+    }
+
     SoundSet::List& getSoundSetList()
     {
         return mSoundSetList;
@@ -377,6 +388,11 @@ public:
     }
 
     WaveFile::List& getWaveFileList()
+    {
+        return mWaveFileList;
+    }
+
+    const WaveFile::List& getWaveFileList() const
     {
         return mWaveFileList;
     }
@@ -451,7 +467,7 @@ public:
     }
 
     //? Check if name contains only allowed characters
-    bool validName(const sead::SafeString& name) const;
+    static bool validName(const sead::SafeString& name);
     //? Check if name is duplicated
     bool validateName(const sead::SafeString& name) const;
     //? Check if name is duplicated (Excluding item)
@@ -459,7 +475,7 @@ public:
 
     bool validateName(const sead::SafeString& name, const Item* ignoreItem) const;
 
-    void updateList(Item::List& list);
+    static void updateList(Item::List& list);
 
     struct WaveDuplicateGroup
     {
@@ -610,6 +626,16 @@ public:
         }
     }
 
+    InnerFileTarget getWaveFileTarget() const
+    {
+        return { mFormat, getVersionForBfwav(), mEndian };
+    }
+
+    InnerFileTarget getSequenceFileTarget() const
+    {
+        return { mFormat, getVersionForBfseq(), mEndian };
+    }
+
     u32 getVersionForBfstm() const
     {
         if (isV3Bfsar())
@@ -639,7 +665,7 @@ public:
     }
 
     //? Validate every item for saving
-    bool validate_(bool showErrors = true);
+    bool validate(bool showErrors = true);
     void recompileInvalidSequences_();
 
     const char* getArchiveMagic() const

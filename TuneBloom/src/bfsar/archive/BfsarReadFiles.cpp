@@ -53,8 +53,9 @@ using WaveIdTableFinder = const Util::WaveIdTable* (*)(const ByteRange& file);
 }
 
 template <typename File>
-static void ReadInnerFileItem(File* item, const ByteRange& file, bool isLayoutValid)
+static void ReadInnerFileItem(Bfsar* archive, File* item, const ByteRange& file, bool isLayoutValid)
 {
+    item->setArchive(archive);
     PopupMgr::instance()->setCurrentProcessItem(item);
 
     if (!isLayoutValid || !item->read(file.data()))
@@ -84,7 +85,7 @@ void Bfsar::readSequenceFiles_(BfsarOpenContext& ctx)
 
         sequence->setFormat(mFormat);
 
-        ReadInnerFileItem(sequence, seqFile, CheckInnerFileBlocks(seqFile));
+        ReadInnerFileItem(this, sequence, seqFile, CheckInnerFileBlocks(seqFile));
 
         sequence->setSerializedHash(md5(seqFile.data(), static_cast<u32>(seqFile.size())));
         mSequenceFileList.pushBack(sequence);
@@ -223,7 +224,7 @@ void Bfsar::readWaveArchiveWaves_(BfsarOpenContext& ctx, u32 warcIndex, u32 wave
         wave->mEnableName = true;
         wave->mName = "Wave";
 
-        ReadInnerFileItem(wave, waveBytes, CheckInnerFileBlocks(waveBytes));
+        ReadInnerFileItem(this, wave, waveBytes, CheckInnerFileBlocks(waveBytes));
 
         mWaveFileList.pushBack(wave);
         wave->setSerializedHash(hash);
@@ -612,7 +613,7 @@ void Bfsar::readBankFiles_(BfsarOpenContext& ctx)
         bank->mEnableName = true;
         bank->mName = "Bank";
 
-        ReadInnerFileItem(bank, bankFile, FindBankWaveIdTable(bankFile) != nullptr);
+        ReadInnerFileItem(this, bank, bankFile, FindBankWaveIdTable(bankFile) != nullptr);
 
         mBankFileList.pushBack(bank);
 

@@ -11,9 +11,11 @@
 
 void DrawSequenceSoundUI(Sound::SequenceSoundInfo& seqSoundInfo)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     {
         Item* seqFile = seqSoundInfo.getSequenceFileRef().getItem();
-        if (ItemSelectorRow(messages::common::cSequenceFile,sBfsar.getSequenceFileList(), &seqFile, false, TrailingButtonsWidth(1)))
+        if (ItemSelectorRow(messages::common::cSequenceFile,archive.getSequenceFileList(), &seqFile, false, TrailingButtonsWidth(1)))
         {
             seqSoundInfo.getSequenceFileRef().attach(seqFile);
             SetUnsavedChanges(true);
@@ -33,7 +35,7 @@ void DrawSequenceSoundUI(Sound::SequenceSoundInfo& seqSoundInfo)
     for (u32 i = 0; i < 4; i++)
     {
         Item* bank = seqSoundInfo.getBankRef(i).getItem();
-        if (ItemSelectorRow(sead::FormatFixedSafeString<16>(messages::sequence::cBankSlotFormat, i).cstr(), sBfsar.getBankList(), &bank, true, TrailingButtonsWidth(1)))
+        if (ItemSelectorRow(sead::FormatFixedSafeString<16>(messages::sequence::cBankSlotFormat, i).cstr(), archive.getBankList(), &bank, true, TrailingButtonsWidth(1)))
         {
             seqSoundInfo.getBankRef(i).attach(bank);
             SetUnsavedChanges(true);

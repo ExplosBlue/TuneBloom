@@ -66,7 +66,7 @@ static void OpenDiscord()
 }
 
 static const StartRow cFileRows[] = {
-    { ICON_LC_FILE,        messages::common::cNewArchive,  GetNewArchiveShortcut,  RequestNewFileFormat },
+    { ICON_LC_FILE,        messages::common::cNewArchive,  GetNewArchiveShortcut,  RequestNewFile },
     { ICON_LC_FOLDER_OPEN, messages::common::cOpenArchive, GetOpenArchiveShortcut, OpenArchive },
 };
 
@@ -217,5 +217,5 @@ void DrawStartPage()
     }
 
     if (open)
-        OpenFile(path.c_str());
+        RequestOpenFile(path.c_str());
 }

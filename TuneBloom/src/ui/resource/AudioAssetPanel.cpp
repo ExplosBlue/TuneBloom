@@ -141,13 +141,15 @@ void AudioAssetPanel::refreshView(AudioAsset* asset)
 
 AudioAssetPanel::FrameContext AudioAssetPanel::beginFrame(AudioAsset* asset)
 {
-    sAudioResource.loadStreamFile(asset);
+    AudioResource& resource = ActiveAudioResource();
+
+    resource.loadStreamFile(asset);
     refreshView(asset);
 
     FrameContext ctx;
     ctx.asset = asset;
     ctx.info = &asset->getInfo();
-    ctx.canSetLoop = sAudioResource.canSetLoop(*asset, &ctx.loopReason);
+    ctx.canSetLoop = resource.canSetLoop(*asset, &ctx.loopReason);
     ctx.playing = asset->isPlaying();
 
     return ctx;
@@ -157,7 +159,7 @@ void AudioAssetPanel::commitLoop(FrameContext& ctx, bool isLoop, u32 loopStartFr
 {
     const char* error = nullptr;
 
-    if (!sAudioResource.setLoop(ctx.asset, isLoop, loopStartFrame, &error))
+    if (!ActiveAudioResource().setLoop(ctx.asset, isLoop, loopStartFrame, &error))
     {
         mLoopStartFrame = ctx.info->loopStartFrame;
         PopupMgr::instance()->addPopup({ error, ctx.asset });
@@ -186,7 +188,7 @@ void AudioAssetPanel::draw(AudioAsset* asset)
 
 void AudioAssetPanel::drawName(const FrameContext& ctx)
 {
-    if (sAudioResource.canRenameAsset(*ctx.asset))
+    if (ActiveAudioResource().canRenameAsset(*ctx.asset))
     {
         DrawItemPropertiesUI(true);
         return;
@@ -362,7 +364,7 @@ void AudioAssetPanel::drawStreamBox(const FrameContext& ctx)
     if (!BeginPropertyBox("AssetStream"))
         return;
 
-    const std::string path = sAudioResource.getStreamFilePath(*ctx.asset);
+    const std::string path = ActiveAudioResource().getStreamFilePath(*ctx.asset);
 
     RegionHeader(messages::sound::cStreamFileLabel);
 

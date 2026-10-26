@@ -72,7 +72,7 @@ static void UpdateMetaFromInfo(AudioAsset* asset)
 static bool WriteWaveFileBytes(const WaveFile& wave, std::vector<u8>* out)
 {
     const sead::FormatFixedSafeString<fileio::cPathLengthMax> tempPath("%s/tunebloom_resource_wave_%p.bin", fileio::GetTempFolder(), static_cast<const void*>(&wave));
-    const WaveFileTarget target = wave.getTarget();
+    const InnerFileTarget target = wave.getTarget();
 
     {
         sead::FileHandle handle;
@@ -135,6 +135,16 @@ static void SetStreamAudio(AudioAsset* asset, const aal::Bwav& full)
 
     asset->setStreamFile(MakeAssetFile(aal::WriteBwav(full)), StreamFileState::Loaded, true);
     asset->setFile(MakeAssetFile(aal::WriteBwav(aal::MakeBwavPrefetch(full, prefetchSamples, prefetchFlag))));
+}
+
+static void SetStreamLoop(AudioAsset* asset, const aal::Bwav& full)
+{
+    aal::Bwav prefetch;
+    ReadAudioAssetBwav(asset->getFile(), &prefetch);
+    aal::CopyBwavLoop(full, &prefetch);
+
+    asset->setStreamFile(MakeAssetFile(aal::WriteBwav(full)), StreamFileState::Loaded, true);
+    asset->setFile(MakeAssetFile(aal::WriteBwav(prefetch)));
 }
 
 static bool DoesStreamMatchPrefetch(const aal::Bwav& stream, const aal::Bwav& prefetch)
@@ -242,6 +252,7 @@ AudioResource::AudioResource()
     , mFilePath()
     , mAssets()
 {
+    mAssets.setResource(this);
 }
 
 AudioResource::~AudioResource()
@@ -252,11 +263,6 @@ AudioResource::~AudioResource()
 bool AudioResource::IsResourceFile(const void* data, u64 size)
 {
     return aal::IsBars(data, size) || aal::IsBwav(data, size);
-}
-
-bool AudioResource::IsResourceData(const void* data, u64 size)
-{
-    return GetResourceDataError(data, size) == nullptr;
 }
 
 const char* AudioResource::GetResourceDataError(const void* data, u64 size)
@@ -735,7 +741,7 @@ bool AudioResource::writeArchive(const char** outError)
     return true;
 }
 
-AudioResource::SaveResult AudioResource::writeAll(const sead::SafeString& previousPath, const char** outError)
+SaveResult AudioResource::writeAll(const sead::SafeString& previousPath, const char** outError)
 {
     std::vector<StreamWrite> writes;
 
@@ -759,12 +765,12 @@ AudioResource::SaveResult AudioResource::writeAll(const sead::SafeString& previo
     return SaveResult::Saved;
 }
 
-AudioResource::SaveResult AudioResource::save(const char** outError)
+SaveResult AudioResource::save(const char** outError)
 {
     return writeAll(mFilePath, outError);
 }
 
-AudioResource::SaveResult AudioResource::saveAs(const sead::SafeString& path, const char** outError)
+SaveResult AudioResource::saveAs(const sead::SafeString& path, const char** outError)
 {
     const sead::FixedSafeString<512> previousPath(mFilePath);
     const bool previousCompressed = mIsCompressed;
@@ -1133,7 +1139,7 @@ bool AudioResource::setLoop(AudioAsset* asset, bool isLoop, u32 loopStartFrame, 
     aal::SetBwavLoop(&bwav, isLoop, loopStartFrame);
 
     if (asset->isStream())
-        SetStreamAudio(asset, bwav);
+        SetStreamLoop(asset, bwav);
     else
         asset->setFile(MakeAssetFile(aal::WriteBwav(bwav)));
 

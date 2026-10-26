@@ -1,5 +1,6 @@
 #include <ui/items/ItemListInternal.h>
 
+#include <ui/file/DocumentState.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/app/Shortcuts.h>
@@ -204,18 +205,18 @@ void ForgetRemovedItems(const std::vector<Item*>& removed)
         return item && std::find(removed.begin(), removed.end(), item) != removed.end();
     };
 
-    for (size_t tab = 0; tab <= (size_t)UIType::Max; tab++)
+    for (SelectionState& selection : ActiveDocumentState().selections)
     {
-        if (isRemoved(sSelectedItemArr[tab]))
-            sSelectedItemArr[tab] = nullptr;
+        if (isRemoved(selection.selectedItem))
+            selection.selectedItem = nullptr;
 
-        if (isRemoved(sSubSelectedItemArr[tab]))
-            sSubSelectedItemArr[tab] = nullptr;
+        if (isRemoved(selection.subSelectedItem))
+            selection.subSelectedItem = nullptr;
 
-        if (isRemoved(sMultiSelectAnchorArr[tab]))
-            sMultiSelectAnchorArr[tab] = nullptr;
+        if (isRemoved(selection.multiSelectAnchor))
+            selection.multiSelectAnchor = nullptr;
 
-        std::vector<Item*>& multiSelected = sMultiSelectedItemsArr[tab];
+        std::vector<Item*>& multiSelected = selection.multiSelectedItems;
         multiSelected.erase(std::remove_if(multiSelected.begin(), multiSelected.end(), isRemoved), multiSelected.end());
     }
 
@@ -255,11 +256,11 @@ void SelectItem(Item* item)
             break;
 
         case Item::ItemType::SoundSet:
-            switch (sSelectedUIType)
+            switch (GetUITab())
             {
                 case UIType::WaveSoundSets:
                 case UIType::SequenceSoundSets:
-                    tab = sSelectedUIType;
+                    tab = GetUITab();
                     break;
                 default:
                     tab = UIType::AllSoundSets;
@@ -303,10 +304,10 @@ void SelectItem(Item* item)
             break;
     }
 
-    size_t tabIdx = (size_t)tab;
-    sSelectedItemArr[tabIdx] = item;
-    sSubSelectedItemArr[tabIdx] = nullptr;
-    sSelectedItemIsSubWindowArr[tabIdx] = false;
+    SelectionState& selection = GetTabSelection(tab);
+    selection.selectedItem = item;
+    selection.subSelectedItem = nullptr;
+    selection.selectedItemIsSubWindow = false;
 
     SetUITab(tab);
 

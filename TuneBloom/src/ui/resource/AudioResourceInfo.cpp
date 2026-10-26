@@ -19,7 +19,7 @@ static StreamCounts CountStreams()
 {
     StreamCounts counts;
 
-    for (const Item* item : sAudioResource.getAssetList())
+    for (const Item* item : ActiveAudioResource().getAssetList())
     {
         const AudioAsset* asset = static_cast<const AudioAsset*>(item);
 
@@ -41,21 +41,21 @@ static void DrawResourceFormatBox()
         return;
 
     sead::FixedSafeString<16> version;
-    FormatResourceVersion(&version, sAudioResource.getVersion());
+    FormatResourceVersion(&version, ActiveAudioResource().getVersion());
 
     RegionHeader(messages::common::cFormat);
 
     PropertyRow(messages::common::cFormat);
-    ImGui::TextUnformatted(GetResourceFormatInfo(sAudioResource.getFormat()).displayName);
+    ImGui::TextUnformatted(GetResourceFormatInfo(ActiveAudioResource().getFormat()).displayName);
 
     PropertyRow(messages::common::cVersion);
     ImGui::TextUnformatted(version.cstr());
 
     PropertyRow(messages::innerfile::cByteOrder);
-    ImGui::TextUnformatted(sAudioResource.isBigEndian() ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian);
+    ImGui::TextUnformatted(ActiveAudioResource().isBigEndian() ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian);
 
     PropertyRow(messages::resource::cCompression, messages::resource::cCompressionDetail);
-    ImGui::TextUnformatted(sAudioResource.isCompressed() ? messages::resource::cCompressionZstd : messages::common::cNone);
+    ImGui::TextUnformatted(ActiveAudioResource().isCompressed() ? messages::resource::cCompressionZstd : messages::common::cNone);
 
     EndPropertyBox();
 }
@@ -70,7 +70,7 @@ static void DrawResourceContentBox()
     RegionHeader(messages::resource::cContentTitle);
 
     PropertyRow(messages::project::cRowAudioAssets);
-    ImGui::Text("%u", static_cast<u32>(sAudioResource.getAssetList().size()));
+    ImGui::Text("%u", static_cast<u32>(ActiveAudioResource().getAssetList().size()));
 
     if (counts.streams > 0)
     {

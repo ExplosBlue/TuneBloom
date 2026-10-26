@@ -1,6 +1,7 @@
 #include <ui/file/SystemShell.h>
 
 #include <core/TestHooks.h>
+#include <ui/file/PathText.h>
 
 #include <basis/seadTypes.h>
 
@@ -35,8 +36,7 @@ void ShowInFileManager(const std::string& path)
     const std::string command = "open -R '" + path + "'";
     system(command.c_str());
 #else
-    const size_t separator = path.find_last_of("/\\");
-    OpenFolder(separator == std::string::npos ? std::string() : path.substr(0, separator));
+    OpenFolder(pathtext::Folder(path));
 #endif
 }
 

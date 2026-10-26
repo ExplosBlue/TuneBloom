@@ -114,13 +114,15 @@ static void ApplyTrackEdit(Sound* sound, const TrackEdit& edit)
         sound->getStreamSoundInfo().setMuteTracks(0);
         sound->getStreamSoundInfo().setSoloTracks(0);
         sSoundPlayer.updateStreamTrackMute(sound);
-        sBfsar.updateList(list);
+        ActiveSoundArchive().updateList(list);
         SetUnsavedChanges(true);
     }
 }
 
 void DrawStreamTracksUI(Sound* sound)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     using Track = Sound::StreamSoundInfo::Track;
 
     Track::List& list = sound->getStreamSoundInfo().getTrackList();
@@ -131,8 +133,8 @@ void DrawStreamTracksUI(Sound* sound)
     for (Item* trackItem : list)
         ctx.tracks.push_back(static_cast<Track*>(trackItem));
 
-    ctx.enableSend = sBfsar.isStreamSendAvailable();
-    ctx.enableFilter = sBfsar.isFilterSupportedVersion();
+    ctx.enableSend = archive.isStreamSendAvailable();
+    ctx.enableFilter = archive.isFilterSupportedVersion();
     ctx.canAdd = ctx.tracks.size() < cStrmTrackNum;
     ctx.biquadWidth = CalcBiquadTypeWidth();
 

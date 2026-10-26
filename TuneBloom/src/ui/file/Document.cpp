@@ -1,0 +1,291 @@
+#include <ui/file/Document.h>
+
+#include <ui/file/AudioResourceDocument.h>
+#include <ui/file/DocumentState.h>
+#include <ui/Messages.h>
+#include <ui/app/PopupMgr.h>
+#include <ui/file/SoundArchiveDocument.h>
+
+#include <aal/AudioResource.h>
+#include <aal/Bars.h>
+#include <aal/Bwav.h>
+#include <core/ByteView.h>
+#include <bfsar/archive/Cmpbin.h>
+#include <core/Debug.h>
+
+#include <filedevice/seadFileDeviceMgr.h>
+
+#include <cstring>
+#include <filesystem>
+
+static constexpr u32 cBarsHeaderFileSize  = 0x04;
+static constexpr u32 cBarsHeaderByteOrder = 0x08;
+
+static constexpr u32 cBfsarLegacyVersionMin = 0x00010000;
+static constexpr u32 cBfsarLegacyVersionEnd = 0x00030000;
+static constexpr u32 cBfsarV3Version        = 0x03000000;
+
+static u64 sLastEditGeneration = 0;
+static u32 sLastDocumentSerial = 0;
+
+u64 NewEditGeneration()
+{
+    return ++sLastEditGeneration;
+}
+
+u32 NewDocumentSerial()
+{
+    return ++sLastDocumentSerial;
+}
+
+static bool HasByteOrderMark(const u8* mark)
+{
+    return (mark[0] == 0xFF && mark[1] == 0xFE) || (mark[0] == 0xFE && mark[1] == 0xFF);
+}
+
+static bool CheckSoundArchiveFile(const u8* file, u32 size)
+{
+    using FileHeader = nw::snd::internal::SoundArchiveFile::FileHeader;
+
+    const bool hasHeader = size >= sizeof(FileHeader);
+    const bool isFsar = hasHeader && sead::MemUtil::compare(file, "FSAR", 4) == 0;
+    const bool isCsar = hasHeader && sead::MemUtil::compare(file, "CSAR", 4) == 0;
+    const u8* byteOrderMark = file + offsetof(nw::ut::BinaryFileHeader, byteOrder);
+
+    if ((!isFsar && !isCsar) || !HasByteOrderMark(byteOrderMark))
+    {
+        PopupMgr::instance()->addPopup({ messages::archive::cNotArchive, nullptr });
+        return false;
+    }
+
+    const FileHeader& header = *reinterpret_cast<const FileHeader*>(file);
+
+    sFileEndian = sead::Endian::markToEndian(*reinterpret_cast<const u16*>(byteOrderMark));
+
+    if (!isFsar)
+        return true;
+
+    const bool inLegacyRange = header.version >= cBfsarLegacyVersionMin && header.version < cBfsarLegacyVersionEnd;
+
+    if (inLegacyRange || header.version == cBfsarV3Version)
+        return true;
+
+    PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::archive::cBfsarVersionUnsupportedFormat, static_cast<u32>(header.version)), nullptr });
+    return false;
+}
+
+const char* Document::Load(const sead::SafeString& path, File* outFile)
+{
+    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
+    SEAD_ASSERT(device);
+
+    LOG_STR(path.cstr());
+
+    sead::FileDevice::LoadArg arg;
+    arg.path = path;
+
+    *outFile = File();
+    outFile->data = device->tryLoad(arg);
+    outFile->size = static_cast<u32>(arg.read_size);
+
+    if (!outFile->data)
+        return messages::archive::cOpenFailed;
+
+    if (cmpbin::IsZstdFrame(outFile->data, outFile->size) || AudioResource::IsResourceFile(outFile->data, outFile->size))
+    {
+        outFile->kind = Kind::AudioResource;
+        return nullptr;
+    }
+
+    if (!cmpbin::IsCompressed(outFile->data, outFile->size))
+        return nullptr;
+
+    outFile->wasCmpbin = true;
+    outFile->prefersZstd = cmpbin::DetectCodec(outFile->data, outFile->size) == cmpbin::Codec::Zstd;
+
+    std::vector<u8> decompressed;
+    const bool decoded = cmpbin::Decompress(outFile->data, outFile->size, decompressed);
+
+    Free(outFile);
+
+    if (!decoded)
+        return messages::archive::cCmpbinDecompressFailed;
+
+    outFile->data = new u8[decompressed.size()];
+    outFile->size = static_cast<u32>(decompressed.size());
+    std::memcpy(outFile->data, decompressed.data(), decompressed.size());
+
+    return nullptr;
+}
+
+void Document::Free(File* file)
+{
+    delete[] file->data;
+
+    file->data = nullptr;
+    file->size = 0;
+}
+
+bool Document::Check(const File& file, const char** outError)
+{
+    *outError = nullptr;
+
+    if (file.kind == Kind::SoundArchive)
+        return CheckSoundArchiveFile(file.data, file.size);
+
+    *outError = AudioResource::GetResourceDataError(file.data, file.size);
+
+    return *outError == nullptr;
+}
+
+bool Document::PeekEndian(const File& file, sead::Endian::Types* outEndian)
+{
+    if (file.kind != Kind::SoundArchive || file.size < sizeof(nw::ut::BinaryFileHeader))
+        return false;
+
+    const u8* byteOrderMark = file.data + offsetof(nw::ut::BinaryFileHeader, byteOrder);
+
+    if (!HasByteOrderMark(byteOrderMark))
+        return false;
+
+    *outEndian = sead::Endian::markToEndian(*reinterpret_cast<const u16*>(byteOrderMark));
+    return true;
+}
+
+bool Document::IsCompleteFile(const u8* header, u64 fileSize)
+{
+    if (cmpbin::IsZstdFrame(header, fileSize) || aal::IsBwav(header, fileSize))
+        return true;
+
+    if (aal::IsBars(header, fileSize))
+        return ByteView(header, fileSize, ByteView::IsBigEndianMark(header, fileSize, cBarsHeaderByteOrder)).readU32(cBarsHeaderFileSize) <= fileSize;
+
+    if (fileSize < sizeof(nw::ut::BinaryFileHeader))
+        return false;
+
+    const u8* mark = header + offsetof(nw::ut::BinaryFileHeader, byteOrder);
+    const bool isLittle = mark[0] == 0xFF && mark[1] == 0xFE;
+
+    return ByteView(header, sizeof(nw::ut::BinaryFileHeader), !isLittle).readU32(offsetof(nw::ut::BinaryFileHeader, fileSize)) == fileSize;
+}
+
+Document* Document::Open(File* file, const sead::SafeString& path, const sead::SafeString* metadataSource)
+{
+    if (file->kind == Kind::AudioResource)
+        return AudioResourceDocument::Open(file, path);
+
+    return SoundArchiveDocument::Open(file, path, metadataSource);
+}
+
+Document* Document::Create(ArchiveFormat format, ArchivePlatform platform)
+{
+    return SoundArchiveDocument::Create(format, platform);
+}
+
+Document::ParseContext Document::CurrentParseContext()
+{
+    ParseContext context;
+    context.endian = sFileEndian;
+    context.usesV3SoundInfo = nw::snd::internal::SoundArchiveFile::UseV3SoundInfoLayout();
+
+    return context;
+}
+
+void Document::ApplyParseContext(const ParseContext& context)
+{
+    sFileEndian = context.endian;
+    nw::snd::internal::SoundArchiveFile::UseV3SoundInfoLayout() = context.usesV3SoundInfo;
+}
+
+Document::Document()
+    : mState(new DocumentState())
+{
+}
+
+Document::~Document()
+{
+    delete mState;
+}
+
+DocumentState& Document::state()
+{
+    return *mState;
+}
+
+const DocumentState& Document::state() const
+{
+    return *mState;
+}
+
+std::string Document::archiveName() const
+{
+    if (!filePath().isEmpty())
+        return std::filesystem::path(filePath().cstr()).filename().string();
+
+    if (!mState->backup.pinnedDir.empty() && !loadedPath().isEmpty())
+        return std::filesystem::path(loadedPath().cstr()).filename().string();
+
+    return std::string(messages::backup::cUntitled) + "." + extension();
+}
+
+void Document::closeWindows()
+{
+    mState->fileWindows.clear();
+}
+
+void Document::AddInnerExtension(sead::BufferedSafeString* path, const char* innerExtension, const char* outerExtension)
+{
+    const size_t length = std::strlen(path->cstr());
+    const size_t outerLength = std::strlen(outerExtension) + 1;
+    std::error_code error;
+
+    if (!HasFileExtension(path->cstr(), length, outerExtension) || HasFileExtension(path->cstr(), length - outerLength, innerExtension) ||
+        std::filesystem::exists(path->cstr(), error))
+        return;
+
+    const std::string named = std::string(path->cstr(), length - outerLength) + "." + innerExtension + "." + outerExtension;
+
+    if (named.size() < static_cast<size_t>(path->getBufferSize()) && !std::filesystem::exists(named, error))
+        path->copy(named.c_str());
+}
+
+bool IsSoundArchiveOpen()
+{
+    return FindActiveSoundArchive() != nullptr;
+}
+
+Bfsar* FindActiveSoundArchive()
+{
+    Document* document = ActiveDocument();
+
+    if (!document || document->kind() != Document::Kind::SoundArchive)
+        return nullptr;
+
+    return &static_cast<SoundArchiveDocument*>(document)->archive();
+}
+
+Bfsar& ActiveSoundArchive()
+{
+    Bfsar* archive = FindActiveSoundArchive();
+    SEAD_ASSERT(archive);
+
+    return *archive;
+}
+
+AudioResource* FindActiveAudioResource()
+{
+    Document* document = ActiveDocument();
+
+    if (!document || document->kind() != Document::Kind::AudioResource)
+        return nullptr;
+
+    return &static_cast<AudioResourceDocument*>(document)->resource();
+}
+
+AudioResource& ActiveAudioResource()
+{
+    AudioResource* resource = FindActiveAudioResource();
+    SEAD_ASSERT(resource);
+
+    return *resource;
+}

@@ -19,7 +19,7 @@ struct DecodedPcm;
 
 namespace opusstream
 {
-    bool AttachStreamWaves(Sound *sound, const sead::SafeString *filePathOverride);
+    bool AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
 }
 
 void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam);
@@ -33,13 +33,6 @@ namespace nw { namespace snd { namespace internal
 } } }
 
 class WaveFile;
-
-struct WaveFileTarget
-{
-    ArchiveFormat format = ArchiveFormat::BFSAR;
-    u32 version = 0;
-    sead::Endian::Types endian = sead::Endian::eLittle;
-};
 
 void ReleaseWaveFileView();
 void ForgetWaveFileView(const WaveFile* wave);
@@ -276,7 +269,7 @@ public:
         friend class Bfsar;
         friend class WaveFile;
         friend class StreamWaveReader;
-        friend bool opusstream::AttachStreamWaves(Sound *sound, const sead::SafeString *filePathOverride);
+        friend bool opusstream::AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
     };
 
     struct RiffWaveInfo
@@ -388,13 +381,13 @@ public:
         mEndian = endian;
     }
 
-    void setStandaloneTarget(const WaveFileTarget& target)
+    void setStandaloneTarget(const InnerFileTarget& target)
     {
         mStandaloneTarget = target;
         mMd5Dirty = true;
     }
 
-    WaveFileTarget getTarget() const;
+    InnerFileTarget getTarget() const;
 
 private:
     bool doRead(const void* fileAddr) override;
@@ -614,7 +607,7 @@ public:
 private:
     u32 mOriginalDmaAlignOffset;
 
-    std::optional<WaveFileTarget> mStandaloneTarget;
+    std::optional<InnerFileTarget> mStandaloneTarget;
 
     std::string mMd5Hash;
     bool mMd5Dirty = true;
@@ -628,5 +621,5 @@ private:
 
     friend class StreamWaveReader;
     friend class StreamLoopInfoBatch;
-    friend bool opusstream::AttachStreamWaves(Sound *sound, const sead::SafeString *filePathOverride);
+    friend bool opusstream::AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
 };

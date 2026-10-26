@@ -26,7 +26,8 @@ void SetUntitledKey(const std::string& key);
 void ForgetArchiveKeys();
 
 bool ReadInfoFile(const fs::path& dir, Snapshot* snapshot);
-bool HasCompleteArchive(const u8* file, u64 size);
+bool IsSafeRelativePath(const std::string& path);
+void LinkUnchangedGroupFiles(const fs::path& dir, const std::string& previousDir, const std::vector<std::string>& groupFiles);
 bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir = nullptr);
 
 fs::path GetMarkerPath();

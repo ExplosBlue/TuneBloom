@@ -106,8 +106,10 @@ static void ClearStreamImport()
 
 static void ResetSoundCreate()
 {
-    if (!ListHasItem(sBfsar.getPlayerList(), sPlayer))
-        sPlayer = FirstItem(sBfsar.getPlayerList());
+    Bfsar& archive = ActiveSoundArchive();
+
+    if (!ListHasItem(archive.getPlayerList(), sPlayer))
+        sPlayer = FirstItem(archive.getPlayerList());
 
     sWaveFile = nullptr;
     sImportedWave = nullptr;
@@ -124,6 +126,8 @@ static void ResetSoundCreate()
 
 static void MakeDefaultStreamPath(sead::BufferedSafeString* out, const sead::SafeString& name)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     out->clear();
 
     if (name.isEmpty())
@@ -131,7 +135,7 @@ static void MakeDefaultStreamPath(sead::BufferedSafeString* out, const sead::Saf
 
     sead::FixedSafeString<512> dir(cDefaultStreamDir);
 
-    for (const Item* item : sBfsar.getSoundList())
+    for (const Item* item : archive.getSoundList())
     {
         const Sound* sound = static_cast<const Sound*>(item);
 
@@ -143,7 +147,7 @@ static void MakeDefaultStreamPath(sead::BufferedSafeString* out, const sead::Saf
         break;
     }
 
-    const char* extension = GetInnerFileFormat(sBfsar.getFormat(), InnerFileKind::Stream).extension;
+    const char* extension = GetInnerFileFormat(archive.getFormat(), InnerFileKind::Stream).extension;
 
     if (dir.isEmpty())
         out->format("%s.%s", name.cstr(), extension);
@@ -153,7 +157,9 @@ static void MakeDefaultStreamPath(sead::BufferedSafeString* out, const sead::Saf
 
 static bool IsStreamPathUsed(const sead::SafeString& path)
 {
-    for (const Item* item : sBfsar.getSoundList())
+    Bfsar& archive = ActiveSoundArchive();
+
+    for (const Item* item : archive.getSoundList())
     {
         const Sound* sound = static_cast<const Sound*>(item);
 
@@ -161,7 +167,7 @@ static bool IsStreamPathUsed(const sead::SafeString& path)
             return true;
     }
 
-    const sead::SafeString* archivePaths[2] = { &sBfsar.getFilePath(), &sBfsar.getLoadedArchivePath() };
+    const sead::SafeString* archivePaths[2] = { &archive.getFilePath(), &archive.getLoadedArchivePath() };
 
     for (const sead::SafeString* archivePath : archivePaths)
     {
@@ -213,6 +219,7 @@ static WaveFile* ImportWave(WaveFile::RiffWaveInfo* info, WaveFile::Encoding enc
         info->loopStartFrame = 0;
 
     WaveFile* wave = new WaveFile();
+    wave->setArchive(&ActiveSoundArchive());
     wave->setEnableName(true);
     wave->getName() = name;
 
@@ -329,7 +336,7 @@ static void DrawWaveSourceUI()
 
     if (sWaveSource == cSourceExisting)
     {
-        ItemSelectorDialogRow(messages::common::cFile, sBfsar.getWaveFileList(), &sWaveFile, false);
+        ItemSelectorDialogRow(messages::common::cFile, ActiveSoundArchive().getWaveFileList(), &sWaveFile, false);
         EndSourceBox(2);
         return;
     }
@@ -475,7 +482,7 @@ static void DrawStreamImportSource(const char* browseLabel)
 
 static void DrawStreamExistingSource(const char* browseLabel)
 {
-    const bool hasArchiveDir = sBfsar.hasArchiveDirectory();
+    const bool hasArchiveDir = ActiveSoundArchive().hasArchiveDirectory();
 
     ImGui::BeginDisabled(!hasArchiveDir);
 
@@ -508,7 +515,7 @@ static void DrawStreamPathRow()
     if (!isExisting && !sNewStreamPathEdited)
         MakeDefaultStreamPath(&sNewStreamPath, GetCreateItemName());
 
-    const sead::FormatFixedSafeString<64> relativeDetail(messages::stream::cPathRelativeFormat, GetInnerFileExtension(sBfsar.getFormat(), InnerFileKind::SoundArchive));
+    const sead::FormatFixedSafeString<64> relativeDetail(messages::stream::cPathRelativeFormat, GetInnerFileExtension(ActiveSoundArchive().getFormat(), InnerFileKind::SoundArchive));
     const char* detail = isExisting ? relativeDetail.cstr() : messages::sound::cStreamNewPathDetail;
 
     DialogRow(messages::stream::cPathLabel);
@@ -589,18 +596,20 @@ static void DrawStreamSourceUI()
 
 static void DrawSequenceSourceUI()
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     if (!BeginSourceBox(messages::common::cSequence))
         return;
 
-    ItemSelectorDialogRow(messages::common::cSequenceFile, sBfsar.getSequenceFileList(), &sSequenceFile, true);
-    ItemSelectorDialogRow(messages::common::cBank, sBfsar.getBankList(), &sBank, true);
+    ItemSelectorDialogRow(messages::common::cSequenceFile, archive.getSequenceFileList(), &sSequenceFile, true);
+    ItemSelectorDialogRow(messages::common::cBank, archive.getBankList(), &sBank, true);
 
     EndSourceBox(2);
 }
 
 static void DrawSoundCreateUI()
 {
-    ItemSelectorDialogRow(messages::common::cPlayer, sBfsar.getPlayerList(), &sPlayer, false);
+    ItemSelectorDialogRow(messages::common::cPlayer, ActiveSoundArchive().getPlayerList(), &sPlayer, false);
 
     DialogRowGap();
 
@@ -693,6 +702,8 @@ static bool ValidateSoundCreate()
 
 static void ApplySoundCreate(Sound* sound)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     sound->getPlayerRef().attach(sPlayer);
     sound->setSoundType(sSoundType);
 
@@ -704,8 +715,8 @@ static void ApplySoundCreate(Sound* sound)
 
             if (sImportedWave)
             {
-                sBfsar.getWaveFileList().pushBack(sImportedWave);
-                sBfsar.updateList(sBfsar.getWaveFileList());
+                archive.getWaveFileList().pushBack(sImportedWave);
+                archive.updateList(archive.getWaveFileList());
 
                 wave = sImportedWave;
                 sImportedWave = nullptr;
@@ -723,7 +734,7 @@ static void ApplySoundCreate(Sound* sound)
             {
                 sound->getStreamSoundInfo().getPath() = sStreamPath;
 
-                if (sBfsar.hasArchiveDirectory())
+                if (archive.hasArchiveDirectory())
                     ReloadStreamFile(sound);
 
                 break;

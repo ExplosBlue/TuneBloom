@@ -102,7 +102,18 @@ static bool ReadResetTable(const ByteView& view, u32 count, std::vector<u32>* ou
     return true;
 }
 
-static bool ReadAssets(const ByteView& view, const std::vector<EntryOffsets>& offsets, BarsFile* bars, std::vector<u32>* outAssetOffsets, u64* outEnd)
+static const char* GetAssetError(const void* data, u64 size)
+{
+    Bwav bwav;
+    const char* error = messages::resource::cBarsDamaged;
+
+    if (IsBwav(data, size))
+        ReadBwav(data, size, &bwav, &error);
+
+    return error;
+}
+
+static bool ReadAssets(const ByteView& view, const std::vector<EntryOffsets>& offsets, BarsFile* bars, std::vector<u32>* outAssetOffsets, u64* outEnd, const char** outError)
 {
     std::vector<u32> assetOffsets;
 
@@ -126,7 +137,10 @@ static bool ReadAssets(const ByteView& view, const std::vector<EntryOffsets>& of
         const u64 size = MeasureBarsAsset(view.at(offset), limit - offset);
 
         if (size == 0)
+        {
+            *outError = GetAssetError(view.at(offset), limit - offset);
             return false;
+        }
 
         bars->assets.emplace_back(view.at(offset), view.at(offset) + size);
         *outEnd = std::max(*outEnd, offset + size);
@@ -181,7 +195,7 @@ bool ReadBars(const void* data, u64 size, BarsFile* out, const char** outError)
     u64 end = cHeaderSize;
 
     std::vector<u32> assetOffsets;
-    if (!ReadAssets(view, offsets, &bars, &assetOffsets, &end))
+    if (!ReadAssets(view, offsets, &bars, &assetOffsets, &end, outError))
         return false;
 
     bars.entries.resize(count);

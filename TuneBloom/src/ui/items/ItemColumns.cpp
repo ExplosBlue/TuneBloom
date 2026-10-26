@@ -663,6 +663,11 @@ void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* 
     drawList->AddText(ImVec2(endX, pos.y), color, end);
 }
 
+f32 CalcItemValueCellWidth(const char* text)
+{
+    return ImGui::CalcTextSize(text).x + cItemColumnGap;
+}
+
 void DrawItemValueCell(const char* text, u32 flags, s32 index, bool unused)
 {
     ImVec2 pos = ImGui::GetCursorScreenPos();

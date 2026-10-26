@@ -117,25 +117,26 @@ static u32 dumpItemList(const char* label, Item::List& list)
     return count;
 }
 
-static void dumpItemIds()
+static void dumpItemIds(Bfsar& archive)
 {
     u32 total = 0;
 
-    total += dumpItemList("sound", sBfsar.getSoundList());
-    total += dumpItemList("soundgroup", sBfsar.getSoundSetList());
-    total += dumpItemList("bank", sBfsar.getBankList());
-    total += dumpItemList("player", sBfsar.getPlayerList());
-    total += dumpItemList("warc", sBfsar.getWaveArchiveList());
-    total += dumpItemList("group", sBfsar.getGroupList());
+    total += dumpItemList("sound", archive.getSoundList());
+    total += dumpItemList("soundgroup", archive.getSoundSetList());
+    total += dumpItemList("bank", archive.getBankList());
+    total += dumpItemList("player", archive.getPlayerList());
+    total += dumpItemList("warc", archive.getWaveArchiveList());
+    total += dumpItemList("group", archive.getGroupList());
 
     fprintf(stderr, "%u named items\n", total);
 }
 
 [[noreturn]] static void convertAudioResource(const char* inPath, const char* outPath, std::vector<u8> bytes, bool dumpIds)
 {
+    AudioResource resource;
     const char* error = nullptr;
 
-    if (!sAudioResource.open(std::move(bytes), sead::FixedSafeString<512>(inPath), &error))
+    if (!resource.open(std::move(bytes), sead::FixedSafeString<512>(inPath), &error))
     {
         fprintf(stderr, "Failed to parse '%s': %s\n", inPath, error);
         exitConvert(1);
@@ -143,7 +144,7 @@ static void dumpItemIds()
 
     if (dumpIds)
     {
-        for (const Item* asset : sAudioResource.getAssetList())
+        for (const Item* asset : resource.getAssetList())
             fprintf(stdout, "asset      0x%08x  %s\n", aal::HashBarsName(asset->getName().cstr()), asset->getName().cstr());
 
         exitConvert(0);
@@ -152,13 +153,13 @@ static void dumpItemIds()
     sead::FixedSafeString<256> validateError;
     const Item* invalid = nullptr;
 
-    if (!sAudioResource.validate(&validateError, &invalid))
+    if (!resource.validate(&validateError, &invalid))
     {
         fprintf(stderr, "'%s': %s\n", invalid ? invalid->getName().cstr() : inPath, validateError.cstr());
         exitConvert(1);
     }
 
-    if (!ensureDir(outPath) || sAudioResource.saveAs(sead::FixedSafeString<512>(outPath), &error) != AudioResource::SaveResult::Saved)
+    if (!ensureDir(outPath) || resource.saveAs(sead::FixedSafeString<512>(outPath), &error) != SaveResult::Saved)
     {
         fprintf(stderr, "Failed to save to '%s': %s\n", outPath, error ? error : "");
         exitConvert(1);
@@ -216,7 +217,10 @@ static void dumpItemIds()
 
     testhooks::ApplyGroupFiles(archivePath.cstr());
 
-    if (!sBfsar.open(bfsarFile, static_cast<u32>(loadArg.read_size), archivePath, nullptr, openAsPath ? &inPathStr : nullptr))
+    Bfsar archive;
+    archive.setCliMode(true);
+
+    if (!archive.open(bfsarFile, static_cast<u32>(loadArg.read_size), archivePath, nullptr, openAsPath ? &inPathStr : nullptr))
     {
         fprintf(stderr, "Failed to parse '%s'\n", inPath);
         exitConvert(1);
@@ -224,7 +228,7 @@ static void dumpItemIds()
 
     if (dumpIds)
     {
-        dumpItemIds();
+        dumpItemIds(archive);
         exitConvert(0);
     }
 
@@ -237,12 +241,12 @@ static void dumpItemIds()
     if (!testhooks::ApplyGroupCommands())
         exitConvert(1);
 
-    if (!sBfsar.saveAs(sead::FixedSafeString<512>(outPath)))
+    if (archive.saveAs(sead::FixedSafeString<512>(outPath)) != SaveResult::Saved)
     {
-        if (sBfsar.hasPendingSaveFinalize())
+        if (archive.hasPendingSaveFinalize())
         {
             fprintf(stderr, "error: the output file cannot be replaced\n");
-            sBfsar.cancelPendingSaveFinalize();
+            archive.cancelPendingSaveFinalize();
         }
 
         fprintf(stderr, "Failed to save to '%s'\n", outPath);
@@ -258,10 +262,7 @@ static void setStartupFile(const char* path)
     std::error_code ec;
     const std::string fullPath = std::filesystem::absolute(path, ec).string();
 
-    if (ec || fullPath.size() >= static_cast<size_t>(sDroppedFilePath.getBufferSize()))
-        sDroppedFilePath = path;
-    else
-        sDroppedFilePath = fullPath.c_str();
+    SetStartupFile(ec ? path : fullPath.c_str());
 }
 
 int main(int argc, char* argv[])
@@ -284,7 +285,6 @@ int main(int argc, char* argv[])
     if (argc >= 3)
     {
         sCliMode = true;
-        sBfsar.setCliMode(true);
 
         sead::Framework::InitializeArg initArg;
         initArg.heap_size = 150 * 1024 * 1024;

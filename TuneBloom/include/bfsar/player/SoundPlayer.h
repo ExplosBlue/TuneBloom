@@ -192,6 +192,21 @@ public:
     const WaveFile* getPlayingWaveFile() const { return mPlayingWaveFile; }
     void resetPlayingWaveFile() { mPlayingWaveFile = nullptr; }
 
+    void setOwnerContext(const void* owner)
+    {
+        mOwnerContext = owner;
+    }
+
+    void disownPlayback()
+    {
+        mOwner = nullptr;
+    }
+
+    bool isPlayingFrom(const void* owner) const
+    {
+        return owner && (mOwner == owner || mBankOwner == owner);
+    }
+
     void invalidateBankFile(const BankFile& bankFile);
     void forgetBankRegion(const BankFile::VelocityRegion& velocityRegion);
 
@@ -333,6 +348,9 @@ private:
     const Sound::StreamSoundInfo::Track* mPlayingStreamTracks[cStrmTrackNum] = {};
     u32 mSilentTracks = 0;
     BasicSoundPlayer* mCurrentPlayer;
+    const void* mOwnerContext = nullptr;
+    const void* mOwner = nullptr;
+    const void* mBankOwner = nullptr;
     u32 mSampleRate;
     u32 mSampleCount;
 

@@ -60,7 +60,7 @@ void DrawPlayersUI()
 {
     DrawTabFilterBar();
 
-    DrawAllItemsUI("Player", messages::common::cPlayer,sBfsar.getPlayerList(),
+    DrawAllItemsUI("Player", messages::common::cPlayer,ActiveSoundArchive().getPlayerList(),
                    &CreatePlayerFunc, nullptr, nullptr, GetItemFilterCallback());
 }
 

@@ -13,7 +13,7 @@
 #include <string>
 #include <unordered_map>
 
-bool Bfsar::validName(const sead::SafeString& name) const
+bool Bfsar::validName(const sead::SafeString& name)
 {
     if (name.isEmpty())
     {
@@ -94,9 +94,33 @@ static bool IsPartOfItem(const Item* item)
            item->getItemType() == Item::ItemType::BankFileInstrument;
 }
 
+static const ItemReference* FindOtherArchiveReference(const Item& target)
+{
+    const Bfsar* archive = target.getArchive();
+
+    if (!archive)
+        return nullptr;
+
+    for (const ItemReference* reference : target.getReferences())
+    {
+        const Bfsar* ownerArchive = reference->getOwner()->getArchive();
+
+        if (ownerArchive && ownerArchive != archive)
+            return reference;
+    }
+
+    return nullptr;
+}
+
 static bool ValidateItem(const BfsarValidateContext& ctx, const Item* item)
 {
     sead::FixedSafeString<1024> error;
+
+    if (const ItemReference* reference = FindOtherArchiveReference(*item))
+    {
+        error.format(messages::validation::cOtherArchiveItemFormat, item->getFormattedName().cstr());
+        return ctx.refuse(error, reference->getOwner());
+    }
 
     const Item* problemItem = item->validate(error);
 
@@ -214,7 +238,7 @@ bool Bfsar::validateWaveSoundOwners_(const BfsarValidateContext& ctx) const
     return true;
 }
 
-bool Bfsar::validate_(bool showErrors)
+bool Bfsar::validate(bool showErrors)
 {
     LOG_FUNC();
 

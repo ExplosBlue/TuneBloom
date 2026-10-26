@@ -105,20 +105,20 @@ static const nw::snd::internal::BankFile::KeyRegion* FindKeyRegionInfo(const Chu
     return keyRegionInfo;
 }
 
-void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
+void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const RegionReadContext& context, u32 instrumentId)
 {
     LOG_FUNC();
     LOG_U32("instrumentId", instrumentId);
     LOG_U32("waveIdTableIndex", velocityRegionInfo->waveIdTableIndex);
-    LOG_U32("waveIdTableCount", waveIdTable.GetCount());
+    LOG_U32("waveIdTableCount", context.waveIdTable.GetCount());
 
-    const nw::snd::internal::Util::WaveId* waveId = waveIdTable.GetWaveId(velocityRegionInfo->waveIdTableIndex);
+    const nw::snd::internal::Util::WaveId* waveId = context.waveIdTable.GetWaveId(velocityRegionInfo->waveIdTableIndex);
     if (waveId)
         LOG("waveId=%p waveArchiveId=%u waveIndex=%u\n", waveId, u32(waveId->waveArchiveId), u32(waveId->waveIndex));
 
     if (waveId && waveId->waveArchiveId == 0)
     {
-        WaveFile* waveFile = static_cast<WaveFile*>(sBfsar.getItem(waveId->waveIndex, sBfsar.getWaveFileList()));
+        WaveFile* waveFile = context.archive ? static_cast<WaveFile*>(context.archive->getItem(waveId->waveIndex, context.archive->getWaveFileList())) : nullptr;
 
         mWaveFileRef.attach(waveFile);
         if (!mWaveFileRef.isAttached())
@@ -151,7 +151,7 @@ void BankFile::VelocityRegion::read(const nw::snd::internal::BankFile::VelocityR
     setAdshrCurve(adshrCurve);
 }
 
-void BankFile::KeyRegion::addVelocityRegion_(u8 velocityMin, u8 velocityMax, const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
+void BankFile::KeyRegion::addVelocityRegion(u8 velocityMin, u8 velocityMax, const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const RegionReadContext& context, u32 instrumentId)
 {
     VelocityRegion* velocityRegion = new VelocityRegion(velocityMin, velocityMax);
     velocityRegion->mId = mVelocityRegionList.size();
@@ -159,13 +159,13 @@ void BankFile::KeyRegion::addVelocityRegion_(u8 velocityMin, u8 velocityMax, con
     velocityRegion->mEnableName = true;
     velocityRegion->mName = "VelocityRegion";
 
-    velocityRegion->read(velocityRegionInfo, waveIdTable, instrumentId);
+    velocityRegion->read(velocityRegionInfo, context, instrumentId);
 
     mVelocityRegionList.pushBack(velocityRegion);
 }
 
 template <typename Chunk>
-void BankFile::KeyRegion::readVelocityRegions_(const Chunk& chunk, u8 velocityMin, const u8* borders, u32 borderCount, const char* errorFormat, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
+void BankFile::KeyRegion::readVelocityRegions(const Chunk& chunk, u8 velocityMin, const u8* borders, u32 borderCount, const char* errorFormat, const RegionReadContext& context, u32 instrumentId)
 {
     if (borderCount > cRegionCountMax)
     {
@@ -184,13 +184,13 @@ void BankFile::KeyRegion::readVelocityRegions_(const Chunk& chunk, u8 velocityMi
 
         const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo = FindVelocityRegionInfo(chunk, velocityMin, errorFormat, instrumentId);
         if (velocityRegionInfo)
-            addVelocityRegion_(velocityMin, velocityMax, velocityRegionInfo, waveIdTable, instrumentId);
+            addVelocityRegion(velocityMin, velocityMax, velocityRegionInfo, context, instrumentId);
 
         velocityMin = velocityMax + 1;
     }
 }
 
-void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId)
+void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const RegionReadContext& context, u32 instrumentId)
 {
     LOG_FUNC();
     LOG_U32("instrumentId", instrumentId);
@@ -208,7 +208,7 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
                 break;
             }
 
-            addVelocityRegion_(0, cRegionValueMax, static_cast<const nw::snd::internal::BankFile::VelocityRegion*>(directChunk.GetRegion()), waveIdTable, instrumentId);
+            addVelocityRegion(0, cRegionValueMax, static_cast<const nw::snd::internal::BankFile::VelocityRegion*>(directChunk.GetRegion()), context, instrumentId);
             break;
         }
 
@@ -216,7 +216,7 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
         {
             const nw::snd::internal::RangeChunk& rangeChunk = keyRegionInfo->GetRangeChunk();
 
-            readVelocityRegions_(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cVelocityRegionInvalidFormat, waveIdTable, instrumentId);
+            readVelocityRegions(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cVelocityRegionInvalidFormat, context, instrumentId);
             break;
         }
 
@@ -231,7 +231,7 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
 
             const std::vector<u8> borders = CollectIndexChunkBorders(indexChunk, messages::bank::cVelocityRegionInvalidFormat, instrumentId);
 
-            readVelocityRegions_(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cVelocityRegionInvalidFormat, waveIdTable, instrumentId);
+            readVelocityRegions(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cVelocityRegionInvalidFormat, context, instrumentId);
             break;
         }
 
@@ -244,7 +244,7 @@ void BankFile::KeyRegion::read(const nw::snd::internal::BankFile::KeyRegion* key
         PushInstrumentError(messages::bank::cVelocityRegionEmptyFormat, instrumentId);
 }
 
-void BankFile::Instrument::addKeyRegion_(u8 keyMin, u8 keyMax, const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable)
+void BankFile::Instrument::addKeyRegion(u8 keyMin, u8 keyMax, const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const RegionReadContext& context)
 {
     KeyRegion* keyRegion = new KeyRegion(keyMin, keyMax);
     keyRegion->mId = mKeyRegionList.size();
@@ -252,13 +252,13 @@ void BankFile::Instrument::addKeyRegion_(u8 keyMin, u8 keyMax, const nw::snd::in
     keyRegion->mEnableName = true;
     keyRegion->mName = "KeyRegion";
 
-    keyRegion->read(keyRegionInfo, waveIdTable, mId);
+    keyRegion->read(keyRegionInfo, context, mId);
 
     mKeyRegionList.pushBack(keyRegion);
 }
 
 template <typename Chunk>
-void BankFile::Instrument::readKeyRegions_(const Chunk& chunk, u8 keyMin, const u8* borders, u32 borderCount, const char* errorFormat, const nw::snd::internal::Util::WaveIdTable& waveIdTable)
+void BankFile::Instrument::readKeyRegions(const Chunk& chunk, u8 keyMin, const u8* borders, u32 borderCount, const char* errorFormat, const RegionReadContext& context)
 {
     if (borderCount > cRegionCountMax)
     {
@@ -277,13 +277,13 @@ void BankFile::Instrument::readKeyRegions_(const Chunk& chunk, u8 keyMin, const 
 
         const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo = FindKeyRegionInfo(chunk, keyMin, errorFormat, mId);
         if (keyRegionInfo)
-            addKeyRegion_(keyMin, keyMax, keyRegionInfo, waveIdTable);
+            addKeyRegion(keyMin, keyMax, keyRegionInfo, context);
 
         keyMin = keyMax + 1;
     }
 }
 
-void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* instrumentInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable)
+void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* instrumentInfo, const RegionReadContext& context)
 {
     LOG_FUNC();
     SEAD_ASSERT(instrumentInfo);
@@ -300,7 +300,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
                 break;
             }
 
-            addKeyRegion_(0, cRegionValueMax, static_cast<const nw::snd::internal::BankFile::KeyRegion*>(directChunk.GetRegion()), waveIdTable);
+            addKeyRegion(0, cRegionValueMax, static_cast<const nw::snd::internal::BankFile::KeyRegion*>(directChunk.GetRegion()), context);
             break;
         }
 
@@ -308,7 +308,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
         {
             const nw::snd::internal::RangeChunk& rangeChunk = instrumentInfo->GetRangeChunk();
 
-            readKeyRegions_(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cKeyRegionInvalidFormat, waveIdTable);
+            readKeyRegions(rangeChunk, 0, rangeChunk.borderTable.item, rangeChunk.borderTable.count, messages::bank::cKeyRegionInvalidFormat, context);
             break;
         }
 
@@ -323,7 +323,7 @@ void BankFile::Instrument::read(const nw::snd::internal::BankFile::Instrument* i
 
             const std::vector<u8> borders = CollectIndexChunkBorders(indexChunk, messages::bank::cKeyRegionInvalidFormat, mId);
 
-            readKeyRegions_(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cKeyRegionInvalidFormat, waveIdTable);
+            readKeyRegions(indexChunk, indexChunk.min, borders.data(), static_cast<u32>(borders.size()), messages::bank::cKeyRegionInvalidFormat, context);
             break;
         }
 
@@ -567,7 +567,7 @@ bool BankFile::doRead(const void* fileAddr)
         instrument->mName = "Instrument";
 
         instrument->mProgramNo = programNo;
-        instrument->read(instrumentInfo, *reader.GetWaveIdTable());
+        instrument->read(instrumentInfo, { *reader.GetWaveIdTable(), getArchive() });
 
         mInstrumentList.pushBack(instrument);
     }

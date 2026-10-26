@@ -4,6 +4,7 @@
 #include <vector>
 
 class MmlCommandBase;
+struct InnerFileTarget;
 
 // trim from left
 inline std::string& ltrim(std::string& s, const char* t = " \t\n\r\f\v")
@@ -32,4 +33,4 @@ bool IsSeqLabelChar(int c);
 
 const char* GetSeqVariableName(unsigned int varNo);
 
-MmlCommandBase* ParseSeqCommand(const std::string& str, const std::vector<std::string>& args, std::string& errorMsg);
+MmlCommandBase* ParseSeqCommand(const std::string& str, const std::vector<std::string>& args, const InnerFileTarget& target, std::string& errorMsg);

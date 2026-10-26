@@ -1,5 +1,8 @@
 #include <ui/backup/BackupInternal.h>
 
+#include <ui/file/Document.h>
+#include <ui/file/DocumentMgr.h>
+#include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
@@ -7,66 +10,16 @@
 #include <ui/file/UnsavedChanges.h>
 #include <ui/app/Workspace.h>
 
-#include <bfsar/archive/Cmpbin.h>
-#include <bfsar/io/FileIo.h>
-
-#include <filedevice/seadFileDeviceMgr.h>
-
-#include <app/Utilll.h>
-
-#include <cstring>
-
 namespace backup
 {
 
 static std::string sRestorePointDir;
 
-static u8* LoadArchiveFile(const std::string& path, u32* outSize, bool* outCmpbin, cmpbin::Codec* outCodec)
-{
-    sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
-
-    if (!device)
-        return nullptr;
-
-    sead::FileDevice::LoadArg arg;
-    arg.path = path.c_str();
-
-    u8* file = device->tryLoad(arg);
-
-    if (!file)
-        return nullptr;
-
-    u32 size = static_cast<u32>(arg.read_size);
-
-    *outCmpbin = cmpbin::IsCompressed(file, size);
-
-    if (*outCmpbin)
-    {
-        *outCodec = cmpbin::DetectCodec(file, size);
-
-        std::vector<u8> decompressed;
-        const bool decoded = cmpbin::Decompress(file, size, decompressed);
-
-        delete file;
-
-        if (!decoded || decompressed.empty())
-            return nullptr;
-
-        file = new u8[decompressed.size()];
-        std::memcpy(file, decompressed.data(), decompressed.size());
-        size = static_cast<u32>(decompressed.size());
-    }
-
-    *outSize = size;
-
-    return file;
-}
-
 bool SaveRestorePoint(const Snapshot& target)
 {
     sRestorePointDir.clear();
 
-    if (!IsDocumentOpen() || !gUnsavedChanges || !IsActive())
+    if (!IsDocumentOpen() || !HasUnsavedChanges() || !IsActive())
         return true;
 
     PinSnapshot(target.dir);
@@ -92,42 +45,8 @@ static void OfferRestorePoint()
     AddRecovery(std::move(recovery));
 }
 
-static void RestoreStreams(const Snapshot& snapshot)
+static void FinishRestore(const Snapshot& snapshot, UIType tab)
 {
-    const fs::path dir(snapshot.dir);
-
-    for (const Bfsar::BackupStream& stream : snapshot.streams)
-    {
-        const std::string streamFile = (dir / stream.path).string();
-
-        if (!sBfsar.restoreStreamFromFile(stream.path.c_str(), streamFile.c_str()))
-        {
-            sead::FormatFixedSafeString<1024> msg(messages::backup::cRestoreStreamFormat, stream.path.c_str());
-            PopupMgr::instance()->addPopup({msg, nullptr});
-        }
-    }
-}
-
-static void RestoreResourceStreams(const Snapshot& snapshot)
-{
-    const fs::path dir(snapshot.dir);
-
-    for (const Bfsar::BackupStream& stream : snapshot.streams)
-    {
-        std::vector<u8> bytes;
-
-        if (!fileio::ReadWholeFile((dir / stream.path).string().c_str(), &bytes) || !sAudioResource.restoreStreamFile(stream.path, std::move(bytes)))
-        {
-            sead::FormatFixedSafeString<1024> msg(messages::backup::cRestoreStreamFormat, stream.path.c_str());
-            PopupMgr::instance()->addPopup({msg, nullptr});
-        }
-    }
-}
-
-static void FinishRestore(const Snapshot& snapshot, const std::string& openPath, UIType tab)
-{
-    util::updateTitle(fs::path(openPath).filename().string().c_str(), true);
-
     SetUnsavedChanges(false);
 
     PinSnapshot(snapshot.dir);
@@ -145,108 +64,88 @@ static void FinishRestore(const Snapshot& snapshot, const std::string& openPath,
     SetUITab(tab);
 }
 
-static bool RestoreResourceSnapshot(const Snapshot& snapshot, std::vector<u8> bytes)
+static bool ReadSnapshotFile(const std::string& path, Document::File* outFile)
 {
-    const std::string& openPath = snapshot.originalPath;
+    if (!Document::Load(sead::FixedSafeString<1100>(path.c_str()), outFile) && Document::IsCompleteFile(outFile->data, outFile->size))
+        return true;
 
-    if (openPath.empty())
+    PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
+    return false;
+}
+
+static bool CheckSnapshotFile(const Document::File& file, bool untitled)
+{
+    sead::Endian::Types endian = sead::Endian::eBig;
+
+    if (Document::PeekEndian(file, &endian))
+        PrepareParseEndian(endian);
+
+    const char* error = nullptr;
+
+    if (!Document::Check(file, &error))
+    {
+        if (error)
+            PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
+
+        return false;
+    }
+
+    if (untitled && file.kind == Document::Kind::AudioResource)
     {
         PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
         return false;
     }
-
-    CloseFile();
-
-    const char* error = nullptr;
-
-    if (!sAudioResource.open(std::move(bytes), openPath.c_str(), &error))
-    {
-        PopupMgr::instance()->addPopup({error, nullptr});
-        CloseFile();
-        OfferRestorePoint();
-        return false;
-    }
-
-    sRestorePointDir.clear();
-
-    RestoreResourceStreams(snapshot);
-    AddRecentFile(openPath.c_str());
-    FinishRestore(snapshot, openPath, UIType::AudioAssets);
 
     return true;
 }
 
 bool RestoreSnapshot(const Snapshot& snapshot)
 {
-    const fs::path dir(snapshot.dir);
-    const std::string archivePath = (dir / snapshot.archiveName).string();
-
-    u32 fileSize = 0;
-    bool wasCmpbin = false;
-    cmpbin::Codec codec = cmpbin::Codec::Lz4Frame;
-
-    u8* file = LoadArchiveFile(archivePath, &fileSize, &wasCmpbin, &codec);
-
-    if (!file || !HasCompleteArchive(file, fileSize))
-    {
-        delete file;
-        PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
-        return false;
-    }
-
-    if (!wasCmpbin && AudioResource::IsResourceData(file, fileSize))
-    {
-        std::vector<u8> bytes(file, file + fileSize);
-        delete file;
-
-        return RestoreResourceSnapshot(snapshot, std::move(bytes));
-    }
-
-    if (cmpbin::IsZstdFrame(file, fileSize))
-    {
-        delete file;
-        PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
-        return false;
-    }
-
-    if (!ValidBFSARHeader(file, fileSize))
-    {
-        delete file;
-        return false;
-    }
-
+    const std::string archivePath = (fs::path(snapshot.dir) / snapshot.archiveName).string();
     const bool untitled = snapshot.originalPath.empty();
+
+    Document::File file;
+
+    if (!ReadSnapshotFile(archivePath, &file) || !CheckSnapshotFile(file, untitled))
+    {
+        Document::Free(&file);
+        return false;
+    }
+
     const std::string openPath = untitled ? archivePath : snapshot.originalPath;
-
-    CloseFile();
-
     const sead::FixedSafeString<1100> metadataSource(archivePath.c_str());
 
-    if (!sBfsar.open(file, fileSize, openPath.c_str(), nullptr, &metadataSource))
+    Document* replaced = untitled ? nullptr : FindOpenDocument(snapshot.originalPath.c_str());
+    Document* document = nullptr;
+
     {
-        sead::FormatFixedSafeString<1024> msg(messages::archive::cCorruptFormat, GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::SoundArchive), PopupMgr::instance()->getCorruptInfo().cstr());
-        PopupMgr::instance()->addPopup({msg, nullptr});
-        CloseFile();
+        DocumentFocus focus(nullptr);
+        document = Document::Open(&file, sead::FixedSafeString<1100>(openPath.c_str()), &metadataSource);
+    }
+
+    if (!document)
+    {
+        PopupMgr::instance()->discardProcessedErrors();
         OfferRestorePoint();
         return false;
     }
 
+    PopupMgr::instance()->moveProcessedErrors(&document->state().itemErrors);
+
+    if (replaced)
+        ReplaceDocument(replaced, document);
+    else
+        AddDocument(document, false);
+
     sRestorePointDir.clear();
 
-    if (wasCmpbin)
-        sBfsar.setCmpbinPreferZstd(codec == cmpbin::Codec::Zstd);
+    document->restoreSidecars(snapshot);
+    document->applyRestoredSnapshot(snapshot, untitled);
 
-    RestoreStreams(snapshot);
-
-    if (snapshot.saveNames >= 0)
-        sBfsar.setSaveMetadata(snapshot.saveNames != 0);
-
-    if (untitled)
-        sBfsar.clearFilePath();
-    else
+    if (!untitled)
         AddRecentFile(openPath.c_str());
 
-    FinishRestore(snapshot, openPath, UIType::ProjectInfo);
+    FinishRestore(snapshot, document->defaultTab());
 
     return true;
 }

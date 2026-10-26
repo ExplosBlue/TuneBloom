@@ -36,8 +36,7 @@ enum class UIType
     Max = AudioAssets
 };
 
-extern UIType sSelectedUIType;
-
+UIType GetUITab();
 void SetUITab(UIType type);
 void FocusInfoWindow();
 void FocusPropertiesWindow();

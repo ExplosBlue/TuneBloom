@@ -14,7 +14,7 @@ static Bfsar::StreamReloadResult sStreamReloadResult;
 bool ReloadStreamFile(Sound* sound)
 {
     sStreamReloadSound = sound;
-    sStreamReloadResult = sBfsar.reloadStreamSound(sound);
+    sStreamReloadResult = ActiveSoundArchive().reloadStreamSound(sound);
 
     if (sStreamReloadResult.succeeded)
         SetUnsavedChanges(true);
@@ -24,7 +24,9 @@ bool ReloadStreamFile(Sound* sound)
 
 bool PickStreamFilePath(sead::BufferedSafeString* outPath, Item* owner)
 {
-    const InnerFileFormatInfo& streamFormat = GetInnerFileFormat(sBfsar.getFormat(), InnerFileKind::Stream);
+    Bfsar& archive = ActiveSoundArchive();
+
+    const InnerFileFormatInfo& streamFormat = GetInnerFileFormat(archive.getFormat(), InnerFileKind::Stream);
 
     sead::FixedSafeString<64> filterName;
     filterName.format(messages::filedialog::cFilterFileFormat,streamFormat.displayName, streamFormat.extension);
@@ -43,8 +45,8 @@ bool PickStreamFilePath(sead::BufferedSafeString* outPath, Item* owner)
 
     sead::FixedSafeString<512> archiveDir;
 
-    if (!sead::Path::getDirectoryName(&archiveDir, sBfsar.getFilePath()) &&
-        !sead::Path::getDirectoryName(&archiveDir, sBfsar.getLoadedArchivePath()))
+    if (!sead::Path::getDirectoryName(&archiveDir, archive.getFilePath()) &&
+        !sead::Path::getDirectoryName(&archiveDir, archive.getLoadedArchivePath()))
     {
         PopupMgr::instance()->addPopup({messages::stream::cReloadNoArchiveFolder, owner});
         return false;
@@ -106,7 +108,7 @@ static void SetStreamReloadTooltip(const Sound* sound, const Sound::StreamSoundI
 
     sead::FixedSafeString<1024> resolvedPath;
 
-    if (!sBfsar.resolveStreamFilePath(*sound, &resolvedPath))
+    if (!ActiveSoundArchive().resolveStreamFilePath(*sound, &resolvedPath))
     {
         ImGui::SetTooltip(messages::stream::cReloadNotFoundFormat, strmSoundInfo.getPath().cstr());
         return;
@@ -138,7 +140,7 @@ static void DrawStreamReloadSummary(const Sound* sound, const Sound::StreamSound
     {
         const char* typeName = strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus
                                    ? messages::stream::cTypeOpus
-                                   : GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream);
+                                   : GetInnerFileDisplayName(ActiveSoundArchive().getFormat(), InnerFileKind::Stream);
 
         ImGui::TextDisabled(messages::stream::cReloadTypeChangedFormat, typeName);
     }
@@ -152,14 +154,16 @@ static void DrawStreamReloadSummary(const Sound* sound, const Sound::StreamSound
 
 static void DrawStreamPathUI(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo)
 {
-    const bool hasArchiveDir = sBfsar.hasArchiveDirectory();
+    Bfsar& archive = ActiveSoundArchive();
+
+    const bool hasArchiveDir = archive.hasArchiveDirectory();
     const bool hasPath = !strmSoundInfo.getPath().isEmpty();
     const bool canReload = hasPath && hasArchiveDir;
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 buttonWidth = ImGui::GetFrameHeight();
 
-    const sead::FormatFixedSafeString<64> pathDetail(messages::stream::cPathRelativeFormat, GetInnerFileExtension(sBfsar.getFormat(), InnerFileKind::SoundArchive));
+    const sead::FormatFixedSafeString<64> pathDetail(messages::stream::cPathRelativeFormat, GetInnerFileExtension(archive.getFormat(), InnerFileKind::SoundArchive));
 
     PropertyRow(messages::stream::cPathLabel);
     DetailTooltip(pathDetail.cstr());
@@ -275,6 +279,8 @@ static void DrawStreamLoopRows(Sound::StreamSoundInfo& strmSoundInfo)
 
 void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     bool enableStreamSoundExtension = strmSoundInfo.isEnableStreamSoundExtension();
     bool changed = false;
     const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Extension", messages::stream::cExtensionTitle).cstr(), &enableStreamSoundExtension, &changed);
@@ -289,11 +295,11 @@ void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
         return;
 
     {
-        const char* streamTypeLabels[] = { GetInnerFileDisplayName(sBfsar.getFormat(), InnerFileKind::Stream), messages::stream::cTypeAdts, messages::stream::cTypeOpus };
+        const char* streamTypeLabels[] = { GetInnerFileDisplayName(archive.getFormat(), InnerFileKind::Stream), messages::stream::cTypeAdts, messages::stream::cTypeOpus };
         const char* streamTypeDetails[] = { messages::stream::cTypeNativeDetail, nullptr, nullptr };
 
         u32 streamType = strmSoundInfo.getStreamType() - 1;
-        u32 streamTypeCount = sBfsar.isV3Bfsar() || streamType + 1 == Sound::StreamSoundInfo::StreamType::Opus ? IM_ARRAYSIZE(streamTypeLabels) : IM_ARRAYSIZE(streamTypeLabels) - 1;
+        u32 streamTypeCount = archive.isV3Bfsar() || streamType + 1 == Sound::StreamSoundInfo::StreamType::Opus ? IM_ARRAYSIZE(streamTypeLabels) : IM_ARRAYSIZE(streamTypeLabels) - 1;
 
         PropertyRow(messages::stream::cTypeLabel);
 
@@ -306,7 +312,7 @@ void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
 
     DrawStreamLoopRows(strmSoundInfo);
 
-    if (sBfsar.isV3Bfsar())
+    if (archive.isV3Bfsar())
     {
         PropertyRow(messages::common::cUnknown);
         DetailTooltip(messages::stream::cTypeInfoDetail);
@@ -328,7 +334,7 @@ static void DrawStreamPrefetchUI(Sound::StreamSoundInfo& strmSoundInfo)
 {
     const bool isNative = strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary;
 
-    if (!strmSoundInfo.hasPrefetch() && !(isNative && sBfsar.isStreamPrefetchBuildable()))
+    if (!strmSoundInfo.hasPrefetch() && !(isNative && ActiveSoundArchive().isStreamPrefetchBuildable()))
         return;
 
     PropertyRow(messages::stream::cPrefetchLabel);

@@ -2,8 +2,11 @@
 
 #include <ui/backup/Backup.h>
 #include <ui/widgets/Dialogs.h>
+#include <ui/file/DocumentMgr.h>
+#include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
+#include <ui/browser/FilesPanel.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
 #include <ui/items/Selection.h>
@@ -14,8 +17,6 @@
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
 #include <imgui/imgui_internal.h>
-
-#include <app/Utilll.h>
 
 #include <algorithm>
 #include <string>
@@ -43,28 +44,24 @@ enum class ChangeKind
 
 enum class ChangeColumn : ImGuiID
 {
-    Id,
-    Name,
-    Type,
+    Id = static_cast<ImGuiID>(ItemColumnId::Id),
+    Name = static_cast<ImGuiID>(ItemColumnId::Name),
+    Type = static_cast<ImGuiID>(ItemColumnId::First),
     Change
-};
-
-struct SavedItem
-{
-    u64 uid;
-    Item::ItemType itemType;
-    u32 id;
-    std::string name;
 };
 
 struct ChangeRow
 {
+    Document* document;
+    s32 documentIndex;
     Item* item;
     Item::ItemType itemType;
     u32 id;
     std::string name;
     ChangeKind kind;
     bool isProjectInfo;
+    bool isDocumentHeader;
+    s32 changeCount;
 };
 
 }
@@ -74,31 +71,24 @@ static const ItemColumn cColumns[] = {
     { "Change", messages::unsaved::cColumnChange, messages::common::cModified,      nullptr, nullptr, cItemColumnFlag_Text, nullptr }
 };
 
-static std::vector<SavedItem> sSavedItems;
 static std::vector<ChangeRow> sRows;
 static std::vector<u32> sOrder;
 static s32 sSelectedRow = -1;
 static bool sWantsOpen = false;
+static bool sIsExitPrompt = false;
 static bool sSortDirty = false;
 
 template <typename Func>
-static void ForEachTrackedItem(Func func)
+static void ForEachTrackedItem(Document& document, Func func)
 {
-    Item::List* lists[] = {
-        &sBfsar.getSoundList(), &sBfsar.getSoundSetList(), &sBfsar.getBankList(), &sBfsar.getWaveArchiveList(),
-        &sBfsar.getGroupList(), &sBfsar.getPlayerList(),
-        &sBfsar.getWaveFileList(), &sBfsar.getSequenceFileList(), &sBfsar.getBankFileList(),
-        &sAudioResource.getAssetList()
-    };
-
-    for (Item::List* list : lists)
+    document.forEachItemList([&func](Item::List& list)
     {
-        for (Item* item : *list)
+        for (Item* item : list)
         {
             if (item->isStateTracked())
                 func(item);
         }
-    }
+    });
 }
 
 static std::string GetListName(const Item* item)
@@ -111,30 +101,36 @@ static std::string GetListName(const Item* item)
 
 void CaptureSavedState()
 {
-    sBfsar.captureItemBaselines();
-    sAudioResource.captureItemBaselines();
+    std::vector<DocumentState::SavedItem>& savedItems = ActiveDocumentState().savedItems;
+    savedItems.clear();
 
-    sSavedItems.clear();
+    Document* document = ActiveDocument();
 
-    ForEachTrackedItem([](Item* item)
+    if (!document)
+        return;
+
+    document->captureItemBaselines();
+
+    ForEachTrackedItem(*document, [&savedItems](Item* item)
     {
-        sSavedItems.push_back({ item->getUid(), item->getItemType(), GetItemListId(item), GetListName(item) });
+        savedItems.push_back({ item->getUid(), item->getItemType(), GetItemListId(item), GetListName(item) });
     });
 }
 
-static void CollectChanges()
+static void CollectDocumentChanges(Document& document, s32 documentIndex)
 {
-    sRows.clear();
+    DocumentFocus focus(&document);
 
-    if (!IsDocumentOpen())
-        return;
+    const size_t headerIndex = sRows.size();
 
-    if (sBfsar.isOpen() && sBfsar.isInfoModified())
-        sRows.push_back({ nullptr, Item::ItemType::Invalid, 0, messages::common::cProjectInfo, ChangeKind::Modified, true });
+    sRows.push_back({ &document, documentIndex, nullptr, Item::ItemType::Invalid, 0, document.displayName(), ChangeKind::Modified, false, true, 0 });
+
+    if (document.isInfoModified())
+        sRows.push_back({ &document, documentIndex, nullptr, Item::ItemType::Invalid, 0, messages::common::cProjectInfo, ChangeKind::Modified, true, false, 0 });
 
     std::unordered_set<u64> present;
 
-    ForEachTrackedItem([&present](Item* item)
+    ForEachTrackedItem(document, [&present, &document, documentIndex](Item* item)
     {
         present.insert(item->getUid());
 
@@ -143,14 +139,47 @@ static void CollectChanges()
 
         const ChangeKind kind = item->hasBaseline() ? ChangeKind::Modified : ChangeKind::Added;
 
-        sRows.push_back({ item, item->getItemType(), GetItemListId(item), GetListName(item), kind, false });
+        sRows.push_back({ &document, documentIndex, item, item->getItemType(), GetItemListId(item), GetListName(item), kind, false, false, 0 });
     });
 
-    for (const SavedItem& saved : sSavedItems)
+    for (const DocumentState::SavedItem& saved : document.state().savedItems)
     {
         if (present.count(saved.uid) == 0)
-            sRows.push_back({ nullptr, saved.itemType, saved.id, saved.name, ChangeKind::Removed, false });
+            sRows.push_back({ &document, documentIndex, nullptr, saved.itemType, saved.id, saved.name, ChangeKind::Removed, false, false, 0 });
     }
+
+    sRows[headerIndex].changeCount = static_cast<s32>(sRows.size() - headerIndex - 1);
+}
+
+static void CollectChanges()
+{
+    sRows.clear();
+
+    const std::vector<Document*>& documents = GetOpenDocuments();
+
+    for (size_t i = 0; i < documents.size(); i++)
+    {
+        if (documents[i]->state().unsaved && documents[i]->isLoaded())
+            CollectDocumentChanges(*documents[i], static_cast<s32>(i));
+    }
+}
+
+static s32 CountChangeRows()
+{
+    s32 count = 0;
+
+    for (const ChangeRow& row : sRows)
+    {
+        if (!row.isDocumentHeader)
+            count++;
+    }
+
+    return count;
+}
+
+static s32 CountChangedDocuments()
+{
+    return static_cast<s32>(sRows.size()) - CountChangeRows();
 }
 
 static const char* GetKindText(ChangeKind kind)
@@ -201,6 +230,22 @@ static s32 CompareRows(const ChangeRow& a, const ChangeRow& b, ChangeColumn colu
     return 0;
 }
 
+static bool IsRowBefore(const ChangeRow& a, const ChangeRow& b, const ImGuiTableColumnSortSpecs* spec)
+{
+    if (a.documentIndex != b.documentIndex)
+        return a.documentIndex < b.documentIndex;
+
+    if (a.isDocumentHeader != b.isDocumentHeader)
+        return a.isDocumentHeader;
+
+    if (!spec)
+        return false;
+
+    const s32 result = CompareRows(a, b, static_cast<ChangeColumn>(spec->ColumnUserID));
+
+    return spec->SortDirection == ImGuiSortDirection_Descending ? result > 0 : result < 0;
+}
+
 static void SortRows(ImGuiTableSortSpecs* sortSpecs)
 {
     if (!sSortDirty && !(sortSpecs && sortSpecs->SpecsDirty))
@@ -211,18 +256,12 @@ static void SortRows(ImGuiTableSortSpecs* sortSpecs)
     for (u32 i = 0; i < sOrder.size(); i++)
         sOrder[i] = i;
 
-    if (sortSpecs && sortSpecs->SpecsCount > 0)
+    const ImGuiTableColumnSortSpecs* spec = sortSpecs && sortSpecs->SpecsCount > 0 ? &sortSpecs->Specs[0] : nullptr;
+
+    std::stable_sort(sOrder.begin(), sOrder.end(), [spec](u32 a, u32 b)
     {
-        const ChangeColumn column = static_cast<ChangeColumn>(sortSpecs->Specs[0].ColumnUserID);
-        const bool descending = sortSpecs->Specs[0].SortDirection == ImGuiSortDirection_Descending;
-
-        std::stable_sort(sOrder.begin(), sOrder.end(), [column, descending](u32 a, u32 b)
-        {
-            const s32 result = CompareRows(sRows[a], sRows[b], column);
-
-            return descending ? result > 0 : result < 0;
-        });
-    }
+        return IsRowBefore(sRows[a], sRows[b], spec);
+    });
 
     if (sortSpecs)
         sortSpecs->SpecsDirty = false;
@@ -232,9 +271,14 @@ static void SortRows(ImGuiTableSortSpecs* sortSpecs)
 
 static bool GoToRow(const ChangeRow& row)
 {
+    if (!ActivateDocument(row.document))
+        return false;
+
     if (row.isProjectInfo)
-    {
         SetUITab(UIType::ProjectInfo);
+
+    if (row.isProjectInfo || row.isDocumentHeader)
+    {
         FocusInfoWindow();
         return true;
     }
@@ -255,6 +299,43 @@ static void DrawCellText(const char* text)
 
     pos.x += cColumnGap;
     ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), pos, ImVec2(pos.x + width, pos.y + ImGui::GetFontSize()), pos.x + width, pos.x + width, text, nullptr, nullptr);
+}
+
+static void DrawDocumentHeaderCells(const ChangeRow& row, const ImVec2& namePos, f32 nameRight)
+{
+    const char* icon = GetFileKindIcon(row.document->fileKind());
+    const f32 nameX = namePos.x + ImGui::CalcTextSize(icon).x + ImGui::GetStyle().ItemInnerSpacing.x;
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddText(namePos, ImGui::GetColorU32(GetFileKindColor(row.document->fileKind())), icon);
+    ImGui::RenderTextEllipsis(drawList, ImVec2(nameX, namePos.y), ImVec2(nameRight, namePos.y + ImGui::GetFontSize()), nameRight, nameRight, row.name.c_str(), nullptr, nullptr);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, GetItemValueColor());
+
+    if (ImGui::TableSetColumnIndex(3))
+        DrawCellText(sead::FormatFixedSafeString<32>(row.changeCount == 1 ? messages::unsaved::cCountOneFormat : messages::unsaved::cCountFormat, row.changeCount).cstr());
+
+    ImGui::PopStyleColor();
+}
+
+static void DrawChangeCells(const ChangeRow& row, const ImVec2& namePos, f32 nameRight)
+{
+    const f32 nameX = namePos.x + ImGui::GetFontSize();
+    const ImGuiCol nameColor = row.kind == ChangeKind::Removed ? ImGuiCol_TextDisabled : ImGuiCol_Text;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(nameColor));
+    ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), ImVec2(nameX, namePos.y), ImVec2(nameRight, namePos.y + ImGui::GetFontSize()), nameRight, nameRight, row.name.c_str(), nullptr, nullptr);
+    ImGui::PopStyleColor();
+
+    ImGui::PushStyleColor(ImGuiCol_Text, GetItemValueColor());
+
+    if (ImGui::TableSetColumnIndex(2))
+        DrawCellText(GetTypeText(row));
+
+    if (ImGui::TableSetColumnIndex(3))
+        DrawCellText(GetKindText(row.kind));
+
+    ImGui::PopStyleColor();
 }
 
 static bool DrawRows()
@@ -281,16 +362,14 @@ static bool DrawRows()
             ImGui::PushID(rowIndex);
             ImGui::TableNextRow();
 
-            // ID
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
 
             if (row.isProjectInfo)
                 ImGui::TextColored(valueColor, "-");
-            else
+            else if (!row.isDocumentHeader)
                 ImGui::TextColored(valueColor, "%u", row.id);
 
-            // Name
             ImGui::TableSetColumnIndex(1);
             ImGui::AlignTextToFramePadding();
 
@@ -320,23 +399,11 @@ static bool DrawRows()
             if (rowHoverRatio > 0.0f || selected)
                 ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, rowHovered && ImGui::IsItemActive() ? rowActiveColor : selected ? rowColor : ImGui::GetHoverColorU32(rowFadeId, rowHovered, 0, rowHoveredColor));
 
-            const ImGuiCol nameColor = row.kind == ChangeKind::Removed ? ImGuiCol_TextDisabled : ImGuiCol_Text;
+            if (row.isDocumentHeader)
+                DrawDocumentHeaderCells(row, namePos, nameRight);
+            else
+                DrawChangeCells(row, namePos, nameRight);
 
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(nameColor));
-            ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), namePos, ImVec2(nameRight, namePos.y + ImGui::GetFontSize()), nameRight, nameRight, row.name.c_str(), nullptr, nullptr);
-            ImGui::PopStyleColor();
-
-            ImGui::PushStyleColor(ImGuiCol_Text, valueColor);
-
-            // Type
-            if (ImGui::TableSetColumnIndex(2))
-                DrawCellText(GetTypeText(row));
-
-            // Change
-            if (ImGui::TableSetColumnIndex(3))
-                DrawCellText(GetKindText(row.kind));
-
-            ImGui::PopStyleColor();
             ImGui::PopID();
         }
     }
@@ -347,6 +414,81 @@ static bool DrawRows()
 void OpenUnsavedChangesDialog()
 {
     sWantsOpen = true;
+    sIsExitPrompt = false;
+}
+
+void OpenExitChangesDialog()
+{
+    sWantsOpen = true;
+    sIsExitPrompt = true;
+}
+
+static void DrawExitHeading()
+{
+    const s32 documentNum = CountChangedDocuments();
+
+    if (documentNum == 1)
+        ImGui::TextUnformatted(messages::unsaved::cExitHeadingOne);
+    else
+        ImGui::Text(messages::unsaved::cExitHeadingFormat, documentNum);
+}
+
+static bool DrawExitFooter()
+{
+    BeginDialogFooter({messages::mainmenu::cSaveAll, messages::unsaved::cDontSave, messages::common::cCancel}, false);
+
+    bool close = false;
+
+    if (DialogButton(messages::mainmenu::cSaveAll))
+    {
+        RequestExitAfterSaveAll();
+        close = true;
+    }
+
+    if (DialogButton(messages::unsaved::cDontSave))
+    {
+        RequestExitWithoutSaving();
+        close = true;
+    }
+
+    if (DialogButton(messages::common::cCancel) || shortcuts::Pressed(shortcuts::Action::CloseDialog))
+        close = true;
+
+    return close;
+}
+
+static bool DrawReviewFooter(bool* outGoTo)
+{
+    const s32 rowNum = static_cast<s32>(sRows.size());
+    const bool hasSelection = sSelectedRow >= 0 && sSelectedRow < rowNum;
+    const bool canGoTo = hasSelection && sRows[sSelectedRow].kind != ChangeKind::Removed;
+
+    const sead::FormatFixedSafeString<32> goToLabel("%s %s", ICON_LC_EXTERNAL_LINK, messages::common::cGoTo);
+
+    BeginDialogFooter({messages::mainmenu::cSaveAll, goToLabel.cstr(), messages::common::cClose}, false);
+
+    bool close = false;
+
+    if (DialogButton(messages::mainmenu::cSaveAll))
+    {
+        RequestSaveAll();
+        close = true;
+    }
+
+    ImGui::BeginDisabled(!canGoTo);
+
+    if (DialogButton(goToLabel.cstr()))
+        *outGoTo = true;
+
+    ImGui::EndDisabled();
+
+    if (!canGoTo)
+        ImGui::SetItemTooltip("%s", hasSelection ? messages::unsaved::cRemovedReason : messages::unsaved::cNoRowReason);
+
+    if (DialogButton(messages::common::cClose) || shortcuts::Pressed(shortcuts::Action::CloseDialog))
+        close = true;
+
+    return close;
 }
 
 void DrawUnsavedChangesDialog()
@@ -377,6 +519,9 @@ void DrawUnsavedChangesDialog()
 
     if (!BeginDialog(sead::FormatFixedSafeString<96>(ICON_LC_FILE_DIFF " %s%s", messages::unsaved::cTitle, cPopupName).cstr(), nullptr, ImGuiWindowFlags_NoScrollbar))
         return;
+
+    if (sIsExitPrompt)
+        DrawExitHeading();
 
     bool goTo = false;
 
@@ -416,41 +561,16 @@ void DrawUnsavedChangesDialog()
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + footerGap - ImGui::GetStyle().ItemSpacing.y);
 
-    const s32 rowNum = static_cast<s32>(sRows.size());
-    const bool hasSelection = sSelectedRow >= 0 && sSelectedRow < rowNum;
-    const bool canGoTo = hasSelection && sRows[sSelectedRow].kind != ChangeKind::Removed;
+    const s32 changeNum = CountChangeRows();
 
     ImGui::AlignTextToFramePadding();
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().CellPadding.x);
-    ImGui::TextDisabled(rowNum == 1 ? messages::unsaved::cCountOneFormat : messages::unsaved::cCountFormat, rowNum);
+    ImGui::TextDisabled(changeNum == 1 ? messages::unsaved::cCountOneFormat : messages::unsaved::cCountFormat, changeNum);
     ImGui::SameLine();
 
-    const sead::FormatFixedSafeString<32> goToLabel("%s %s", ICON_LC_EXTERNAL_LINK, messages::common::cGoTo);
+    bool close = sIsExitPrompt ? DrawExitFooter() : DrawReviewFooter(&goTo);
 
-    BeginDialogFooter({messages::common::cSave, goToLabel.cstr(), messages::common::cClose}, false);
-
-    bool close = false;
-
-    if (DialogButton(messages::common::cSave))
-    {
-        RequestSaveFile();
-        close = true;
-    }
-
-    ImGui::BeginDisabled(!canGoTo);
-
-    if (DialogButton(goToLabel.cstr()))
-        goTo = true;
-
-    ImGui::EndDisabled();
-
-    if (!canGoTo)
-        ImGui::SetItemTooltip("%s", hasSelection ? messages::unsaved::cRemovedReason : messages::unsaved::cNoRowReason);
-
-    if (DialogButton(messages::common::cClose) || shortcuts::Pressed(shortcuts::Action::CloseDialog))
-        close = true;
-
-    if (goTo && hasSelection && GoToRow(sRows[sSelectedRow]))
+    if (goTo && sSelectedRow >= 0 && sSelectedRow < static_cast<s32>(sRows.size()) && GoToRow(sRows[sSelectedRow]))
         close = true;
 
     if (close)
@@ -459,28 +579,40 @@ void DrawUnsavedChangesDialog()
     ImGui::EndPopup();
 }
 
-bool gUnsavedChanges = false;
-
-static u64 sEditGeneration = 0;
+bool HasUnsavedChanges()
+{
+    return ActiveDocumentState().unsaved;
+}
 
 u64 GetEditGeneration()
 {
-    return sEditGeneration;
+    return ActiveDocumentState().editGeneration;
 }
 
 void SetUnsavedChanges(bool dirty)
 {
-    if (dirty)
-        sEditGeneration++;
-    else
+    Document* document = ActiveDocument();
+
+    if (!dirty)
     {
         CaptureSavedState();
         backup::OnClean();
     }
 
-    if (gUnsavedChanges != dirty)
+    if (!document)
+        return;
+
+    DocumentState& state = document->state();
+
+    if (dirty)
     {
-        gUnsavedChanges = dirty;
-        util::refreshTitleDirty(dirty);
+        state.editGeneration = NewEditGeneration();
+        PinDocument(document);
+    }
+
+    if (state.unsaved != dirty)
+    {
+        state.unsaved = dirty;
+        RefreshWindowTitle();
     }
 }

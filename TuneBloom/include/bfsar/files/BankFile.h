@@ -19,6 +19,12 @@ public:
     class Instrument;
     class KeyRegion;
 
+    struct RegionReadContext
+    {
+        const nw::snd::internal::Util::WaveIdTable& waveIdTable;
+        Bfsar* archive;
+    };
+
     class VelocityRegion : public Item
     {
     public:
@@ -45,7 +51,7 @@ public:
 
         ~VelocityRegion() override;
 
-        void read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId);
+        void read(const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const RegionReadContext& context, u32 instrumentId);
         void drawPitchUI();
         void drawOutputUI();
         void drawEnvelopeUI();
@@ -205,7 +211,7 @@ public:
             SEAD_ASSERT(mKeyMax <= 127);
         }
 
-        void read(const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId);
+        void read(const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const RegionReadContext& context, u32 instrumentId);
 
         const VelocityRegion* getVelocityRegion(u8 velocity) const
         {
@@ -258,10 +264,10 @@ public:
         }
 
     private:
-        void addVelocityRegion_(u8 velocityMin, u8 velocityMax, const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId);
+        void addVelocityRegion(u8 velocityMin, u8 velocityMax, const nw::snd::internal::BankFile::VelocityRegion* velocityRegionInfo, const RegionReadContext& context, u32 instrumentId);
 
         template <typename Chunk>
-        void readVelocityRegions_(const Chunk& chunk, u8 velocityMin, const u8* borders, u32 borderCount, const char* errorFormat, const nw::snd::internal::Util::WaveIdTable& waveIdTable, u32 instrumentId);
+        void readVelocityRegions(const Chunk& chunk, u8 velocityMin, const u8* borders, u32 borderCount, const char* errorFormat, const RegionReadContext& context, u32 instrumentId);
 
     private:
         u8 mKeyMin;
@@ -285,7 +291,7 @@ public:
             mItemType = ItemType::BankFileInstrument;
         }
 
-        void read(const nw::snd::internal::BankFile::Instrument* instrumentInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
+        void read(const nw::snd::internal::BankFile::Instrument* instrumentInfo, const RegionReadContext& context);
         void drawUI();
 
         s16 getProgramNo() const
@@ -338,10 +344,10 @@ public:
         sead::FixedSafeString<256> getFormattedName() const override;
 
     private:
-        void addKeyRegion_(u8 keyMin, u8 keyMax, const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
+        void addKeyRegion(u8 keyMin, u8 keyMax, const nw::snd::internal::BankFile::KeyRegion* keyRegionInfo, const RegionReadContext& context);
 
         template <typename Chunk>
-        void readKeyRegions_(const Chunk& chunk, u8 keyMin, const u8* borders, u32 borderCount, const char* errorFormat, const nw::snd::internal::Util::WaveIdTable& waveIdTable);
+        void readKeyRegions(const Chunk& chunk, u8 keyMin, const u8* borders, u32 borderCount, const char* errorFormat, const RegionReadContext& context);
 
     private:
         s16 mProgramNo;

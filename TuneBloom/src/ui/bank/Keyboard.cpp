@@ -252,10 +252,10 @@ static void UpdateComputerKeyboard(ImGuiPianoKeyboardProc callback, void* userDa
 
     s32 base = sOctaveBase;
 
-    if (shortcuts::Pressed(shortcuts::Action::OctaveDown))
+    if (!shortcuts::Claimed(shortcuts::Action::OctaveDown) && shortcuts::Pressed(shortcuts::Action::OctaveDown))
         base -= cOctaveKeyNum;
 
-    if (shortcuts::Pressed(shortcuts::Action::OctaveUp))
+    if (!shortcuts::Claimed(shortcuts::Action::OctaveUp) && shortcuts::Pressed(shortcuts::Action::OctaveUp))
         base += cOctaveKeyNum;
 
     if (shortcuts::Pressed(shortcuts::Action::OctaveReset))

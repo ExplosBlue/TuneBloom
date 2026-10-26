@@ -644,8 +644,9 @@ void StreamLoopInfoBatch::Flush()
 class StreamWaveReader
 {
 public:
-    StreamWaveReader(Sound* sound, const void* strmFile, u32 strmFileSize)
-        : mSound(sound)
+    StreamWaveReader(Bfsar& archive, Sound* sound, const void* strmFile, u32 strmFileSize)
+        : mArchive(archive)
+        , mSound(sound)
         , mStrmFile(strmFile)
         , mStrmFileSize(strmFileSize)
     {
@@ -680,6 +681,7 @@ private:
     }
 
 private:
+    Bfsar& mArchive;
     Sound* mSound;
     const void* mStrmFile;
     u32 mStrmFileSize;
@@ -786,7 +788,8 @@ void StreamWaveReader::readChannelBuffers_()
 WaveFile* StreamWaveReader::createTrackWave_(u32 trackNo, u32 trackCount)
 {
     WaveFile* wave = new WaveFile();
-    wave->mId = sBfsar.getWaveFileList().size();
+    wave->setArchive(&mArchive);
+    wave->mId = mArchive.getWaveFileList().size();
     wave->mIsFromStreamFile = true;
 
     wave->mEnableName = true;
@@ -795,7 +798,7 @@ WaveFile* StreamWaveReader::createTrackWave_(u32 trackNo, u32 trackCount)
     else
         wave->mName.format("GUESS_%s_TRACK_%u", mSound->getName().cstr(), trackNo);
 
-    wave->mVersion = sBfsar.getVersionForBfwav();
+    wave->mVersion = mArchive.getVersionForBfwav();
     wave->mDataEndian = nw::ut::GetFileEndian(*mReader.mHeader);
     wave->mEncoding = mEncoding;
     wave->mIsLoop = mStreamSoundInfo.isLoop;
@@ -913,7 +916,7 @@ bool StreamWaveReader::read()
         if (trackNo == 0)
             readFileLayout_(wave);
 
-        sBfsar.getWaveFileList().pushBack(wave);
+        mArchive.getWaveFileList().pushBack(wave);
         track.getWaveFileRef().attach(wave);
 
         if (!isLoopValid)
@@ -970,7 +973,7 @@ static bool AttachSharedStreamWaves(Sound* sound, const Sound* srcSound)
     return true;
 }
 
-bool ReadStreamWaves(Sound* sound, const void* strmFile, u32 strmFileSize, const Sound* srcSound)
+bool ReadStreamWaves(Bfsar& archive, Sound* sound, const void* strmFile, u32 strmFileSize, const Sound* srcSound)
 {
     LOG_FUNC();
 
@@ -983,6 +986,6 @@ bool ReadStreamWaves(Sound* sound, const void* strmFile, u32 strmFileSize, const
     if (srcSound)
         return AttachSharedStreamWaves(sound, srcSound);
 
-    StreamWaveReader reader(sound, strmFile, strmFileSize);
+    StreamWaveReader reader(archive, sound, strmFile, strmFileSize);
     return reader.read();
 }

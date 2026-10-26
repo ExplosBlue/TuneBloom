@@ -157,7 +157,7 @@ void DrawAllSoundsUI()
 
     SetNextItemListAction(&SoundRowActionFunc);
 
-    DrawAllItemsUI("Sound", messages::common::cSound, sBfsar.getSoundList(),
+    DrawAllItemsUI("Sound", messages::common::cSound, ActiveSoundArchive().getSoundList(),
         &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback()
     );
 }
@@ -171,7 +171,7 @@ void DrawStreamSoundsUI()
     SetNextItemListColumns(columns, columnCount);
     SetNextItemListAction(&SoundRowActionFunc);
 
-    DrawAllItemsUI("Stream Sound", messages::item::cTypeStreamSound,sBfsar.getSoundList(), &CreateStreamSoundFunc, nullptr, &SoundContextMenuFunc,
+    DrawAllItemsUI("Stream Sound", messages::item::cTypeStreamSound,ActiveSoundArchive().getSoundList(), &CreateStreamSoundFunc, nullptr, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
@@ -183,8 +183,10 @@ void DrawStreamSoundsUI()
 
 static bool SoundIsInAnySet(const Sound *sound)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     u32 id = sound->getId();
-    for (auto it = sBfsar.getSoundSetList().robustBegin(); it != sBfsar.getSoundSetList().robustEnd(); ++it)
+    for (auto it = archive.getSoundSetList().robustBegin(); it != archive.getSoundSetList().robustEnd(); ++it)
     {
         const SoundSet *set = static_cast<const SoundSet *>(it->val());
         if (set->getIsEmpty())
@@ -218,7 +220,7 @@ static void DrawTypedSoundsUI(const char* id, const char* title, CreateItemCallb
     SetNextItemListColumns(columns, columnCount);
     SetNextItemListAction(&SoundRowActionFunc);
 
-    DrawAllItemsUI(id, title, sBfsar.getSoundList(), createCallback, nullptr, &SoundContextMenuFunc,
+    DrawAllItemsUI(id, title, ActiveSoundArchive().getSoundList(), createCallback, nullptr, &SoundContextMenuFunc,
         [](const Item* item)
         {
             const Sound* sound = static_cast<const Sound*>(item);
@@ -495,7 +497,7 @@ static const RangeSet* FindHoveredRangeSet(const RangeBar& bar, const std::vecto
 
 static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterByType, SoundSet::SoundSetType filterType, const SoundSet* viewedSet)
 {
-    u32 totalSounds = sBfsar.getSoundList().size();
+    u32 totalSounds = ActiveSoundArchive().getSoundList().size();
     if (totalSounds == 0)
         return;
 
@@ -557,10 +559,12 @@ static void ScopedSoundInsertHook(Item* afterItem, Item* newItem)
 
 static bool ValidateViewedSet(SoundSet** viewedSet)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     if (!*viewedSet)
         return false;
 
-    for (auto it = sBfsar.getSoundSetList().robustBegin(); it != sBfsar.getSoundSetList().robustEnd(); ++it)
+    for (auto it = archive.getSoundSetList().robustBegin(); it != archive.getSoundSetList().robustEnd(); ++it)
     {
         if (it->val() == *viewedSet)
             return true;
@@ -572,10 +576,12 @@ static bool ValidateViewedSet(SoundSet** viewedSet)
 
 static u32 CountSetPlayers(const SoundSet* set, const Item** outPlayer)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     static std::vector<const Item*> sPlayers;
     sPlayers.clear();
 
-    for (auto it = sBfsar.getSoundList().begin(); it != sBfsar.getSoundList().end(); ++it)
+    for (auto it = archive.getSoundList().begin(); it != archive.getSoundList().end(); ++it)
     {
         const Sound* sound = static_cast<const Sound*>(*it);
 
@@ -630,7 +636,7 @@ static void DrawSoundSetScopedSoundsUI(SoundSet* viewedSet)
 
     InstanciateItemCallback (*create)(bool) = viewedSet->getSoundSetType() == SoundSet::SoundSetType::Seq ? &CreateSequenceSoundFunc : &CreateWaveSoundFunc;
 
-    DrawAllItemsUI("Sound", messages::common::cSound, sBfsar.getSoundList(), create, nullptr, &SoundContextMenuFunc,
+    DrawAllItemsUI("Sound", messages::common::cSound, ActiveSoundArchive().getSoundList(), create, nullptr, &SoundContextMenuFunc,
         &SoundInScopedSetFilter,
         false, &ScopedSoundInsertHook, &RemoveSoundWithCascade
     );
@@ -681,7 +687,7 @@ static void DrawSoundSetSplitView(
         [&]()
         {
             DrawTabFilterBar();
-            DrawAllItemsUI(id, listName, sBfsar.getSoundSetList(), createFunc, namePrefix, contextMenu, listFilter, false, nullptr, nullptr, false, /*highlightItem*/ viewedSet);
+            DrawAllItemsUI(id, listName, ActiveSoundArchive().getSoundSetList(), createFunc, namePrefix, contextMenu, listFilter, false, nullptr, nullptr, false, /*highlightItem*/ viewedSet);
             ValidateViewedSet(&viewedSet);
             adoptSelection();
         },
@@ -690,7 +696,7 @@ static void DrawSoundSetSplitView(
             DrawSoundSetScopedSoundsUI(viewedSet);
         });
 
-    DrawSoundSetRangeVisualizer(sBfsar.getSoundSetList(), filterByType, type, viewedSet);
+    DrawSoundSetRangeVisualizer(ActiveSoundArchive().getSoundSetList(), filterByType, type, viewedSet);
 }
 
 void DrawWaveSoundSetsUI()
@@ -719,13 +725,15 @@ void DrawAllSoundSetsUI()
 
 static bool SoundSetHasSequences(const SoundSet* soundSet)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     if (!soundSet || soundSet->getIsEmpty() || soundSet->getSoundSetType() != SoundSet::SoundSetType::Seq)
         return false;
 
     const u32 startId = soundSet->getStartId();
     const u32 endId = soundSet->getEndId();
 
-    for (auto it = sBfsar.getSoundList().begin(); it != sBfsar.getSoundList().end(); ++it)
+    for (auto it = archive.getSoundList().begin(); it != archive.getSoundList().end(); ++it)
     {
         Sound* sound = static_cast<Sound*>(*it);
         if (sound->getId() >= startId && sound->getId() <= endId && sound->getSoundType() == Sound::SoundType::Seq)

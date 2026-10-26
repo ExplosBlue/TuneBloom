@@ -115,6 +115,7 @@ bool SoundPlayer::beginSeqExport(const Sound* sound, const SeqExportSettings& se
 
     mSeqExport = SeqExportState();
     mSeqExport.settings = settings;
+    mOwner = mOwnerContext;
 
     mSeqExport.muteTracks = mMuteTracks;
     mSeqExport.soloTracks = mSoloTracks;

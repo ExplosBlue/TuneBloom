@@ -7,35 +7,6 @@
 
 #include <snd/snd_SoundArchive.h>
 
-template <typename T>
-class List : public sead::TList<T>
-{
-public:
-    List()
-        : sead::TList<T>()
-    {
-    }
-
-    ~List()
-    {
-        clear();
-    }
-
-    void clear()
-    {
-        for (auto it = this->robustBegin(); it != this->robustEnd(); ++it)
-        {
-            T item = (*it).val();
-
-            this->erase(item);
-
-            delete item;
-        }
-
-        sead::TList<T>::clear();
-    }
-};
-
 enum class WaveArchiveType
 {
     Invalid = -1,
@@ -44,9 +15,56 @@ enum class WaveArchiveType
     Explicit
 };
 
+class AudioResource;
+class Bfsar;
 class Item;
 
-using ItemList = List<Item*>;
+class ItemList : public sead::TList<Item*>
+{
+public:
+    ItemList()
+        : sead::TList<Item*>()
+    {
+    }
+
+    ~ItemList();
+
+    void clear();
+
+    const Bfsar* getArchive() const
+    {
+        return mArchive;
+    }
+
+    Bfsar* getArchive()
+    {
+        return mArchive;
+    }
+
+    void setArchive(Bfsar* archive)
+    {
+        mArchive = archive;
+    }
+
+    const AudioResource* getResource() const
+    {
+        return mResource;
+    }
+
+    AudioResource* getResource()
+    {
+        return mResource;
+    }
+
+    void setResource(AudioResource* resource)
+    {
+        mResource = resource;
+    }
+
+private:
+    Bfsar* mArchive{nullptr};
+    AudioResource* mResource{nullptr};
+};
 
 class ItemReference : public sead::TListNode<ItemReference*>
 {
@@ -216,6 +234,31 @@ public:
         return mItemType;
     }
 
+    const Bfsar* getArchive() const
+    {
+        const ItemList* ownerList = static_cast<const ItemList*>(list());
+
+        if (ownerList)
+            return ownerList->getArchive();
+
+        return mArchive;
+    }
+
+    Bfsar* getArchive()
+    {
+        ItemList* ownerList = static_cast<ItemList*>(list());
+
+        if (ownerList)
+            return ownerList->getArchive();
+
+        return mArchive;
+    }
+
+    void setArchive(Bfsar* archive)
+    {
+        mArchive = archive;
+    }
+
     u32 getId() const
     {
         return mId;
@@ -320,7 +363,10 @@ public:
     virtual sead::FixedSafeString<256> getFormattedName() const
     {
         sead::FixedSafeString<256> name;
-        name.appendWithFormat("[%u] ", getId());
+
+        if (getId() != cInvalidId)
+            name.appendWithFormat("[%u] ", getId());
+
         name.appendWithFormat("%s", getNameOrNull().cstr());
 
         return name;
@@ -370,6 +416,8 @@ private:
 
     u64 mUid{++sUidCounter};
 
+    Bfsar* mArchive{nullptr};
+
     u64 mBaselineSignature{0};
     bool mHasBaseline{false};
 
@@ -380,6 +428,25 @@ private:
 
     friend class Bfsar;
 };
+
+inline ItemList::~ItemList()
+{
+    clear();
+}
+
+inline void ItemList::clear()
+{
+    for (auto it = robustBegin(); it != robustEnd(); ++it)
+    {
+        Item* item = (*it).val();
+
+        erase(item);
+
+        delete item;
+    }
+
+    sead::TList<Item*>::clear();
+}
 
 inline void ItemReference::attach(Item* item)
 {

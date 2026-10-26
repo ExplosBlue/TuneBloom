@@ -2,6 +2,8 @@
 
 #include <ui/backup/BackupInternal.h>
 #include <ui/settings/Config.h>
+#include <ui/file/DocumentMgr.h>
+#include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/Messages.h>
 #include <ui/app/Notifications.h>
@@ -11,28 +13,17 @@
 #include <ui/widgets/Widgets.h>
 
 #include <chrono>
+#include <vector>
 
 namespace backup
 {
 
-using Clock = std::chrono::steady_clock;
+using Clock = DocumentState::Backup::Clock;
 
 static constexpr size_t cNoticePathMax = 60;
 
 static constexpr s32 cRetrySeconds     = 20;
 static constexpr s32 cIdleMilliseconds = 1000;
-
-static bool sTimerRunning = false;
-static Clock::time_point sTimerStart;
-static Clock::time_point sLastInput;
-static Clock::time_point sRetryAt;
-
-static bool sHasLastBackup = false;
-static u64 sLastBackupGeneration = 0;
-static bool sHasFailure = false;
-static u64 sFailedGeneration = 0;
-static Bfsar::BackupResult sFailure = Bfsar::BackupResult::Ok;
-static Bfsar::BackupResult sNoticeShown = Bfsar::BackupResult::Ok;
 
 static bool sScanned = false;
 
@@ -54,17 +45,24 @@ static Clock::duration GetInterval()
     return std::chrono::minutes(sAutoBackupIntervalMinutes);
 }
 
+static DocumentState::Backup& GetState()
+{
+    return ActiveDocumentState().backup;
+}
+
 bool GetFailure(Bfsar::BackupResult* result)
 {
-    *result = sFailure;
+    const DocumentState::Backup& state = GetState();
+    *result = state.failure;
 
-    return sHasFailure;
+    return state.hasFailure;
 }
 
 void MarkEditsBackedUp()
 {
-    sHasLastBackup = true;
-    sLastBackupGeneration = GetEditGeneration();
+    DocumentState::Backup& state = GetState();
+    state.hasLastBackup = true;
+    state.lastBackupGeneration = GetEditGeneration();
 }
 
 static bool IsInputActive()
@@ -81,12 +79,12 @@ static bool IsInputActive()
     return false;
 }
 
-static void ShowFailureNotice(Bfsar::BackupResult result)
+static void ShowFailureNotice(DocumentState::Backup& state, Bfsar::BackupResult result)
 {
-    if (sNoticeShown == result)
+    if (state.noticeShown == result)
         return;
 
-    sNoticeShown = result;
+    state.noticeShown = result;
 
     if (result == Bfsar::BackupResult::Invalid)
     {
@@ -100,6 +98,77 @@ static void ShowFailureNotice(Bfsar::BackupResult result)
     notify::Add(notify::Kind::Error, messages::backup::cNoticeFailedTitle, msg.cstr());
 }
 
+static void UpdateDocument(Document& document)
+{
+    DocumentState::Backup& state = document.state().backup;
+
+    if (!sAutoBackupEnabled || !IsActive() || !document.isLoaded() || !document.state().unsaved)
+    {
+        state.timerRunning = false;
+        return;
+    }
+
+    const Clock::time_point now = Clock::now();
+
+    if (!state.timerRunning)
+    {
+        state.timerRunning = true;
+        state.timerStart = now;
+        state.lastInput = now;
+    }
+
+    if (IsInputActive())
+        state.lastInput = now;
+
+    if (now - state.timerStart < GetInterval())
+        return;
+
+    const u64 generation = document.state().editGeneration;
+
+    if (state.hasLastBackup && generation == state.lastBackupGeneration)
+    {
+        state.timerStart = now;
+        return;
+    }
+
+    if (state.hasFailure)
+    {
+        if (now < state.retryAt)
+            return;
+
+        if (state.failure == Bfsar::BackupResult::Invalid && generation == state.failedGeneration)
+            return;
+    }
+
+    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup) || now - state.lastInput < std::chrono::milliseconds(cIdleMilliseconds))
+        return;
+
+    Bfsar::BackupResult result;
+    bool written = false;
+
+    {
+        DocumentFocus focus(&document);
+        written = WriteSnapshot(Kind::Auto, &result);
+    }
+
+    if (!written)
+    {
+        state.hasFailure = true;
+        state.failure = result;
+        state.failedGeneration = generation;
+        state.retryAt = now + std::chrono::seconds(cRetrySeconds);
+
+        ShowFailureNotice(state, result);
+        return;
+    }
+
+    state.hasFailure = false;
+    state.noticeShown = Bfsar::BackupResult::Ok;
+    state.hasLastBackup = true;
+    state.lastBackupGeneration = generation;
+    state.timerStart = now;
+}
+
 void Update()
 {
     if (!sScanned)
@@ -110,77 +179,29 @@ void Update()
             ScanRecoveries();
     }
 
-    if (!sAutoBackupEnabled || !IsActive() || !IsDocumentOpen() || !gUnsavedChanges)
-    {
-        sTimerRunning = false;
-        return;
-    }
+    const std::vector<Document*> documents = GetOpenDocuments();
 
-    const Clock::time_point now = Clock::now();
-
-    if (!sTimerRunning)
-    {
-        sTimerRunning = true;
-        sTimerStart = now;
-        sLastInput = now;
-    }
-
-    if (IsInputActive())
-        sLastInput = now;
-
-    if (now - sTimerStart < GetInterval())
-        return;
-
-    const u64 generation = GetEditGeneration();
-
-    if (sHasLastBackup && generation == sLastBackupGeneration)
-    {
-        sTimerStart = now;
-        return;
-    }
-
-    if (sHasFailure)
-    {
-        if (now < sRetryAt)
-            return;
-
-        if (sFailure == Bfsar::BackupResult::Invalid && generation == sFailedGeneration)
-            return;
-    }
-
-    if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopup) || now - sLastInput < std::chrono::milliseconds(cIdleMilliseconds))
-        return;
-
-    Bfsar::BackupResult result;
-
-    if (!WriteSnapshot(Kind::Auto, &result))
-    {
-        sHasFailure = true;
-        sFailure = result;
-        sFailedGeneration = generation;
-        sRetryAt = now + std::chrono::seconds(cRetrySeconds);
-
-        ShowFailureNotice(result);
-        return;
-    }
-
-    sHasFailure = false;
-    sNoticeShown = Bfsar::BackupResult::Ok;
-    sHasLastBackup = true;
-    sLastBackupGeneration = generation;
-    sTimerStart = now;
+    for (Document* document : documents)
+        UpdateDocument(*document);
 }
 
 void OnClean()
 {
-    sTimerRunning = false;
-    sHasFailure = false;
-    sHasLastBackup = false;
-    sNoticeShown = Bfsar::BackupResult::Ok;
+    DocumentState::Backup& state = GetState();
+    state.timerRunning = false;
+    state.hasFailure = false;
+    state.hasLastBackup = false;
+    state.noticeShown = Bfsar::BackupResult::Ok;
 
     if (!IsDocumentOpen())
         ForgetArchiveKeys();
 
+    if (IsActive())
+        RemoveMarker();
+}
+
+void OnDocumentClosed()
+{
     if (IsActive())
         RemoveMarker();
 }
@@ -209,7 +230,7 @@ bool CreateBackup()
     }
 
     MarkEditsBackedUp();
-    sTimerStart = Clock::now();
+    GetState().timerStart = Clock::now();
 
     return true;
 }

@@ -181,6 +181,14 @@ void RemoveFile(const char* path)
     std::filesystem::remove(path, ec);
 }
 
+std::string CanonicalPath(const char* path)
+{
+    std::error_code error;
+    const std::filesystem::path canonical = std::filesystem::weakly_canonical(std::filesystem::path(path), error);
+
+    return error ? std::string(path) : canonical.string();
+}
+
 const char* GetTempFolder()
 {
     for (const char* name : { "TEMP", "TMP", "TMPDIR" })

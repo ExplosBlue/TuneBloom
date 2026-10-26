@@ -162,7 +162,8 @@ static bool StepItemSelectorIndex(const Item::List& list, Item** itemPtr, bool a
 static bool DrawItemSelectorTrigger(const char* name, const Item::List& list, Item** itemPtr, bool allowNone, bool compact, f32 triggerWidth)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
-    const bool isWaveList = &list == static_cast<const Item::List*>(&sBfsar.getWaveFileList());
+    const Bfsar* archive = list.getArchive();
+    const bool isWaveList = archive && &list == static_cast<const Item::List*>(&archive->getWaveFileList());
 
     sead::FixedSafeString<256> itemName;
 

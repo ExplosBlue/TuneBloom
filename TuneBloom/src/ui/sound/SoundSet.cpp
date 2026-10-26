@@ -44,19 +44,24 @@ const Item* SoundSet::validate(sead::BufferedSafeString& error) const
         return this;
     }
 
-    if (getStartId() >= sBfsar.getSoundList().size())
+    const Bfsar* archive = getArchive();
+    const u32 soundCount = archive ? static_cast<u32>(archive->getSoundList().size()) : 0;
+
+    if (getStartId() >= soundCount)
     {
         error = messages::soundset::cErrorStartExceedsCount;
         return this;
     }
 
-    if (getEndId() >= sBfsar.getSoundList().size())
+    if (getEndId() >= soundCount)
     {
         error = messages::soundset::cErrorEndExceedsCount;
         return this;
     }
 
-    for (const Item::ListNode* itemNode = sBfsar.getItem(getStartId(), sBfsar.getSoundList()); itemNode && itemNode->val()->getId() <= getEndId(); itemNode = sBfsar.getSoundList().next(itemNode))
+    const Item::List& soundList = archive->getSoundList();
+
+    for (const Item::ListNode* itemNode = archive->getItem(getStartId(), soundList); itemNode && itemNode->val()->getId() <= getEndId(); itemNode = soundList.next(itemNode))
     {
         SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
         const Sound* sound = static_cast<const Sound*>(itemNode->val());
@@ -201,8 +206,10 @@ static bool CascadeSetsBefore(const std::vector<SoundSet*>& sets, u32 newStartId
 
 void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
 {
-    Item::List &soundList = sBfsar.getSoundList();
-    Item::List &soundSetList = sBfsar.getSoundSetList();
+    Bfsar& archive = ActiveSoundArchive();
+
+    Item::List &soundList = archive.getSoundList();
+    Item::List &soundSetList = archive.getSoundSetList();
 
     Item *insertAfterItem = afterItem;
 
@@ -215,7 +222,7 @@ void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
             SoundSet *earlierSet = static_cast<SoundSet *>(node->val());
             if (!earlierSet->getIsEmpty())
             {
-                insertAfterItem = sBfsar.getItem(earlierSet->getEndId(), soundList);
+                insertAfterItem = archive.getItem(earlierSet->getEndId(), soundList);
                 break;
             }
         }
@@ -225,7 +232,7 @@ void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
         else
             soundList.pushFront(newSound);
 
-        sBfsar.updateList(soundList);
+        archive.updateList(soundList);
 
         targetSet->setIsEmpty(false);
         targetSet->setStartId(newSound->getId());
@@ -238,7 +245,7 @@ void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
             u32 endId = targetSet->getEndId();
             Item::ListNode *lastNode = nullptr;
 
-            for (Item::ListNode *node = sBfsar.getItem(targetSet->getStartId(), soundList); node && node->val()->getId() <= endId; node = soundList.next(node))
+            for (Item::ListNode *node = archive.getItem(targetSet->getStartId(), soundList); node && node->val()->getId() <= endId; node = soundList.next(node))
                 lastNode = node;
 
             SEAD_ASSERT(lastNode);
@@ -251,7 +258,7 @@ void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
         );
 
         insertAfterItem->insertBack(newSound);
-        sBfsar.updateList(soundList);
+        archive.updateList(soundList);
 
         targetSet->setEndId(targetSet->getEndId() + 1);
     }
@@ -266,7 +273,7 @@ void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
         SEAD_ASSERT_MSG(false, "Cascade offset after insert should always be in-bounds");
 
     SetUnsavedChanges(true);
-    sBfsar.validate_(false);
+    archive.validate(false);
 }
 
 static SoundSet *FindContainingSet(u32 soundId, const Item::List &soundSetList)
@@ -309,8 +316,10 @@ static void ShiftSetsAtOrAfter(u32 thresholdId, s32 delta, Item::List &soundSetL
 
 static void InsertSoundAt(Item *afterItem, Sound *newSound)
 {
-    Item::List &soundList = sBfsar.getSoundList();
-    Item::List &soundSetList = sBfsar.getSoundSetList();
+    Bfsar& archive = ActiveSoundArchive();
+
+    Item::List &soundList = archive.getSoundList();
+    Item::List &soundSetList = archive.getSoundSetList();
 
     SoundSet *containingSet = afterItem ? FindContainingSet(afterItem->getId(), soundSetList) : nullptr;
 
@@ -319,7 +328,7 @@ static void InsertSoundAt(Item *afterItem, Sound *newSound)
     else
         soundList.pushBack(newSound);
 
-    sBfsar.updateList(soundList);
+    archive.updateList(soundList);
 
     if (containingSet)
         containingSet->setEndId(containingSet->getEndId() + 1);
@@ -328,7 +337,7 @@ static void InsertSoundAt(Item *afterItem, Sound *newSound)
     ShiftSetsAtOrAfter(newSound->getId(), +1, soundSetList, soundCount);
 
     SetUnsavedChanges(true);
-    sBfsar.validate_(false);
+    archive.validate(false);
 }
 
 void InsertSoundAtHook(Item *afterItem, Item *newItem)
@@ -338,15 +347,17 @@ void InsertSoundAtHook(Item *afterItem, Item *newItem)
 
 void RemoveSoundWithCascade(Item *item)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     Sound *sound = static_cast<Sound *>(item);
-    Item::List &soundList = sBfsar.getSoundList();
-    Item::List &soundSetList = sBfsar.getSoundSetList();
+    Item::List &soundList = archive.getSoundList();
+    Item::List &soundSetList = archive.getSoundSetList();
 
     u32 removedId = sound->getId();
     SoundSet *containingSet = FindContainingSet(removedId, soundSetList);
 
     delete sound;
-    sBfsar.updateList(soundList);
+    archive.updateList(soundList);
 
     if (containingSet)
     {
@@ -360,7 +371,7 @@ void RemoveSoundWithCascade(Item *item)
     ShiftSetsAtOrAfter(removedId + 1, -1, soundSetList, soundCount);
 
     SetUnsavedChanges(true);
-    sBfsar.validate_(false);
+    archive.validate(false);
 }
 
 static bool sSoundSetStickyEdit = false;
@@ -387,7 +398,7 @@ static void DrawSoundSetTypeBox(SoundSet* soundSet)
         WaveArchiveType warcType = soundSet->getWaveArchiveType();
 
         PropertyRow(messages::common::cWaveArchive);
-        if (WaveArchiveSelector("##WaveArchive", &warcType, &warc, sBfsar.getWaveArchiveList()))
+        if (WaveArchiveSelector("##WaveArchive", &warcType, &warc, ActiveSoundArchive().getWaveArchiveList()))
         {
             soundSet->getWaveArchiveRef().attach(warc);
             soundSet->setWaveArchiveType(warcType);
@@ -422,8 +433,10 @@ static bool DrawRangeIdField(const char* id, u32* value, bool stickyEdit)
 
 static bool MoveStickyStartId(SoundSet* soundSet, u32 startId)
 {
-    Item::List& soundSetList = sBfsar.getSoundSetList();
-    const u32 soundCount = static_cast<u32>(sBfsar.getSoundList().size());
+    Bfsar& archive = ActiveSoundArchive();
+
+    Item::List& soundSetList = archive.getSoundSetList();
+    const u32 soundCount = static_cast<u32>(archive.getSoundList().size());
     const s32 delta = static_cast<s32>(startId) - static_cast<s32>(soundSet->getStartId());
 
     if (!IsTouchingPrev(soundSet, soundSetList))
@@ -448,8 +461,10 @@ static bool MoveStickyStartId(SoundSet* soundSet, u32 startId)
 
 static bool MoveStickyEndId(SoundSet* soundSet, u32 endId)
 {
-    Item::List& soundSetList = sBfsar.getSoundSetList();
-    const u32 soundCount = static_cast<u32>(sBfsar.getSoundList().size());
+    Bfsar& archive = ActiveSoundArchive();
+
+    Item::List& soundSetList = archive.getSoundSetList();
+    const u32 soundCount = static_cast<u32>(archive.getSoundList().size());
     const s32 delta = static_cast<s32>(endId) - static_cast<s32>(soundSet->getEndId());
 
     if (!IsTouchingNext(soundSet, soundSetList))

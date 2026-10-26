@@ -165,7 +165,7 @@ static bool IsFwavInBounds(const std::vector<u8>& file)
     return true;
 }
 
-static WaveFile* ReadFwav(const std::vector<u8>& file)
+WaveFile* ReadFwavFile(const std::vector<u8>& file)
 {
     if (!IsFwavInBounds(file))
         return nullptr;
@@ -386,6 +386,20 @@ static bool BuildDecodedPcm(const SourceAudio& source, DecodedPcm* out)
     return out->isValid();
 }
 
+bool DecodeAudioFile(const AudioAssetFile& file, DecodedPcm* out)
+{
+    *out = DecodedPcm();
+
+    if (!file)
+        return false;
+
+    SourceAudio source;
+    const AudioAssetKind kind = DetectAudioAssetKind(*file);
+    const bool isRead = kind == AudioAssetKind::Stream ? ReadBfstmSource(file, &source) : kind == AudioAssetKind::Bwav && ReadBwavSource(file, &source);
+
+    return isRead && BuildDecodedPcm(source, out);
+}
+
 const char* GetAudioAssetKindName(AudioAssetKind kind)
 {
     switch (kind)
@@ -464,7 +478,7 @@ bool ReadAudioAssetBwav(const AudioAssetFile& file, aal::Bwav* out)
 
 bool IsReadableFwav(const std::vector<u8>& file)
 {
-    WaveFile* wave = ReadFwav(file);
+    WaveFile* wave = ReadFwavFile(file);
     const bool isReadable = wave != nullptr;
 
     delete wave;
@@ -491,6 +505,20 @@ AudioAsset::AudioAsset()
 AudioAsset::~AudioAsset()
 {
     releasePreviewWave();
+}
+
+const AudioResource* AudioAsset::getResource() const
+{
+    const ItemList* ownerList = static_cast<const ItemList*>(list());
+
+    return ownerList ? ownerList->getResource() : nullptr;
+}
+
+AudioResource* AudioAsset::getResource()
+{
+    ItemList* ownerList = static_cast<ItemList*>(list());
+
+    return ownerList ? ownerList->getResource() : nullptr;
 }
 
 const Item* AudioAsset::validate(sead::BufferedSafeString& error) const
@@ -755,7 +783,7 @@ WaveFile* AudioAsset::buildPreviewWave()
 
     if (mInfo.kind == AudioAssetKind::Fwav && mFile)
     {
-        wave = ReadFwav(*mFile);
+        wave = ReadFwavFile(*mFile);
     }
     else
     {

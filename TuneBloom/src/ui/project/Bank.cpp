@@ -35,6 +35,8 @@ static constexpr s32 cBankFileModeNone = 2;
 
 static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     static WaveArchiveType sWarcType = WaveArchiveType::AutomaticShared;
     static Item *sWarcItem = nullptr;
     static s32 sBankFileMode = cBankFileModeCreateNew;
@@ -52,7 +54,7 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
     if (!item && !validate)
     {
         DialogRow(messages::common::cWaveArchive);
-        WaveArchiveSelector("##WaveArchive", &sWarcType, &sWarcItem, sBfsar.getWaveArchiveList());
+        WaveArchiveSelector("##WaveArchive", &sWarcType, &sWarcItem, archive.getWaveArchiveList());
 
         DialogRowGap();
 
@@ -76,7 +78,7 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
         else
         {
             ImGui::BeginDisabled(sBankFileMode != cBankFileModeSelectExisting);
-            ItemSelectorDialogRow(messages::common::cFile,sBfsar.getBankFileList(), &sBankFileItem, true);
+            ItemSelectorDialogRow(messages::common::cFile,archive.getBankFileList(), &sBankFileItem, true);
             ImGui::EndDisabled();
         }
 
@@ -94,8 +96,8 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
             bankFile->setEnableName(true);
             bankFile->getName().format("GUESS_%s", bank->getName().cstr());
 
-            sBfsar.getBankFileList().pushBack(bankFile);
-            sBfsar.updateList(sBfsar.getBankFileList());
+            archive.getBankFileList().pushBack(bankFile);
+            archive.updateList(archive.getBankFileList());
 
             bank->getFileRef().attach(bankFile);
         }
@@ -130,12 +132,14 @@ void DrawBanksUI()
 
     SetNextItemListAction(&BankRowActionFunc);
 
-    DrawAllItemsUI("Bank", messages::common::cBank,sBfsar.getBankList(),
+    DrawAllItemsUI("Bank", messages::common::cBank,ActiveSoundArchive().getBankList(),
                    &CreateBankFunc, nullptr, &BankContextMenuFunc, GetItemFilterCallback());
 }
 
 void DrawBankPropertiesUI()
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     Bank* bank = static_cast<Bank*>(sSelectedItem);
 
     if (!BeginPropertyBox("BankFiles"))
@@ -146,7 +150,7 @@ void DrawBankPropertiesUI()
     {
         Item* file = bank->getFileRef().getItem();
         PropertyRow(messages::common::cBankFile);
-        if (ItemSelector("##BankFile", sBfsar.getBankFileList(), &file, true))
+        if (ItemSelector("##BankFile", archive.getBankFileList(), &file, true))
         {
             bank->getFileRef().attach(file);
             SetUnsavedChanges(true);
@@ -157,7 +161,7 @@ void DrawBankPropertiesUI()
         Item* warc = bank->getWaveArchiveRef().getItem();
         WaveArchiveType warcType = bank->getWaveArchiveType();
         PropertyRow(messages::common::cWaveArchive);
-        if (WaveArchiveSelector("##WaveArchive", &warcType, &warc, sBfsar.getWaveArchiveList()))
+        if (WaveArchiveSelector("##WaveArchive", &warcType, &warc, archive.getWaveArchiveList()))
         {
             bank->getWaveArchiveRef().attach(warc);
             bank->setWaveArchiveType(warcType);

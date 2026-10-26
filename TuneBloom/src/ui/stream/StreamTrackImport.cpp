@@ -469,6 +469,7 @@ WaveFile* StreamTrackImport::createWave(const TrackPlan& plan, const ImportTarge
     info.loopEndFrame = target.loopEnd;
 
     WaveFile* wave = new WaveFile();
+    wave->setArchive(&ActiveSoundArchive());
     wave->setEnableName(true);
     wave->getName() = name;
 
@@ -534,11 +535,13 @@ bool StreamTrackImport::createWaves(const std::vector<TrackPlan>& plans, const I
 
 void StreamTrackImport::attachWaves(Sound* sound, WaveFile* const* waves, u32 waveCount) const
 {
+    Bfsar& archive = ActiveSoundArchive();
+
     Sound::StreamSoundInfo::Track::List& tracks = sound->getStreamSoundInfo().getTrackList();
 
     for (u32 i = 0; i < waveCount; i++)
     {
-        sBfsar.getWaveFileList().pushBack(waves[i]);
+        archive.getWaveFileList().pushBack(waves[i]);
 
         Sound::StreamSoundInfo::Track* track = new Sound::StreamSoundInfo::Track();
         track->setEnableName(true);
@@ -548,8 +551,8 @@ void StreamTrackImport::attachWaves(Sound* sound, WaveFile* const* waves, u32 wa
         tracks.pushBack(track);
     }
 
-    sBfsar.updateList(sBfsar.getWaveFileList());
-    sBfsar.updateList(tracks);
+    archive.updateList(archive.getWaveFileList());
+    archive.updateList(tracks);
     SetUnsavedChanges(true);
 }
 

@@ -63,6 +63,9 @@ class AudioAsset : public Item
 {
 public:
     AudioAsset();
+
+    const AudioResource* getResource() const;
+    AudioResource* getResource();
     ~AudioAsset() override;
 
     const Item* validate(sead::BufferedSafeString& error) const override;
@@ -119,3 +122,5 @@ const char* GetAudioAssetKindExtension(AudioAssetKind kind);
 AudioAssetKind DetectAudioAssetKind(const std::vector<u8>& file);
 bool ReadAudioAssetBwav(const AudioAssetFile& file, aal::Bwav* out);
 bool IsReadableFwav(const std::vector<u8>& file);
+WaveFile* ReadFwavFile(const std::vector<u8>& file);
+bool DecodeAudioFile(const AudioAssetFile& file, DecodedPcm* out);

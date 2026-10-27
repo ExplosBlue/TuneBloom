@@ -75,6 +75,7 @@ static constexpr f32 cHorizontalFrom = 1.4f;
 
 static bool sMergeChannels = false;
 static bool sWindowVisible = false;
+static bool sPlaceRequest = false;
 
 OutputMeter& OutputMeter::instance()
 {
@@ -656,7 +657,21 @@ void SetOutputMeterWindowVisible(bool visible)
         return;
 
     sWindowVisible = visible;
+    sPlaceRequest = visible;
     ImGui::MarkIniSettingsDirty();
+}
+
+f32 CalcOutputMeterWindowHeight()
+{
+    return std::ceil(cMaxBarHeight * 2.0f + CalcScaleRowHeight() + ImGui::GetStyle().WindowPadding.y * 2.0f);
+}
+
+bool TakeOutputMeterPlaceRequest()
+{
+    const bool request = sPlaceRequest;
+    sPlaceRequest = false;
+
+    return request;
 }
 
 void DrawOutputMeterWindow()

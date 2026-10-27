@@ -32,6 +32,7 @@ public:
     bool confirmCancel(bool cancelClicked);
 
     std::string finalizeForCommit(WaveFile::RiffWaveInfo* info);
+    u32 calcOutputLength(const WaveFile::RiffWaveInfo& info) const;
 
     f32 getBodyHeight() const
     {

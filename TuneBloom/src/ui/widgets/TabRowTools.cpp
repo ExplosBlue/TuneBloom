@@ -1,6 +1,8 @@
 #include <ui/widgets/TabRowTools.h>
 
 #include <ui/items/ItemColumns.h>
+#include <ui/widgets/Knob.h>
+#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 
@@ -38,6 +40,17 @@ void EndTabRowTools()
     ImGui::PopStyleColor(3);
     ImGui::PopClipRect();
     ImGui::DockNodeEndAmendTabBar();
+}
+
+void BeginTitleRowTools(const char* title, f32 toolsWidth)
+{
+    const ImVec2 titlePos = ImGui::GetCursorScreenPos();
+    const f32 toolsX = titlePos.x + ImGui::GetContentRegionAvail().x - toolsWidth;
+
+    RegionHeader(title, toolsWidth + ImGui::GetStyle().ItemSpacing.x);
+
+    ImGui::SameLine();
+    ImGui::SetCursorScreenPos(ImVec2(toolsX, titlePos.y));
 }
 
 bool DrawTabRowTool(const char* label, bool inTabBar)
@@ -91,7 +104,7 @@ void DrawTabRowCount(const TabRowTitle& title, s32 count)
     const ImRect tabRect = window->DockTabItemRect;
     const ImVec2& padding = node->TabBar->FramePadding;
     const sead::FormatFixedSafeString<64> lead(" %s %s ", title.icon, title.title);
-    const sead::FormatFixedSafeString<16> text("%d", count);
+    const sead::FixedSafeString<32> text = FormatCountText(count);
     const ImVec2 pos(tabRect.Min.x + padding.x + ImGui::CalcTextSize(lead.cstr()).x, tabRect.Min.y + padding.y);
 
     ImGui::PushClipRect(barRect.Min, barRect.Max, true);

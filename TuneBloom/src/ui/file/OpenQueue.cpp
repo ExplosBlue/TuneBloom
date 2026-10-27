@@ -34,7 +34,7 @@ static void TakeExternalPaths()
     std::lock_guard<std::mutex> lock(sExternalMutex);
 
     for (s32 i = 0; i < sExternalCount; i++)
-        sRequests.push_back({ sExternalPaths[i].cstr(), Mode::Pin });
+        sRequests.push_back({ sExternalPaths[i].cstr(), Mode::Pin, Origin::System });
 
     sExternalCount = 0;
 }
@@ -67,6 +67,18 @@ bool IsEmpty()
     TakeExternalPaths();
 
     return sRequests.empty();
+}
+
+bool Peek(Request* outRequest)
+{
+    TakeExternalPaths();
+
+    if (sRequests.empty())
+        return false;
+
+    *outRequest = sRequests.front();
+
+    return true;
 }
 
 void Clear()

@@ -11,20 +11,27 @@
 #if defined(SEAD_PLATFORM_WINDOWS)
 #include <basis/win/seadWindows.h>
 #include <shlobj.h>
+#include <shlwapi.h>
+
+#include <cwctype>
 #elif defined(SEAD_PLATFORM_LINUX)
+#include <app/Utilll.h>
 #include <ui/settings/ConfigFile.h>
 
 #include <bfsar/io/FileIo.h>
 
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
+#elif defined(SEAD_PLATFORM_MACOSX)
+#include <platform/macos/bundle.h>
+#include <platform/macos/defaultApp.h>
 #endif
 
 #include <filesystem>
 #include <iterator>
 #include <string>
-
-#if defined(SEAD_PLATFORM_WINDOWS) || defined(SEAD_PLATFORM_LINUX)
 
 namespace
 {
@@ -35,12 +42,34 @@ enum class FileTypeName
     BcsarArchive,
     CmpbinFile,
     AudioResource,
-    CompressedAudioResource,
     Wave,
-    ZstdFile
+    ZstdFile,
+    BfstmStream,
+    BcstmStream,
+    BfwavWave,
+    BcwavWave
+};
+
+struct FileType
+{
+    const char* extension;
+    FileTypeName name;
 };
 
 }
+
+static constexpr FileType cFileTypes[] = {
+    { "bfsar",          FileTypeName::BfsarArchive  },
+    { "bcsar",          FileTypeName::BcsarArchive  },
+    { "bars",           FileTypeName::AudioResource },
+    { "bwav",           FileTypeName::Wave          },
+    { "bfstm",          FileTypeName::BfstmStream   },
+    { "bcstm",          FileTypeName::BcstmStream   },
+    { "bfwav",          FileTypeName::BfwavWave     },
+    { "bcwav",          FileTypeName::BcwavWave     },
+    { cCmpbinExtension, FileTypeName::CmpbinFile    },
+    { cZstdExtension,   FileTypeName::ZstdFile      },
+};
 
 static std::string FormatFileTypeName(FileTypeName name)
 {
@@ -64,10 +93,6 @@ static std::string FormatFileTypeName(FileTypeName name)
             text.format(messages::resource::cResourceTypeFormat, GetResourceFormatInfo(ResourceFormat::Bars).displayName);
             break;
 
-        case FileTypeName::CompressedAudioResource:
-            text.format(messages::resource::cCompressedResourceTypeFormat, GetResourceFormatInfo(ResourceFormat::Bars).displayName);
-            break;
-
         case FileTypeName::Wave:
             text.format(messages::resource::cWaveTypeFormat, GetResourceFormatInfo(ResourceFormat::Bwav).displayName);
             break;
@@ -75,42 +100,72 @@ static std::string FormatFileTypeName(FileTypeName name)
         case FileTypeName::ZstdFile:
             text.format(messages::common::cCompressedFileTypeFormat, cZstdExtension);
             break;
+
+        case FileTypeName::BfstmStream:
+            text.format(messages::stream::cStreamTypeFormat, GetInnerFileDisplayName(ArchiveFormat::BFSAR, InnerFileKind::Stream));
+            break;
+
+        case FileTypeName::BcstmStream:
+            text.format(messages::stream::cStreamTypeFormat, GetInnerFileDisplayName(ArchiveFormat::BCSAR, InnerFileKind::Stream));
+            break;
+
+        case FileTypeName::BfwavWave:
+            text.format(messages::resource::cWaveTypeFormat, GetInnerFileDisplayName(ArchiveFormat::BFSAR, InnerFileKind::Wave));
+            break;
+
+        case FileTypeName::BcwavWave:
+            text.format(messages::resource::cWaveTypeFormat, GetInnerFileDisplayName(ArchiveFormat::BCSAR, InnerFileKind::Wave));
+            break;
     }
 
     return text.cstr();
 }
 
-#endif
-
 #if defined(SEAD_PLATFORM_WINDOWS)
 
-namespace
-{
+static constexpr const wchar_t* cClassesKey    = L"Software\\Classes\\";
+static constexpr const wchar_t* cFileExtsKey   = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\";
+static constexpr const wchar_t* cUserChoiceKey = L"\\UserChoice";
+static constexpr const wchar_t* cProgIdPrefix  = L"TuneBloom.";
+static constexpr const wchar_t* cLegacyProgId  = L"TuneBloom.SoundArchive";
+static constexpr const wchar_t* cCommandKey    = L"\\shell\\open\\command";
+static constexpr const wchar_t* cIconKey       = L"\\DefaultIcon";
+static constexpr const wchar_t* cOpenWithKey   = L"\\OpenWithProgids";
 
-struct FileType
+static std::wstring ToWide(const std::string& text)
 {
-    const wchar_t* extension;
-    const wchar_t* progId;
-    FileTypeName name;
-    bool isDefault;
-};
+    wchar_t wide[128];
 
+    if (MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wide, static_cast<int>(std::size(wide))) == 0)
+        return std::wstring();
+
+    return wide;
 }
 
-static constexpr const wchar_t* cClassesKey   = L"Software\\Classes\\";
-static constexpr const wchar_t* cLegacyProgId = L"TuneBloom.SoundArchive";
-static constexpr const wchar_t* cCommandKey   = L"\\shell\\open\\command";
-static constexpr const wchar_t* cIconKey      = L"\\DefaultIcon";
-static constexpr const wchar_t* cOpenWithKey  = L"\\OpenWithProgids";
+static std::string ToUtf8(const std::wstring& text)
+{
+    char utf8[512];
 
-static constexpr FileType cFileTypes[] = {
-    { L".bfsar",  L"TuneBloom.Bfsar",  FileTypeName::BfsarArchive,  true  },
-    { L".bcsar",  L"TuneBloom.Bcsar",  FileTypeName::BcsarArchive,  true  },
-    { L".cmpbin", L"TuneBloom.Cmpbin", FileTypeName::CmpbinFile,    false },
-    { L".bars",   L"TuneBloom.Bars",   FileTypeName::AudioResource, false },
-    { L".bwav",   L"TuneBloom.Bwav",   FileTypeName::Wave,          false },
-    { L".zs",     L"TuneBloom.Zs",     FileTypeName::ZstdFile,      false },
-};
+    if (WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, utf8, static_cast<int>(std::size(utf8)), nullptr, nullptr) == 0)
+        return std::string();
+
+    return utf8;
+}
+
+static std::wstring GetExtensionKey(const FileType& type)
+{
+    return L"." + ToWide(type.extension);
+}
+
+static std::wstring GetProgId(const FileType& type)
+{
+    std::wstring name = ToWide(type.extension);
+
+    if (!name.empty())
+        name[0] = static_cast<wchar_t>(std::towupper(name[0]));
+
+    return cProgIdPrefix + name;
+}
 
 static std::wstring GetClassKey(const std::wstring& name)
 {
@@ -135,6 +190,17 @@ static bool SetKeyText(const std::wstring& key, const wchar_t* name, const std::
     return RegSetKeyValueW(HKEY_CURRENT_USER, key.c_str(), name, REG_SZ, text.c_str(), size) == ERROR_SUCCESS;
 }
 
+static std::wstring QueryAssociation(ASSOCSTR kind, const std::wstring& extension)
+{
+    wchar_t text[MAX_PATH * 4];
+    DWORD size = static_cast<DWORD>(std::size(text));
+
+    if (AssocQueryStringW(ASSOCF_INIT_IGNOREUNKNOWN, kind, extension.c_str(), nullptr, text, &size) != S_OK)
+        return std::wstring();
+
+    return text;
+}
+
 static std::wstring GetOpenCommand()
 {
     const std::wstring path = GetExecutablePath().wstring();
@@ -145,23 +211,13 @@ static std::wstring GetOpenCommand()
     return L"\"" + path + L"\" \"%1\"";
 }
 
-static std::wstring ToWide(const std::string& text)
-{
-    wchar_t wide[128];
-
-    if (MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wide, static_cast<int>(std::size(wide))) == 0)
-        return std::wstring();
-
-    return wide;
-}
-
-static bool RemoveProgId(const wchar_t* progId)
+static bool RemoveProgId(const std::wstring& progId)
 {
     for (const FileType& type : cFileTypes)
     {
-        const std::wstring key = GetClassKey(type.extension);
+        const std::wstring key = GetClassKey(GetExtensionKey(type));
 
-        RegDeleteKeyValueW(HKEY_CURRENT_USER, (key + cOpenWithKey).c_str(), progId);
+        RegDeleteKeyValueW(HKEY_CURRENT_USER, (key + cOpenWithKey).c_str(), progId.c_str());
 
         if (GetKeyText(key, nullptr) == progId)
             RegDeleteKeyValueW(HKEY_CURRENT_USER, key.c_str(), nullptr);
@@ -177,92 +233,64 @@ static void NotifyShell()
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
+static void ReadPlatformState(const FileType& type, fileassoc::TypeState* state)
+{
+    const std::wstring extension = GetExtensionKey(type);
+    const std::wstring executable = QueryAssociation(ASSOCSTR_EXECUTABLE, extension);
+    const std::wstring userChoice = GetKeyText(cFileExtsKey + extension + cUserChoiceKey, L"ProgId");
+
+    state->isOn = !executable.empty() && _wcsicmp(executable.c_str(), GetExecutablePath().wstring().c_str()) == 0;
+    state->appName = ToUtf8(QueryAssociation(ASSOCSTR_FRIENDLYAPPNAME, extension));
+
+    if (!state->isOn && !userChoice.empty() && userChoice != GetProgId(type))
+        state->lock = fileassoc::Lock::UserChoice;
+}
+
+static bool SetPlatformType(const FileType& type, bool on)
+{
+    const std::wstring progId = GetProgId(type);
+    const std::wstring command = GetOpenCommand();
+
+    bool success = RemoveProgId(cLegacyProgId);
+
+    if (!on)
+    {
+        success &= RemoveProgId(progId);
+        NotifyShell();
+
+        return success;
+    }
+
+    if (command.empty())
+        return false;
+
+    const std::wstring progKey = GetClassKey(progId);
+    const std::wstring extensionKey = GetClassKey(GetExtensionKey(type));
+
+    success &= SetKeyText(progKey, nullptr, ToWide(FormatFileTypeName(type.name)));
+    success &= SetKeyText(progKey + cIconKey, nullptr, L"\"" + GetExecutablePath().wstring() + L"\",0");
+    success &= SetKeyText(progKey + cCommandKey, nullptr, command);
+    success &= SetKeyText(extensionKey + cOpenWithKey, progId.c_str(), std::wstring());
+    success &= SetKeyText(extensionKey, nullptr, progId);
+
+    NotifyShell();
+
+    return success;
+}
+
 bool fileassoc::IsSupported()
 {
     return true;
 }
 
-fileassoc::State fileassoc::GetState()
-{
-    const std::wstring command = GetKeyText(GetClassKey(cFileTypes[0].progId) + cCommandKey, nullptr);
-
-    if (command.empty())
-        return GetKeyText(GetClassKey(cLegacyProgId) + cCommandKey, nullptr).empty() ? State::None : State::OtherCopy;
-
-    return _wcsicmp(command.c_str(), GetOpenCommand().c_str()) == 0 ? State::ThisCopy : State::OtherCopy;
-}
-
-bool fileassoc::Register()
-{
-    const std::wstring command = GetOpenCommand();
-
-    if (testhooks::IsEnabled() || command.empty())
-        return false;
-
-    const std::wstring icon = L"\"" + GetExecutablePath().wstring() + L"\",0";
-    bool success = RemoveProgId(cLegacyProgId);
-
-    for (const FileType& type : cFileTypes)
-    {
-        const std::wstring progKey = GetClassKey(type.progId);
-        const std::wstring extensionKey = GetClassKey(type.extension);
-
-        success &= SetKeyText(progKey, nullptr, ToWide(FormatFileTypeName(type.name)));
-        success &= SetKeyText(progKey + cIconKey, nullptr, icon);
-        success &= SetKeyText(progKey + cCommandKey, nullptr, command);
-        success &= SetKeyText(extensionKey + cOpenWithKey, type.progId, std::wstring());
-
-        if (type.isDefault)
-            success &= SetKeyText(extensionKey, nullptr, type.progId);
-    }
-
-    NotifyShell();
-
-    return success;
-}
-
-bool fileassoc::Remove()
-{
-    if (testhooks::IsEnabled())
-        return false;
-
-    bool success = RemoveProgId(cLegacyProgId);
-
-    for (const FileType& type : cFileTypes)
-        success &= RemoveProgId(type.progId);
-
-    NotifyShell();
-
-    return success;
-}
-
 #elif defined(SEAD_PLATFORM_LINUX)
 
-namespace
-{
-
-struct MimeType
-{
-    const char* type;
-    const char* glob;
-    FileTypeName name;
-    bool isDefault;
-};
-
-}
-
 static constexpr const char* cDesktopFile      = "tunebloom.desktop";
+static constexpr const char* cDesktopSuffix    = ".desktop";
 static constexpr const char* cMimeFile         = "tunebloom.xml";
+static constexpr const char* cMimePrefix       = "application/x-nintendo-";
 static constexpr const char* cExecKey          = "Exec=";
 static constexpr const char* cUnsafePathChars  = "\"'`$\\\n";
-
-static constexpr MimeType cMimeTypes[] = {
-    { "application/x-nintendo-bfsar",     "*.bfsar",   FileTypeName::BfsarArchive,            true  },
-    { "application/x-nintendo-bcsar",     "*.bcsar",   FileTypeName::BcsarArchive,            true  },
-    { "application/x-nintendo-bars",      "*.bars",    FileTypeName::AudioResource,           false },
-    { "application/x-nintendo-bars-zstd", "*.bars.zs", FileTypeName::CompressedAudioResource, false },
-    { "application/x-nintendo-bwav",      "*.bwav",    FileTypeName::Wave,                    false },
-};
 
 static std::string GetDataDir()
 {
@@ -287,6 +315,11 @@ static std::string GetMimePath(const std::string& dataDir)
     return dataDir + "/mime/packages/" + cMimeFile;
 }
 
+static std::string GetMimeType(const FileType& type)
+{
+    return cMimePrefix + std::string(type.extension);
+}
+
 static std::string GetExecLine()
 {
     const std::string path = GetExecutablePath().string();
@@ -297,42 +330,55 @@ static std::string GetExecLine()
     return std::string(cExecKey) + "\"" + path + "\" %f";
 }
 
+static std::string ReadText(const std::string& path)
+{
+    std::vector<u8> data;
+
+    if (!fileio::ReadWholeFile(path.c_str(), &data))
+        return std::string();
+
+    return std::string(data.begin(), data.end());
+}
+
+static std::string QueryDefaultApp(const FileType& type)
+{
+    FILE* pipe = popen(("xdg-mime query default " + GetMimeType(type) + " 2>/dev/null").c_str(), "r");
+
+    if (!pipe)
+        return std::string();
+
+    char line[256] = {};
+    const bool read = fgets(line, sizeof(line), pipe) != nullptr;
+    pclose(pipe);
+
+    std::string app = read ? line : "";
+
+    while (!app.empty() && (app.back() == '\n' || app.back() == '\r'))
+        app.pop_back();
+
+    return app;
+}
+
+static bool IsListed(const std::string& mimeText, const FileType& type)
+{
+    return mimeText.find("type=\"" + GetMimeType(type) + "\"") != std::string::npos;
+}
+
+static bool IsThisCopy(const std::string& dataDir)
+{
+    const std::string execLine = GetExecLine();
+
+    return !execLine.empty() && ReadText(GetDesktopPath(dataDir)).find("\n" + execLine + "\n") != std::string::npos;
+}
+
 static void UpdateDatabases(const std::string& dataDir)
 {
     system(("update-mime-database '" + dataDir + "/mime' >/dev/null 2>&1").c_str());
     system(("update-desktop-database '" + dataDir + "/applications' >/dev/null 2>&1").c_str());
 }
 
-bool fileassoc::IsSupported()
+static bool WriteFiles(const std::string& dataDir, const std::vector<const FileType*>& types)
 {
-    return true;
-}
-
-fileassoc::State fileassoc::GetState()
-{
-    const std::string dataDir = GetDataDir();
-    std::vector<u8> data;
-
-    if (dataDir.empty() || !fileio::ReadWholeFile(GetDesktopPath(dataDir).c_str(), &data))
-        return State::None;
-
-    const std::string text(data.begin(), data.end());
-    const std::string execLine = GetExecLine();
-
-    if (!execLine.empty() && text.find("\n" + execLine + "\n") != std::string::npos)
-        return State::ThisCopy;
-
-    return State::OtherCopy;
-}
-
-bool fileassoc::Register()
-{
-    const std::string dataDir = GetDataDir();
-    const std::string execLine = GetExecLine();
-
-    if (testhooks::IsEnabled() || dataDir.empty() || dataDir.find('\'') != std::string::npos || execLine.empty())
-        return false;
-
     const std::string folder = GetExecutablePath().parent_path().string();
 
     std::string mime;
@@ -341,13 +387,13 @@ bool fileassoc::Register()
     mime += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     mime += "<mime-info xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n";
 
-    for (const MimeType& type : cMimeTypes)
+    for (const FileType* type : types)
     {
-        mime += std::string("  <mime-type type=\"") + type.type + "\">\n";
-        mime += "    <comment>" + FormatFileTypeName(type.name) + "</comment>\n";
-        mime += std::string("    <glob pattern=\"") + type.glob + "\"/>\n";
+        mime += "  <mime-type type=\"" + GetMimeType(*type) + "\">\n";
+        mime += "    <comment>" + FormatFileTypeName(type->name) + "</comment>\n";
+        mime += std::string("    <glob pattern=\"*.") + type->extension + "\"/>\n";
         mime += "  </mime-type>\n";
-        mimeTypes += std::string(type.type) + ";";
+        mimeTypes += GetMimeType(*type) + ";";
     }
 
     mime += "</mime-info>\n";
@@ -356,34 +402,18 @@ bool fileassoc::Register()
     desktop += "[Desktop Entry]\n";
     desktop += "Type=Application\n";
     desktop += "Name=TuneBloom\n";
-    desktop += execLine + "\n";
+    desktop += GetExecLine() + "\n";
     desktop += "Path=" + folder + "\n";
     desktop += "Icon=" + folder + "/content/icon.png\n";
     desktop += "MimeType=" + mimeTypes + "\n";
     desktop += "Terminal=false\n";
     desktop += "Categories=AudioVideo;Audio;\n";
 
-    if (!WriteTextFileAtomic(GetMimePath(dataDir), mime) || !WriteTextFileAtomic(GetDesktopPath(dataDir), desktop))
-        return false;
-
-    UpdateDatabases(dataDir);
-
-    for (const MimeType& type : cMimeTypes)
-    {
-        if (type.isDefault)
-            system((std::string("xdg-mime default ") + cDesktopFile + " " + type.type + " >/dev/null 2>&1").c_str());
-    }
-
-    return true;
+    return WriteTextFileAtomic(GetMimePath(dataDir), mime) && WriteTextFileAtomic(GetDesktopPath(dataDir), desktop);
 }
 
-bool fileassoc::Remove()
+static bool RemoveFiles(const std::string& dataDir)
 {
-    const std::string dataDir = GetDataDir();
-
-    if (testhooks::IsEnabled() || dataDir.empty() || dataDir.find('\'') != std::string::npos)
-        return false;
-
     std::error_code ec;
     std::filesystem::remove(GetDesktopPath(dataDir), ec);
     std::filesystem::remove(GetMimePath(dataDir), ec);
@@ -393,26 +423,121 @@ bool fileassoc::Remove()
     return !std::filesystem::exists(GetDesktopPath(dataDir), ec);
 }
 
+static void ReadPlatformState(const FileType& type, fileassoc::TypeState* state)
+{
+    const std::string dataDir = GetDataDir();
+    std::string app = QueryDefaultApp(type);
+
+    state->isOn = !dataDir.empty() && app == cDesktopFile && IsThisCopy(dataDir) && IsListed(ReadText(GetMimePath(dataDir)), type);
+
+    if (app == cDesktopFile)
+        app = util::cAppName.cstr();
+    else if (app.size() > strlen(cDesktopSuffix) && app.compare(app.size() - strlen(cDesktopSuffix), std::string::npos, cDesktopSuffix) == 0)
+        app.erase(app.size() - strlen(cDesktopSuffix));
+
+    state->appName = app;
+}
+
+static bool SetPlatformType(const FileType& changed, bool on)
+{
+    const std::string dataDir = GetDataDir();
+
+    if (dataDir.empty() || dataDir.find('\'') != std::string::npos || GetExecLine().empty())
+        return false;
+
+    const std::string mimeText = IsThisCopy(dataDir) ? ReadText(GetMimePath(dataDir)) : std::string();
+    std::vector<const FileType*> listed;
+
+    for (const FileType& type : cFileTypes)
+    {
+        if (&type == &changed ? on : IsListed(mimeText, type))
+            listed.push_back(&type);
+    }
+
+    if (listed.empty())
+        return RemoveFiles(dataDir);
+
+    if (!WriteFiles(dataDir, listed))
+        return false;
+
+    UpdateDatabases(dataDir);
+
+    if (!on)
+        return true;
+
+    return system((std::string("xdg-mime default ") + cDesktopFile + " " + GetMimeType(changed) + " >/dev/null 2>&1").c_str()) == 0;
+}
+
+bool fileassoc::IsSupported()
+{
+    return true;
+}
+
+#elif defined(SEAD_PLATFORM_MACOSX)
+
+static void ReadPlatformState(const FileType& type, fileassoc::TypeState* state)
+{
+    state->isOn = macos::isDefaultApp(type.extension);
+    state->appName = macos::getDefaultAppName(type.extension);
+
+    if (state->isOn && !macos::hasOtherApp(type.extension))
+        state->lock = fileassoc::Lock::OnlyApp;
+}
+
+static bool SetPlatformType(const FileType& type, bool on)
+{
+    return on ? macos::setDefaultToThisApp(type.extension) : macos::setDefaultToOtherApp(type.extension);
+}
+
+bool fileassoc::IsSupported()
+{
+    return macos::isAppBundle();
+}
+
 #else
+
+static void ReadPlatformState(const FileType&, fileassoc::TypeState*)
+{
+}
+
+static bool SetPlatformType(const FileType&, bool)
+{
+    return false;
+}
 
 bool fileassoc::IsSupported()
 {
     return false;
 }
 
-fileassoc::State fileassoc::GetState()
-{
-    return State::None;
-}
-
-bool fileassoc::Register()
-{
-    return false;
-}
-
-bool fileassoc::Remove()
-{
-    return false;
-}
-
 #endif
+
+u32 fileassoc::GetTypeCount()
+{
+    return static_cast<u32>(std::size(cFileTypes));
+}
+
+fileassoc::TypeState fileassoc::GetTypeState(u32 index)
+{
+    SEAD_ASSERT(index < GetTypeCount());
+
+    const FileType& type = cFileTypes[index];
+
+    TypeState state;
+    state.extension = type.extension;
+    state.typeName = FormatFileTypeName(type.name);
+
+    ReadPlatformState(type, &state);
+
+    return state;
+}
+
+bool fileassoc::SetTypeOn(u32 index, bool on)
+{
+    SEAD_ASSERT(index < GetTypeCount());
+
+    if (testhooks::IsEnabled())
+        return false;
+
+    return SetPlatformType(cFileTypes[index], on);
+}

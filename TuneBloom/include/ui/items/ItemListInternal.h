@@ -47,6 +47,7 @@ struct ItemListContext
     f32 addDialogWidth = 0.0f;
     bool fixedOrder = false;
     bool removable = true;
+    bool deselectable = false;
 
     std::vector<Item*> listItems;
     std::vector<Item*> rows;
@@ -100,6 +101,7 @@ void SetSelectionInSubWindow(bool isSubWindow);
 void PruneFilteredSelection(const std::vector<Item*>& listItems, ItemFilterCallback filterCallback);
 void HandleItemListKeys(ItemListContext& ctx);
 void SelectItemListRow(ItemListContext& ctx, Item* item);
+void ClearItemListSelection(ItemListContext& ctx);
 
 bool DrawItemContextMenu(ItemListContext& ctx, Item* item);
 

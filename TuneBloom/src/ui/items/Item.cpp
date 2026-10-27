@@ -94,6 +94,12 @@ void DrawItemNameRow(Item* item)
 {
     PropertyRow(messages::common::cName);
 
+    if (!CanRenameItem(item))
+    {
+        ImGui::TextUnformatted(item->getName().cstr());
+        return;
+    }
+
     sead::FixedSafeString<256> shown(item->isEnableName() ? item->getName().cstr() : "");
     sead::FixedSafeString<256> name(shown);
 

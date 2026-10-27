@@ -54,6 +54,7 @@ static f32 sNextListFooterWidth = 0.0f;
 static f32 sNextListAddDialogWidth = 0.0f;
 static bool sNextListFixedOrder = false;
 static bool sNextListRemovable = true;
+static bool sNextListDeselectable = false;
 
 void ScrollItemListTo(Item* item)
 {
@@ -108,6 +109,11 @@ void SetNextItemListRemovable(bool removable)
     sNextListRemovable = removable;
 }
 
+void SetNextItemListDeselectable()
+{
+    sNextListDeselectable = true;
+}
+
 static bool IsItemVisible(Item* item, ItemFilterCallback filterCallback)
 {
     return item && (!filterCallback || filterCallback(item));
@@ -134,8 +140,10 @@ static void CollectItemListRows(ItemListContext& ctx)
 
     ctx.fixedOrder = sNextListFixedOrder;
     ctx.removable = sNextListRemovable;
+    ctx.deselectable = sNextListDeselectable;
     sNextListFixedOrder = false;
     sNextListRemovable = true;
+    sNextListDeselectable = false;
 
     ctx.listItems.reserve(ctx.list.size());
 
@@ -786,6 +794,9 @@ static void DrawItemListRows(ItemListContext& ctx)
         for (s32 row = clipper.DisplayStart; row < clipper.DisplayEnd; row++)
             DrawItemListRow(ctx, ctx.rows[row]);
     }
+
+    if (ctx.deselectable && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered())
+        ClearItemListSelection(ctx);
 }
 
 static void EndItemListTable(ItemListContext& ctx)

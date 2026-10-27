@@ -1,6 +1,7 @@
 #include <ui/project/Sidebar.h>
 
 #include <ui/browser/FilesPanel.h>
+#include <ui/file/Document.h>
 #include <ui/file/DocumentMgr.h>
 #include <ui/project/ProjectViews.h>
 #include <ui/Messages.h>
@@ -13,8 +14,6 @@
 
 static constexpr f32 cSwitchGapEm    = 0.25f;
 static constexpr f32 cSwitchHoverMix = 0.5f;
-
-static constexpr const char* cSidebarWindowId = "###ProjectWindow";
 
 enum class SidebarView
 {
@@ -41,18 +40,38 @@ static const SidebarViewInfo& GetViewInfo(SidebarView view)
     return cSidebarViews[static_cast<s32>(view)];
 }
 
+static bool HasProjectView()
+{
+    const Document* document = ActiveDocument();
+
+    return document && document->hasProjectList();
+}
+
+static SidebarView GetShownView()
+{
+    return HasProjectView() ? sView : SidebarView::Browser;
+}
+
 static void DrawSwitchTab(SidebarView view, const ImRect& bb)
 {
     const SidebarViewInfo& info = GetViewInfo(view);
-    const bool isSelected = sView == view;
+    const bool isSelected = GetShownView() == view;
+    const bool isEnabled = view != SidebarView::Project || HasProjectView();
 
     ImGui::PushID(static_cast<s32>(view));
     ImGui::SetCursorScreenPos(bb.Min);
 
+    ImGui::BeginDisabled(!isEnabled);
+
     if (ImGui::InvisibleButton("##View", bb.GetSize(), ImGuiButtonFlags_PressedOnClick))
         sView = view;
 
-    const bool isHovered = ImGui::IsItemHovered();
+    ImGui::EndDisabled();
+
+    if (!isEnabled)
+        ImGui::SetItemTooltip("%s", messages::project::cViewUnavailable);
+
+    const bool isHovered = isEnabled && ImGui::IsItemHovered();
     const ImVec4& tabColor = ImGui::GetStyleColorVec4(ImGuiCol_Tab);
     const ImVec4& selectedColor = ImGui::GetStyleColorVec4(ImGuiCol_TabUnfocusedActive);
     const ImU32 idleColor = ImGui::GetColorU32(isSelected ? selectedColor : tabColor);
@@ -67,16 +86,13 @@ static void DrawSwitchTab(SidebarView view, const ImRect& bb)
     const f32 textY = bb.Min.y + ImFloor((bb.GetHeight() - ImGui::GetFontSize()) * 0.5f);
     const f32 right = bb.Max.x - padX;
 
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(isSelected || isHovered ? ImGuiCol_Text : ImGuiCol_TextDisabled));
+    const f32 textAlpha = isEnabled ? 1.0f : ImGui::GetStyle().DisabledAlpha;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(isSelected || isHovered ? ImGuiCol_Text : ImGuiCol_TextDisabled, textAlpha));
     ImGui::RenderTextEllipsis(drawList, ImVec2(textX, textY), ImVec2(right, textY + ImGui::GetFontSize()), right, right, label.cstr(), nullptr, nullptr);
     ImGui::PopStyleColor();
 
     ImGui::PopID();
-}
-
-static bool HasProjectView()
-{
-    return !GetOpenDocuments().empty();
 }
 
 static void DrawSwitch(const ImRect& bb, f32 lineLeft, f32 lineRight)
@@ -91,9 +107,7 @@ static void DrawSwitch(const ImRect& bb, f32 lineLeft, f32 lineRight)
     ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(lineLeft, lineTop), ImVec2(lineRight, bb.Max.y), ImGui::GetColorU32(ImGuiCol_TabUnfocusedActive));
 
     DrawSwitchTab(SidebarView::Browser, ImRect(bb.Min, ImVec2(bb.Min.x + half, bb.Max.y)));
-
-    if (HasProjectView())
-        DrawSwitchTab(SidebarView::Project, ImRect(ImVec2(bb.Max.x - half, bb.Min.y), bb.Max));
+    DrawSwitchTab(SidebarView::Project, ImRect(ImVec2(bb.Max.x - half, bb.Min.y), bb.Max));
 }
 
 static void DrawSwitchInWindow()
@@ -147,10 +161,11 @@ void DrawSidebarUI()
         ImGui::SetNextWindowFocus();
     }
 
-    if (!HasProjectView())
+    if (GetOpenDocuments().empty())
         sView = SidebarView::Browser;
 
-    const SidebarViewInfo& info = GetViewInfo(sView);
+    const SidebarView view = GetShownView();
+    const SidebarViewInfo& info = GetViewInfo(view);
     const sead::FormatFixedSafeString<64> title("%s %s%s", info.icon, info.label, cSidebarWindowId);
 
     if (ImGui::Begin(title.cstr()))
@@ -158,7 +173,7 @@ void DrawSidebarUI()
         if (!sIsSwitchInStrip)
             DrawSwitchInWindow();
 
-        if (sView == SidebarView::Project)
+        if (view == SidebarView::Project)
             DrawProjectList();
         else
             DrawFilesPanel();

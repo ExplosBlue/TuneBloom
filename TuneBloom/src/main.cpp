@@ -31,9 +31,12 @@
 #include "bfsar/archive/Bea.h"
 #include "bfsar/archive/BfsarLayoutCheck.h"
 #include "bfsar/archive/Cmpbin.h"
+#include "bfsar/files/LooseStreamFile.h"
+#include "bfsar/files/LooseWaveFile.h"
 #include "ui/file/File.h"
 #include "bfsar/io/FileIo.h"
 #include "bfsar/io/PackFile.h"
+#include "platform/SingleInstance.h"
 
 #include <libs/portable-file-dialogs.h>
 
@@ -177,6 +180,28 @@ static void dumpItemIds(Bfsar& archive)
     exitConvert(0);
 }
 
+template <typename LooseFile>
+[[noreturn]] static void convertLooseFile(const char* inPath, const char* outPath, const u8* data, u32 size)
+{
+    LooseFile looseFile;
+    sead::FixedSafeString<256> error;
+
+    if (!looseFile.open(data, size, sead::FixedSafeString<512>(inPath), &error))
+    {
+        fprintf(stderr, "Failed to parse '%s': %s\n", inPath, error.cstr());
+        exitConvert(1);
+    }
+
+    if (!ensureDir(outPath) || looseFile.saveAs(sead::FixedSafeString<512>(outPath), &error) != SaveResult::Saved)
+    {
+        fprintf(stderr, "Failed to save to '%s': %s\n", outPath, error.cstr());
+        exitConvert(1);
+    }
+
+    fprintf(stdout, "Done: '%s' -> '%s'\n", inPath, outPath);
+    exitConvert(0);
+}
+
 [[noreturn]] static void convertArchive(const char* inPath, const char* outPath)
 {
     const bool dumpIds = strcmp(outPath, "--dump-ids") == 0;
@@ -224,6 +249,12 @@ static void dumpItemIds(Bfsar& archive)
 
         convertAudioResource(inPath, outPath, std::move(bytes), dumpIds);
     }
+
+    if (!dumpIds && LooseStreamFile::IsStreamFile(bfsarFile, static_cast<u32>(loadArg.read_size)))
+        convertLooseFile<LooseStreamFile>(inPath, outPath, bfsarFile, static_cast<u32>(loadArg.read_size));
+
+    if (!dumpIds && LooseWaveFile::IsWaveFile(bfsarFile, static_cast<u32>(loadArg.read_size)))
+        convertLooseFile<LooseWaveFile>(inPath, outPath, bfsarFile, static_cast<u32>(loadArg.read_size));
 
     bea::Source beaSource;
 
@@ -310,6 +341,9 @@ static void setStartupFile(const char* path)
 
 int main(int argc, char* argv[])
 {
+    if (argc == 2 && argv[1][0] != '-' && !testhooks::IsEnabled() && singleinstance::ForwardToRunningApp(argv[1]))
+        return 0;
+
     if (argc == 2 && argv[1][0] != '-')
         setStartupFile(argv[1]);
 
@@ -387,6 +421,8 @@ int main(int argc, char* argv[])
 
     if (testhooks::IsEnabled())
         testhooks::HideWindow(framework->getWindowHandle());
+    else
+        singleinstance::StartListening();
 
     sead::TaskBase::CreateArg rootArg(&sead::TTaskFactory<RootTask>);
     sead::Framework::RunArg runArg;

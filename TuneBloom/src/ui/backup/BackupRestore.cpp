@@ -82,7 +82,7 @@ static bool CheckSnapshotFile(const Document::File& file, bool untitled)
         return false;
     }
 
-    if (untitled && file.kind == Document::Kind::AudioResource)
+    if (untitled && file.kind != Document::Kind::SoundArchive)
     {
         PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
         return false;

@@ -61,6 +61,7 @@ static InterfaceSettings sInterfaceSettings;
 static StartupSettings sStartupSettings;
 static MidiSettings sMidiSettings;
 static std::vector<std::string> sMidiEnabledDevices;
+static bool sIsMidiAutoConnected = false;
 
 static f32 sUIScale = cUIScaleDefault;
 
@@ -186,6 +187,11 @@ void SetMidiDeviceEnabled(const char* name, bool enabled)
 
 void AutoConnectMidiDevices()
 {
+    if (sIsMidiAutoConnected)
+        return;
+
+    sIsMidiAutoConnected = true;
+
     const u32 count = MidiInput::getDeviceCount();
 
     for (u32 i = 0; i < count; i++)
@@ -223,6 +229,13 @@ void LoadAudioConfig()
         sAudioSettings.playbackDeviceName = *device;
 }
 
+void ApplyAudioMixConfig()
+{
+    snd::SoundSystem::setMasterVolume(gMasterVolume);
+    snd::SoundSystem::setOutputMode(sAudioSettings.monoOutput ? snd::OutputMode::Mono : snd::OutputMode::Stereo);
+    snd::SoundSystem::setSrcType(sAudioSettings.linearInterpolation ? snd::SrcType::Type_Linear : snd::SrcType::Type_4Tap);
+}
+
 void ApplyAudioConfig()
 {
     snd::SoundSystem::refreshPlaybackDevices();
@@ -231,9 +244,7 @@ void ApplyAudioConfig()
     if (sAudioSettings.outputSampleRate != snd::SoundSystem::getOutputSampleRate())
         snd::SoundSystem::setOutputSampleRate(sAudioSettings.outputSampleRate);
 
-    snd::SoundSystem::setMasterVolume(gMasterVolume);
-    snd::SoundSystem::setOutputMode(sAudioSettings.monoOutput ? snd::OutputMode::Mono : snd::OutputMode::Stereo);
-    snd::SoundSystem::setSrcType(sAudioSettings.linearInterpolation ? snd::SrcType::Type_Linear : snd::SrcType::Type_4Tap);
+    ApplyAudioMixConfig();
 }
 
 void SaveArchiveConfig()

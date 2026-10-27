@@ -5,6 +5,7 @@
 #include <ui/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/Workspace.h>
+#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
@@ -43,11 +44,6 @@ static const ProjectRow cSoundArchiveRows[] = {
     { UIType::BankFiles,         ICON_LC_KEYBOARD_MUSIC, messages::project::cRowBankFiles,      4, false, true  },
 
     { UIType::FileStatistics,    ICON_LC_CHART_AREA,     messages::project::cRowFileStatistics, 5, false, false },
-};
-
-static const ProjectRow cAudioResourceRows[] = {
-    { UIType::ProjectInfo, ICON_LC_INFO,       messages::common::cProjectInfo,      0, false, false },
-    { UIType::AudioAssets, ICON_LC_FILE_AUDIO, messages::project::cRowAudioAssets, 1, false, true  },
 };
 
 struct ProjectRowTable
@@ -130,12 +126,6 @@ static void CountSoundArchiveItems(Bfsar& archive, s32* counts)
 
 static ProjectRowTable GetProjectRows(s32* counts)
 {
-    if (const AudioResource* resource = FindActiveAudioResource())
-    {
-        CountAt(counts, UIType::AudioAssets) = static_cast<s32>(resource->getAssetList().size());
-        return { cAudioResourceRows, IM_ARRAYSIZE(cAudioResourceRows) };
-    }
-
     if (Bfsar* archive = FindActiveSoundArchive())
         CountSoundArchiveItems(*archive, counts);
 
@@ -220,7 +210,7 @@ void EndNavBox()
 
 static bool DrawProjectRow(const ProjectRow& row, s32 count, f32 indent)
 {
-    const sead::FormatFixedSafeString<16> text("%d", count);
+    const sead::FixedSafeString<32> text = FormatCountText(count);
 
     ImGui::PushID(static_cast<s32>(row.type));
     const bool pressed = DrawNavRow(row.icon, row.name, GetUITab() == row.type, row.counted ? text.cstr() : nullptr, row.counted && count == 0, row.title, indent);

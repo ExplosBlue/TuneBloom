@@ -41,7 +41,6 @@ enum class RecentColumn
     Folder,
     Modified,
     Size,
-    Pin,
     Num
 };
 
@@ -58,10 +57,7 @@ enum class RecentAction
 {
     None,
     Open,
-    TogglePin,
-    Remove,
-    MoveUp,
-    MoveDown
+    Remove
 };
 
 static constexpr s32    cRecentVisibleRows  = 12;
@@ -81,7 +77,6 @@ static constexpr const char* cPinnedKey    = "pinned";
 
 static RecentSort sRecentSort = RecentSort::LastOpened;
 static bool sRecentSortDescending = false;
-static bool sRecentDragMoved = false;
 static bool sRecentInfoDirty = true;
 static s32 sRecentTableFrame = -1;
 
@@ -91,13 +86,7 @@ std::vector<std::string>& GetRecentFiles()
     return *files;
 }
 
-static std::vector<std::string>& GetPinnedFiles()
-{
-    static std::vector<std::string>* files = new std::vector<std::string>();
-    return *files;
-}
-
-static std::vector<std::string>& GetMissingPinnedFiles()
+static std::vector<std::string>& GetLegacyPinnedFiles()
 {
     static std::vector<std::string>* files = new std::vector<std::string>();
     return *files;
@@ -156,18 +145,6 @@ static bool IsFileMissing(const std::string& path)
     return !packfile::IsOnDisk(path);
 }
 
-static void UpdateMissingPinnedFiles()
-{
-    std::vector<std::string>& missing = GetMissingPinnedFiles();
-    missing.clear();
-
-    for (const std::string& path : GetPinnedFiles())
-    {
-        if (IsFileMissing(path))
-            missing.push_back(path);
-    }
-}
-
 static void WritePathList(json::Value* section, const char* key, const std::vector<std::string>& files)
 {
     json::Value& list = section->setArray(key);
@@ -206,7 +183,6 @@ static void SaveRecentFiles()
 
     json::Value section;
     WritePathList(&section, cRecentKey, GetRecentFiles());
-    WritePathList(&section, cPinnedKey, GetPinnedFiles());
 
     SaveConfigSection(cStateFile, cFilesSection, section);
 }
@@ -226,7 +202,6 @@ static void PruneRecentFiles()
 static void RefreshRecentFiles()
 {
     PruneRecentFiles();
-    UpdateMissingPinnedFiles();
     sRecentInfoDirty = true;
 }
 
@@ -244,13 +219,32 @@ void LoadRecentFiles()
     json::Value section;
     LoadConfigSection(cStateFile, cFilesSection, &section);
 
-    ReadPathList(section, cRecentKey, &GetRecentFiles());
-    ReadPathList(section, cPinnedKey, &GetPinnedFiles());
+    std::vector<std::string>& recent = GetRecentFiles();
+    std::vector<std::string>& pinned = GetLegacyPinnedFiles();
 
-    for (const std::string& path : GetPinnedFiles())
-        RemovePath(&GetRecentFiles(), path);
+    ReadPathList(section, cRecentKey, &recent);
+    ReadPathList(section, cPinnedKey, &pinned);
+
+    for (auto it = pinned.rbegin(); it != pinned.rend(); ++it)
+    {
+        if (packfile::IsPackPath(*it) && !ContainsPath(recent, *it))
+            recent.insert(recent.begin(), *it);
+    }
+
+    std::erase_if(pinned, [](const std::string& path) { return packfile::IsPackPath(path); });
 
     RefreshRecentFiles();
+}
+
+std::vector<std::string> TakeLegacyPinnedFiles()
+{
+    std::vector<std::string> files;
+    files.swap(GetLegacyPinnedFiles());
+
+    if (!files.empty())
+        SaveRecentFiles();
+
+    return files;
 }
 
 void AddRecentFile(const char* path)
@@ -260,7 +254,7 @@ void AddRecentFile(const char* path)
 
     const std::string file = NormalizePath(path);
 
-    if (file.empty() || ContainsPath(GetPinnedFiles(), file))
+    if (file.empty())
         return;
 
     std::vector<std::string>& files = GetRecentFiles();
@@ -460,7 +454,7 @@ static bool IsRecentRowHeld()
 {
     const ImGuiID activeId = ImGui::GetActiveID();
 
-    return activeId != 0 && (activeId == ImGui::GetID("##row") || activeId == ImGui::GetID("##pin") || activeId == ImGui::GetID("##remove"));
+    return activeId != 0 && (activeId == ImGui::GetID("##row") || activeId == ImGui::GetID("##remove"));
 }
 
 static f32 CalcRecentNameOffset()
@@ -468,23 +462,18 @@ static f32 CalcRecentNameOffset()
     return ImGui::CalcTextSize(ICON_LC_FILE_MUSIC " ").x;
 }
 
-static void DrawRecentFileName(const std::string& path, bool missing, bool grip, const ImVec2& pos, f32 right)
+static void DrawRecentFileName(const std::string& path, const ImVec2& pos, f32 right)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const ImVec4 dimColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
-    const char* icon = missing ? ICON_LC_FILE_X : grip ? ICON_LC_GRIP_VERTICAL : ICON_LC_FILE_MUSIC;
     const f32 nameLeft = pos.x + CalcRecentNameOffset();
 
-    drawList->AddText(pos, ImGui::GetColorU32(missing ? dimColor : GetItemValueColor()), icon);
-
-    ImGui::PushStyleColor(ImGuiCol_Text, missing ? dimColor : ImGui::GetStyleColorVec4(ImGuiCol_Text));
+    drawList->AddText(pos, ImGui::GetColorU32(GetItemValueColor()), ICON_LC_FILE_MUSIC);
     ImGui::RenderTextEllipsis(drawList, ImVec2(nameLeft, pos.y), ImVec2(right, pos.y + ImGui::GetFontSize()), right, right, pathtext::FileName(path.c_str()), nullptr, nullptr);
-    ImGui::PopStyleColor();
 }
 
-static void SetRecentFileTooltip(const std::string& path, bool missing)
+static void SetRecentFileTooltip(const std::string& path)
 {
-    ImGui::SetTooltip(missing ? messages::recent::cNotFoundFormat : "%s", path.c_str());
+    ImGui::SetTooltip("%s", path.c_str());
 }
 
 static void SetRecentDateTooltip(const RecentFileInfo& info)
@@ -495,40 +484,14 @@ static void SetRecentDateTooltip(const RecentFileInfo& info)
     ImGui::SetTooltip("%s", date);
 }
 
-static RecentAction DragRecentRow(bool held, bool canDrag, f32 top, f32 bottom)
-{
-    if (!held || !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
-        return RecentAction::None;
-
-    sRecentDragMoved = true;
-
-    if (!canDrag)
-        return RecentAction::None;
-
-    const f32 mouseY = ImGui::GetMousePos().y;
-
-    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-
-    if (mouseY < top)
-        return RecentAction::MoveUp;
-
-    if (mouseY > bottom)
-        return RecentAction::MoveDown;
-
-    return RecentAction::None;
-}
-
-static RecentAction DrawRecentRowMenu(const std::string& path, bool pinned, bool missing)
+static RecentAction DrawRecentRowMenu(const std::string& path)
 {
     RecentAction action = RecentAction::None;
 
     if (!BeginContextMenu("##menu"))
         return action;
 
-    if (ContextMenuItem(ICON_LC_PIN, pinned ? messages::recent::cUnpin : messages::recent::cPin))
-        action = RecentAction::TogglePin;
-
-    if (ContextMenuItem(ICON_LC_FOLDER_OPEN, messages::recent::cShowInFileManager, !missing))
+    if (ContextMenuItem(ICON_LC_FOLDER_OPEN, messages::recent::cShowInFileManager))
         ShowInFileManager(path);
 
     if (ContextMenuItem(ICON_LC_COPY, messages::mainmenu::cCopyPath))
@@ -544,7 +507,7 @@ static RecentAction DrawRecentRowMenu(const std::string& path, bool pinned, bool
     return action;
 }
 
-static RecentAction DrawRecentRow(const std::string& path, bool pinned, bool missing, bool canDrag, f32 width, f32 nameWidth)
+static RecentAction DrawRecentRow(const std::string& path, f32 width, f32 nameWidth)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
@@ -564,22 +527,18 @@ static RecentAction DrawRecentRow(const std::string& path, bool pinned, bool mis
 
     ImDrawList* highlightList = BeginMenuHighlight();
     const bool pressed = ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap | ImGuiSelectableFlags_DontClosePopups, ImVec2(width, 0.0f));
-    const bool held = ImGui::IsItemActive();
     const bool detailHovered = IsItemHoveredForDetail();
     EndMenuHighlight(highlightList, rowHovered);
 
     ImGui::OpenPopupOnItemClick("##menu", ImGuiPopupFlags_MouseButtonRight);
 
-    if (held && canDrag && sRecentDragMoved)
-        drawList->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_CheckMark), style.FrameRounding);
-
     // Name and folder
     const f32 textY = pos.y;
-    const f32 buttonsLeft = max.x - buttonSize * 2.0f;
-    const f32 textRight = buttonsLeft + (pinned || !rowHovered ? buttonSize : 0.0f) - style.ItemSpacing.x;
+    const f32 buttonLeft = max.x - buttonSize;
+    const f32 textRight = buttonLeft - style.ItemSpacing.x;
     const f32 folderLeft = pos.x + CalcRecentNameOffset() + nameWidth + em * cRecentFolderGapEm;
 
-    DrawRecentFileName(path, missing, canDrag && rowHovered, pos, sead::Mathf::min(folderLeft - style.ItemSpacing.x, textRight));
+    DrawRecentFileName(path, pos, sead::Mathf::min(folderLeft - style.ItemSpacing.x, textRight));
 
     if (folderLeft < textRight)
     {
@@ -589,29 +548,20 @@ static RecentAction DrawRecentRow(const std::string& path, bool pinned, bool mis
     }
 
     if (detailHovered)
-        SetRecentFileTooltip(path, missing);
+        SetRecentFileTooltip(path);
 
-    action = DragRecentRow(held, canDrag, min.y, max.y);
-
-    if (pressed && !sRecentDragMoved && !missing)
+    if (pressed)
     {
         action = RecentAction::Open;
         ImGui::CloseCurrentPopup();
     }
 
     // Buttons
-    if (!pinned)
-    {
-        ImGui::SetCursorScreenPos(ImVec2(buttonsLeft, min.y));
-        if (DrawRowHoverButton("##remove", ICON_LC_X, false, rowHovered, messages::recent::cRemove, ImVec2(buttonSize, buttonSize), buttonSize))
-            action = RecentAction::Remove;
-    }
+    ImGui::SetCursorScreenPos(ImVec2(buttonLeft, min.y));
+    if (DrawRowHoverButton("##remove", ICON_LC_X, false, rowHovered, messages::recent::cRemove, ImVec2(buttonSize, buttonSize), buttonSize))
+        action = RecentAction::Remove;
 
-    ImGui::SetCursorScreenPos(ImVec2(buttonsLeft + buttonSize, min.y));
-    if (DrawRowHoverButton("##pin", ICON_LC_PIN, pinned, pinned || rowHovered, pinned ? messages::recent::cUnpin : messages::recent::cPin, ImVec2(buttonSize, buttonSize), buttonSize))
-        action = RecentAction::TogglePin;
-
-    const RecentAction menuAction = DrawRecentRowMenu(path, pinned, missing);
+    const RecentAction menuAction = DrawRecentRowMenu(path);
 
     if (menuAction != RecentAction::None)
         action = menuAction;
@@ -669,75 +619,25 @@ static f32 CalcRecentTextWidth(Fn getText, f32 maxWidth)
 {
     f32 width = 0.0f;
 
-    for (const std::vector<std::string>* files : { &GetPinnedFiles(), &GetRecentFiles() })
-    {
-        for (const std::string& path : *files)
-            width = sead::Mathf::max(width, ImGui::CalcTextSize(getText(path).c_str()).x);
-    }
+    for (const std::string& path : GetRecentFiles())
+        width = sead::Mathf::max(width, ImGui::CalcTextSize(getText(path).c_str()).x);
 
     return sead::Mathf::min(width, maxWidth);
 }
 
-static void ApplyRecentAction(RecentAction action, const std::string& path)
-{
-    std::vector<std::string>& pinned = GetPinnedFiles();
-    std::vector<std::string>& recent = GetRecentFiles();
-    const auto it = std::find(pinned.begin(), pinned.end(), path);
-    const bool isPinned = it != pinned.end();
-
-    switch (action)
-    {
-    case RecentAction::TogglePin:
-        if (isPinned)
-        {
-            pinned.erase(it);
-            recent.insert(recent.begin(), path);
-            LimitRecentFiles();
-        }
-        else
-        {
-            RemovePath(&recent, path);
-            pinned.push_back(path);
-        }
-        break;
-
-    case RecentAction::Remove:
-        RemovePath(&pinned, path);
-        RemovePath(&recent, path);
-        break;
-
-    case RecentAction::MoveUp:
-        if (!isPinned || it == pinned.begin())
-            return;
-        std::iter_swap(it, it - 1);
-        break;
-
-    case RecentAction::MoveDown:
-        if (!isPinned || it + 1 == pinned.end())
-            return;
-        std::iter_swap(it, it + 1);
-        break;
-
-    default:
-        return;
-    }
-
-    UpdateMissingPinnedFiles();
-    SaveRecentFiles();
-}
-
 static bool FinishRecentAction(RecentAction action, const std::string& path, std::string* outPath)
 {
-    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
-        sRecentDragMoved = false;
-
     if (action == RecentAction::Open)
     {
         *outPath = path;
         return true;
     }
 
-    ApplyRecentAction(action, path);
+    if (action == RecentAction::Remove)
+    {
+        RemovePath(&GetRecentFiles(), path);
+        SaveRecentFiles();
+    }
 
     return false;
 }
@@ -746,13 +646,12 @@ bool DrawRecentFilesList(std::string* outPath)
 {
     SEAD_ASSERT(outPath);
 
-    std::vector<std::string>& pinned = GetPinnedFiles();
     std::vector<std::string>& recent = GetRecentFiles();
 
     if (ImGui::IsWindowAppearing())
         RefreshRecentFiles();
 
-    if (pinned.empty() && recent.empty())
+    if (recent.empty())
     {
         MenuBarItem(messages::recent::cEmpty, nullptr, false, false);
         return false;
@@ -767,57 +666,41 @@ bool DrawRecentFilesList(std::string* outPath)
     RecentAction action = RecentAction::None;
     std::string actionPath;
 
-    auto drawRow = [&](const std::string& path, bool isPinned)
+    std::vector<const std::string*> rows;
+    for (const std::string& path : recent)
+        rows.push_back(&path);
+
+    SortRecentFiles(&rows, sRecentSort, sRecentSortDescending);
+
+    DrawRecentHeader(width, nameWidth);
+
+    const bool scroll = static_cast<s32>(rows.size()) > cRecentVisibleRows;
+    const f32 inset = ImFloor(style.ItemSpacing.x * 0.5f);
+
+    if (scroll)
     {
-        const bool missing = isPinned && ContainsPath(GetMissingPinnedFiles(), path);
-        const RecentAction rowAction = DrawRecentRow(path, isPinned, missing, isPinned && pinned.size() > 1, width, nameWidth);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() - inset);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparent);
+        ImGui::BeginChild("##recent", ImVec2(width + inset * 2.0f + style.ScrollbarSize, cRecentVisibleRows * CalcRecentRowHeight()));
+        ImGui::SetCursorPos(ImVec2(inset, ImFloor(style.ItemSpacing.y * 0.5f)));
+        ImGui::Indent(inset);
+    }
+
+    for (const std::string* path : rows)
+    {
+        const RecentAction rowAction = DrawRecentRow(*path, width, nameWidth);
 
         if (rowAction == RecentAction::None)
-            return;
+            continue;
 
         action = rowAction;
-        actionPath = path;
-    };
+        actionPath = *path;
+    }
 
-    if (!pinned.empty())
-        ImGui::SeparatorText(messages::common::cPinned);
-
-    for (const std::string& path : pinned)
-        drawRow(path, true);
-
-    if (!pinned.empty() && !recent.empty())
-        ImGui::SeparatorText(messages::common::cRecentFiles);
-
-    if (!recent.empty())
+    if (scroll)
     {
-        std::vector<const std::string*> rows;
-        for (const std::string& path : recent)
-            rows.push_back(&path);
-
-        SortRecentFiles(&rows, sRecentSort, sRecentSortDescending);
-
-        DrawRecentHeader(width, nameWidth);
-
-        const bool scroll = static_cast<s32>(rows.size()) > cRecentVisibleRows;
-        const f32 inset = ImFloor(style.ItemSpacing.x * 0.5f);
-
-        if (scroll)
-        {
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() - inset);
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparent);
-            ImGui::BeginChild("##recent", ImVec2(width + inset * 2.0f + style.ScrollbarSize, cRecentVisibleRows * CalcRecentRowHeight()));
-            ImGui::SetCursorPos(ImVec2(inset, ImFloor(style.ItemSpacing.y * 0.5f)));
-            ImGui::Indent(inset);
-        }
-
-        for (const std::string* path : rows)
-            drawRow(*path, false);
-
-        if (scroll)
-        {
-            ImGui::EndChild();
-            ImGui::PopStyleColor();
-        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
     }
 
     ImGui::Separator();
@@ -853,20 +736,7 @@ static void DrawRecentTableEmpty()
     ImGui::PopStyleColor();
 }
 
-static void DrawRecentTablePin(bool pinned, bool rowHovered, RecentAction* action)
-{
-    if (!ImGui::TableSetColumnIndex(static_cast<s32>(RecentColumn::Pin)))
-        return;
-
-    BeginItemActionCell();
-
-    if (DrawRowHoverButton("##pin", ICON_LC_PIN, pinned, pinned || rowHovered, pinned ? messages::recent::cUnpin : messages::recent::cPin, GetItemActionCellSize(), GetRowButtonSize()))
-        *action = RecentAction::TogglePin;
-
-    EndItemActionCell();
-}
-
-static RecentAction DrawRecentTableRow(const std::string& path, bool pinned, bool missing, bool canDrag)
+static RecentAction DrawRecentTableRow(const std::string& path)
 {
     const RecentFileInfo& info = GetRecentFileInfo(path);
 
@@ -879,32 +749,24 @@ static RecentAction DrawRecentTableRow(const std::string& path, bool pinned, boo
     const ImVec2 cursor = ImGui::GetCursorScreenPos();
     const ImVec2 textPos(cursor.x, cursor.y + ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset);
     const f32 nameRight = cursor.x + ImGui::GetContentRegionAvail().x;
-    const bool rowHovered = IsRecentRowHeld() || ImGui::IsPopupOpen("##menu") || (ImGui::GetActiveID() == 0 && ImGui::TableGetHoveredRow() == ImGui::TableGetRowIndex());
 
     bool selectableHovered = false;
-    ImGui::SetNextItemAllowOverlap();
     const bool pressed = DrawTableRowSelectable("##row", false, &selectableHovered);
-    const bool held = ImGui::IsItemActive();
     const bool detailHovered = IsItemHoveredForDetail();
-    const ImVec2 rowMin = ImGui::GetItemRectMin();
-    const ImVec2 rowMax = ImGui::GetItemRectMax();
 
     ImGui::OpenPopupOnItemClick("##menu", ImGuiPopupFlags_MouseButtonRight);
 
-    DrawRecentFileName(path, missing, canDrag && rowHovered, textPos, nameRight);
+    DrawRecentFileName(path, textPos, nameRight);
 
     if (detailHovered)
     {
         if (ImGui::TableGetHoveredColumn() == static_cast<s32>(RecentColumn::Modified) && info.time != 0)
             SetRecentDateTooltip(info);
         else
-            SetRecentFileTooltip(path, missing);
+            SetRecentFileTooltip(path);
     }
 
-    RecentAction action = DragRecentRow(held, canDrag, rowMin.y, rowMax.y);
-
-    if (pressed && !sRecentDragMoved && !missing)
-        action = RecentAction::Open;
+    RecentAction action = pressed ? RecentAction::Open : RecentAction::None;
 
     if (ImGui::TableSetColumnIndex(static_cast<s32>(RecentColumn::Folder)))
         DrawItemValueCell(info.folder.c_str(), cItemColumnFlag_Text | cItemColumnFlag_TextEnd);
@@ -915,9 +777,7 @@ static RecentAction DrawRecentTableRow(const std::string& path, bool pinned, boo
     if (ImGui::TableSetColumnIndex(static_cast<s32>(RecentColumn::Size)))
         DrawItemValueCell(info.size.c_str(), cItemColumnFlag_None);
 
-    DrawRecentTablePin(pinned, rowHovered, &action);
-
-    const RecentAction menuAction = DrawRecentRowMenu(path, pinned, missing);
+    const RecentAction menuAction = DrawRecentRowMenu(path);
 
     if (menuAction != RecentAction::None)
         action = menuAction;
@@ -967,11 +827,8 @@ static void CalcRecentTableWidths(const ItemColumn* columns, f32* widths, bool* 
 
     widths[1] = GetItemColumnWidth(columns[1]);
     widths[2] = GetItemColumnWidth(columns[2]);
-    widths[3] = GetItemActionColumnWidth();
 
-    f32 rest = ImGui::GetContentRegionAvail().x - cell - nameMin - (widths[3] + cell);
-
-    shown[3] = true;
+    f32 rest = ImGui::GetContentRegionAvail().x - cell - nameMin;
 
     for (s32 i : { 1, 2 })
     {
@@ -987,13 +844,10 @@ static void CalcRecentTableWidths(const ItemColumn* columns, f32* widths, bool* 
     widths[0] = sead::Mathf::max(folderMin, sead::Mathf::min(GetItemColumnWidth(columns[0]), folderRoom));
 }
 
-static bool BeginRecentTable(const char* id, bool pinned, ItemColumn* columns, std::string* samples, f32* widths)
+static bool BeginRecentTable(ItemColumn* columns, std::string* samples, f32* widths)
 {
-    for (const std::vector<std::string>* files : { &GetPinnedFiles(), &GetRecentFiles() })
-    {
-        for (const std::string& path : *files)
-            GetRecentFileInfo(path);
-    }
+    for (const std::string& path : GetRecentFiles())
+        GetRecentFileInfo(path);
 
     for (const RecentFileInfo& info : GetRecentFileInfos())
     {
@@ -1009,9 +863,8 @@ static bool BeginRecentTable(const char* id, bool pinned, ItemColumn* columns, s
     columns[0] = { "Folder", messages::common::cFolder, samples[0].c_str(), nullptr, nullptr, cItemColumnFlag_Text | cItemColumnFlag_TextEnd, nullptr };
     columns[1] = { "Modified", messages::common::cModified, samples[1].c_str(), nullptr, nullptr, cItemColumnFlag_Text, nullptr };
     columns[2] = { "Size", messages::common::cSize, samples[2].c_str(), nullptr, nullptr, cItemColumnFlag_None, nullptr };
-    columns[3] = { "Pin", "", "", nullptr, nullptr, cItemColumnFlag_None, nullptr };
 
-    bool shown[4];
+    bool shown[3];
     CalcRecentTableWidths(columns, widths, shown);
 
     auto columnFlags = [&shown](s32 index, ImGuiTableColumnFlags flags)
@@ -1020,10 +873,10 @@ static bool BeginRecentTable(const char* id, bool pinned, ItemColumn* columns, s
     };
 
     const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_SizingFixedFit |
-                                  (pinned ? ImGuiTableFlags_None : ImGuiTableFlags_ScrollY | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate);
+                                  ImGuiTableFlags_ScrollY | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate;
 
     ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparentU32);
-    const bool open = ImGui::BeginTable(id, static_cast<s32>(RecentColumn::Num), flags);
+    const bool open = ImGui::BeginTable("##RecentFiles", static_cast<s32>(RecentColumn::Num), flags);
     ImGui::PopStyleColor();
 
     if (!open)
@@ -1033,10 +886,7 @@ static bool BeginRecentTable(const char* id, bool pinned, ItemColumn* columns, s
     ImGui::TableSetupColumn(columns[0].title, columnFlags(0, ImGuiTableColumnFlags_WidthFixed), widths[0]);
     ImGui::TableSetupColumn(columns[1].title, columnFlags(1, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending), widths[1]);
     ImGui::TableSetupColumn(columns[2].title, columnFlags(2, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending), widths[2]);
-    SetupItemActionColumn();
-
-    if (!pinned)
-        ImGui::TableSetupScrollFreeze(0, 1);
+    ImGui::TableSetupScrollFreeze(0, 1);
 
     return true;
 }
@@ -1049,30 +899,37 @@ static void RefreshRecentTables()
     sRecentTableFrame = ImGui::GetFrameCount();
 }
 
-static bool DrawRecentFileTable(const char* id, bool pinned, std::string* outPath)
+bool DrawRecentFilesTable(std::string* outPath)
 {
     SEAD_ASSERT(outPath);
 
-    const std::vector<std::string>& files = pinned ? GetPinnedFiles() : GetRecentFiles();
-    ItemColumn columns[4];
+    RefreshRecentTables();
+
+    if (GetRecentFiles().empty())
+    {
+        DrawRecentTableEmpty();
+        return false;
+    }
+
+    ItemColumn columns[3];
     std::string samples[3];
-    f32 widths[4];
+    f32 widths[3];
 
     PushItemTablePadding();
 
-    if (!BeginRecentTable(id, pinned, columns, samples, widths))
+    if (!BeginRecentTable(columns, samples, widths))
     {
         ImGui::PopStyleVar();
         return false;
     }
 
-    DrawItemHeadersRow(columns, 4, widths);
+    DrawItemHeadersRow(columns, 3, widths);
 
     bool descending = false;
-    const RecentSort sort = pinned ? RecentSort::LastOpened : GetRecentTableSort(ImGui::TableGetSortSpecs(), &descending);
+    const RecentSort sort = GetRecentTableSort(ImGui::TableGetSortSpecs(), &descending);
 
     std::vector<const std::string*> rows;
-    for (const std::string& path : files)
+    for (const std::string& path : GetRecentFiles())
         rows.push_back(&path);
 
     SortRecentFiles(&rows, sort, descending);
@@ -1082,8 +939,7 @@ static bool DrawRecentFileTable(const char* id, bool pinned, std::string* outPat
 
     for (const std::string* path : rows)
     {
-        const bool missing = pinned && ContainsPath(GetMissingPinnedFiles(), *path);
-        const RecentAction rowAction = DrawRecentTableRow(*path, pinned, missing, pinned && files.size() > 1);
+        const RecentAction rowAction = DrawRecentTableRow(*path);
 
         if (rowAction == RecentAction::None)
             continue;
@@ -1096,29 +952,4 @@ static bool DrawRecentFileTable(const char* id, bool pinned, std::string* outPat
     ImGui::PopStyleVar();
 
     return FinishRecentAction(action, actionPath, outPath);
-}
-
-bool HasPinnedFiles()
-{
-    RefreshRecentTables();
-
-    return !GetPinnedFiles().empty();
-}
-
-bool DrawPinnedFilesTable(std::string* outPath)
-{
-    return DrawRecentFileTable("##PinnedFiles", true, outPath);
-}
-
-bool DrawRecentFilesTable(std::string* outPath)
-{
-    RefreshRecentTables();
-
-    if (GetRecentFiles().empty())
-    {
-        DrawRecentTableEmpty();
-        return false;
-    }
-
-    return DrawRecentFileTable("##RecentFiles", false, outPath);
 }

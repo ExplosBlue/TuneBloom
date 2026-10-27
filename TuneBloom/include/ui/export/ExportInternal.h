@@ -3,10 +3,10 @@
 #include <ui/file/FileDialogs.h>
 
 #include <bfsar/model/Item.h>
+#include <bfsar/model/Sound.h>
 
 #include <vector>
 
-class Sound;
 class WaveFile;
 
 inline constexpr f32 cExportDialogWidthEm = 27.0f;
@@ -22,9 +22,9 @@ void BeginExportNameBatch();
 void BuildUniqueExportPath(sead::BufferedSafeString *outPath, const char *dir, const sead::SafeString &rawName, const char *ext);
 void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char *dir, const Sound *sound, const char *ext);
 
-const WaveFile* FindStreamExportWave(const Sound* sound);
+const WaveFile* FindStreamExportWave(const Sound::StreamSoundInfo& stream);
 bool HasExportLoop(const WaveFile* wave);
-bool ExportStreamSoundToWav(Sound* sound, const char* path, bool multiChannel, u32 loopCount, f32 fadeSec, u32 targetRate, bool loopMarkers);
+bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool multiChannel, u32 loopCount, f32 fadeSec, u32 targetRate, bool loopMarkers);
 
 void ShowExportResult(const char* message);
 void ShowBatchExportResult(s32 total, s32 failureCount, const char* formatName);
@@ -53,6 +53,10 @@ void BuildTrackExportPath(sead::BufferedSafeString* outPath, const char* path, u
 
 void DrawShowExportedFilesCheck();
 void ShowExportedFiles(const sead::SafeString& path);
+
+bool BeginExportProgressDialog(const char* popupId);
+bool DrawExportProgressRows(const char* fileName, s32 fileNo, s32 fileNum, f32 fraction);
+void CloseExportProgressDialog(const char* popupId);
 
 struct ExportFileType
 {

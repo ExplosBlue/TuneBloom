@@ -14,6 +14,7 @@
 #include <ui/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/OutputMeter.h>
+#include <ui/player/PlayerFrame.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/settings/Preferences.h>
 #include <ui/file/RecentFiles.h>
@@ -244,10 +245,11 @@ bool BeginSubMenu(const char* label)
 {
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const f32 right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    const bool enabled = !(GImGui->CurrentItemFlags & ImGuiItemFlags_Disabled);
 
     ImDrawList* drawList = BeginMenuHighlight();
     ImGui::PushStyleColor(ImGuiCol_Text, uicolors::cTransparent);
-    const bool open = ImGui::BeginMenu(label);
+    const bool open = ImGui::BeginMenu(label, enabled);
     ImGui::PopStyleColor();
     EndMenuHighlight(drawList, open);
 
@@ -417,10 +419,16 @@ static void FocusInfoWindowForFind()
         ImGui::SetWindowFocus("###InfoWindow");
 }
 
+static bool IsSlimMenuBar()
+{
+    return IsPlayerFrameShown() || IsFileEditorShown();
+}
+
 static void DrawFileMenu()
 {
     const bool documentOpen = IsDocumentOpen();
     const bool archiveOpen = IsSoundArchiveOpen();
+    const bool isSlim = IsSlimMenuBar();
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FILE " %s", messages::mainmenu::cNew).cstr(), shortcuts::Label(shortcuts::Action::NewProject)))
         RequestNewFile();
@@ -428,7 +436,7 @@ static void DrawFileMenu()
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER_OPEN " %s", messages::common::cOpen).cstr(), shortcuts::Label(shortcuts::Action::OpenProject)))
         RequestOpenFile();
 
-    if (MenuBarIconItem(ICON_LC_FOLDER_PLUS, messages::common::cOpenFolder))
+    if (!isSlim && MenuBarIconItem(ICON_LC_FOLDER_PLUS, messages::common::cOpenFolder))
         RequestFilesPanelFolderDialog();
 
     DrawRecentFilesMenu();
@@ -442,7 +450,7 @@ static void DrawFileMenu()
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE_ALL " %s", messages::mainmenu::cSaveAs).cstr(), shortcuts::Label(shortcuts::Action::SaveProjectAs)))
         SaveFileAs();
 
-    if (MenuBarIconItem(ICON_LC_FILE_STACK, messages::mainmenu::cSaveAll, shortcuts::Label(shortcuts::Action::SaveAllProjects), HasUnsavedDocuments()))
+    if (!isSlim && MenuBarIconItem(ICON_LC_FILE_STACK, messages::mainmenu::cSaveAll, shortcuts::Label(shortcuts::Action::SaveAllProjects), HasUnsavedDocuments()))
         RequestSaveAll();
 
     if (MenuBarIconItem(ICON_LC_FILE_DIFF, messages::mainmenu::cShowUnsaved, nullptr, HasUnsavedChanges()))
@@ -452,13 +460,17 @@ static void DrawFileMenu()
 
     ImGui::EndDisabled();
     ImGui::Separator();
-    ImGui::BeginDisabled(!archiveOpen);
 
-    DrawImportMenu();
-    DrawExportMenu();
+    if (!isSlim)
+    {
+        ImGui::BeginDisabled(!archiveOpen);
 
-    ImGui::EndDisabled();
-    ImGui::Separator();
+        DrawImportMenu();
+        DrawExportMenu();
+
+        ImGui::EndDisabled();
+        ImGui::Separator();
+    }
 
     const bool hasPath = documentOpen && !GetDocumentPath().isEmpty();
 
@@ -469,6 +481,9 @@ static void DrawFileMenu()
         ImGui::SetClipboardText(GetDocumentPath().cstr());
 
     ImGui::Separator();
+
+    if (isSlim && MenuBarIconItem(ICON_LC_LAYOUT_PANEL_LEFT, messages::mainmenu::cOpenFullEditor))
+        RequestFullEditor();
 
     if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, shortcuts::Label(shortcuts::Action::CloseProject), documentOpen))
         RequestCloseFile();
@@ -523,19 +538,21 @@ static void DrawMenuBarItems(f32 em)
 
     CloseHoverMenuOnLeave();
 
+    const bool isSlim = IsSlimMenuBar();
+
     if (BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_TEXT " %s", messages::common::cFile).cstr()))
     {
         DrawFileMenu();
         EndBarMenu();
     }
 
-    if (BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_SQUARE_PEN " %s", messages::mainmenu::cEdit).cstr()))
+    if (!isSlim && BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_SQUARE_PEN " %s", messages::mainmenu::cEdit).cstr()))
     {
         DrawEditMenu();
         EndBarMenu();
     }
 
-    if (BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_PANELS_TOP_LEFT " %s", messages::mainmenu::cView).cstr()))
+    if (!isSlim && BeginBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_PANELS_TOP_LEFT " %s", messages::mainmenu::cView).cstr()))
     {
         DrawViewMenu();
         EndBarMenu();
@@ -565,6 +582,9 @@ static void DrawMenuBarItems(f32 em)
     }
 
     SetMenuBarFontSize();
+
+    if (IsPlayerFrameShown())
+        return;
 
     const ImVec2 bellRangeY = CalcMenuBarPillRangeY();
     const f32 bellWidth = notify::DrawBell(barMax.x - ImGui::GetStyle().WindowPadding.x, bellRangeY.x, bellRangeY.y);

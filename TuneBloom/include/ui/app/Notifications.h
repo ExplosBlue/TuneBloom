@@ -13,10 +13,19 @@ enum class Kind
     Error
 };
 
-void Add(Kind kind, const char* title, const char* text = nullptr);
+using ActionCallback = void (*)(u32 token);
+
+struct Action
+{
+    const char* label = nullptr;
+    ActionCallback callback = nullptr;
+    u32 token = 0;
+};
+
+void Add(Kind kind, const char* title, const char* text = nullptr, const Action& action = Action());
 
 f32 DrawBell(f32 right, f32 top, f32 bottom);
 
-void Draw();
+void Draw(bool showToasts);
 
 }

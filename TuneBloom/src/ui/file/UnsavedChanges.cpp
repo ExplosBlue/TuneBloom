@@ -609,8 +609,9 @@ void DrawUnsavedChangesDialog()
     const f32 fontSize = ImGui::GetFontSize();
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
 
-    const f32 maxWidth = viewport->WorkSize.x * 0.85f;
-    const f32 maxHeight = viewport->WorkSize.y * 0.85f;
+    const ImVec2 area = GetDialogAreaSize();
+    const f32 maxWidth = area.x * 0.85f;
+    const f32 maxHeight = area.y * 0.85f;
 
     const ImVec2 windowSize(sead::Mathf::min(fontSize * cWidthEm, maxWidth), sead::Mathf::min(fontSize * cHeightEm, maxHeight));
 

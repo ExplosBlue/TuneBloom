@@ -358,14 +358,6 @@ bool DrawReferencesUI(Item* item, f32 reserveBelow)
     return clicked;
 }
 
-static void FormatInnerVersion(sead::BufferedSafeString* out, u32 version)
-{
-    if (GetArchiveVersionByteCount(ActiveSoundArchive().getFormat()) == 4)
-        out->format("%u.%u.%u.%u", (version >> 24) & 0xFF, (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
-    else
-        out->format("%u.%u.%u", (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
-}
-
 void DrawArchiveInfoUI(Item::ItemType itemType)
 {
     Bfsar& archive = ActiveSoundArchive();
@@ -395,13 +387,13 @@ void DrawArchiveInfoUI(Item::ItemType itemType)
     PropertyRow(messages::innerfile::cByteOrder);
     ImGui::TextUnformatted(archive.getEndian() == sead::Endian::eBig ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian);
 
-    FormatInnerVersion(&text, version);
+    FormatInnerFileVersion(&text, version, archive.getFormat());
     PropertyRow(messages::common::cVersion);
     ImGui::TextUnformatted(text.cstr());
 
     if (itemType == Item::ItemType::WaveFile)
     {
-        FormatInnerVersion(&text, archive.getVersionForBfstm());
+        FormatInnerFileVersion(&text, archive.getVersionForBfstm(), archive.getFormat());
         PropertyRow(messages::innerfile::cStreamVersion);
         ImGui::TextUnformatted(text.cstr());
     }

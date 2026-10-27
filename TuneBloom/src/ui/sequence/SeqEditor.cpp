@@ -7,6 +7,7 @@
 #include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
+#include <ui/widgets/Widgets.h>
 
 #include <imgui/imgui.h>
 #include <imgui/imgui_custom.h>
@@ -168,7 +169,7 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
             ImGui::AlignTextToFramePadding();
 
             if (matchNum > 0)
-                ImGui::TextDisabled(messages::common::cCountOfFormat, editor.GetSearchCurrentMatch() + 1, matchNum);
+                ImGui::TextDisabled(messages::common::cCountOfFormat, FormatCountText(editor.GetSearchCurrentMatch() + 1).cstr(), FormatCountText(matchNum).cstr());
             else if (sFindBuffer[0] != '\0')
                 ImGui::TextDisabled("%s", messages::sequence::cFindNoResults);
         }

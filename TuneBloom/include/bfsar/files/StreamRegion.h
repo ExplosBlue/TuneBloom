@@ -44,6 +44,7 @@ struct StreamFileLayout
     bool setRegionName(s32 regionNo, const sead::SafeString& name);
     void setRegions(std::vector<StreamRegion>&& newRegions);
     u32 removeRegionsAfter(u32 sampleCount);
+    u32 countRegionsAfter(u32 sampleCount) const;
 
     static bool IsRegionNameValid(const sead::SafeString& name);
     static u32 GetRegionLengthMin(bool isDspAdpcm, bool isPcm8);

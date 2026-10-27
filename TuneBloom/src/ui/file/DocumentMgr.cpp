@@ -8,6 +8,8 @@
 #include <ui/file/FileFlow.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/LoadProgress.h>
+#include <ui/Messages.h>
+#include <ui/player/PlayerFrame.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/file/RecentFiles.h>
@@ -119,7 +121,7 @@ static void UnlockSoundThread()
 
 void PrepareParseEndian(sead::Endian::Types endian)
 {
-    if (endian != Document::CurrentParseContext().endian)
+    if (endian != Document::CurrentParseContext().endian && sSoundPlayer.hasPlaybackOwner())
         sSoundPlayer.reset();
 }
 
@@ -130,7 +132,7 @@ static void SwitchToParseContextOf(const Document* document)
 
     const Document::ParseContext context = document->parseContext();
 
-    if (context.endian != Document::CurrentParseContext().endian && !sSoundPlayer.isPlayingFrom(document))
+    if (context.endian != Document::CurrentParseContext().endian && sSoundPlayer.hasPlaybackOwner() && !sSoundPlayer.isPlayingFrom(document))
         sSoundPlayer.reset();
 
     Document::ApplyParseContext(context);
@@ -565,13 +567,15 @@ void RefreshDocumentPath(Document* document)
 
 void RefreshWindowTitle()
 {
+    const char* appName = IsPlayerFrameShown() ? messages::playerframe::cWindowTitle : nullptr;
+
     if (!sActive)
     {
-        util::updateTitle(nullptr, false);
+        util::updateTitle(nullptr, false, appName);
         return;
     }
 
-    util::updateTitle(sActive->displayName().c_str(), sActive->state().unsaved);
+    util::updateTitle(sActive->displayName().c_str(), sActive->state().unsaved, appName);
 }
 
 void RecordDocumentSession()

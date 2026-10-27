@@ -11,8 +11,21 @@
 #include <string>
 #include <vector>
 
+class AudioAsset;
 class AudioResource;
 struct DocumentState;
+
+struct PlayableFile
+{
+    StreamSource stream;
+    WaveFile* wave = nullptr;
+    AudioAsset* asset = nullptr;
+
+    bool isValid() const
+    {
+        return stream.isValid() || wave || asset;
+    }
+};
 
 enum class BrowserFileKind;
 
@@ -29,7 +42,9 @@ public:
     enum class Kind
     {
         SoundArchive,
-        AudioResource
+        AudioResource,
+        StreamFile,
+        WaveFile
     };
 
     struct File
@@ -89,6 +104,36 @@ public:
     virtual BrowserFileKind fileKind() const = 0;
     virtual UIType defaultTab() const = 0;
     virtual void drawInfo(UIType tab) = 0;
+    virtual StreamSource activeStreamSource() = 0;
+
+    virtual Item* defaultSelection()
+    {
+        return nullptr;
+    }
+
+    virtual bool hasProjectList() const
+    {
+        return false;
+    }
+
+    virtual bool drawFileProperties()
+    {
+        return false;
+    }
+
+    virtual bool showsItemInInfo() const
+    {
+        return false;
+    }
+
+    virtual PlayableFile playableFile()
+    {
+        return {};
+    }
+
+    virtual void formatFileFacts(sead::BufferedSafeString*) const
+    {
+    }
 
     virtual bool isValidName(const sead::SafeString& name) const = 0;
     virtual bool isUniqueName(const sead::SafeString& name, const Item* ignoreItem) const = 0;
@@ -135,3 +180,4 @@ Bfsar* FindActiveSoundArchive();
 
 AudioResource& ActiveAudioResource();
 AudioResource* FindActiveAudioResource();
+

@@ -13,6 +13,27 @@ static constexpr u32 makeVersion(u32 major, u32 minor, u32 patch)
 #include <prim/seadPtrUtil.h>
 #include <prim/seadRuntimeTypeInfo.h>
 
+class FileEndianScope
+{
+public:
+    explicit FileEndianScope(sead::Endian::Types endian)
+        : mPrevEndian(sFileEndian)
+    {
+        sFileEndian = endian;
+    }
+
+    ~FileEndianScope()
+    {
+        sFileEndian = mPrevEndian;
+    }
+
+    FileEndianScope(const FileEndianScope&) = delete;
+    FileEndianScope& operator=(const FileEndianScope&) = delete;
+
+private:
+    sead::Endian::Types mPrevEndian;
+};
+
 struct InnerFileTarget
 {
     ArchiveFormat format = ArchiveFormat::BFSAR;
@@ -43,16 +64,12 @@ public:
         const nw::ut::BinaryFileHeader& header = *static_cast<const nw::ut::BinaryFileHeader*>(fileAddr);
 
         mEndian = nw::ut::GetFileEndian(header);
-        
-        sead::Endian::Types prevEndian = sFileEndian;
-        sFileEndian = mEndian;
+
+        FileEndianScope endianScope(mEndian);
 
         mVersion = header.version;
-        bool success = doRead(fileAddr);
 
-        sFileEndian = prevEndian;
-
-        return success;
+        return doRead(fileAddr);
     }
 
     virtual u32 write(sead::FileHandle* handle, sead::WriteStream* stream, sead::Endian::Types prevEndian, bool isLast) const

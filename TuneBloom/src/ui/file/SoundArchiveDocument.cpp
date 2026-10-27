@@ -125,6 +125,16 @@ UIType SoundArchiveDocument::defaultTab() const
     return UIType::ProjectInfo;
 }
 
+bool SoundArchiveDocument::hasProjectList() const
+{
+    return true;
+}
+
+StreamSource SoundArchiveDocument::activeStreamSource()
+{
+    return mArchive ? mArchive->getStreamSource(GetSelectedStreamSound()) : StreamSource();
+}
+
 void SoundArchiveDocument::drawInfo(UIType tab)
 {
     switch (tab)

@@ -1,6 +1,7 @@
 #include <ui/items/ItemColumns.h>
 
 #include <ui/Messages.h>
+#include <ui/widgets/Widgets.h>
 
 #include <aal/AudioAsset.h>
 #include <bfsar/model/Bank.h>
@@ -25,7 +26,7 @@ static constexpr u64 cBytesPerKilobyte = 1024;
 static constexpr u64 cBytesPerMegabyte = cBytesPerKilobyte * 1024;
 static constexpr u64 cBytesPerGigabyte = cBytesPerMegabyte * 1024;
 
-static constexpr const char* cLoopLengthSample = ICON_LC_REPEAT " 0:00.000";
+static constexpr const char* cLoopLengthSample = ICON_LC_REPEAT " 0:00.0";
 
 static const std::vector<const Item*>& GetUniqueItems(std::vector<const Item*>* items)
 {
@@ -292,10 +293,9 @@ static void FormatSampleLength(u32 sampleCount, u32 sampleRate, sead::BufferedSa
         return;
     }
 
-    const f64 seconds = static_cast<f64>(sampleCount) / sampleRate;
-    const u32 minutes = static_cast<u32>(seconds / 60.0);
+    const u32 tenths = static_cast<u32>((static_cast<u64>(sampleCount) * 10 + sampleRate / 2) / sampleRate);
 
-    out->format(messages::wavefile::cTimeFormat, minutes, seconds - minutes * 60.0);
+    out->format(messages::common::cTimeTenthsFormat, tenths / 600, tenths / 10 % 60, tenths % 10);
 }
 
 void FormatWaveFileLength(const Item* item, sead::BufferedSafeString* out)
@@ -310,7 +310,7 @@ static void FormatCount(sead::BufferedSafeString* out, s64 count)
     if (count < 0)
         out->copy("-");
     else
-        out->format("%lld", count);
+        out->copy(FormatCountText(count));
 }
 
 static void FormatRefsColumn(const Item* item, sead::BufferedSafeString* out)

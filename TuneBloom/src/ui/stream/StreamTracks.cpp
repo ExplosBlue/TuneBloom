@@ -15,7 +15,7 @@ const char* const cTrackWaveLabel                            = messages::common:
 
 static Item* sHighlightTrack = nullptr;
 static bool sTrackMixerView = false;
-static bool sTrackToolsInTabBar = false;
+static bool sTrackToolsInTitleRow = false;
 
 bool IsTrackMixerView()
 {
@@ -45,32 +45,40 @@ void HighlightStreamTrack(Item* track)
 
 static constexpr s32 cTrackToolNum = 3;
 
-static void DrawTrackTools(Sound* sound, bool inTabBar, TrackEdit* edit)
+static void DrawTrackTools(const StreamSource& source, bool inTabBar, TrackEdit* edit)
 {
     const sead::FormatFixedSafeString<64> limit(messages::stream::cTrackLimitFormat, cStrmTrackNum);
-    const bool canAdd = sound && sound->getStreamSoundInfo().getTrackList().size() < static_cast<s32>(cStrmTrackNum);
-    const char* reason = sound ? limit.cstr() : messages::stream::cTrackNoSound;
+    const bool canAdd = source.isValid() && source.stream->getTrackList().size() < static_cast<s32>(cStrmTrackNum);
+    const char* reason = source.isValid() ? limit.cstr() : messages::stream::cTrackNoSound;
 
     if (DrawTabRowCommand(ICON_LC_PLUS "###AddTrack", messages::stream::cTrackAddTip, canAdd ? nullptr : reason, inTabBar))
         edit->add = true;
 
     if (DrawTabRowCommand(ICON_LC_IMPORT "###ImportTracks", messages::import::cTrackImportMenuLabel, canAdd ? nullptr : reason, inTabBar))
-        RequestStreamTrackImport(sound);
+        RequestStreamTrackImport(source);
 
-    if (DrawTabRowTool(sTrackMixerView ? ICON_LC_ROWS_3 "###TrackView" : ICON_LC_SLIDERS_VERTICAL "###TrackView", inTabBar))
-        edit->toggleView = true;
+    if (source.isValid() && !source.hasTrackMix)
+    {
+        DrawTabRowCommand(ICON_LC_SLIDERS_VERTICAL "###TrackView", messages::stream::cTrackMixerView, messages::stream::cTrackMixNotInFile, inTabBar);
+    }
+    else
+    {
+        if (DrawTabRowTool(sTrackMixerView ? ICON_LC_ROWS_3 "###TrackView" : ICON_LC_SLIDERS_VERTICAL "###TrackView", inTabBar))
+            edit->toggleView = true;
 
-    ImGui::SetItemTooltip("%s", sTrackMixerView ? messages::stream::cTrackTableView : messages::stream::cTrackMixerView);
+        ImGui::SetItemTooltip("%s", sTrackMixerView ? messages::stream::cTrackTableView : messages::stream::cTrackMixerView);
+    }
 
     if (!inTabBar)
         ImGui::NewLine();
 }
 
-static void ApplyTrackEdit(Sound* sound, const TrackEdit& edit)
+static void ApplyTrackEdit(const StreamSource& source, const TrackEdit& edit)
 {
     using Track = Sound::StreamSoundInfo::Track;
 
-    Track::List& list = sound->getStreamSoundInfo().getTrackList();
+    Sound::StreamSoundInfo& stream = *source.stream;
+    Track::List& list = stream.getTrackList();
 
     if (edit.toggleView)
         ToggleTrackMixerView();
@@ -80,8 +88,7 @@ static void ApplyTrackEdit(Sound* sound, const TrackEdit& edit)
     if (edit.add)
     {
         Track* track = new Track();
-        track->setEnableName(true);
-        track->getName() = "Track";
+        track->setDefaultName();
 
         if (edit.insertAfter)
             edit.insertAfter->insertBack(track);
@@ -94,6 +101,10 @@ static void ApplyTrackEdit(Sound* sound, const TrackEdit& edit)
     if (edit.deleteTrack)
     {
         ForgetRemovedItems({ edit.deleteTrack });
+
+        if (sHighlightTrack == edit.deleteTrack)
+            sHighlightTrack = nullptr;
+
         delete edit.deleteTrack;
     }
 
@@ -111,49 +122,48 @@ static void ApplyTrackEdit(Sound* sound, const TrackEdit& edit)
 
     if (edit.add || edit.deleteTrack || move)
     {
-        sound->getStreamSoundInfo().setMuteTracks(0);
-        sound->getStreamSoundInfo().setSoloTracks(0);
-        sSoundPlayer.updateStreamTrackMute(sound);
-        ActiveSoundArchive().updateList(list);
+        stream.setMuteTracks(0);
+        stream.setSoloTracks(0);
+        sSoundPlayer.updateStreamTrackMute(&stream);
+        Bfsar::updateList(list);
         SetUnsavedChanges(true);
     }
 }
 
-void DrawStreamTracksUI(Sound* sound)
+TrackContext MakeTrackContext(const StreamSource& source)
 {
-    Bfsar& archive = ActiveSoundArchive();
-
-    using Track = Sound::StreamSoundInfo::Track;
-
-    Track::List& list = sound->getStreamSoundInfo().getTrackList();
-
     TrackContext ctx = {};
-    ctx.sound = sound;
+    ctx.source = source;
 
-    for (Item* trackItem : list)
-        ctx.tracks.push_back(static_cast<Track*>(trackItem));
+    for (Item* trackItem : source.stream->getTrackList())
+        ctx.tracks.push_back(static_cast<Sound::StreamSoundInfo::Track*>(trackItem));
 
-    ctx.enableSend = archive.isStreamSendAvailable();
-    ctx.enableFilter = archive.isFilterSupportedVersion();
     ctx.canAdd = ctx.tracks.size() < cStrmTrackNum;
     ctx.biquadWidth = CalcBiquadTypeWidth();
 
-    WaveFile* mainWave = sound->getStreamSoundInfo().getMainWave();
+    return ctx;
+}
+
+void DrawStreamTracksUI(const StreamSource& source)
+{
+    TrackContext ctx = MakeTrackContext(source);
+
+    WaveFile* mainWave = source.stream->getMainWave();
     TrackEdit edit;
 
-    if (!sTrackToolsInTabBar)
-        DrawTrackTools(sound, false, &edit);
+    if (!sTrackToolsInTitleRow)
+        DrawTrackTools(source, false, &edit);
 
-    if (sTrackMixerView)
+    if (sTrackMixerView && source.hasTrackMix)
         DrawTrackStrips(ctx, &edit);
     else
         DrawTrackTable(ctx, &edit);
 
-    ApplyTrackEdit(sound, edit);
-    KeepStreamRegions(sound, mainWave);
+    ApplyTrackEdit(source, edit);
+    KeepStreamRegions(source.stream->getMainWave(), mainWave);
 }
 
-bool DrawStreamTracksTabRow(Sound* sound)
+bool DrawStreamTracksTabRow(const StreamSource& source)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     ImGuiDockNode* node = window->DockNode;
@@ -164,11 +174,11 @@ bool DrawStreamTracksTabRow(Sound* sound)
     TrackEdit edit;
     bool toggleFold = false;
 
-    sTrackToolsInTabBar = isVisible && BeginTabRowTools(node, CalcTabRowToolsWidth(canFold ? cTrackToolNum + 1 : cTrackToolNum));
+    sTrackToolsInTitleRow = isVisible && BeginTabRowTools(node, CalcTabRowToolsWidth(canFold ? cTrackToolNum + 1 : cTrackToolNum));
 
-    if (sTrackToolsInTabBar)
+    if (sTrackToolsInTitleRow)
     {
-        DrawTrackTools(sound, true, &edit);
+        DrawTrackTools(source, true, &edit);
 
         if (canFold)
             toggleFold = DrawStreamPanelFoldTool();
@@ -176,10 +186,31 @@ bool DrawStreamTracksTabRow(Sound* sound)
         EndTabRowTools();
     }
 
-    if (sound)
-        ApplyTrackEdit(sound, edit);
+    if (source.isValid())
+        ApplyTrackEdit(source, edit);
     else if (edit.toggleView)
         ToggleTrackMixerView();
 
     return UpdateStreamPanelFold(toggleFold);
+}
+
+void DrawStreamTracksSection(const StreamSource& source, f32 height)
+{
+    TrackEdit edit;
+
+    BeginTitleRowTools(messages::common::cTracks, CalcTabRowToolsWidth(cTrackToolNum));
+    DrawTrackTools(source, false, &edit);
+    ApplyTrackEdit(source, edit);
+
+    sTrackToolsInTitleRow = true;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, ImGui::GetStyle().ChildBorderSize));
+
+    if (ImGui::BeginChild("TracksSection", ImVec2(0.0f, height), ImGuiChildFlags_AlwaysUseWindowPadding))
+        DrawStreamTracksUI(source);
+
+    ImGui::EndChild();
+    ImGui::PopStyleVar();
+
+    DrawStreamTrackImportPopup(source);
 }

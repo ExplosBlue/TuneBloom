@@ -125,25 +125,28 @@ TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx)
     layout.filterSlots.widths[1] = sead::Mathf::max(layout.filterSlots.widths[1], ctx.biquadWidth);
 
     layout.cellPadding = CalcTrackCellPadding();
-    layout.columnNum = 6 + (ctx.enableSend ? 1 : 0) + (ctx.enableFilter ? 1 : 0);
+    layout.columnNum = 4 + (ctx.source.hasTrackMix ? 2 : 0) + (ctx.source.enableSend ? 1 : 0) + (ctx.source.enableFilter ? 1 : 0);
     layout.indexWidth = ImCeil(ImGui::GetFontSize() * cTrackIndexWidthEm);
     layout.muteWidth = layout.muteSlots.calcWidth();
     layout.soloWidth = layout.soloSlots.calcWidth();
-    layout.mixWidth = layout.mixSlots.calcWidth();
-    layout.bypassWidth = layout.bypassSlots.calcWidth();
-    layout.sendWidth = ctx.enableSend ? layout.sendSlots.calcWidth() : 0.0f;
-    layout.filterWidth = ctx.enableFilter ? layout.filterSlots.calcWidth() : 0.0f;
+    layout.mixWidth = ctx.source.hasTrackMix ? layout.mixSlots.calcWidth() : 0.0f;
+    layout.bypassWidth = ctx.source.hasTrackMix ? layout.bypassSlots.calcWidth() : 0.0f;
+    layout.sendWidth = ctx.source.enableSend ? layout.sendSlots.calcWidth() : 0.0f;
+    layout.filterWidth = ctx.source.enableFilter ? layout.filterSlots.calcWidth() : 0.0f;
 
     layout.columnExtra = layout.cellPadding.x * 2.0f + 1.0f;
     layout.leadWidth = layout.indexWidth + layout.muteWidth + layout.soloWidth + layout.columnExtra * 4.0f + 1.0f;
 
-    layout.groupWidths[layout.groupNum++] = layout.mixWidth + layout.columnExtra;
-    layout.groupWidths[layout.groupNum++] = layout.bypassWidth + layout.columnExtra;
+    if (ctx.source.hasTrackMix)
+    {
+        layout.groupWidths[layout.groupNum++] = layout.mixWidth + layout.columnExtra;
+        layout.groupWidths[layout.groupNum++] = layout.bypassWidth + layout.columnExtra;
+    }
 
-    if (ctx.enableSend)
+    if (ctx.source.enableSend)
         layout.groupWidths[layout.groupNum++] = layout.sendWidth + layout.columnExtra;
 
-    if (ctx.enableFilter)
+    if (ctx.source.enableFilter)
         layout.groupWidths[layout.groupNum++] = layout.filterWidth + layout.columnExtra;
 
     layout.fixedWidth = layout.leadWidth;
@@ -181,7 +184,7 @@ bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* tra
         }
 
         if (ContextMenuItem(ICON_LC_IMPORT, messages::import::cTrackImportMenuLabel, ctx.canAdd, limit.cstr()))
-            RequestStreamTrackImport(ctx.sound);
+            RequestStreamTrackImport(ctx.source);
 
         ContextMenuSeparator();
 
@@ -224,7 +227,7 @@ void DrawTrackListMenu(const TrackContext& ctx, TrackEdit* edit)
         edit->add = true;
 
     if (ContextMenuItem(ICON_LC_IMPORT, messages::import::cTrackImportMenuLabel, ctx.canAdd, limit.cstr()))
-        RequestStreamTrackImport(ctx.sound);
+        RequestStreamTrackImport(ctx.source);
 
     ContextMenuSeparator();
 
@@ -259,7 +262,7 @@ bool DrawTrackToggle(const char* label, bool on, const ImVec4& color, const ImVe
 
 static void DrawTrackMuteButton(const TrackContext& ctx, s32 index, const ImVec2& size)
 {
-    Sound::StreamSoundInfo& strmInfo = ctx.sound->getStreamSoundInfo();
+    Sound::StreamSoundInfo& strmInfo = *ctx.source.stream;
     const u32 bit = 1 << index;
     const u32 muteTracks = strmInfo.getMuteTracks();
 
@@ -267,12 +270,12 @@ static void DrawTrackMuteButton(const TrackContext& ctx, s32 index, const ImVec2
         return;
 
     strmInfo.setMuteTracks(muteTracks ^ bit);
-    sSoundPlayer.updateStreamTrackMute(ctx.sound);
+    sSoundPlayer.updateStreamTrackMute(ctx.source.stream);
 }
 
 static void DrawTrackSoloButton(const TrackContext& ctx, s32 index, const ImVec2& size)
 {
-    Sound::StreamSoundInfo& strmInfo = ctx.sound->getStreamSoundInfo();
+    Sound::StreamSoundInfo& strmInfo = *ctx.source.stream;
     const u32 bit = 1 << index;
     const u32 soloTracks = strmInfo.getSoloTracks();
 
@@ -288,15 +291,15 @@ static void DrawTrackSoloButton(const TrackContext& ctx, s32 index, const ImVec2
     else
         strmInfo.setSoloTracks(soloTracks == bit ? 0 : bit);
 
-    sSoundPlayer.updateStreamTrackMute(ctx.sound);
+    sSoundPlayer.updateStreamTrackMute(ctx.source.stream);
 }
 
-void DrawTrackWaveSelector(Sound::StreamSoundInfo::Track* track, f32 width, bool compact)
+void DrawTrackWaveSelector(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, f32 width, bool compact)
 {
     Item* waveFile = track->getWaveFileRef().getItem();
 
     ImGui::SetNextItemWidth(width);
-    if (ItemSelector("##WaveFile", ActiveSoundArchive().getWaveFileList(), &waveFile, false, compact))
+    if (ItemSelector("##WaveFile", ctx.source.waveOwner->getStreamWaveList(), &waveFile, false, compact))
     {
         track->getWaveFileRef().attach(waveFile);
         SetUnsavedChanges(true);
@@ -347,7 +350,7 @@ void DrawTrackParam(const TrackContext& ctx, s32 index, TrackParam param, f32 wi
             break;
 
         case TrackParam::WaveFile:
-            DrawTrackWaveSelector(track, width, true);
+            DrawTrackWaveSelector(ctx, track, width, true);
             break;
 
         case TrackParam::Volume:

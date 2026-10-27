@@ -45,10 +45,8 @@ inline constexpr TrackParam cTrackFilterParams[] = { TrackParam::Lpf, TrackParam
 
 struct TrackContext
 {
-    Sound* sound;
+    StreamSource source;
     std::vector<Sound::StreamSoundInfo::Track*> tracks;
-    bool enableSend;
-    bool enableFilter;
     bool canAdd;
     f32 biquadWidth;
 };
@@ -108,6 +106,10 @@ struct TrackTableLayout
 
 Item* GetHighlightedStreamTrack();
 
+TrackContext MakeTrackContext(const StreamSource& source);
+void DrawTrackChannelText(u16 channelCount, bool dim);
+void DimTrackCell(bool toTableEdge);
+
 f32 CalcTrackKnobSize();
 TrackSlots MakeTrackSlots(const char* const* labels, s32 labelNum);
 TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx);
@@ -116,7 +118,7 @@ ImVec2 CalcTrackParamSize(const TrackContext& ctx, TrackParam param, f32 width);
 void DrawTrackParam(const TrackContext& ctx, s32 index, TrackParam param, f32 width);
 void DrawTrackSlotGroup(const TrackContext& ctx, s32 index, TrackSlots& slots, const TrackParam* params, f32 rowHeight);
 bool DrawTrackToggle(const char* label, bool on, const ImVec4& color, const ImVec2& size);
-void DrawTrackWaveSelector(Sound::StreamSoundInfo::Track* track, f32 width, bool compact);
+void DrawTrackWaveSelector(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, f32 width, bool compact);
 
 bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, const ImVec2& size, ImGuiSelectableFlags flags, TrackEdit* edit);
 void DrawTrackListMenu(const TrackContext& ctx, TrackEdit* edit);

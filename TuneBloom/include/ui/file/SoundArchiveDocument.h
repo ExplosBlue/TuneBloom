@@ -21,6 +21,8 @@ public:
     BrowserFileKind fileKind() const override;
     UIType defaultTab() const override;
     void drawInfo(UIType tab) override;
+    bool hasProjectList() const override;
+    StreamSource activeStreamSource() override;
 
     bool isValidName(const sead::SafeString& name) const override;
     bool isUniqueName(const sead::SafeString& name, const Item* ignoreItem) const override;

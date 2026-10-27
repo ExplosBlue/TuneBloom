@@ -21,6 +21,10 @@ public:
     BrowserFileKind fileKind() const override;
     UIType defaultTab() const override;
     void drawInfo(UIType tab) override;
+    bool drawFileProperties() override;
+    StreamSource activeStreamSource() override;
+    PlayableFile playableFile() override;
+    void formatFileFacts(sead::BufferedSafeString* out) const override;
 
     bool isValidName(const sead::SafeString& name) const override;
     bool isUniqueName(const sead::SafeString& name, const Item* ignoreItem) const override;

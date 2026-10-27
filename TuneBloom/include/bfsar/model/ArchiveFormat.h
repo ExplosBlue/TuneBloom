@@ -3,6 +3,7 @@
 #include <basis/seadAssert.h>
 #include <basis/seadTypes.h>
 #include <prim/seadEndian.h>
+#include <prim/seadSafeString.h>
 
 #include <cctype>
 #include <cstring>
@@ -126,6 +127,14 @@ inline const char* GetInnerFileDisplayName(ArchiveFormat format, InnerFileKind k
 inline u32 GetArchiveVersionByteCount(ArchiveFormat format)
 {
     return format == ArchiveFormat::BCSAR ? 4 : 3;
+}
+
+inline void FormatInnerFileVersion(sead::BufferedSafeString* out, u32 version, ArchiveFormat format)
+{
+    if (GetArchiveVersionByteCount(format) == 4)
+        out->format("%u.%u.%u.%u", (version >> 24) & 0xFF, (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
+    else
+        out->format("%u.%u.%u", (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
 }
 
 inline u32 GetInnerFileDataAlignment(ArchiveFormat format, sead::Endian::Types endian)

@@ -167,6 +167,13 @@ static void ApplyWindowAnimation(ImGuiWindow* window, WindowAnimation kind)
     if (window->Hidden)
         return;
 
+    if (window->ViewportOwned && window->Viewport != ImGui::GetMainViewport())
+    {
+        slot.ghostVertices.resize(0);
+        slot.ghostCommands.resize(0);
+        return;
+    }
+
     const ImVec2 max(window->Pos.x + window->Size.x, window->Pos.y + window->Size.y);
 
     if (slot.isFirstVisibleFrame || info.isAnchorMoving)

@@ -3,7 +3,6 @@
 #include <core/Debug.h>
 #include <core/TestHooks.h>
 
-#include <bfsar/archive/BfsarInternal.h>
 #include <bfsar/files/BfstmFile.h>
 #include <bfsar/files/BfstpFile.h>
 #include <bfsar/io/FileIo.h>
@@ -76,6 +75,23 @@ bool Bfsar::resolveStreamFilePath(const Sound& sound, sead::BufferedSafeString* 
     return false;
 }
 
+StreamSource Bfsar::getStreamSource(Sound* sound)
+{
+    StreamSource source;
+    source.target = getStreamFileTarget();
+    source.waveOwner = this;
+    source.enableSend = isStreamSendAvailable();
+    source.enableFilter = isFilterSupportedVersion();
+
+    if (!sound || sound->getSoundType() != Sound::SoundType::Strm)
+        return source;
+
+    source.stream = &sound->getStreamSoundInfo();
+    source.sound = sound;
+
+    return source;
+}
+
 void Bfsar::detachStreamWaves(Sound* sound)
 {
     std::vector<WaveFile*> orphans;
@@ -100,51 +116,6 @@ void Bfsar::detachStreamWaves(Sound* sound)
     removeUnusedWaveFiles(orphans);
 }
 
-void Bfsar::applyStreamTrackLayout(Sound* sound, u32 trackCount, u32 channelCount) const
-{
-    Sound::StreamSoundInfo::Track::List& tracks = sound->getStreamSoundInfo().getTrackList();
-
-    std::vector<Item*> removedTracks;
-
-    while (static_cast<u32>(tracks.size()) > trackCount)
-    {
-        Item* last = tracks.nth(tracks.size() - 1)->val();
-
-        tracks.erase(last);
-        removedTracks.push_back(last);
-    }
-
-    ForgetRemovedItems(removedTracks);
-
-    for (Item* track : removedTracks)
-        delete track;
-
-    while (static_cast<u32>(tracks.size()) < trackCount)
-    {
-        Sound::StreamSoundInfo::Track* track = new Sound::StreamSoundInfo::Track();
-
-        track->mEnableName = true;
-        track->mName = "Track";
-
-        tracks.pushBack(track);
-    }
-
-    u32 nextChannel = 0;
-
-    for (u32 i = 0; i < trackCount; i++)
-    {
-        Sound::StreamSoundInfo::Track& track = *static_cast<Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
-
-        track.mId = i;
-        track.mChannels.clear();
-
-        u32 trackChannelCount = channelCount / trackCount + (i < channelCount % trackCount ? 1 : 0);
-
-        for (u32 j = 0; j < trackChannelCount && j < snd::cWaveChannelMax; j++)
-            *track.mChannels.birthBack() = static_cast<u8>(nextChannel++);
-    }
-}
-
 static bool StreamChannelsFitInTracks(u32 trackCount, u32 channelCount)
 {
     return trackCount != 0 && trackCount <= channelCount && channelCount <= trackCount * snd::cWaveChannelMax;
@@ -155,7 +126,7 @@ static u32 ChooseStreamTrackCount(u32 currentTrackCount, u32 channelCount)
     if (StreamChannelsFitInTracks(currentTrackCount, channelCount))
         return currentTrackCount;
 
-    return (channelCount + snd::cWaveChannelMax - 1) / snd::cWaveChannelMax;
+    return GetDefaultStreamTrackCount(channelCount);
 }
 
 static bool StreamTrackLayoutFits(const Sound::StreamSoundInfo& strmSoundInfo, u32 channelCount)
@@ -182,72 +153,6 @@ static bool StreamTrackLayoutFits(const Sound::StreamSoundInfo& strmSoundInfo, u
     }
 
     return total == channelCount;
-}
-
-bool Bfsar::readEmbeddedStreamTracks(nw::snd::internal::StreamSoundFileReader& reader, Sound::StreamSoundInfo& strmSoundInfo, sead::Heap* heap) const
-{
-    u32 trackCount = reader.GetTrackCount();
-
-    if (trackCount > cStrmTrackNum)
-        trackCount = cStrmTrackNum;
-
-    bool readAllTracks = true;
-
-    for (u32 j = 0; j < trackCount; j++)
-    {
-        Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
-        track->mId = j;
-
-        track->mEnableName = true;
-        track->mName = "Track";
-
-        nw::snd::internal::StreamSoundFileReader::TrackInfo trackInfo;
-
-        if (reader.ReadStreamTrackInfo(&trackInfo, j) && trackInfo.channelCount <= snd::cWaveChannelMax)
-        {
-            track->mVolume = trackInfo.volume;
-            track->mPan = trackInfo.pan;
-            track->mSPan = trackInfo.span;
-            track->mFlags = trackInfo.flags;
-
-            for (u8 k = 0; k < trackInfo.channelCount; k++)
-                *track->mChannels.birthBack() = trackInfo.globalChannelIndex[k];
-        }
-        else
-        {
-            sead::FormatFixedSafeString<128> msg(messages::stream::cTrackUnreadableFormat, j);
-            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
-
-            readAllTracks = false;
-        }
-
-        strmSoundInfo.mTrackList.pushBack(track);
-    }
-
-    return readAllTracks;
-}
-
-bool StreamWavesCoverLayout(const Sound::StreamSoundInfo& strmSoundInfo)
-{
-    const Sound::StreamSoundInfo::Track::List& tracks = strmSoundInfo.getTrackList();
-
-    if (tracks.isEmpty())
-        return false;
-
-    for (s32 i = 0; i < tracks.size(); i++)
-    {
-        const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
-
-        if (!track.getWaveFileRef().isAttached())
-            return false;
-
-        const WaveFile& wave = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
-
-        if (track.getChannels_().isEmpty() || wave.getChannels().size() != track.getChannels_().size())
-            return false;
-    }
-
-    return true;
 }
 
 static void CopyStreamChannelLayout(const Sound::StreamSoundInfo& source, Sound::StreamSoundInfo* destination)
@@ -571,11 +476,11 @@ bool Bfsar::stageStreamReload_(StreamReloadContext& ctx, const StreamReloadResul
 
     if (ctx.tracksFromFile)
     {
-        readTracks = readEmbeddedStreamTracks(ctx.reader, stagedInfo, nullptr);
+        readTracks = ReadStreamFileTracks(ctx.reader, stagedInfo, nullptr);
     }
     else
     {
-        applyStreamTrackLayout(staged, ctx.trackCount, result.channelCount);
+        ApplyStreamTrackLayout(stagedInfo, ctx.trackCount, result.channelCount);
 
         if (ctx.keepLayout)
             CopyStreamChannelLayout(strmSoundInfo, &stagedInfo);
@@ -623,14 +528,14 @@ void Bfsar::commitStreamReload_(StreamReloadContext& ctx, StreamReloadResult* re
     {
         result->tracksReplaced = !StreamTracksMatch(strmSoundInfo, stagedInfo);
 
-        applyStreamTrackLayout(sound, stagedTrackCount, result->channelCount);
+        ApplyStreamTrackLayout(strmSoundInfo, stagedTrackCount, result->channelCount);
         CopyEmbeddedTrackInfo(stagedInfo, &strmSoundInfo);
     }
     else
     {
         if (!ctx.keepLayout)
         {
-            applyStreamTrackLayout(sound, ctx.trackCount, result->channelCount);
+            ApplyStreamTrackLayout(strmSoundInfo, ctx.trackCount, result->channelCount);
             result->layoutChanged = true;
         }
 
@@ -668,7 +573,7 @@ void Bfsar::commitStreamReload_(StreamReloadContext& ctx, StreamReloadResult* re
     if (ctx.isOpus)
         sound->mStreamFileSignature = opusstream::ComputeContentSignature(*sound);
     else
-        sound->mStreamFileSignature = BfstmFile::ComputeContentSignature(strmSoundInfo, getVersionForBfstm(), mEndian, mFormat);
+        sound->mStreamFileSignature = BfstmFile::ComputeContentSignature(strmSoundInfo, getStreamFileTarget());
 
     sound->mHasStreamFileBaseline = true;
 
@@ -725,7 +630,7 @@ u32 Bfsar::shareStreamWavesWithSiblings(Sound* source, bool tracksFromFile)
             continue;
 
         detachStreamWaves(sibling);
-        applyStreamTrackLayout(sibling, static_cast<u32>(sourceTracks.size()), sourceChannelCount);
+        ApplyStreamTrackLayout(siblingInfo, static_cast<u32>(sourceTracks.size()), sourceChannelCount);
 
         if (tracksFromFile)
             CopyEmbeddedTrackInfo(sourceInfo, &siblingInfo);
@@ -899,7 +804,7 @@ void Bfsar::planStreamSaves(std::vector<StreamSaveJob> &out, std::vector<Skipped
         if (seen.contains(path))
             continue;
 
-        u64 sig = BfstmFile::ComputeContentSignature(strmSoundInfo, getVersionForBfstm(), mEndian, mFormat);
+        u64 sig = BfstmFile::ComputeContentSignature(strmSoundInfo, getStreamFileTarget());
         const bool dirty = !sound->mHasStreamFileBaseline || sig != sound->mStreamFileSignature || testhooks::IsStreamRewriteForced(path);
 
         StreamSaveJob job;
@@ -966,7 +871,7 @@ bool Bfsar::writeStreamFile_(const Sound *sound, const sead::SafeString &path, b
             return false;
         }
     }
-    else if (!BfstmFile::WriteBfstmFile(handle, strmSoundInfo, getVersionForBfstm(), mEndian, mFormat))
+    else if (!BfstmFile::WriteBfstmFile(handle, strmSoundInfo, getStreamFileTarget()))
     {
         return false;
     }
@@ -1136,7 +1041,7 @@ bool Bfsar::saveBackupStreams(const std::string &dir, const std::string &previou
 
         const bool isOpus = strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus;
         const u64 signature = isOpus ? opusstream::ComputeContentSignature(*sound)
-                                     : BfstmFile::ComputeContentSignature(strmSoundInfo, getVersionForBfstm(), mEndian, mFormat);
+                                     : BfstmFile::ComputeContentSignature(strmSoundInfo, getStreamFileTarget());
 
         if (sound->mHasStreamFileBaseline && signature == sound->mStreamFileSignature)
             continue;

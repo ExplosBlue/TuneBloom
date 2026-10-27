@@ -369,12 +369,12 @@ static std::vector<ListEntry> BuildErrorEntries(const ErrorMap& errors, size_t* 
 
 static void SetNextErrorsWindowSize(f32 fontSize)
 {
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const ImVec2 area = GetDialogAreaSize();
 
     ImVec2 windowSize(fontSize * cWidthEm, fontSize * cHeightEm);
 
-    const f32 maxWidth = viewport->WorkSize.x * 0.85f;
-    const f32 maxHeight = viewport->WorkSize.y * 0.85f;
+    const f32 maxWidth = area.x * 0.85f;
+    const f32 maxHeight = area.y * 0.85f;
 
     if (windowSize.x > maxWidth)
         windowSize.x = maxWidth;
@@ -382,7 +382,7 @@ static void SetNextErrorsWindowSize(f32 fontSize)
     if (windowSize.y > maxHeight)
         windowSize.y = maxHeight;
 
-    ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    CenterNextDialog();
     ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
     ImGui::SetNextWindowSizeConstraints(ImVec2(sead::Mathf::min(fontSize * cMinWidthEm, maxWidth), sead::Mathf::min(fontSize * cMinHeightEm, maxHeight)), ImVec2(FLT_MAX, FLT_MAX));
 }

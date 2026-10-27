@@ -6,6 +6,7 @@
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>
+#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
@@ -14,9 +15,34 @@
 
 static constexpr f32 cDialogRowGapEm = 0.4f;
 
+static ImVec2 sDetachedDialogArea;
+
 void CenterNextDialog()
 {
     ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+}
+
+void SetDetachedDialogArea(const ImVec2& size)
+{
+    sDetachedDialogArea = size;
+}
+
+static bool HasDetachedDialogArea()
+{
+    return sDetachedDialogArea.x > 0.0f && sDetachedDialogArea.y > 0.0f;
+}
+
+bool AreDialogsDetached()
+{
+    return HasDetachedDialogArea() && (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable);
+}
+
+ImVec2 GetDialogAreaSize()
+{
+    if (HasDetachedDialogArea())
+        return sDetachedDialogArea;
+
+    return ImGui::GetMainViewport()->WorkSize;
 }
 
 static constexpr f32 cDialogButtonWidthEm = 6.0f;
@@ -24,6 +50,7 @@ static constexpr f32 cDialogPadEm         = 0.8f;
 static constexpr f32 cDialogMinWidthEm    = 20.0f;
 static constexpr f32 cDialogFooterGapEm   = 0.8f;
 static constexpr f32 cDialogFooterPadEm   = 0.4f;
+static constexpr f32 cFooterWarningGapEm  = 0.5f;
 
 static f32 sDialogButtonWidth = 0.0f;
 static bool sDialogButtonFirst = true;
@@ -53,7 +80,29 @@ f32 CalcDialogFooterWidth(std::initializer_list<const char*> labels)
     return CalcDialogButtonWidth(labels) * buttonNum + ImGui::GetStyle().ItemSpacing.x * (buttonNum - 1);
 }
 
-void BeginDialogFooter(std::initializer_list<const char*> labels, bool separator)
+static void DrawFooterWarning(const char* warning, f32 right)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const ImVec2 pos = ImGui::GetCursorScreenPos() + ImVec2(0.0f, style.FramePadding.y);
+    const ImVec2 iconSize = ImGui::CalcTextSize(ICON_LC_TRIANGLE_ALERT);
+    const f32 textX = pos.x + iconSize.x + ImFloor(ImGui::GetFontSize() * cFooterWarningGapEm);
+    const ImVec2 textMax(right, pos.y + ImGui::GetFontSize());
+    const ImU32 color = ImGui::GetColorU32(uicolors::Warning());
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddText(pos, color, ICON_LC_TRIANGLE_ALERT);
+
+    ImGui::PushStyleColor(ImGuiCol_Text, color);
+    ImGui::RenderTextEllipsis(drawList, ImVec2(textX, pos.y), textMax, right, right, warning, nullptr, nullptr);
+    ImGui::PopStyleColor();
+
+    const bool isCut = textX + ImGui::CalcTextSize(warning).x > right;
+
+    if (isCut && ImGui::IsMouseHoveringRect(pos, textMax))
+        ImGui::SetTooltip("%s", warning);
+}
+
+void BeginDialogFooter(std::initializer_list<const char*> labels, bool separator, const char* warning)
 {
     sDialogButtonWidth = CalcDialogButtonWidth(labels);
     sDialogButtonFirst = true;
@@ -70,8 +119,12 @@ void BeginDialogFooter(std::initializer_list<const char*> labels, bool separator
 
     const f32 totalWidth = CalcDialogFooterWidth(labels);
     const f32 cursorX = ImGui::GetCursorPosX();
+    const f32 buttonX = ImMax(cursorX, cursorX + ImGui::GetContentRegionAvail().x - totalWidth);
 
-    ImGui::SetCursorPosX(ImMax(cursorX, cursorX + ImGui::GetContentRegionAvail().x - totalWidth));
+    if (warning)
+        DrawFooterWarning(warning, ImGui::GetCursorScreenPos().x + buttonX - cursorX - ImGui::GetFontSize());
+
+    ImGui::SetCursorPosX(buttonX);
 }
 
 bool BeginDialog(const char* name, bool* open, ImGuiWindowFlags flags)
@@ -82,6 +135,13 @@ bool BeginDialog(const char* name, bool* open, ImGuiWindowFlags flags)
 
     if ((flags & ImGuiWindowFlags_AlwaysAutoResize) && !(GImGui->NextWindowData.Flags & ImGuiNextWindowDataFlags_HasSizeConstraint))
         ImGui::SetNextWindowSizeConstraints(ImVec2(ImFloor(ImGui::GetFontSize() * cDialogMinWidthEm), 0.0f), ImVec2(FLT_MAX, FLT_MAX));
+
+    if (AreDialogsDetached())
+    {
+        ImGuiWindowClass windowClass;
+        windowClass.ViewportFlagsOverrideSet = ImGuiViewportFlags_NoAutoMerge;
+        ImGui::SetNextWindowClass(&windowClass);
+    }
 
     ImGui::PushStyleColor(ImGuiCol_PopupBg, background);
     ImGui::PushStyleColor(ImGuiCol_ResizeGrip, uicolors::cTransparent);
@@ -214,12 +274,12 @@ void DialogNamedText(const char* format, const char* name)
 static constexpr f32 cDialogListCellPadXEm = 0.4f;
 static constexpr f32 cDialogListCellPadYEm = 0.2f;
 
-bool BeginDialogList(const char* id, s32 columnNum, s32 rowNum)
+bool BeginDialogList(const char* id, s32 columnNum, s32 rowNum, bool frameHeader)
 {
     const f32 em = ImGui::GetFontSize();
     const ImVec2 cellPadding(ImFloor(em * cDialogListCellPadXEm), ImFloor(em * cDialogListCellPadYEm));
     const f32 rowHeight = ImGui::GetFrameHeight() + cellPadding.y * 2.0f;
-    const f32 headerHeight = em + cellPadding.y * 2.0f;
+    const f32 headerHeight = (frameHeader ? ImGui::GetFrameHeight() : em) + cellPadding.y * 2.0f;
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, cellPadding);
 
@@ -252,6 +312,29 @@ void DrawDialogListTitles(const char* const* titles, s32 titleNum, bool alignLas
 
         ImGui::TableHeader(titles[i]);
     }
+}
+
+bool DrawDialogListCheck(bool* on)
+{
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+
+    bool rowHovered = false;
+
+    ImGui::SetNextItemAllowOverlap();
+
+    bool changed = DrawTableRowSelectable("##Row", false, &rowHovered);
+
+    if (changed)
+        *on = !*on;
+
+    ImGui::SameLine(0.0f, 0.0f);
+
+    if (ImGui::Checkbox("##On", on))
+        changed = true;
+
+    return changed;
 }
 
 void DrawDialogListText(const char* text, ImU32 color, bool alignRight, bool showEnd)

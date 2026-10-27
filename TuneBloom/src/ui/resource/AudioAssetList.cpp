@@ -79,7 +79,7 @@ static bool AskForWav(AssetAudioImport* import)
     if (!OpenFileDialog(&import->info.path, nullptr, IM_ARRAYSIZE(filters), filters) || !WaveFile::readRiffWavInfo(&import->info))
         return false;
 
-    GetFileStem(&import->fileName, import->info.path);
+    fileio::GetFileStem(&import->fileName, import->info.path);
     return true;
 }
 
@@ -102,7 +102,7 @@ static bool CommitAudioImport(AssetAudioImport* import, AudioAsset* asset, Item*
     return replaced;
 }
 
-static void RequestAssetReplace(AudioAsset* asset)
+void RequestAudioAssetReplace(AudioAsset* asset)
 {
     sReplaceImport.target = nullptr;
 
@@ -211,7 +211,7 @@ static bool CanExportWavs(const std::vector<AudioAsset*>& assets, sead::Buffered
     return true;
 }
 
-static void PlayAsset(AudioAsset* asset)
+void PlayAudioAsset(AudioAsset* asset)
 {
     ActiveAudioResource().loadStreamFile(asset);
 
@@ -239,7 +239,7 @@ static void AudioAssetRowActionFunc(Item* item)
     const bool canPlay = !asset->getPlaybackError(&playbackError);
 
     if (DrawRowPlayButton(asset->getId(), canPlay ? nullptr : playbackError.cstr(), asset->isPlaying()))
-        PlayAsset(asset);
+        PlayAudioAsset(asset);
 }
 
 static void AudioAssetContextMenuFunc(Item* item)
@@ -257,7 +257,7 @@ static void AudioAssetContextMenuFunc(Item* item)
     const bool canReplace = single && ActiveAudioResource().canReplaceAudio(*asset, &replaceReason);
 
     if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace, canReplace, replaceReason))
-        RequestAssetReplace(asset);
+        RequestAudioAssetReplace(asset);
 
     if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::resource::cImportAudioFile, canReplace, replaceReason))
         ImportAssetFile(asset);
@@ -379,6 +379,7 @@ void DrawAudioAssetsUI()
     SetNextItemListAddDialogWidth(CalcWaveImportWidth());
     SetNextItemListFixedOrder();
     SetNextItemListRemovable(resource.canRemoveAssets());
+    SetNextItemListDeselectable();
 
     DrawAllItemsUI("Audio Asset", messages::common::cAudioAsset, resource.getAssetList(),
         resource.canAddAssets() ? &CreateAudioAssetFunc : nullptr, nullptr, &AudioAssetContextMenuFunc, GetItemFilterCallback()

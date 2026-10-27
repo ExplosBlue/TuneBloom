@@ -16,6 +16,7 @@ bool IsSoundExportRunning();
 void DrawSoundExportDialog();
 void DrawSoundExportProgress();
 void DrawSoundExportProgressPreview(f32 fraction);
+void UpdateExportWindowTitle(bool isExporting);
 
 void RequestExportSequenceFiles(const std::vector<SequenceFile*>& files);
 void RequestImportSequenceFile();

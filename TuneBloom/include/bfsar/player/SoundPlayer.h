@@ -6,6 +6,7 @@
 #include <snd/StreamSoundPlayer.h>
 #include <snd/WaveSoundPlayer.h>
 
+#include <bfsar/model/StreamSource.h>
 #include <bfsar/seq/SeqTimeline.h>
 #include <bfsar/player/TrackSwitch.h>
 
@@ -101,6 +102,7 @@ public:
 
     static bool GetSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError);
     static bool GetWaveFilePlaybackError(const WaveFile& wave, sead::BufferedSafeString* outError);
+    static bool GetStreamPlaybackError(const StreamSource& source, sead::BufferedSafeString* outError);
     static bool IsStreamFileNotLoaded(const Sound& sound);
 
     static bool CanPlaySound(const Sound& sound)
@@ -110,6 +112,7 @@ public:
     }
 
     bool playSound(const Sound* sound, u32 startOffsetSample = 0);
+    bool playStream(const StreamSource& source);
     bool playLastSound();
 
     bool playSeqFile(const SequenceFile& seqFile, const sead::SafeString& startLabel, const Bank** bankArray, const Sound* sound = nullptr);
@@ -163,13 +166,13 @@ public:
     bool isLoopEnabled() const { return mLoopEnabled; }
     void setLoopEnabled(bool enable);
 
-    bool playStreamRegion(const Sound* sound, s32 regionNo);
+    bool playStreamRegion(const StreamSource& source, s32 regionNo);
     void setNextStreamRegion(s32 regionNo);
     s32 getPlayingStreamRegion() const;
     s32 getNextStreamRegion() const;
     void renumberStreamRegions(const s32* newNos, s32 count);
 
-    void updateStreamTrackMute(const Sound* sound);
+    void updateStreamTrackMute(const Sound::StreamSoundInfo* stream);
 
     bool hasSeqVarOverride(SeqVarScope scope, u32 trackNo, u32 varNo) const { return getSeqVarInfo_(scope, trackNo, varNo).enable; }
     s16 getSeqVar(SeqVarScope scope, u32 trackNo, u32 varNo) const;
@@ -186,9 +189,14 @@ public:
     void resetSeqVars();
 
     const Sound* getPlayingSound() const { return mPlayingSound; }
-    void resetPlayingSound() { mPlayingSound = nullptr; }
+    const Sound::StreamSoundInfo* getPlayingStream() const { return mPlayingStream.stream; }
+    const StreamSource& getPlayingStreamSource() const { return mPlayingStream; }
+    void resetPlayingSound() { mPlayingSound = nullptr; mPlayingStream = {}; }
     const Sound* getLastPlayedSound() const { return mLastPlayedSound; }
-    void resetLastPlayedSound() { mLastPlayedSound = nullptr; }
+    const Item* getLastPlayedItem() const;
+    bool hasLastPlayed() const { return getLastPlayedItem() != nullptr; }
+    void resetLastPlayedSound() { mLastPlayedSound = nullptr; mLastPlayedStream = {}; }
+    void forgetStream(const Sound::StreamSoundInfo* stream);
     const WaveFile* getPlayingWaveFile() const { return mPlayingWaveFile; }
     void resetPlayingWaveFile() { mPlayingWaveFile = nullptr; }
 
@@ -205,6 +213,11 @@ public:
     bool isPlayingFrom(const void* owner) const
     {
         return owner && (mOwner == owner || mBankOwner == owner);
+    }
+
+    bool hasPlaybackOwner() const
+    {
+        return mOwner || mBankOwner;
     }
 
     void invalidateBankFile(const BankFile& bankFile);
@@ -249,7 +262,7 @@ public:
 
 private:
     bool playSeqSound_(const Sound* sound);
-    bool playStrmSound_(const Sound* sound);
+    bool playStream_(const StreamSource& source);
     bool playWaveSound_(const Sound* sound, u32 startOffsetSample);
 
     void fadeOutPlayers_();
@@ -263,7 +276,8 @@ private:
     void initPlayerTrack_();
     void initPlayerLoop_();
     f32 calcTrackVolume_(u32 trackNo) const;
-    void readStreamTrackMute_(const Sound* sound);
+    void readStreamTrackMute_(const Sound::StreamSoundInfo* stream);
+    const Sound::StreamSoundInfo* getLastPlayedStream_() const;
     void initSeqVars_();
     const SeqVarInfo& getSeqVarInfo_(SeqVarScope scope, u32 trackNo, u32 varNo) const;
     volatile s16* getSeqVarPtr_(SeqVarScope scope, u32 trackNo, u32 varNo);
@@ -344,6 +358,8 @@ private:
 
     const Sound* mPlayingSound;
     const Sound* mLastPlayedSound;
+    StreamSource mPlayingStream;
+    StreamSource mLastPlayedStream;
     const WaveFile* mPlayingWaveFile;
     const Sound::StreamSoundInfo::Track* mPlayingStreamTracks[cStrmTrackNum] = {};
     u32 mSilentTracks = 0;

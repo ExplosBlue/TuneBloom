@@ -28,6 +28,7 @@ bool CopyFileOver(const char* srcPath, const char* destPath);
 void RemoveFile(const char* path);
 const char* GetTempFolder();
 std::string CanonicalPath(const char* path);
+void GetFileStem(sead::BufferedSafeString* out, const sead::SafeString& path);
 
 bool OpenForWrite(sead::FileHandle* handle, const sead::SafeString& path);
 

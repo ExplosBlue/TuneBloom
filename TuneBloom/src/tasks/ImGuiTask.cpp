@@ -4,6 +4,7 @@
 #include "imgui/imgui_custom.h"
 #include "imgui/imgui_impl_opengl3.h"
 #include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_internal.h"
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <framework/glfw/seadGameFrameworkGlfwGL.h>
@@ -11,11 +12,13 @@
 #include <heap/seadExpHeap.h>
 
 #include <core/TestHooks.h>
+#include <platform/OwnedWindow.h>
 
 #include <ui/widgets/Dialogs.h>
 #include <ui/browser/FilesPanel.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/player/OutputMeter.h>
+#include <ui/player/PlayerFrame.h>
 #include <ui/sequence/SeqManual.h>
 #include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
@@ -45,6 +48,45 @@ static void ImGuiFreeFunc(void* ptr, void* userPtr)
     heap->free(ptr);
 }
 
+static void (*sShowPlatformWindow)(ImGuiViewport*) = nullptr;
+static void (*sDestroyPlatformWindow)(ImGuiViewport*) = nullptr;
+
+static bool IsModalViewport(ImGuiViewport* viewport)
+{
+    const ImGuiWindow* window = static_cast<ImGuiViewportP*>(viewport)->Window;
+
+    return window && (window->Flags & ImGuiWindowFlags_Modal);
+}
+
+static void ShowPlatformWindow(ImGuiViewport* viewport)
+{
+    const bool isModal = IsModalViewport(viewport);
+
+    if (isModal)
+        ownedwindow::prepare(viewport->PlatformHandleRaw);
+
+    sShowPlatformWindow(viewport);
+
+    if (isModal)
+        ownedwindow::attach(viewport->PlatformHandleRaw, ImGui::GetMainViewport()->PlatformHandleRaw);
+}
+
+static void DestroyPlatformWindow(ImGuiViewport* viewport)
+{
+    ownedwindow::detach(viewport->PlatformHandleRaw);
+    sDestroyPlatformWindow(viewport);
+}
+
+static void HookPlatformWindows()
+{
+    ImGuiPlatformIO& platformIo = ImGui::GetPlatformIO();
+
+    sShowPlatformWindow = platformIo.Platform_ShowWindow;
+    sDestroyPlatformWindow = platformIo.Platform_DestroyWindow;
+    platformIo.Platform_ShowWindow = &ShowPlatformWindow;
+    platformIo.Platform_DestroyWindow = &DestroyPlatformWindow;
+}
+
 ImGuiTask::ImGuiTask(const sead::TaskConstructArg& arg)
     : sead::Task(arg, "ImGuiTask")
     , mCalcMeter("ImGuiTask::calc", sead::Color4f::cCyan)
@@ -68,6 +110,7 @@ void ImGuiTask::prepare()
     RegisterPropertySettings();
     RegisterSeqEditorSettings();
     RegisterOutputMeterSettings();
+    RegisterLayoutSettings();
     RegisterRecentFilesSettings();
 
     if (testhooks::IsEnabled())
@@ -79,7 +122,8 @@ void ImGuiTask::prepare()
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;       // Enable Docking
 
 #if !defined(SEAD_PLATFORM_LINUX)
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;     // Enable Multi-Viewport / Platform Windows
+    if (!testhooks::IsEnabled() || testhooks::IsViewportsOn())
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;     // Enable Multi-Viewport / Platform Windows
 #endif
 
     // Setup Dear ImGui style
@@ -135,14 +179,17 @@ void ImGuiTask::prepare()
         io.Fonts->AddFontFromMemoryTTF(iconsFont, iconsArg.read_size, ScaleSize(cDialogIconFontSize), &dialogIconConfig, GetDialogIconRanges());
     }
 
-    sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(getFramework());
+    sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
     SEAD_ASSERT(fw);
 
     sead::Graphics::instance()->lockDrawContext();
     {
+        sead::CurrentHeapSetter chs(fw->getGLHeap());
+
         // Setup Platform/Renderer backends
         ImGui_ImplGlfw_InitForOpenGL(fw->getWindowHandle(), true);
         ImGui_ImplOpenGL3_Init();
+        HookPlatformWindows();
     }
     sead::Graphics::instance()->unlockDrawContext();
 
@@ -184,6 +231,7 @@ void ImGuiTask::calc()
     testhooks::ApplyInputOverrides();
     ImGui::NewFrame();
 
+    ApplyPlayerFrameStart();
     testhooks::Update();
 
     mCalcMeter.measureEnd();
@@ -197,6 +245,7 @@ void ImGuiTask::draw()
     sead::CurrentHeapSetter chs(fw->getGLHeap());
 
     mDrawMeter.measureBegin();
+    mIsDrawing = true;
 
     ImGui::Render();
     testhooks::Capture(ImGui::GetDrawData());
@@ -205,9 +254,6 @@ void ImGuiTask::draw()
     // Update and Render additional Platform Windows
     if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
     {
-        sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(getFramework());
-        SEAD_ASSERT(fw);
-
         GLFWwindow* prevContext = glfwGetCurrentContext();
 
         GLint prevFBO;
@@ -224,6 +270,7 @@ void ImGuiTask::draw()
         glBindFramebuffer(GL_FRAMEBUFFER, prevFBO);
     }
 
+    mIsDrawing = false;
     mDrawMeter.measureEnd();
 }
 

@@ -3,7 +3,6 @@
 #include <basis/seadTypes.h>
 #include <prim/seadSafeString.h>
 
-class Sound;
 class WaveFile;
 struct ImDrawList;
 struct ImVec2;
@@ -14,6 +13,7 @@ namespace ImGui
 }
 
 void DrawStreamRegionsWindow();
+void DrawStreamRegionsSection();
 
 // Selection
 s32 GetSelectedStreamRegion(const WaveFile* wave);
@@ -33,8 +33,8 @@ void RequestStreamRegionImport(WaveFile* wave);
 void ImportTrackWavRegions(WaveFile* wave, const sead::SafeString& wavPath);
 void DrawStreamRegionImportDialog();
 
-void KeepStreamRegions(Sound* sound, WaveFile* oldMainWave);
-void TrimStreamRegions(WaveFile* wave);
+void KeepStreamRegions(WaveFile* mainWave, WaveFile* oldMainWave);
+u32 RemoveStreamRegionsPastEnd(WaveFile* wave);
 
 void DrawStreamRegionLane(WaveFile* wave, ImGui::LoopWaveformState& state);
 

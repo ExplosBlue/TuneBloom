@@ -18,7 +18,7 @@ inline const sead::SafeString cAppName("TuneBloom");
 extern const sead::SafeString cAppVersion;
 extern const bool cIsCommitBuild;
 
-bool updateTitle(const char* path, bool dirty = false);
+bool updateTitle(const char* path, bool dirty = false, const char* appName = nullptr);
 
 bool isAssertDialogOpen();
 

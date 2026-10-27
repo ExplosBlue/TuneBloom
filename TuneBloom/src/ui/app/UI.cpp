@@ -2,6 +2,8 @@
 
 #include <ui/app/About.h>
 #include <ui/backup/Backup.h>
+#include <ui/browser/FileExportRun.h>
+#include <ui/file/DocumentMgr.h>
 #include <ui/file/DocumentState.h>
 #include <ui/file/DocumentTabs.h>
 #include <ui/export/Export.h>
@@ -17,6 +19,7 @@
 #include <ui/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/OutputMeter.h>
+#include <ui/player/PlayerFrame.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/settings/Preferences.h>
@@ -45,6 +48,10 @@
 
 static bool sShowSystemWindow = false;
 static bool sResetLayoutRequest = false;
+static bool sIsFileEditorShown = false;
+
+static constexpr s32 cLayoutVersion = 2;
+static s32 sSavedLayoutVersion = 0;
 
 UIType GetUITab()
 {
@@ -86,12 +93,115 @@ void SetSystemWindowShown(bool shown)
     sShowSystemWindow = shown;
 }
 
+bool IsFileEditorShown()
+{
+    return sIsFileEditorShown;
+}
+
+void SetFileEditorShown(bool shown)
+{
+    sIsFileEditorShown = shown;
+}
+
+static void UpdateFileEditorShown()
+{
+    if (sIsFileEditorShown && (GetOpenDocuments().size() != 1 || !IsPlayerDocument(ActiveDocument())))
+        sIsFileEditorShown = false;
+}
+
 void RequestResetLayout()
 {
     sResetLayoutRequest = true;
 }
 
+static void* LayoutSettingsReadOpen(ImGuiContext*, ImGuiSettingsHandler*, const char*)
+{
+    return &sSavedLayoutVersion;
+}
+
+static void LayoutSettingsReadLine(ImGuiContext*, ImGuiSettingsHandler*, void*, const char* line)
+{
+    int value = 0;
+
+    if (sscanf(line, "Version=%d", &value) == 1)
+        sSavedLayoutVersion = value;
+}
+
+static void LayoutSettingsApplyAll(ImGuiContext*, ImGuiSettingsHandler*)
+{
+    if (sSavedLayoutVersion < cLayoutVersion)
+        RequestResetLayout();
+
+    sSavedLayoutVersion = cLayoutVersion;
+}
+
+static void LayoutSettingsWriteAll(ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buf)
+{
+    buf->appendf("[%s][Dock]\n", handler->TypeName);
+    buf->appendf("Version=%d\n\n", cLayoutVersion);
+}
+
+void RegisterLayoutSettings()
+{
+    ImGuiSettingsHandler handler;
+    handler.TypeName = "Layout";
+    handler.TypeHash = ImHashStr("Layout");
+    handler.ReadOpenFn = LayoutSettingsReadOpen;
+    handler.ReadLineFn = LayoutSettingsReadLine;
+    handler.ApplyAllFn = LayoutSettingsApplyAll;
+    handler.WriteAllFn = LayoutSettingsWriteAll;
+
+    ImGui::AddSettingsHandler(&handler);
+}
+
 extern void HeapInfo();
+
+static constexpr f32 cOutputMeterMaxRatio = 0.5f;
+
+static constexpr const char* cOutputMeterWindowId = "###OutputMeterWindow";
+
+static ImGuiID SplitOutputMeterNode(ImGuiID* nodeId)
+{
+    const ImGuiDockNode* node = ImGui::DockBuilderGetNode(*nodeId);
+    const f32 ratio = ImMin(CalcOutputMeterWindowHeight() / ImMax(node->Size.y, 1.0f), cOutputMeterMaxRatio);
+
+    return ImGui::DockBuilderSplitNode(*nodeId, ImGuiDir_Down, ratio, nullptr, nodeId);
+}
+
+static ImGuiID GetSavedDockId(const char* windowId)
+{
+    if (const ImGuiWindow* window = ImGui::FindWindowByName(windowId))
+        return window->DockId;
+
+    const ImGuiWindowSettings* settings = ImGui::FindWindowSettingsByID(ImHashStr(windowId));
+
+    return settings ? settings->DockId : 0;
+}
+
+static void PlaceOutputMeterBelowSidebar()
+{
+    const ImGuiWindow* sidebar = ImGui::FindWindowByName(cSidebarWindowId);
+
+    if (!sidebar || !sidebar->DockNode || sidebar->DockNode->IsSplitNode() || !ImGui::DockNodeGetRootNode(sidebar->DockNode)->IsDockSpace())
+        return;
+
+    const ImGuiID meterDockId = GetSavedDockId(cOutputMeterWindowId);
+
+    if (meterDockId == 0)
+        return;
+
+    ImGuiDockNode* meterNode = ImGui::DockBuilderGetNode(meterDockId);
+
+    if (meterNode && !ImGui::DockNodeGetRootNode(meterNode)->IsDockSpace())
+        return;
+
+    if (meterNode && meterNode->ParentNode && meterNode->ParentNode == sidebar->DockNode->ParentNode)
+        return;
+
+    ImGuiID sidebarNodeId = sidebar->DockNode->ID;
+
+    ImGui::DockBuilderDockWindow(cOutputMeterWindowId, SplitOutputMeterNode(&sidebarNodeId));
+}
 
 static void DockBuilder(ImGuiID dockspaceId, const ImVec2& dockspaceSize)
 {
@@ -106,10 +216,10 @@ static void DockBuilder(ImGuiID dockspaceId, const ImVec2& dockspaceSize)
     ImGuiID dock1 = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Left, 0.20f, nullptr, &mainDockId);
     ImGuiID dock2 = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Right, 0.50f, nullptr, &mainDockId);
     ImGuiID dockDownMain = ImGui::DockBuilderSplitNode(mainDockId, ImGuiDir_Down, 0.35f, nullptr, &mainDockId);
-    ImGuiID dock1Bottom = ImGui::DockBuilderSplitNode(dock1, ImGuiDir_Down, 0.50f, nullptr, &dock1);
+    ImGuiID dock1Bottom = SplitOutputMeterNode(&dock1);
 
-    ImGui::DockBuilderDockWindow("###ProjectWindow", dock1);
-    ImGui::DockBuilderDockWindow("###OutputMeterWindow", dock1Bottom);
+    ImGui::DockBuilderDockWindow(cSidebarWindowId, dock1);
+    ImGui::DockBuilderDockWindow(cOutputMeterWindowId, dock1Bottom);
     ImGui::DockBuilderDockWindow("###InfoWindow", mainDockId);
     ImGui::DockBuilderDockWindow("###SubInfoWindow", dockDownMain);
     ImGui::DockBuilderDockWindow("###StreamRegionsWindow", dockDownMain);
@@ -143,7 +253,8 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
     ImGui::Begin(label, NULL, host_window_flags);
     ImGui::PopStyleVar(3);
 
-    DrawDocumentTabStrip();
+    if (!sIsFileEditorShown)
+        DrawDocumentTabStrip();
 
     ImGuiID dockspace_id = ImGui::GetID("DockSpace");
 
@@ -151,6 +262,10 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
     {
         DockBuilder(dockspace_id, viewport->WorkSize);
         sResetLayoutRequest = false;
+    }
+    else if (TakeOutputMeterPlaceRequest())
+    {
+        PlaceOutputMeterBelowSidebar();
     }
 
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags, window_class);
@@ -214,6 +329,13 @@ Sound* GetSelectedStreamSound()
     return sound->getSoundType() == Sound::SoundType::Strm ? sound : nullptr;
 }
 
+StreamSource GetActiveStreamSource()
+{
+    Document* document = ActiveDocument();
+
+    return document ? document->activeStreamSource() : StreamSource();
+}
+
 bool IsStreamPanelShown()
 {
     if (!IsSoundArchiveOpen())
@@ -225,6 +347,24 @@ bool IsStreamPanelShown()
     return GetUITab() == UIType::AllSounds && GetSelectedStreamSound() != nullptr;
 }
 
+static void DrawSubInfoBody(const StreamSource& source)
+{
+    if (source.isValid())
+    {
+        ImGui::BeginChild("TrackInnerWindow", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AlwaysUseWindowPadding);
+        DrawStreamTracksUI(source);
+        ImGui::EndChild();
+    }
+    else if (sSelectedItem && sSelectedItem->getItemType() == Item::ItemType::Sound)
+    {
+        CenteredText(messages::stream::cSelectedNotStream);
+    }
+    else if (!sSelectedItem)
+    {
+        CenteredText(messages::item::cNoItemSelected);
+    }
+}
+
 static void DrawSubInfoUI()
 {
     if (!IsStreamPanelShown())
@@ -232,8 +372,8 @@ static void DrawSubInfoUI()
 
     const TabRowTitle title = { ICON_LC_LAYERS, messages::common::cTracks, "###SubInfoWindow", 1 };
 
-    Sound* streamSound = GetSelectedStreamSound();
-    const s32 trackNum = streamSound ? static_cast<s32>(streamSound->getStreamSoundInfo().getTrackList().size()) : -1;
+    const StreamSource source = GetActiveStreamSource();
+    const s32 trackNum = source.isValid() ? static_cast<s32>(source.stream->getTrackList().size()) : -1;
 
     sead::FixedSafeString<64> name;
     FormatTabRowTitle(&name, title, trackNum);
@@ -244,43 +384,13 @@ static void DrawSubInfoUI()
 
     DrawTabRowCount(title, trackNum);
 
-    const bool folded = DrawStreamTracksTabRow(streamSound);
+    const bool folded = DrawStreamTracksTabRow(source);
 
-    if (streamSound)
-        DrawStreamTrackImportPopup(streamSound);
+    if (source.isValid())
+        DrawStreamTrackImportPopup(source);
 
     if (windowOpen && !folded)
-    {
-        if (sSelectedItem)
-        {
-            switch (sSelectedItem->getItemType())
-            {
-                    default:
-                        break;
-
-                    case Item::ItemType::Sound:
-                    {
-                        Sound* sound = static_cast<Sound*>(sSelectedItem);
-
-                        if (sound->getSoundType() == Sound::SoundType::Strm)
-                        {
-                            ImGui::BeginChild("TrackInnerWindow", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AlwaysUseWindowPadding);
-                            DrawStreamTracksUI(sound);
-                            ImGui::EndChild();
-                        }
-                        else
-                        {
-                        CenteredText(messages::stream::cSelectedNotStream);
-                    }
-                    break;
-                }
-            }
-        }
-        else
-        {
-            CenteredText(messages::item::cNoItemSelected);
-        }
-    }
+        DrawSubInfoBody(source);
 
     ImGui::End();
 }
@@ -420,6 +530,9 @@ static void DrawSelectedItemPropertiesUI()
 
 static void DrawSelectedItemReferencesUI()
 {
+    if (!IsSoundArchiveOpen())
+        return;
+
     const Item::ItemType itemType = sSelectedItem->getItemType();
 
     switch (itemType)
@@ -464,15 +577,19 @@ static void DrawPropertiesUI()
             window->ContentRegionRect.Max.x -= margin;
         }
 
-        if (!sSelectedItem || sSelectedItemIsSubWindow || sSelectedItem->getItemType() != Item::ItemType::WaveFile)
+        Document* document = ActiveDocument();
+        const bool showsItemInInfo = document && document->showsItemInInfo();
+
+        if (!showsItemInInfo && (!sSelectedItem || sSelectedItemIsSubWindow || sSelectedItem->getItemType() != Item::ItemType::WaveFile))
             ReleaseWaveFileView();
 
         if (!sSelectedItem || sSelectedItemIsSubWindow || sSelectedItem->getItemType() != Item::ItemType::AudioAsset)
             ReleaseAudioAssetView();
 
-        if (!sSelectedItem)
+        if (showsItemInInfo || !sSelectedItem)
         {
-            CenteredText(messages::item::cNoItemSelected);
+            if (!document || !document->drawFileProperties())
+                CenteredText(messages::item::cNoItemSelected);
         }
         else if (sSelectedItemIsSubWindow)
         {
@@ -494,17 +611,27 @@ void DrawUI()
     HandleFileShortcuts();
 
     UpdateFileWindows();
+    UpdateFileEditorShown();
 
     DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_AutoHideTabBar);
 
-    DrawSidebarUI();
+    if (!sIsFileEditorShown)
+        DrawSidebarUI();
+
     DrawInfoUI();
     DrawSubInfoUI();
     DrawStreamRegionsWindow();
     DrawPropertiesUI();
     DrawPlayerUI();
-    DrawOutputMeterWindow();
 
+    if (!sIsFileEditorShown)
+        DrawOutputMeterWindow();
+
+    DrawAppDialogs();
+}
+
+void DrawAppDialogs()
+{
     DrawPreferencesWindow();
     DrawUnsavedChangesDialog();
     DrawShortcutsDialog();
@@ -512,7 +639,7 @@ void DrawUI()
     backup::Update();
     backup::DrawDialogs();
 
-    notify::Draw();
+    notify::Draw(!IsPlayerFrameShown());
 
     DrawWavRegionDropImport();
 
@@ -525,6 +652,8 @@ void DrawUI()
     DrawExportResultPopup();
     DrawMidiExportDialog();
     DrawSoundExportProgress();
+    DrawFileExportProgress();
+    UpdateExportWindowTitle(IsSoundExportRunning() || IsFileExportRunning());
     DrawWaveFileReplacePopup();
     DrawAudioResourceDialogs();
 

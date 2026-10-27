@@ -68,6 +68,8 @@ constexpr ActionBinding cActionBindings[] = {
 
     { Action::CloseProject,       ImGuiMod_Shortcut | ImGuiKey_W },
     { Action::SaveAllProjects,    ImGuiMod_Shortcut | ImGuiMod_Alt | ImGuiKey_S },
+
+    { Action::ClearSelection,     ImGuiKey_Escape },
 };
 
 constexpr ModifierBinding cModifierBindings[] = {
@@ -84,7 +86,7 @@ constexpr ModifierBinding cModifierBindings[] = {
 
 constexpr ImGuiKeyChord cCommandModifiers = ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiMod_Super;
 
-static_assert(IM_ARRAYSIZE(cActionBindings) == static_cast<s32>(Action::SaveAllProjects) + 1);
+static_assert(IM_ARRAYSIZE(cActionBindings) == static_cast<s32>(Action::ClearSelection) + 1);
 static_assert(IM_ARRAYSIZE(cModifierBindings) == static_cast<s32>(Modifier::TypeValue) + 1);
 
 constexpr s32 cTriggerFrames = 2;

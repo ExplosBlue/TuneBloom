@@ -189,7 +189,7 @@ static SoundExportSummary CalcSoundExportSummary()
         }
         else if (sound->getSoundType() == Sound::SoundType::Strm)
         {
-            const WaveFile* wave = FindStreamExportWave(sound);
+            const WaveFile* wave = FindStreamExportWave(sound->getStreamSoundInfo());
 
             if (!wave)
                 continue;
@@ -233,7 +233,7 @@ static sead::FixedSafeString<16> FormatExportTime(f64 seconds, bool tenths = tru
     sead::FixedSafeString<16> out;
 
     if (tenths)
-        out.format(messages::exporting::cTimeTenthsFormat, total / 600, total / 10 % 60, total % 10);
+        out.format(messages::common::cTimeTenthsFormat, total / 600, total / 10 % 60, total % 10);
     else
         out.format(messages::exporting::cTimeFormat, total / 600, total / 10 % 60);
 
@@ -394,7 +394,7 @@ static f64 DrawExportTimelineBox(const SoundExportSummary& summary, s32 count)
         GroupBoxRowLabel(messages::common::cLoop, labelWidth);
 
     if (!single)
-        ImGui::TextColored(valueColor, messages::common::cCountOfFormat, summary.loopNum, count);
+        ImGui::TextColored(valueColor, messages::common::cCountOfFormat, FormatCountText(summary.loopNum).cstr(), FormatCountText(count).cstr());
     else if (summary.loopNum > 0)
         ImGui::TextColored(valueColor, messages::exporting::cLoopRangeFormat, FormatExportTime(summary.introSec).cstr(), FormatExportTime(summary.introSec + summary.loopSec).cstr());
     else if (summary.noEndNum > 0)
@@ -460,7 +460,7 @@ static void DrawExportFormatBox(const SoundExportSummary& summary, bool single, 
     if (single && summary.sampleRate != 0)
         sampleRateItems[0] = originalRate.cstr();
 
-    GroupBoxRowLabel(messages::exporting::cFileType, labelWidth);
+    GroupBoxRowLabel(messages::common::cFileType, labelWidth);
     ImGui::TextColored(GetItemValueColor(), "%s", messages::exporting::cFileTypeWav);
 
     GroupBoxRowLabel(messages::common::cSampleRate, labelWidth);

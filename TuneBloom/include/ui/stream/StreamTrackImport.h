@@ -7,9 +7,11 @@
 
 class Sound;
 class WaveFile;
+struct StreamSource;
 
-void RequestStreamTrackImport(Sound* sound);
-void DrawStreamTrackImportPopup(Sound* sound);
+void RequestStreamTrackImport(const StreamSource& source);
+void DrawStreamTrackImportPopup(const StreamSource& source);
+bool IsStreamTrackImportPending(const StreamSource& source);
 
 void ResetStreamCreateImport();
 void SetStreamCreateMainWave(WaveFile* wave, const sead::SafeString& name);

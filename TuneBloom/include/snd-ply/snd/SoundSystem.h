@@ -30,6 +30,9 @@ public:
             , enable_visualization(false)
 
             , voice_synthesize_buffer_count(5)
+
+            , output_sample_rate(0)
+            , playback_device_name(nullptr)
         {
         }
 
@@ -45,6 +48,9 @@ public:
         bool enable_visualization;
 
         u32 voice_synthesize_buffer_count;
+
+        u32 output_sample_rate;
+        const char* playback_device_name;
 
         static const s32 cDefaultSoundThreadPriority = 31;
         static const u32 cDefaultSoundThreadStackSize = 16 * 1024;
@@ -85,6 +91,8 @@ public:
 
     static void pauseAudio();
     static void resumeAudio();
+    static void updateIdleOutput(f32 deltaTime);
+    static bool isOutputRunning();
 
     static void setOutputSampleRate(u32 rate);
     static u32 getOutputSampleRate();

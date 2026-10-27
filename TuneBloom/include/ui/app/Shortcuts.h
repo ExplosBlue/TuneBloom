@@ -50,6 +50,8 @@ enum class Action : s32
 
     CloseProject = 31,
     SaveAllProjects = 32,
+
+    ClearSelection = 33,
 };
 
 enum class Modifier : s32

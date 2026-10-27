@@ -294,7 +294,7 @@ static void DrawWaveDetails()
     FormatItemSize(&size, wave.getFileSize());
 
     DetailRow(messages::common::cLength, length.cstr());
-    DetailRow(messages::browser::cSamples, sead::FormatFixedSafeString<24>("%u", wave.getSampleCount()).cstr());
+    DetailRow(messages::browser::cSamples, FormatCountText(wave.getSampleCount()).cstr());
     DetailRow(messages::common::cSampleRate, sead::FormatFixedSafeString<24>(messages::unit::cHertzFormat, wave.getSampleRate()).cstr());
     DetailRow(messages::common::cChannels, channels.cstr());
     DetailRow(messages::common::cEncoding, WaveFile::sEncodingTypes[static_cast<s32>(wave.getEncoding())]);
@@ -305,7 +305,7 @@ static void DrawWaveDetails()
         DetailRow(messages::common::cLoop, "-");
 
     DetailRow(messages::common::cSize, size.cstr());
-    DetailRow(messages::browser::cUsedBy, sead::FormatFixedSafeString<24>("%d", wave.getReferences().size()).cstr());
+    DetailRow(messages::browser::cUsedBy, FormatCountText(wave.getReferences().size()).cstr());
 }
 
 static bool BeginBrowserTable(const Item::List& list, Item::ItemType itemType, const ImVec2& size, BrowserTable* table)

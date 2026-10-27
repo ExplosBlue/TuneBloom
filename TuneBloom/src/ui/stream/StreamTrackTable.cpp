@@ -1,6 +1,7 @@
 #include <ui/stream/StreamTracks.h>
 
 #include <ui/Messages.h>
+#include <ui/project/FileLists.h>
 #include <ui/sound/SoundProperties.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
@@ -52,7 +53,7 @@ static f32 CalcTrackWaveWidth(const TrackTableLayout& layout, f32 availWidth, f3
     return ImFloor(sead::Mathf::max(minWidth, availWidth - usedWidth));
 }
 
-static void DimTrackCell(bool toTableEdge)
+void DimTrackCell(bool toTableEdge)
 {
     ImGuiTable* table = ImGui::GetCurrentTable();
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -73,20 +74,28 @@ static void DimTrackCell(bool toTableEdge)
     drawList->PopClipRect();
 }
 
+static const char* GetTrackWaveTitle(const TrackContext& ctx)
+{
+    return ctx.source.sound ? cTrackWaveLabel : messages::common::cChannels;
+}
+
 static void SetupTrackTableColumns(const TrackContext& ctx, const TrackTableLayout& layout, f32 waveWidth)
 {
     ImGui::TableSetupScrollFreeze(3, 1);
     ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, layout.indexWidth);
     ImGui::TableSetupColumn(messages::stream::cTrackMute, ImGuiTableColumnFlags_WidthFixed, layout.muteWidth);
     ImGui::TableSetupColumn(messages::stream::cTrackSolo, ImGuiTableColumnFlags_WidthFixed, layout.soloWidth);
-    ImGui::TableSetupColumn(messages::common::cWaveFile, ImGuiTableColumnFlags_WidthFixed, waveWidth);
-    ImGui::TableSetupColumn(messages::stream::cTrackMix, ImGuiTableColumnFlags_WidthFixed, layout.mixWidth);
-    ImGui::TableSetupColumn(messages::stream::cTrackBypass, ImGuiTableColumnFlags_WidthFixed, layout.bypassWidth);
+    ImGui::TableSetupColumn(GetTrackWaveTitle(ctx), ImGuiTableColumnFlags_WidthFixed, waveWidth);
+    if (ctx.source.hasTrackMix)
+    {
+        ImGui::TableSetupColumn(messages::stream::cTrackMix, ImGuiTableColumnFlags_WidthFixed, layout.mixWidth);
+        ImGui::TableSetupColumn(messages::stream::cTrackBypass, ImGuiTableColumnFlags_WidthFixed, layout.bypassWidth);
+    }
 
-    if (ctx.enableSend)
+    if (ctx.source.enableSend)
         ImGui::TableSetupColumn(messages::panel::cSend, ImGuiTableColumnFlags_WidthFixed, layout.sendWidth);
 
-    if (ctx.enableFilter)
+    if (ctx.source.enableFilter)
         ImGui::TableSetupColumn(messages::common::cFilter, ImGuiTableColumnFlags_WidthFixed, layout.filterWidth);
 }
 
@@ -106,21 +115,24 @@ static void DrawTrackTableTitles(const TrackContext& ctx, const TrackTableLayout
 
     ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(cTrackWaveLabel);
+    ImGui::TextUnformatted(GetTrackWaveTitle(ctx));
 
-    ImGui::TableNextColumn();
-    layout.mixSlots.drawLabels();
+    if (ctx.source.hasTrackMix)
+    {
+        ImGui::TableNextColumn();
+        layout.mixSlots.drawLabels();
 
-    ImGui::TableNextColumn();
-    layout.bypassSlots.drawLabels();
+        ImGui::TableNextColumn();
+        layout.bypassSlots.drawLabels();
+    }
 
-    if (ctx.enableSend)
+    if (ctx.source.enableSend)
     {
         ImGui::TableNextColumn();
         layout.sendSlots.drawLabels();
     }
 
-    if (ctx.enableFilter)
+    if (ctx.source.enableFilter)
     {
         ImGui::TableNextColumn();
         layout.filterSlots.drawLabels();
@@ -152,17 +164,50 @@ static void DrawTrackIndexCell(const TrackContext& ctx, s32 index, f32 rowHeight
     ImGui::Text("%d", index);
 }
 
+void DrawTrackChannelText(u16 channelCount, bool dim)
+{
+    sead::FixedSafeString<16> text;
+
+    if (channelCount == 1)
+        text = messages::common::cMono;
+    else if (channelCount == 2)
+        text = messages::common::cStereo;
+    else
+        text.format(messages::stream::cTrackChannelsFormat, channelCount);
+
+    ImGui::AlignTextToFramePadding();
+
+    if (dim)
+        ImGui::TextDisabled("%s", text.cstr());
+    else
+        ImGui::TextUnformatted(text.cstr());
+}
+
 static void DrawTrackChannelCount(u16 channelCount)
 {
     ImGui::SameLine();
-    ImGui::AlignTextToFramePadding();
+    DrawTrackChannelText(channelCount, true);
+}
 
-    if (channelCount == 1)
-        ImGui::TextDisabled("%s", messages::common::cMono);
-    else if (channelCount == 2)
-        ImGui::TextDisabled("%s", messages::common::cStereo);
-    else
-        ImGui::TextDisabled(messages::stream::cTrackChannelsFormat, channelCount);
+static void DrawLooseTrackChannelCell(const TrackContext& ctx, s32 index)
+{
+    Sound::StreamSoundInfo::Track* track = ctx.tracks[index];
+    Item* waveFile = track->getWaveFileRef().getItem();
+
+    const f32 buttonSize = ImGui::GetFrameHeight();
+    const f32 cellRight = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+
+    DrawTrackChannelText(track->getChannelCount(ctx.source.stream->getStreamType()), false);
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(cellRight - buttonSize);
+    ImGui::BeginDisabled(!waveFile);
+
+    if (ImGui::Button(ICON_LC_REPLACE "###ReplaceWave", ImVec2(buttonSize, buttonSize)))
+        RequestWaveFileReplace(static_cast<WaveFile*>(waveFile));
+
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("%s", waveFile ? messages::import::cReplaceAudioTip : messages::reference::cNoWaveFile);
 }
 
 static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, const TrackTableView& view, bool audible)
@@ -173,7 +218,17 @@ static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, const TrackTab
     ImGui::TableNextColumn();
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor((view.rowHeight - ImGui::GetFrameHeight()) * 0.5f));
 
-    DrawTrackWaveSelector(track, ImGui::GetContentRegionAvail().x - (view.showWaveLink ? TrailingButtonsWidth(1) : 0.0f) - (view.showChannels ? style.ItemSpacing.x + view.channelWidth : 0.0f), view.compactWave);
+    if (!ctx.source.sound)
+    {
+        DrawLooseTrackChannelCell(ctx, index);
+
+        if (!audible)
+            DimTrackCell(false);
+
+        return;
+    }
+
+    DrawTrackWaveSelector(ctx, track, ImGui::GetContentRegionAvail().x - (view.showWaveLink ? TrailingButtonsWidth(1) : 0.0f) - (view.showChannels ? style.ItemSpacing.x + view.channelWidth : 0.0f), view.compactWave);
 
     Item* waveFile = track->getWaveFileRef().getItem();
 
@@ -191,7 +246,7 @@ static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, const TrackTab
     }
 
     if (view.showChannels)
-        DrawTrackChannelCount(track->getChannelCount(ctx.sound->getStreamSoundInfo().getStreamType()));
+        DrawTrackChannelCount(track->getChannelCount(ctx.source.stream->getStreamType()));
 
     if (!audible)
         DimTrackCell(false);
@@ -209,7 +264,7 @@ static void DrawTrackGroupCell(const TrackContext& ctx, s32 index, TrackSlots& s
 static void DrawTrackTableRow(const TrackContext& ctx, s32 index, TrackTableView& view, TrackEdit* edit)
 {
     TrackTableLayout& layout = view.layout;
-    const bool audible = ctx.sound->getStreamSoundInfo().isTrackAudible(static_cast<u32>(index));
+    const bool audible = ctx.source.stream->isTrackAudible(static_cast<u32>(index));
 
     ImGui::PushID(ctx.tracks[index]);
     ImGui::TableNextRow();
@@ -225,13 +280,16 @@ static void DrawTrackTableRow(const TrackContext& ctx, s32 index, TrackTableView
     DrawTrackSlotGroup(ctx, index, layout.soloSlots, cTrackSoloParams, view.rowHeight);
 
     DrawTrackWaveCell(ctx, index, view, audible);
-    DrawTrackGroupCell(ctx, index, layout.mixSlots, cTrackMixParams, view, audible);
-    DrawTrackGroupCell(ctx, index, layout.bypassSlots, cTrackMixParams + cTrackBypassIndex, view, audible);
+    if (ctx.source.hasTrackMix)
+    {
+        DrawTrackGroupCell(ctx, index, layout.mixSlots, cTrackMixParams, view, audible);
+        DrawTrackGroupCell(ctx, index, layout.bypassSlots, cTrackMixParams + cTrackBypassIndex, view, audible);
+    }
 
-    if (ctx.enableSend)
+    if (ctx.source.enableSend)
         DrawTrackGroupCell(ctx, index, layout.sendSlots, cTrackSendParams, view, audible);
 
-    if (ctx.enableFilter)
+    if (ctx.source.enableFilter)
         DrawTrackGroupCell(ctx, index, layout.filterSlots, cTrackFilterParams, view, audible);
 
     ImGui::PopID();
@@ -262,7 +320,7 @@ void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit)
     const f32 waveWidth = CalcTrackWaveWidth(view.layout, availWidth, ImFloor(em * cTrackWaveMinWidthEm), &allInView);
 
     view.compactWave = waveWidth < em * (allInView ? cTrackWaveFullWidthEm : cTrackWaveWideWidthEm);
-    view.showWaveLink = waveWidth >= em * cTrackWaveLinkWidthEm;
+    view.showWaveLink = ctx.source.sound && waveWidth >= em * cTrackWaveLinkWidthEm;
     view.showChannels = waveWidth >= em * cTrackChannelsMinEm;
 
     SetupTrackTableColumns(ctx, view.layout, waveWidth);

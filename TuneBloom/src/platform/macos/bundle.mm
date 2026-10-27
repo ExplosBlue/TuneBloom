@@ -5,19 +5,24 @@
 
 namespace macos {
 
-void useBundleResources()
+bool isAppBundle()
 {
     @autoreleasepool
     {
-        NSBundle* bundle = [NSBundle mainBundle];
-        NSString* executablePath = [bundle executablePath];
+        NSString* executablePath = [[NSBundle mainBundle] executablePath];
 
-        if (!executablePath || ![executablePath containsString:@".app/Contents/MacOS/"])
-        {
-            return;
-        }
+        return executablePath && [executablePath containsString:@".app/Contents/MacOS/"];
+    }
+}
 
-        NSString* resourcePath = [bundle resourcePath];
+void useBundleResources()
+{
+    if (!isAppBundle())
+        return;
+
+    @autoreleasepool
+    {
+        NSString* resourcePath = [[NSBundle mainBundle] resourcePath];
 
         if (resourcePath)
         {

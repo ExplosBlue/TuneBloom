@@ -490,6 +490,24 @@ InnerFileTarget WaveFile::getTarget() const
     return {};
 }
 
+bool WaveFile::writeFile(const sead::SafeString& path) const
+{
+    fileio::StagedFile file;
+
+    if (!file.open(path))
+        return false;
+
+    {
+        const InnerFileTarget target = getTarget();
+        sead::FileDeviceWriteStream stream(file.getHandle(), sead::Stream::Modes::eBinary);
+
+        setup(target.endian);
+        write(file.getHandle(), &stream, target.endian, true);
+    }
+
+    return file.commit();
+}
+
 u32 WaveFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool isLast) const
 {
     LOG_FUNC();

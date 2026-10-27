@@ -2,6 +2,7 @@
 
 #include <ui/backup/BackupInternal.h>
 #include <ui/file/FileDialogs.h>
+#include <ui/file/LooseFileInfo.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/resource/ResourceViews.h>
@@ -76,12 +77,53 @@ UIType AudioResourceDocument::defaultTab() const
     return UIType::AudioAssets;
 }
 
-void AudioResourceDocument::drawInfo(UIType tab)
+void AudioResourceDocument::drawInfo(UIType)
 {
-    if (tab == UIType::ProjectInfo)
-        DrawAudioResourceInfoUI();
-    else
-        DrawAudioAssetsUI();
+    DrawAudioAssetsUI();
+}
+
+bool AudioResourceDocument::drawFileProperties()
+{
+    DrawAudioResourceInfoUI();
+    return true;
+}
+
+StreamSource AudioResourceDocument::activeStreamSource()
+{
+    return {};
+}
+
+PlayableFile AudioResourceDocument::playableFile()
+{
+    PlayableFile playable;
+
+    if (mResource.getContainer() != AudioResource::Container::Bwav)
+        return playable;
+
+    for (Item* asset : mResource.getAssetList())
+    {
+        playable.asset = static_cast<AudioAsset*>(asset);
+        break;
+    }
+
+    return playable;
+}
+
+void AudioResourceDocument::formatFileFacts(sead::BufferedSafeString* out) const
+{
+    sead::FixedSafeString<16> version;
+    FormatResourceVersion(&version, mResource.getVersion());
+
+    out->format("%s %s", GetResourceFormatInfo(mResource.getFormat()).displayName, version.cstr());
+
+    for (const Item* asset : mResource.getAssetList())
+    {
+        const AudioAssetInfo& info = static_cast<const AudioAsset*>(asset)->getInfo();
+
+        AppendRateFact(out, info.sampleRate);
+        AppendChannelFact(out, info.channelCount);
+        break;
+    }
 }
 
 bool AudioResourceDocument::isValidName(const sead::SafeString& name) const

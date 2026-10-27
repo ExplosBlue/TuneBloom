@@ -44,7 +44,7 @@ void setIcon_(sead::Texture* icon)
     sIcon = icon;
 }
 
-bool updateTitle(const char* path, bool dirty)
+bool updateTitle(const char* path, bool dirty, const char* appName)
 {
     sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
     if (!fw)
@@ -53,7 +53,11 @@ bool updateTitle(const char* path, bool dirty)
     }
 
     sead::FixedSafeString<512> title;
-    title.format("%s %s", cAppName.cstr(), cAppVersion.cstr());
+
+    if (appName)
+        title.copy(appName);
+    else
+        title.format("%s %s", cAppName.cstr(), cAppVersion.cstr());
 
     if (path)
     {

@@ -2,8 +2,9 @@
 
 #include <browser/FileIndex.h>
 #include <ui/browser/FilePreview.h>
-#include <ui/browser/FileWavExport.h>
+#include <ui/browser/FileExportRun.h>
 
+#include <libs/IconsLucide.h>
 #include <imgui/imgui.h>
 
 #include <memory>
@@ -15,6 +16,9 @@ inline constexpr f32 cIconGapEm = 0.4f;
 inline constexpr f32 cIndentEm  = 1.1f;
 
 inline constexpr const char* cFolderMenuId = "##foldermenu";
+inline constexpr const char* cOpenFileMark = ICON_LC_DOT;
+
+void UndoFilesPanelUnpin(u32 token);
 
 enum class FilesColumn
 {
@@ -95,6 +99,8 @@ struct FilesRoot
     std::vector<u8> sizeLabelLengths;
     u32 scanRequest = 0;
     bool isPinned = false;
+    bool isFile = false;
+    bool isNested = false;
     bool isOpen = true;
     bool isMissing = false;
     bool hasSnapshot = false;
@@ -113,7 +119,9 @@ class FilesPanel
 {
 public:
     void loadConfig();
-    void openFolder(const std::string& path, bool isPinned = false);
+    s32 addPath(const std::string& path, bool isPinned = false);
+    void pinPaths(const std::vector<std::string>& paths);
+    void requestUndo(u32 token);
     bool chooseFolder();
     void draw();
 
@@ -180,7 +188,11 @@ private:
     };
 
     s32 findRoot(const std::string& path) const;
-    s32 addRoot(const std::string& path, bool isPinned);
+    s32 addRoot(const std::string& path, bool isPinned, bool isFile);
+    void removeRoot(s32 root);
+    void unpinFile(s32 root);
+    void applyUndo();
+    void addLegacyPins();
     s32 insertRoot(FilesRoot root);
     void trimRecentRoots();
     void onRootsChanged();
@@ -201,6 +213,13 @@ private:
     const FileIndexSnapshot& getSnapshot(s32 root) const;
     const BrowserFile& getFile(const FilesRow& row) const;
     const BrowserFolder* getPackFolder(const FilesRow& row) const;
+    s32 getRootFolder(s32 root) const;
+    const BrowserFile* getRootFile(s32 root) const;
+    const BrowserFile* getRowFile(const FilesRow& row) const;
+    bool isExpandable(const FilesRow& row) const;
+    bool isSearching() const;
+    const std::string& getSearchKey(const FilesRow& row) const;
+    bool isSearchClosed(const std::string& key) const;
     s32 findPackAncestor(s32 root, s32 folder) const;
     bool isRootScanning(s32 root) const;
 
@@ -209,6 +228,9 @@ private:
     bool isFileShown(const BrowserFile& file) const;
     static void collectOpenFiles(FrameContext& ctx);
     static const OpenFileMark* findOpenFile(const FrameContext& ctx, const std::string& path);
+    static ImU32 getOpenNameColor(const OpenFileMark* mark);
+    static ImU32 getOpenMarkColor(const OpenFileMark* mark);
+    const char* getFileIcon(const BrowserFile& file, ImU32* color) const;
     void countShownFiles(FrameContext& ctx, s32 root, s32 folder);
     void invalidateRows();
     bool isRowsKeyCurrent(const FrameContext& ctx) const;
@@ -219,6 +241,7 @@ private:
     void collectFileRows(std::vector<FilesRow>& rows, s32 root, s32 folder, s32 depth, bool isAllOpen);
     void collectAllOpenRows(const FrameContext& ctx, std::vector<FilesRow>& rows);
     void collectSearchRows(FrameContext& ctx, s32 root);
+    void collectFileRootSearchRows(FrameContext& ctx, s32 root);
     void updateSoundMatches();
 
     void drawKindMenu();
@@ -232,7 +255,9 @@ private:
     void calcValueWidths(FrameContext& ctx, const std::vector<FilesRow>& rows) const;
     void setupColumns(FrameContext& ctx);
     RowFrame beginRow(FrameContext& ctx, const FilesRow& row, f32 indent);
+    static bool isChevronClicked(const FrameContext& ctx, const RowFrame& frame);
     void drawRootRow(FrameContext& ctx, const FilesRow& row);
+    f32 drawRootLabel(const FrameContext& ctx, const FilesRow& row, const RowFrame& frame, f32 right);
     void drawRootButtons(const FilesRoot& root, s32 index, const RowFrame& frame, bool isRowHovered);
     void drawRootMenu(const FilesRoot& root, s32 index);
     void drawStatusRow(FrameContext& ctx, const FilesRow& row);
@@ -241,21 +266,33 @@ private:
     void drawAddFolderRow(const FrameContext& ctx);
     void drawFolderRow(FrameContext& ctx, const FilesRow& row);
     void drawFolderMenu(s32 root, s32 folder);
+    void drawPinItem(const std::string& path);
     void drawPrefixRow(FrameContext& ctx, const FilesRow& row);
     void drawFileRow(FrameContext& ctx, const FilesRow& row);
     void drawSoundRow(FrameContext& ctx, const FilesRow& row);
     void drawValueCells(FrameContext& ctx, const char* format, const char* size);
     f32 drawRowLabel(const ImVec2& pos, f32 right, const char* icon, ImU32 iconColor, const char* name, ImU32 nameColor, const char* note, ImU32 noteColor, s32 prefixLength = 0);
     f32 drawRowName(ImDrawList* drawList, const ImVec2& pos, f32 right, const char* name, ImU32 color, s32 prefixLength);
-    void drawFileTooltip(const BrowserFile& file);
+    void drawFileTooltip(const BrowserFile& file, bool showPath = false);
     void drawArchiveContents(const ArchiveContents& contents);
     void drawSoundTooltip(const BrowserFile& file, const ArchiveSound& sound);
-    void drawFileMenu(const BrowserFile& file);
+    void drawFileCommands(const BrowserFile& file);
+    bool drawSelectionMenu(const BrowserFile& file);
+    void drawFileMenu(const FilesRow& row);
     void drawSoundMenu(const FrameContext& ctx, const BrowserFile& file, const ArchiveSound& sound);
     void drawFooter(FrameContext& ctx);
     void drawMatchSummary(const FrameContext& ctx);
+    bool drawSelectionSummary();
     void handleKeys(FrameContext& ctx);
     void select(const FrameContext& ctx, const FilesRow& row);
+    void clickSelection(const FrameContext& ctx, const FilesRow& row, const BrowserFile& file);
+    void selectAll(const FrameContext& ctx);
+    void clearMultiSelection();
+    void onSelectionChanged();
+    bool isRowSelected(const FilesRow& row) const;
+    bool isPathSelected(const std::string& path) const;
+    std::vector<std::string> collectSelectablePaths(const FrameContext& ctx) const;
+    std::vector<const BrowserFile*> collectSelectedFiles() const;
     void setAutoPlay(bool isOn);
     void previewFile(const BrowserFile& file);
     void openFile(const BrowserFile& file);
@@ -276,6 +313,13 @@ private:
         std::vector<std::vector<u8>> hasMatch;
     };
 
+    struct RemovedRoot
+    {
+        u32 token = 0;
+        s32 index = 0;
+        FilesRoot root;
+    };
+
     struct PendingSound
     {
         std::string path;
@@ -287,13 +331,21 @@ private:
     FrameContext mFrame;
     RowsKey mRowsKey;
     FilePreview mPreview;
-    FileWavExport mWavExport;
     char mSearch[128] = {};
     bool mKindShown[cKindFilterCount] = { true, true, true, true };
     FilesRow mSelected;
+    std::vector<std::string> mSelectedPaths;
+    std::vector<std::string> mSelectedSorted;
+    std::string mSelectAnchor;
+    u64 mSelectedSize = 0;
+    bool mCanExportSelection = false;
     SoundMatches mSoundMatches;
     PendingSound mPendingSound;
     PendingAction mPendingAction;
+    std::vector<RemovedRoot> mRemovedRoots;
+    std::vector<std::string> mSearchClosed;
+    u32 mNextUndoToken = 1;
+    u32 mUndoToken = 0;
     u32 mSnapshotGeneration = 0;
     u32 mRowsGeneration = 1;
     u32 mScanRequestCount = 0;

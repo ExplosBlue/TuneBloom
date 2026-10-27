@@ -55,9 +55,11 @@ static bool ClaimExportName(const std::string& key)
     return true;
 }
 
-static std::string MakeExportNameKey(const sead::SafeString &name, const char *ext)
+static std::string MakeExportNameKey(const char *dir, const sead::SafeString &name, const char *ext)
 {
-    std::string key = name.cstr();
+    std::string key = dir;
+    key += '/';
+    key += name.cstr();
     key += '.';
     key += ext;
 
@@ -74,7 +76,7 @@ void BuildUniqueExportPath(sead::BufferedSafeString *outPath, const char *dir, c
     SanitizeFilenameInPlace(&name);
 
     sead::FixedSafeString<256> uniqueName = name;
-    for (u32 copyNum = 2; !ClaimExportName(MakeExportNameKey(uniqueName, ext)); copyNum++)
+    for (u32 copyNum = 2; !ClaimExportName(MakeExportNameKey(dir, uniqueName, ext)); copyNum++)
         uniqueName.format("%s_%u", name.cstr(), copyNum);
 
     outPath->format("%s/%s.%s", dir, uniqueName.cstr(), ext);

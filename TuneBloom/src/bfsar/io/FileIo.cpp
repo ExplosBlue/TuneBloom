@@ -1,6 +1,7 @@
 #include <bfsar/io/FileIo.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
+#include <filedevice/seadPath.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -187,6 +188,16 @@ std::string CanonicalPath(const char* path)
     const std::filesystem::path canonical = std::filesystem::weakly_canonical(std::filesystem::path(path), error);
 
     return error ? std::string(path) : canonical.string();
+}
+
+void GetFileStem(sead::BufferedSafeString* out, const sead::SafeString& path)
+{
+    sead::Path::getFileName(out, path);
+
+    const s32 dotPos = out->rfindIndex(".");
+
+    if (dotPos != -1)
+        out->trim(dotPos);
 }
 
 const char* GetTempFolder()

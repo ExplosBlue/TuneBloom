@@ -150,6 +150,16 @@ u32 StreamFileLayout::removeRegionsAfter(u32 sampleCount)
     return static_cast<u32>(countBefore - regions.size());
 }
 
+u32 StreamFileLayout::countRegionsAfter(u32 sampleCount) const
+{
+    u32 count = 0;
+
+    for (const StreamRegion& region : regions)
+        count += region.end > sampleCount ? 1 : 0;
+
+    return count;
+}
+
 bool StreamFileLayout::IsRegionNameValid(const sead::SafeString& name)
 {
     const s32 length = name.calcLength();

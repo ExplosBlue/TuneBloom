@@ -124,7 +124,7 @@ void WaveImportPanel::rescaleWaveformView(u32 oldLength, u32 newLength)
 
 bool WaveImportPanel::beginBody()
 {
-    const f32 maxHeight = ImGui::GetMainViewport()->WorkSize.y - ImFloor(ImGui::GetFontSize() * cPanelReserveEm);
+    const f32 maxHeight = GetDialogAreaSize().y - ImFloor(ImGui::GetFontSize() * cPanelReserveEm);
 
     mBodyScroll = mBodyHeight > maxHeight;
 
@@ -329,6 +329,16 @@ std::string WaveImportPanel::finalizeForCommit(WaveFile::RiffWaveInfo* info)
     return written;
 }
 
+u32 WaveImportPanel::calcOutputLength(const WaveFile::RiffWaveInfo& info) const
+{
+    if (IsPassThroughSource(info.path) || !mSettings.matchesLoadedPath(info) || mSettings.shapedChannels.empty())
+        return info.sampleCount;
+
+    const u32 end = std::min(info.isLoop ? mSettings.workingLoopEnd : mSettings.workingCropEnd, mSettings.shapedLength());
+
+    return end - std::min(mSettings.workingCropStart, end);
+}
+
 static WaveImportPanel sPanel;
 
 }
@@ -357,6 +367,11 @@ std::string FinalizeImportInfoForCommit(WaveFile::RiffWaveInfo* info)
     return sPanel.finalizeForCommit(info);
 }
 
+u32 CalcWaveImportOutputLength(const WaveFile::RiffWaveInfo& info)
+{
+    return sPanel.calcOutputLength(info);
+}
+
 void ResetWaveImport()
 {
     sPanel.reset();
@@ -372,14 +387,14 @@ bool WaveImportConfirmCancel(bool cancelClicked)
     return sPanel.confirmCancel(cancelClicked);
 }
 
-WaveImportResult DrawWaveImportBody(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* commitLabel)
+WaveImportResult DrawWaveImportBody(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* commitLabel, const char* footerWarning)
 {
     if (ImGui::IsWindowAppearing())
         ResetWaveImport();
 
     DrawWaveImportInfo(encoding, info, header);
 
-    BeginDialogFooter({ commitLabel, messages::common::cCancel }, false);
+    BeginDialogFooter({ commitLabel, messages::common::cCancel }, false, footerWarning);
 
     const bool commit = DialogButton(commitLabel);
     const bool cancelClicked = DialogButton(messages::common::cCancel);

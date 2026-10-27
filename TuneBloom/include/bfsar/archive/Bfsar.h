@@ -10,7 +10,9 @@
 #include <bfsar/files/SequenceFile.h>
 #include <bfsar/model/Sound.h>
 #include <bfsar/model/SoundSet.h>
+#include <bfsar/model/StreamSource.h>
 #include <bfsar/model/WaveArchive.h>
+#include <bfsar/files/StreamWaveOwner.h>
 #include <bfsar/files/WaveFile.h>
 
 #include <ui/MessageType.h>
@@ -46,7 +48,6 @@ struct SoundArchivePlayerInfo
 namespace nw { namespace snd { namespace internal {
 
 class GroupFileReader;
-class StreamSoundFileReader;
 class WaveArchiveFileReader;
 class WaveSoundFileReader;
 
@@ -65,11 +66,11 @@ class VectorMap;
 
 ArchivePlatform getDefaultPlatformForFormat(ArchiveFormat format);
 
-class Bfsar
+class Bfsar : public StreamWaveOwner
 {
 public:
     Bfsar();
-    ~Bfsar();
+    ~Bfsar() override;
 
     ArchiveFormat getFormat() const
     {
@@ -99,6 +100,8 @@ public:
 
     void create(ArchiveFormat format = ArchiveFormat::BFSAR);
     void create(ArchiveFormat format, ArchivePlatform platform);
+
+    static InnerFileTarget GetNewFileTarget(ArchiveFormat format, ArchivePlatform platform, InnerFileKind kind);
     bool open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath, sead::Heap* heap, const sead::SafeString* metadataSource = nullptr);
 
     struct StreamSaveJob
@@ -423,6 +426,17 @@ public:
         return mWaveFileList;
     }
 
+    Item::List& getStreamWaveList() override
+    {
+        return mWaveFileList;
+    }
+
+    void prepareStreamWave(WaveFile* wave) override
+    {
+        wave->setArchive(this);
+        wave->setVersion(getVersionForBfwav());
+    }
+
     SequenceFile::List& getSequenceFileList()
     {
         return mSequenceFileList;
@@ -697,6 +711,13 @@ public:
         }
     }
 
+    InnerFileTarget getStreamFileTarget() const
+    {
+        return { mFormat, getVersionForBfstm(), mEndian };
+    }
+
+    StreamSource getStreamSource(Sound* sound);
+
     //? Validate every item for saving
     bool validate(bool showErrors = true);
     void recompileInvalidSequences_();
@@ -926,8 +947,6 @@ private:
     bool finalizeSavedFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath);
     void finishPendingSaveFinalize_();
     void setLoadedArchivePath_(const sead::SafeString &path);
-    bool readEmbeddedStreamTracks(nw::snd::internal::StreamSoundFileReader& reader, Sound::StreamSoundInfo& strmSoundInfo, sead::Heap* heap) const;
-    void applyStreamTrackLayout(Sound* sound, u32 trackCount, u32 channelCount) const;
     void detachStreamWaves(Sound* sound);
     u32 shareStreamWavesWithSiblings(Sound* source, bool tracksFromFile);
     bool loadStreamFileForReload_(StreamReloadContext& ctx);

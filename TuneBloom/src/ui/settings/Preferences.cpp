@@ -3,6 +3,7 @@
 #include <ui/backup/Backup.h>
 #include <ui/settings/Config.h>
 #include <ui/settings/ConfigFile.h>
+#include <ui/settings/FileAssociationDialog.h>
 #include <ui/widgets/Dialogs.h>
 #include <ui/file/FileAssociation.h>
 #include <ui/items/ItemColumns.h>
@@ -132,7 +133,6 @@ static size_t sBackupCount = 0;
 static u64 sBackupSize = 0;
 static bool sBackupFolderFound = false;
 
-static fileassoc::State sAssociation = fileassoc::State::None;
 
 static f32 sMidiNotesHeight = 0.0f;
 
@@ -473,18 +473,14 @@ static void DrawSavingRows()
     }
 }
 
-static void DrawAssociationRow()
+static bool DrawAssociationRow()
 {
-    const bool associated = sAssociation == fileassoc::State::ThisCopy;
-    const char* text = associated ? messages::preferences::cAssociationOn : messages::preferences::cAssociationNone;
+    const u32 onCount = GetFileAssociationOnCount();
+    const u32 typeCount = GetFileAssociationTypeCount();
+    const sead::FormatFixedSafeString<32> count(messages::preferences::cAssociationCountFormat, onCount, typeCount);
+    const char* text = onCount == typeCount ? messages::common::cAll : onCount == 0 ? messages::common::cNone : count.cstr();
 
-    if (!DrawValueButtonRow(messages::preferences::cAssociationLabel, text, !associated, associated ? messages::preferences::cAssociationRemove : messages::preferences::cAssociationAdd, true, messages::preferences::cAssociationDetail))
-        return;
-
-    if (!(associated ? fileassoc::Remove() : fileassoc::Register()))
-        PopupMgr::instance()->addPopup({messages::preferences::cAssociationFailed});
-
-    sAssociation = fileassoc::GetState();
+    return DrawValueButtonRow(messages::preferences::cAssociationLabel, text, onCount == 0, messages::preferences::cAssociationChoose, true, messages::preferences::cAssociationDetail);
 }
 
 static void DrawOpeningRows()
@@ -759,6 +755,8 @@ static void DrawMidiNotesBox()
 
 static void DrawMidiDeviceTable(f32 height)
 {
+    AutoConnectMidiDevices();
+
     const ImGuiStyle& style = ImGui::GetStyle();
 
     const f32 statusWidth = sead::Mathf::max(ImGui::CalcTextSize(messages::preferences::cMidiConnected).x, ImGui::CalcTextSize(messages::preferences::cMidiNotFound).x);
@@ -1191,16 +1189,22 @@ static void DrawAdvancedPage()
         EndGroupBox();
     }
 
+    bool chooseTypes = false;
+
     if (fileassoc::IsSupported() && BeginGroupBox(messages::common::cSystem))
     {
-        DrawAssociationRow();
+        chooseTypes = DrawAssociationRow();
         EndGroupBox();
     }
 
     if (reset)
         ImGui::OpenPopup("###ResetAllSettings");
 
+    if (chooseTypes)
+        OpenFileAssociationDialog();
+
     DrawResetAllDialog();
+    DrawFileAssociationDialog();
 }
 
 static const PageInfo cPages[] = {
@@ -1263,7 +1267,8 @@ void DrawPreferencesWindow()
         snd::SoundSystem::refreshPlaybackDevices();
         MidiInput::refreshDevices();
         UpdateBackupUsage();
-        sAssociation = fileassoc::GetState();
+        if (fileassoc::IsSupported())
+            UpdateFileAssociations();
 
         ImGui::OpenPopup(title.cstr());
     }

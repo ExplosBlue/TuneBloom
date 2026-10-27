@@ -14,12 +14,15 @@ void FormatMasterVolume(char* buffer, size_t size);
 
 bool CanTogglePlayback();
 void TogglePlayback();
+void PlayActiveDocumentFile();
 void SetPlaybackLoopEnabled(bool enable);
 
 const Item* ResolveDisplayItem();
 const SeqTimeline* ResolveSeqTimeline();
 
 void DrawPlayerUI();
+f32 CalcTransportRowHeight();
+void DrawCompactPlayerBar();
 void RegisterPlaybackSettings();
 
 bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,

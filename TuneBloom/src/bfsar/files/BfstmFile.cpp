@@ -9,6 +9,7 @@
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/app/UI.h>
+#include <ui/items/Selection.h>
 
 #include <snd/snd_StreamSoundFileReader.h>
 #include <snd/StreamSoundPlayer.h>
@@ -44,26 +45,26 @@ void MixWaveChannelData(StateHash& hash, const WaveFile& wave)
     }
 }
 
-u32 BfstmFile::GetFileVersion(const Sound::StreamSoundInfo &soundInfo, u32 archiveVersion, ArchiveFormat format)
+u32 BfstmFile::GetFileVersion(const Sound::StreamSoundInfo &soundInfo, const InnerFileTarget &target)
 {
     const StreamFileLayout* layout = soundInfo.getFileLayout();
 
-    if (!layout || layout->version == 0 || format != ArchiveFormat::BFSAR)
-        return archiveVersion;
+    if (!layout || layout->version == 0 || target.format != ArchiveFormat::BFSAR)
+        return target.version;
 
-    if (IsTrackInfoAvailable(layout->version, format) != IsTrackInfoAvailable(archiveVersion, format))
-        return archiveVersion;
+    if (IsTrackInfoAvailable(layout->version, target.format) != IsTrackInfoAvailable(target.version, target.format))
+        return target.version;
 
     return layout->version;
 }
 
-u64 BfstmFile::ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, u32 archiveVersion, sead::Endian::Types endian, ArchiveFormat format)
+u64 BfstmFile::ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, const InnerFileTarget &target)
 {
     StateHash hash;
 
-    hash.mixValue<u32>(GetFileVersion(soundInfo, archiveVersion, format));
-    hash.mixValue<u32>(static_cast<u32>(endian));
-    hash.mixValue<u32>(static_cast<u32>(format));
+    hash.mixValue<u32>(GetFileVersion(soundInfo, target));
+    hash.mixValue<u32>(static_cast<u32>(target.endian));
+    hash.mixValue<u32>(static_cast<u32>(target.format));
 
     if (const StreamFileLayout* layout = soundInfo.getFileLayout())
         layout->mixInto(hash);
@@ -578,20 +579,20 @@ static void WriteDataBlock(StreamWriteContext& context)
     writer.closeBlock();
 }
 
-bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, u32 archiveVersion, sead::Endian::Types endian, ArchiveFormat format)
+bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoundInfo& soundInfo, const InnerFileTarget& target)
 {
-    const u32 version = GetFileVersion(soundInfo, archiveVersion, format);
+    const u32 version = GetFileVersion(soundInfo, target);
 
     LOG_FUNC();
-    LOG_FMT("format=%s, version=0x%04X, endian=%d", GetInnerFileMagic(format, InnerFileKind::Stream), version, endian);
+    LOG_FMT("format=%s, version=0x%04X, endian=%d", GetInnerFileMagic(target.format, InnerFileKind::Stream), version, target.endian);
 
     CheckedFileStreamSrc streamSrc(&handle);
     sead::WriteStream stream(&streamSrc, sead::Stream::Modes::eBinary);
-    stream.setBinaryEndian(endian);
+    stream.setBinaryEndian(target.endian);
 
     SEAD_ASSERT(soundInfo.getTrackList().size() > 0);
 
-    StreamWriteContext context(&handle, &stream, version, endian, format);
+    StreamWriteContext context(&handle, &stream, version, target.endian, target.format);
     CollectTracksAndChannels(context, soundInfo);
     CalcBlockLayout(context);
     PrepareChannelData(context);
@@ -600,7 +601,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     bool hasRegionBlock = !context.layout->regions.empty();
     u32 fileBlockCount = 2 + (hasSeekBlock ? 1 : 0) + (hasRegionBlock ? 1 : 0);
 
-    context.writer.openFile(GetInnerFileMagic(format, InnerFileKind::Stream), fileBlockCount, version);
+    context.writer.openFile(GetInnerFileMagic(target.format, InnerFileKind::Stream), fileBlockCount, version);
 
     WriteInfoBlock(context);
 
@@ -654,9 +655,10 @@ void StreamLoopInfoBatch::Flush()
 class StreamWaveReader
 {
 public:
-    StreamWaveReader(Bfsar& archive, Sound* sound, const void* strmFile, u32 strmFileSize)
-        : mArchive(archive)
-        , mSound(sound)
+    StreamWaveReader(StreamWaveOwner& owner, Sound::StreamSoundInfo& soundInfo, const sead::SafeString& streamName, const void* strmFile, u32 strmFileSize)
+        : mOwner(owner)
+        , mSoundInfo(soundInfo)
+        , mStreamName(streamName)
         , mStrmFile(strmFile)
         , mStrmFileSize(strmFileSize)
     {
@@ -692,8 +694,9 @@ private:
     }
 
 private:
-    Bfsar& mArchive;
-    Sound* mSound;
+    StreamWaveOwner& mOwner;
+    Sound::StreamSoundInfo& mSoundInfo;
+    const sead::SafeString& mStreamName;
     const void* mStrmFile;
     u32 mStrmFileSize;
 
@@ -799,17 +802,11 @@ void StreamWaveReader::readChannelBuffers_()
 WaveFile* StreamWaveReader::createTrackWave_(u32 trackNo, u32 trackCount)
 {
     WaveFile* wave = new WaveFile();
-    wave->setArchive(&mArchive);
-    wave->mId = mArchive.getWaveFileList().size();
+    mOwner.prepareStreamWave(wave);
     wave->mIsFromStreamFile = true;
 
-    wave->mEnableName = true;
-    if (trackCount == 1)
-        wave->mName.format("GUESS_%s", mSound->getName().cstr());
-    else
-        wave->mName.format("GUESS_%s_TRACK_%u", mSound->getName().cstr(), trackNo);
+    mOwner.nameStreamWave(wave, mStreamName, trackNo, trackCount);
 
-    wave->mVersion = mArchive.getVersionForBfwav();
     wave->mDataEndian = nw::ut::GetFileEndian(*mReader.mHeader);
     wave->mEncoding = mEncoding;
     wave->mIsLoop = mStreamSoundInfo.isLoop;
@@ -928,7 +925,7 @@ bool StreamWaveReader::read()
 
     readChannelBuffers_();
 
-    Sound::StreamSoundInfo::Track::List& tracks = mSound->getStreamSoundInfo().getTrackList();
+    Sound::StreamSoundInfo::Track::List& tracks = mSoundInfo.getTrackList();
 
     for (u32 trackNo = 0; trackNo < tracks.size(); trackNo++)
     {
@@ -940,7 +937,7 @@ bool StreamWaveReader::read()
         if (trackNo == 0)
             readFileLayout_(wave);
 
-        mArchive.getWaveFileList().pushBack(wave);
+        mOwner.addStreamWave(wave);
         track.getWaveFileRef().attach(wave);
 
         if (!isLoopValid)
@@ -997,19 +994,143 @@ static bool AttachSharedStreamWaves(Sound* sound, const Sound* srcSound)
     return true;
 }
 
-bool ReadStreamWaves(Bfsar& archive, Sound* sound, const void* strmFile, u32 strmFileSize, const Sound* srcSound)
+bool ReadStreamWaves(StreamWaveOwner& owner, Sound::StreamSoundInfo& soundInfo, const sead::SafeString& streamName, const void* strmFile, u32 strmFileSize)
 {
     LOG_FUNC();
 
-    if (sound->getStreamSoundInfo().getTrackList().isEmpty())
+    if (soundInfo.getTrackList().isEmpty())
     {
         LOG("ReadStreamWaves: tracks is empty");
         return false;
     }
 
-    if (srcSound)
+    StreamWaveReader reader(owner, soundInfo, streamName, strmFile, strmFileSize);
+    return reader.read();
+}
+
+bool ReadStreamWaves(Bfsar& archive, Sound* sound, const void* strmFile, u32 strmFileSize, const Sound* srcSound)
+{
+    if (srcSound && !sound->getStreamSoundInfo().getTrackList().isEmpty())
         return AttachSharedStreamWaves(sound, srcSound);
 
-    StreamWaveReader reader(archive, sound, strmFile, strmFileSize);
-    return reader.read();
+    return ReadStreamWaves(archive, sound->getStreamSoundInfo(), sound->getName(), strmFile, strmFileSize);
+}
+
+void NameStreamTrackWave(WaveFile* wave, const sead::SafeString& streamName, u32 trackNo, u32 trackCount)
+{
+    wave->setEnableName(true);
+
+    if (trackCount == 1)
+        wave->getName().format("GUESS_%s", streamName.cstr());
+    else
+        wave->getName().format("GUESS_%s_TRACK_%u", streamName.cstr(), trackNo);
+}
+
+bool ReadStreamFileTracks(nw::snd::internal::StreamSoundFileReader& reader, Sound::StreamSoundInfo& soundInfo, sead::Heap* heap)
+{
+    u32 trackCount = reader.GetTrackCount();
+
+    if (trackCount > cStrmTrackNum)
+        trackCount = cStrmTrackNum;
+
+    bool readAllTracks = true;
+
+    for (u32 trackNo = 0; trackNo < trackCount; trackNo++)
+    {
+        Sound::StreamSoundInfo::Track* track = new(heap) Sound::StreamSoundInfo::Track();
+        track->setId(trackNo);
+        track->setDefaultName();
+
+        nw::snd::internal::StreamSoundFileReader::TrackInfo trackInfo;
+
+        if (reader.ReadStreamTrackInfo(&trackInfo, trackNo) && trackInfo.channelCount <= snd::cWaveChannelMax)
+        {
+            track->setFileValues(trackInfo.volume, trackInfo.pan, trackInfo.span, trackInfo.flags);
+
+            for (u8 ch = 0; ch < trackInfo.channelCount; ch++)
+                track->addChannel(trackInfo.globalChannelIndex[ch]);
+        }
+        else
+        {
+            sead::FormatFixedSafeString<128> msg(messages::stream::cTrackUnreadableFormat, trackNo);
+            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+
+            readAllTracks = false;
+        }
+
+        soundInfo.getTrackList().pushBack(track);
+    }
+
+    return readAllTracks;
+}
+
+u32 GetDefaultStreamTrackCount(u32 channelCount)
+{
+    return (channelCount + snd::cWaveChannelMax - 1) / snd::cWaveChannelMax;
+}
+
+bool StreamWavesCoverLayout(const Sound::StreamSoundInfo& soundInfo)
+{
+    const Sound::StreamSoundInfo::Track::List& tracks = soundInfo.getTrackList();
+
+    if (tracks.isEmpty())
+        return false;
+
+    for (s32 i = 0; i < tracks.size(); i++)
+    {
+        const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
+
+        if (!track.getWaveFileRef().isAttached())
+            return false;
+
+        const WaveFile& wave = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
+
+        if (track.getChannels_().isEmpty() || wave.getChannels().size() != track.getChannels_().size())
+            return false;
+    }
+
+    return true;
+}
+
+void ApplyStreamTrackLayout(Sound::StreamSoundInfo& soundInfo, u32 trackCount, u32 channelCount)
+{
+    Sound::StreamSoundInfo::Track::List& tracks = soundInfo.getTrackList();
+
+    std::vector<Item*> removedTracks;
+
+    while (static_cast<u32>(tracks.size()) > trackCount)
+    {
+        Item* last = tracks.nth(tracks.size() - 1)->val();
+
+        tracks.erase(last);
+        removedTracks.push_back(last);
+    }
+
+    ForgetRemovedItems(removedTracks);
+
+    for (Item* track : removedTracks)
+        delete track;
+
+    while (static_cast<u32>(tracks.size()) < trackCount)
+    {
+        Sound::StreamSoundInfo::Track* track = new Sound::StreamSoundInfo::Track();
+        track->setDefaultName();
+
+        tracks.pushBack(track);
+    }
+
+    u32 nextChannel = 0;
+
+    for (u32 trackNo = 0; trackNo < trackCount; trackNo++)
+    {
+        Sound::StreamSoundInfo::Track& track = *static_cast<Sound::StreamSoundInfo::Track*>(tracks.nth(trackNo)->val());
+
+        track.setId(trackNo);
+        track.clearChannels();
+
+        const u32 trackChannelCount = channelCount / trackCount + (trackNo < channelCount % trackCount ? 1 : 0);
+
+        for (u32 ch = 0; ch < trackChannelCount && ch < snd::cWaveChannelMax; ch++)
+            track.addChannel(static_cast<u8>(nextChannel++));
+    }
 }

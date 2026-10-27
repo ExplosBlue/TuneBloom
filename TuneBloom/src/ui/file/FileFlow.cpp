@@ -10,6 +10,10 @@
 #include <ui/file/File.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/GroupFileLocate.h>
+#include <ui/file/LooseStreamDocument.h>
+#include <ui/file/LooseWaveDocument.h>
+#include <ui/project/FileLists.h>
+#include <ui/stream/StreamTrackImport.h>
 #include <ui/resource/ResourceViews.h>
 #include <ui/Messages.h>
 #include <ui/file/OpenQueue.h>
@@ -32,6 +36,7 @@ static bool sWantsOpenDialog = false;
 static bool sWantsExit = false;
 static bool sWantsExitWithoutSaving = false;
 static bool sNeedsNewFileFormat = false;
+static Document* sNewLooseDocument = nullptr;
 static bool sWantsSaveDirect = false;
 static bool (*sPendingFileAction)() = nullptr;
 static bool sSaveInUseRemember = false;
@@ -148,6 +153,9 @@ void ForgetDocumentRequests(const Document* document)
 {
     const auto isDocument = [document](const CloseRequest& request) { return request.document == document; };
     sCloseQueue.erase(std::remove_if(sCloseQueue.begin(), sCloseQueue.end(), isDocument), sCloseQueue.end());
+
+    if (sNewLooseDocument == document)
+        sNewLooseDocument = nullptr;
 
     if (sSaveAsRequest == document)
         sSaveAsRequest = nullptr;
@@ -302,6 +310,32 @@ static void StartSaveAs()
     SaveFileAs();
 }
 
+static Document* FindOnlyUnsavedLooseFile()
+{
+    Document* unsaved = nullptr;
+
+    for (Document* document : GetOpenDocuments())
+    {
+        if (!document->state().unsaved)
+            continue;
+
+        if (unsaved)
+            return nullptr;
+
+        unsaved = document;
+    }
+
+    return unsaved && unsaved->playableFile().isValid() ? unsaved : nullptr;
+}
+
+static void AskSaveBeforeExit(Document* document)
+{
+    ActivateDocument(document);
+
+    sFileAction = &Exit;
+    ImGui::OpenPopup("###Save");
+}
+
 static void StartFileAction()
 {
     if (IsDocumentSwitchLocked())
@@ -321,7 +355,9 @@ static void StartFileAction()
 
     if (TakeRequest(&sWantsExit))
     {
-        if (HasUnsavedDocuments())
+        if (Document* looseFile = FindOnlyUnsavedLooseFile())
+            AskSaveBeforeExit(looseFile);
+        else if (HasUnsavedDocuments())
             OpenExitChangesDialog();
         else
             Exit();
@@ -654,6 +690,77 @@ static void DrawRemoveUnusedFilesDialog()
     }
 }
 
+enum class NewFileType
+{
+    SoundArchive,
+    StreamFile,
+    WaveFile
+};
+
+static int sNewFileType = 0;
+static int sNewFilePlatform = 0;
+static u32 sNewFileVersion = 0;
+static bool sNewFileStringTable = true;
+
+static InnerFileKind GetNewFileKind(NewFileType type)
+{
+    return type == NewFileType::StreamFile ? InnerFileKind::Stream : InnerFileKind::Wave;
+}
+
+static void CreateLooseFile(NewFileType type, const ArchiveFormatInfo& info)
+{
+    const InnerFileTarget target = Bfsar::GetNewFileTarget(info.format, info.platform, GetNewFileKind(type));
+    Document* document = type == NewFileType::StreamFile ? LooseStreamDocument::Create(target) : LooseWaveDocument::Create(target);
+
+    AddDocument(document, false);
+    SetUnsavedChanges(true);
+    SetUITab(document->defaultTab());
+
+    if (Item* item = document->defaultSelection())
+        sSelectedItem = item;
+
+    const PlayableFile file = document->playableFile();
+
+    if (file.wave)
+        RequestWaveFileReplace(file.wave);
+    else
+        RequestStreamTrackImport(file.stream);
+
+    sNewLooseDocument = document;
+}
+
+static bool IsLooseFileEmpty(const PlayableFile& file)
+{
+    if (file.wave)
+        return file.wave->getChannels().isEmpty();
+
+    return file.stream.isValid() && file.stream.stream->getTrackList().isEmpty();
+}
+
+static void UpdateNewLooseFile()
+{
+    Document* document = sNewLooseDocument;
+
+    if (!document)
+        return;
+
+    if (!IsOpenDocument(document))
+    {
+        sNewLooseDocument = nullptr;
+        return;
+    }
+
+    const PlayableFile file = document->playableFile();
+
+    if (IsWaveFileReplacePending(file.wave) || IsStreamTrackImportPending(file.stream))
+        return;
+
+    sNewLooseDocument = nullptr;
+
+    if (IsLooseFileEmpty(file))
+        CloseDocument(document);
+}
+
 static void DrawNewFileFormatDialog()
 {
     if (sNeedsNewFileFormat)
@@ -665,38 +772,47 @@ static void DrawNewFileFormatDialog()
     {
         CenterNextDialog();
 
-        if (BeginDialog(sead::FormatFixedSafeString<64>("%s###NewFileFormat", messages::common::cNewArchive).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (BeginDialog(sead::FormatFixedSafeString<64>("%s###NewFileFormat", messages::common::cNewFile).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            static int sSelected = 0;
-            static u32 sVersion = 0;
-            static bool sIncludeStringTable = true;
-
             if (ImGui::IsWindowAppearing())
             {
-                sSelected = 0;
-                sVersion = cFormatTable[sSelected].defaultVersion;
-                sIncludeStringTable = true;
+                sNewFileType = 0;
+                sNewFilePlatform = 0;
+                sNewFileVersion = cFormatTable[sNewFilePlatform].defaultVersion;
+                sNewFileStringTable = true;
             }
 
-            static char sLabels[IM_ARRAYSIZE(cFormatTable)][64];
-            const char *labels[IM_ARRAYSIZE(cFormatTable)];
+            const char* typeLabels[] = { messages::common::cSoundArchive, messages::sound::cStreamFileLabel, messages::common::cWaveFile };
+
+            ImGui::SetNextItemWidth(240.0f);
+            ComboScroll(messages::common::cFileType, &sNewFileType, typeLabels, IM_ARRAYSIZE(typeLabels));
+
+            const NewFileType type = static_cast<NewFileType>(sNewFileType);
+
+            sead::FixedSafeString<64> formatLabels[IM_ARRAYSIZE(cFormatTable)];
+            const char* labels[IM_ARRAYSIZE(cFormatTable)];
 
             for (int i = 0; i < IM_ARRAYSIZE(cFormatTable); i++)
             {
-                snprintf(sLabels[i], sizeof(sLabels[i]), "%s (%s)", cFormatTable[i].fmtName, cFormatTable[i].systemName);
-                labels[i] = sLabels[i];
+                const char* formatName = type == NewFileType::SoundArchive ? cFormatTable[i].fmtName : GetInnerFileDisplayName(cFormatTable[i].format, GetNewFileKind(type));
+
+                formatLabels[i].format("%s (%s)", formatName, cFormatTable[i].systemName);
+                labels[i] = formatLabels[i].cstr();
             }
 
             ImGui::SetNextItemWidth(240.0f);
-            if (ComboScroll(messages::project::cPlatformTitle, &sSelected, labels, IM_ARRAYSIZE(cFormatTable)))
-                sVersion = cFormatTable[sSelected].defaultVersion;
+            if (ComboScroll(messages::project::cPlatformTitle, &sNewFilePlatform, labels, IM_ARRAYSIZE(cFormatTable)))
+                sNewFileVersion = cFormatTable[sNewFilePlatform].defaultVersion;
 
-            const ArchiveFormatInfo &info = cFormatTable[sSelected];
+            const ArchiveFormatInfo &info = cFormatTable[sNewFilePlatform];
 
-            DrawVersionUI(&sVersion, info.format);
+            if (type == NewFileType::SoundArchive)
+            {
+                DrawVersionUI(&sNewFileVersion, info.format);
 
-            ImGui::Checkbox(messages::archive::cIncludeStringTable, &sIncludeStringTable);
-            DetailTooltip(messages::project::cStringTableDetail);
+                ImGui::Checkbox(messages::archive::cIncludeStringTable, &sNewFileStringTable);
+                DetailTooltip(messages::project::cStringTableDetail);
+            }
 
             BeginDialogFooter({messages::dialog::cCreate, messages::common::cCancel});
 
@@ -705,13 +821,18 @@ static void DrawNewFileFormatDialog()
             if (DialogButton(messages::common::cCancel))
                 ImGui::CloseCurrentPopup();
 
-            if (create)
+            if (create && type != NewFileType::SoundArchive)
+            {
+                ImGui::CloseCurrentPopup();
+                CreateLooseFile(type, info);
+            }
+            else if (create)
             {
                 NewFile(info.format, info.platform);
 
                 Bfsar& archive = ActiveSoundArchive();
-                archive.setVersion(sVersion);
-                archive.setIncludeStringTable(sIncludeStringTable);
+                archive.setVersion(sNewFileVersion);
+                archive.setIncludeStringTable(sNewFileStringTable);
                 SetUnsavedChanges(true);
                 ImGui::CloseCurrentPopup();
             }
@@ -734,4 +855,5 @@ void DrawFileFlow()
     DrawSaveInUseDialog();
     DrawRemoveUnusedFilesDialog();
     DrawNewFileFormatDialog();
+    UpdateNewLooseFile();
 }

@@ -274,21 +274,11 @@ namespace opusstream
                 continue;
 
             WaveFile *wave = new WaveFile();
-            wave->setArchive(&archive);
-            wave->mId = archive.getWaveFileList().size();
+            archive.prepareStreamWave(wave);
             wave->mIsFromStreamFile = true;
 
-            wave->mEnableName = true;
-            if (tracks.size() == 1)
-            {
-                wave->mName.format("GUESS_%s", sound->getName().cstr());
-            }
-            else
-            {
-                wave->mName.format("GUESS_%s_TRACK_%u", sound->getName().cstr(), trackNo);
-            }
+            NameStreamTrackWave(wave, sound->getName(), trackNo, tracks.size());
 
-            wave->mVersion = archive.getVersionForBfwav();
             wave->mDataEndian = sead::Endian::Types::eLittle;
             wave->mEncoding = WaveFile::Encoding::Pcm16;
             wave->mIsLoop = isLoop;
@@ -299,7 +289,7 @@ namespace opusstream
 
             wave->mUseOriginalData = false;
 
-            archive.getWaveFileList().pushBack(wave);
+            archive.addStreamWave(wave);
             track.getWaveFileRef().attach(wave);
 
             for (s32 ch = 0; ch < track.getChannels_().size(); ch++)

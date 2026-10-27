@@ -21,6 +21,7 @@ void SetNextItemListAction(ItemRowActionCallback callback);
 void SetNextItemListAddDialogWidth(f32 width);
 void SetNextItemListFixedOrder();
 void SetNextItemListRemovable(bool removable);
+void SetNextItemListDeselectable();
 void SetNextItemListFooter(ItemListFooterCallback callback, f32 width);
 void SetNextItemListRemoveText(const char* label, const char* manyFormat, bool removesData);
 

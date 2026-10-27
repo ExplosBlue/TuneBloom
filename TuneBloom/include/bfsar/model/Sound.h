@@ -357,24 +357,42 @@ public:
                 mFlags = flags;
             }
 
+            void setDefaultName()
+            {
+                mEnableName = true;
+                mName = "Track";
+            }
+
+            void setFileValues(u8 volume, u8 pan, u8 span, u8 flags)
+            {
+                mVolume = volume;
+                mPan = pan;
+                mSPan = span;
+                mFlags = flags;
+            }
+
             const sead::ObjList<u8>& getChannels_() const
             {
                 return mChannels;
             }
 
-            void copyChannelsFrom(const Track& other)
+            void clearChannels()
             {
                 mChannels.clear();
+            }
+
+            void addChannel(u8 globalChannelIndex)
+            {
+                if (u8* channel = mChannels.birthBack())
+                    *channel = globalChannelIndex;
+            }
+
+            void copyChannelsFrom(const Track& other)
+            {
+                clearChannels();
 
                 for (s32 i = 0; i < other.mChannels.size(); i++)
-                {
-                    u8* channel = mChannels.birthBack();
-
-                    if (!channel)
-                        break;
-
-                    *channel = *other.mChannels.nth(i);
-                }
+                    addChannel(*other.mChannels.nth(i));
             }
 
             u16 getChannelCount(StreamType streamType = StreamType::NwStreamBinary) const

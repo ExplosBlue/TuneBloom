@@ -12,4 +12,6 @@ void DrawAudioResourceInfoUI();
 void DrawAudioAssetPropertiesUI(AudioAsset* asset);
 void DrawAudioResourceDialogs();
 void CancelAudioResourceRequests();
+void PlayAudioAsset(AudioAsset* asset);
+void RequestAudioAssetReplace(AudioAsset* asset);
 void ReleaseAudioAssetView();

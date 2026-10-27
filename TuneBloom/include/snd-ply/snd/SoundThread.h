@@ -74,7 +74,7 @@ public:
 
     private:
         void run_() override;
-        void calc_(sead::MessageQueue::Element msg);
+        void calc_(sead::MessageQueue::Element msg) override;
     };
 
     enum Message
@@ -100,6 +100,11 @@ public:
     bool isCreated() const
     {
         return mCreateFlag;
+    }
+
+    bool hasPlayerCallback() const
+    {
+        return !mPlayerCallbackList.isEmpty();
     }
 
     void detail_setVoiceRenderer(VoiceRenderer* voiceRenderer)

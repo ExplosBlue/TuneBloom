@@ -6,6 +6,7 @@
 #include <ui/items/ItemList.h>
 #include <ui/widgets/Knob.h>
 #include <ui/wave/LoopWaveformEditor.h>
+#include <ui/wave/WaveformBox.h>
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Properties.h>
@@ -49,17 +50,17 @@ struct WaveFileView
     u32 loopStartFrame = 0;
     u32 loopEndFrame = 0;
     bool fieldPending = false;
+
+    bool fillHeight = false;
+    f32 canvasBottomY = 0.0f;
+    f32 canvasExtraHeight = 0.0f;
+    f32 belowCanvasHeight = 0.0f;
 };
 
 }
 
-static constexpr f32 cWaveViewHeightEm    = 7.0f;
-static constexpr f32 cWaveTitleGapEm      = 0.3f;
-static constexpr f32 cWaveLoopFieldMinEm  = 3.5f;
-static constexpr f32 cWaveLoopFieldMaxEm  = 7.0f;
-static constexpr f32 cWaveLoopGroupGapEm  = 1.5f;
-static constexpr f32 cWaveLoopDragRange   = 2000.0f;
-static constexpr u32 cWaveViewMaxSamples  = 12000000;
+static constexpr f32 cWaveViewHeightEm   = 7.0f;
+static constexpr u32 cWaveViewMaxSamples = 12000000;
 
 static WaveFileView* sWaveFileView = nullptr;
 
@@ -206,25 +207,6 @@ static bool IsWaveLoopDragging(const ImGui::LoopWaveformState& state)
     return state.dragging == ImGui::LoopWaveformState::Dragging::Start || state.dragging == ImGui::LoopWaveformState::Dragging::End;
 }
 
-static bool DrawWaveLoopField(const char* label, const char* id, f32 labelWidth, f32 fieldWidth, u32* frame, u32 min, u32 max, u32 sampleRate, bool* outCommit)
-{
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    ImGui::SameLine(0.0f, labelWidth - ImGui::CalcTextSize(label).x + ImGui::GetStyle().ItemSpacing.x);
-    ImGui::SetNextItemWidth(fieldWidth);
-
-    const bool changed = DragField(id, ImGuiDataType_U32, frame, sead::Mathf::max(1.0f, static_cast<f32>(max) / cWaveLoopDragRange), &min, &max);
-
-    u32 minutes = 0;
-    f64 seconds = 0.0;
-    SplitSampleTime(*frame, sampleRate, &minutes, &seconds);
-    KnobTooltip(messages::wavefile::cTimeFormat, minutes, seconds);
-
-    *outCommit = ImGui::IsItemDeactivatedAfterEdit() || (changed && !ImGui::IsItemActive());
-
-    return changed;
-}
-
 static bool DrawWaveFormatBox(const WaveFile& wave, WaveFile::Encoding* outEncoding)
 {
     bool encodingChanged = false;
@@ -314,17 +296,6 @@ static void DrawWavePlayButtons(const WaveFile& wave, bool playing, f32 buttonSi
 static void DrawWaveCanvas(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edit, bool playing)
 {
     const u32 sampleRate = wave.getSampleRate();
-    sead::FixedSafeString<96> readout;
-
-    if (edit.isLoop && view.loopEndFrame > view.loopStartFrame)
-    {
-        u32 minutes = 0;
-        f64 seconds = 0.0;
-        SplitSampleTime(view.loopEndFrame - view.loopStartFrame, sampleRate, &minutes, &seconds);
-
-        readout.format(wave.getIsLoopDirty() ? messages::wavefile::cLoopDirtyReadoutFormat : messages::wavefile::cLoopReadoutFormat, minutes, seconds);
-    }
-
     f32 playheadSample = -1.0f;
 
     if (playing)
@@ -336,8 +307,17 @@ static void DrawWaveCanvas(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edi
     if (!wave.getStreamFileLayout().regions.empty())
         DrawStreamRegionLane(&wave, view.state);
 
+    const f32 canvasTop = ImGui::GetCursorScreenPos().y;
+    const f32 contentBottom = ImGui::GetWindowPos().y + ImGui::GetWindowContentRegionMax().y;
+    const f32 minHeight = ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm);
+    const f32 fillHeight = ImFloor(contentBottom - canvasTop - view.canvasExtraHeight - view.belowCanvasHeight);
+    const f32 height = view.fillHeight ? sead::Mathf::max(minHeight, fillHeight) : minHeight;
+
     ImGui::LoopWaveformEditor("wave", view.state, view.mono, sampleRate, view.loopStartFrame, view.loopEndFrame, playheadSample, edit.isLoop, true,
-                              readout.cstr(), ImVec2(0.0f, ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm)), true, &seekSample);
+                              nullptr, ImVec2(0.0f, height), true, &seekSample);
+
+    view.canvasBottomY = ImGui::GetCursorScreenPos().y;
+    view.canvasExtraHeight = view.canvasBottomY - canvasTop - height;
 
     if (!IsWaveLoopDragging(view.state))
     {
@@ -351,6 +331,26 @@ static void DrawWaveCanvas(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edi
         sSoundPlayer.seek(sead::Mathf::clamp2(0.0f, static_cast<f32>(seekSample / static_cast<f64>(sSoundPlayer.getSampleCount())), 1.0f));
 }
 
+static void DrawWaveLoopFields(WaveFileView& view, WaveLoopEdit& edit, u32 sampleRate)
+{
+    const LoopFieldsResult fields = DrawLoopFields(&view.loopStartFrame, &view.loopEndFrame, edit.sampleCount, sampleRate, edit.isLoop);
+
+    if (fields.changed)
+        view.fieldPending = true;
+
+    if (fields.startCommit)
+    {
+        SetWaveLoopStart(edit, view.loopStartFrame, true);
+        view.fieldPending = false;
+    }
+
+    if (fields.endCommit)
+    {
+        SetWaveLoopEnd(edit, view.loopEndFrame, true);
+        view.fieldPending = false;
+    }
+}
+
 static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edit)
 {
     if (!BeginPropertyBox("WaveView"))
@@ -361,87 +361,32 @@ static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& ed
     const u32 channelNum = wave.getChannels().size();
     const u32 buttonNum = channelNum > 1 ? 1 + channelNum : 1;
     const f32 buttonsWidth = buttonSize * buttonNum + style.ItemSpacing.x * (buttonNum - 1);
-    const ImVec2 headerPos = ImGui::GetCursorScreenPos();
-    const f32 buttonsX = headerPos.x + ImGui::GetContentRegionAvail().x - buttonsWidth;
     const bool playing = sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == &wave;
 
-    RegionHeader(messages::wavefile::cWaveform, buttonsWidth + style.ItemSpacing.x);
-
-    ImGui::SameLine();
-    ImGui::SetCursorScreenPos(ImVec2(buttonsX, headerPos.y));
+    if (BeginWaveformHeader(buttonsWidth, edit.isLoop))
+        SetWaveLoopFlag(edit, !edit.isLoop);
 
     DrawWavePlayButtons(wave, playing, buttonSize);
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(ImGui::GetFontSize() * cWaveTitleGapEm));
+    EndWaveformHeader();
 
     if (view.mono.empty())
         ImGui::TextDisabled("%s", view.tooLong ? messages::wavefile::cTooLong : messages::wavefile::cNoData);
     else
         DrawWaveCanvas(wave, view, edit, playing);
 
+    DrawWaveLoopFields(view, edit, wave.getSampleRate());
+
     EndPropertyBox();
 }
 
-static void DrawWaveLoopFields(const WaveFile& wave, WaveFileView& view, WaveLoopEdit& edit)
-{
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 em = ImGui::GetFontSize();
-    const u32 sampleCount = edit.sampleCount;
-    const u32 sampleRate = wave.getSampleRate();
-
-    const f32 labelWidth = sead::Mathf::max(ImGui::CalcTextSize(messages::common::cStart).x, ImGui::CalcTextSize(messages::common::cEnd).x);
-    const f32 unitWidth = style.ItemSpacing.x + ImGui::CalcTextSize(messages::common::cSamples).x;
-    const f32 groupGap = ImFloor(em * cWaveLoopGroupGapEm);
-    const f32 avail = ImGui::GetContentRegionAvail().x;
-    const f32 fieldMin = ImFloor(em * cWaveLoopFieldMinEm);
-    const f32 oneLineWidth = (avail - (labelWidth + style.ItemSpacing.x) * 2.0f - groupGap - unitWidth) * 0.5f;
-    const bool oneLine = oneLineWidth >= fieldMin;
-    const f32 fieldWidth = oneLine ? sead::Mathf::min(ImFloor(oneLineWidth), ImFloor(em * cWaveLoopFieldMaxEm)) : sead::Mathf::max(fieldMin, avail - labelWidth - style.ItemSpacing.x - unitWidth);
-
-    bool commit = false;
-
-    if (DrawWaveLoopField(messages::common::cStart, "##LoopStart", oneLine ? ImGui::CalcTextSize(messages::common::cStart).x : labelWidth, fieldWidth, &view.loopStartFrame, 0, sampleCount > 0 ? sampleCount - 1 : 0, sampleRate, &commit))
-        view.fieldPending = true;
-
-    if (commit)
-    {
-        SetWaveLoopStart(edit, view.loopStartFrame, true);
-        view.fieldPending = false;
-    }
-
-    if (oneLine)
-        ImGui::SameLine(0.0f, groupGap);
-
-    if (DrawWaveLoopField(messages::common::cEnd, "##LoopEnd", oneLine ? ImGui::CalcTextSize(messages::common::cEnd).x : labelWidth, fieldWidth, &view.loopEndFrame, 1, sead::Mathu::max(sampleCount, 1u), sampleRate, &commit))
-        view.fieldPending = true;
-
-    if (commit)
-    {
-        SetWaveLoopEnd(edit, view.loopEndFrame, true);
-        view.fieldPending = false;
-    }
-
-    ImGui::SameLine();
-    ImGui::TextDisabled("%s", messages::common::cSamples);
-}
-
-static void DrawWaveLoopSection(const WaveFile& wave, WaveFileView& view, WaveLoopEdit& edit)
-{
-    bool isLoop = edit.isLoop;
-    bool toggled = false;
-    const bool open = BeginPropertySection(sead::FormatFixedSafeString<64>("%s###Loop", messages::common::cLoop).cstr(), &isLoop, &toggled);
-
-    if (toggled)
-        SetWaveLoopFlag(edit, isLoop);
-
-    if (!open)
-        return;
-
-    DrawWaveLoopFields(wave, view, edit);
-    EndPropertySection();
-}
-
 void WaveFile::drawUI()
+{
+    DrawItemNameRow(this);
+    drawEditorUI(false);
+}
+
+void WaveFile::drawEditorUI(bool fillHeight)
 {
     const InnerFileTarget target = getTarget();
 
@@ -459,12 +404,13 @@ void WaveFile::drawUI()
         view.loopEndFrame = mLoopEndFrame;
     }
 
-    DrawItemNameRow(this);
-
     const bool openEncodingPopup = DrawWaveFormatBox(*this, &sEncoding);
 
+    view.fillHeight = fillHeight;
+
     DrawWaveViewBox(*this, view, edit);
-    DrawWaveLoopSection(*this, view, edit);
+
+    view.belowCanvasHeight = ImGui::GetCursorScreenPos().y - view.canvasBottomY;
 
     if (edit.changed)
     {

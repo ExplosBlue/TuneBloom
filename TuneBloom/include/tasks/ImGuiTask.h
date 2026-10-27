@@ -18,8 +18,11 @@ public:
     void calc() override;
     void draw() override;
 
+    bool isDrawing() const { return mIsDrawing; }
+
 protected:
     sead::MultiProcessMeterBar<1> mCalcMeter;
     sead::MultiProcessMeterBar<1> mDrawMeter;
+    bool mIsDrawing = false;
 };
 

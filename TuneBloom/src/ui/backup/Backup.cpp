@@ -58,6 +58,18 @@ bool GetFailure(Bfsar::BackupResult* result)
     return state.hasFailure;
 }
 
+static const char* GetFailureTitle(Bfsar::BackupResult result)
+{
+    return result == Bfsar::BackupResult::Invalid ? messages::backup::cNoticePausedTitle : messages::backup::cNoticeFailedTitle;
+}
+
+const char* GetFailureTitle()
+{
+    Bfsar::BackupResult failure;
+
+    return GetFailure(&failure) ? GetFailureTitle(failure) : nullptr;
+}
+
 void MarkEditsBackedUp()
 {
     DocumentState::Backup& state = GetState();
@@ -86,16 +98,18 @@ static void ShowFailureNotice(DocumentState::Backup& state, Bfsar::BackupResult 
 
     state.noticeShown = result;
 
+    const char* title = GetFailureTitle(result);
+
     if (result == Bfsar::BackupResult::Invalid)
     {
-        notify::Add(notify::Kind::Warning, messages::backup::cNoticePausedTitle, messages::backup::cNoticePausedText);
+        notify::Add(notify::Kind::Warning, title, messages::backup::cNoticePausedText);
         return;
     }
 
     const std::string folder = CutPathStart(GetRootDir().string(), cNoticePathMax);
 
     sead::FormatFixedSafeString<1024> msg(messages::backup::cNoticeFailedTextFormat, folder.c_str());
-    notify::Add(notify::Kind::Error, messages::backup::cNoticeFailedTitle, msg.cstr());
+    notify::Add(notify::Kind::Error, title, msg.cstr());
 }
 
 static void UpdateDocument(Document& document)

@@ -98,6 +98,7 @@ void AutoConnectMidiDevices();
 AudioSettings& GetAudioSettings();
 void SaveAudioConfig();
 void LoadAudioConfig();
+void ApplyAudioMixConfig();
 void ApplyAudioConfig();
 
 void SaveArchiveConfig();

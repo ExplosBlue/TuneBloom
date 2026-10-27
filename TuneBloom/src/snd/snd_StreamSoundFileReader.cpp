@@ -64,13 +64,7 @@ void StreamSoundFileReader::Finalize()
 
 bool StreamSoundFileReader::IsTrackInfoAvailable() const
 {
-    const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
-    const InnerFileFormatInfo* streamFormat = FindInnerFileFormat(&header.signature, InnerFileKind::Stream);
-    if (streamFormat && streamFormat->format == ArchiveFormat::BCSAR)
-        return true;
-    if (header.version <= 0x00020000)
-        return true;
-    return false;
+    return mInfoBlockBody && mInfoBlockBody->GetTrackInfoTable() != nullptr;
 }
 
 bool StreamSoundFileReader::IsOriginalLoopAvailable() const

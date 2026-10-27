@@ -51,10 +51,28 @@ static bool IsNameLess(const std::string& left, const std::string& right)
     });
 }
 
+static std::vector<ScannedFile> CollectFile(const fs::path& path, std::atomic<u32>* foundCount)
+{
+    std::error_code error;
+    ScannedFile file;
+
+    file.path = path;
+    file.key = path.filename().generic_string();
+    file.size = fs::file_size(path, error);
+    file.modified = fs::last_write_time(path, error).time_since_epoch().count();
+    (*foundCount)++;
+
+    return { std::move(file) };
+}
+
 static std::vector<ScannedFile> CollectFiles(const fs::path& root, const std::atomic<bool>& cancel, std::atomic<u32>* foundCount)
 {
     std::vector<ScannedFile> files;
     std::error_code error;
+
+    if (fs::is_regular_file(root, error))
+        return CollectFile(root, foundCount);
+
     fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied, error);
     const fs::recursive_directory_iterator end;
 

@@ -39,7 +39,17 @@ inline bool TakeBrowserRequest(const char*, bool)
     return false;
 }
 
+inline bool GetDropCursor(f64*, f64*)
+{
+    return false;
+}
+
 inline const char* GetOpenFilePath()
+{
+    return nullptr;
+}
+
+inline const char* GetSaveFilePath()
 {
     return nullptr;
 }
@@ -53,6 +63,11 @@ inline void CaptureLoadFrame(ImDrawData*, int)
 }
 
 inline bool IsMotionOn()
+{
+    return false;
+}
+
+inline bool IsViewportsOn()
 {
     return false;
 }

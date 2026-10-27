@@ -29,6 +29,15 @@ static const Bfsar& GetSoundArchive(const Sound& sound)
     return *archive;
 }
 
+static StreamSource GetSoundStreamSource(const Sound& sound)
+{
+    Sound& playable = const_cast<Sound&>(sound);
+    Bfsar* archive = playable.getArchive();
+    SEAD_ASSERT(archive);
+
+    return archive->getStreamSource(&playable);
+}
+
 static bool IsWaveSoundFilterSupported(const Bfsar& archive)
 {
     return BfwsdFile::isFilterSupportedVersion(archive.getVersionForBfwsd(), archive.getFormat());
@@ -36,8 +45,8 @@ static bool IsWaveSoundFilterSupported(const Bfsar& archive)
 
 void SoundPlayer::update()
 {
-    if (mPlayingSound && !isActive())
-        mPlayingSound = nullptr;
+    if (!isActive())
+        resetPlayingSound();
 
     refreshPlayingSound_();
     refreshBankRegions_();
@@ -127,14 +136,13 @@ static bool GetSequenceSoundPlaybackError(const Sound& sound, sead::BufferedSafe
     return false;
 }
 
-static bool GetStreamSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError, bool* outFileNotLoaded = nullptr)
+static bool GetStreamInfoPlaybackError(const Sound::StreamSoundInfo& streamSoundInfo, ArchiveFormat format, sead::BufferedSafeString* outError, bool* outFileNotLoaded = nullptr)
 {
-    const Sound::StreamSoundInfo& streamSoundInfo = sound.getStreamSoundInfo();
     const Sound::StreamSoundInfo::StreamType streamType = streamSoundInfo.getStreamType();
 
     if (streamType != Sound::StreamSoundInfo::StreamType::NwStreamBinary && streamType != Sound::StreamSoundInfo::StreamType::Opus)
     {
-        outError->format(messages::stream::cTypeUnsupportedFormat, GetInnerFileDisplayName(GetSoundArchive(sound).getFormat(), InnerFileKind::Stream));
+        outError->format(messages::stream::cTypeUnsupportedFormat, GetInnerFileDisplayName(format, InnerFileKind::Stream));
         return true;
     }
 
@@ -225,7 +233,12 @@ bool SoundPlayer::IsStreamFileNotLoaded(const Sound& sound)
     sead::FixedSafeString<cPlaybackErrorLength> error;
     bool fileNotLoaded = false;
 
-    return GetStreamSoundPlaybackError(sound, &error, &fileNotLoaded) && fileNotLoaded;
+    return GetStreamInfoPlaybackError(sound.getStreamSoundInfo(), GetSoundArchive(sound).getFormat(), &error, &fileNotLoaded) && fileNotLoaded;
+}
+
+bool SoundPlayer::GetStreamPlaybackError(const StreamSource& source, sead::BufferedSafeString* outError)
+{
+    return GetStreamInfoPlaybackError(*source.stream, source.target.format, outError);
 }
 
 bool SoundPlayer::GetSoundPlaybackError(const Sound& sound, sead::BufferedSafeString* outError)
@@ -236,7 +249,7 @@ bool SoundPlayer::GetSoundPlaybackError(const Sound& sound, sead::BufferedSafeSt
             return GetSequenceSoundPlaybackError(sound, outError);
 
         case Sound::SoundType::Strm:
-            return GetStreamSoundPlaybackError(sound, outError);
+            return GetStreamInfoPlaybackError(sound.getStreamSoundInfo(), GetSoundArchive(sound).getFormat(), outError);
 
         case Sound::SoundType::Wave:
             return GetWaveSoundPlaybackError(sound, outError);
@@ -257,8 +270,11 @@ bool SoundPlayer::playSound(const Sound* sound, u32 startOffsetSample)
         return false;
 
     mLastPlayedSound = sound;
+    mLastPlayedStream = {};
 
-    readStreamTrackMute_(sound);
+    const bool isStream = sound->getSoundType() == Sound::SoundType::Strm;
+
+    readStreamTrackMute_(isStream ? &sound->getStreamSoundInfo() : nullptr);
 
     switch (sound->getSoundType())
     {
@@ -266,7 +282,7 @@ bool SoundPlayer::playSound(const Sound* sound, u32 startOffsetSample)
             return playSeqSound_(sound);
 
         case Sound::SoundType::Strm:
-            return playStrmSound_(sound);
+            return playStream_(GetSoundStreamSource(*sound));
 
         case Sound::SoundType::Wave:
             return playWaveSound_(sound, startOffsetSample);
@@ -278,30 +294,74 @@ bool SoundPlayer::playSound(const Sound* sound, u32 startOffsetSample)
     return false;
 }
 
-void SoundPlayer::readStreamTrackMute_(const Sound* sound)
+bool SoundPlayer::playStream(const StreamSource& source)
+{
+    SEAD_ASSERT(source.isValid());
+
+    if (source.sound)
+        return playSound(source.sound);
+
+    if (mSeqExport.isActive)
+        return false;
+
+    mLastPlayedSound = nullptr;
+    mLastPlayedStream = source;
+
+    readStreamTrackMute_(source.stream);
+
+    return playStream_(source);
+}
+
+void SoundPlayer::readStreamTrackMute_(const Sound::StreamSoundInfo* stream)
 {
     mSilentTracks = 0;
 
-    if (sound->getSoundType() != Sound::SoundType::Strm)
+    if (!stream)
         return;
-
-    const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
 
     for (u32 i = 0; i < cStrmTrackNum; i++)
     {
-        if (!strmSoundInfo.isTrackAudible(i))
+        if (!stream->isTrackAudible(i))
             mSilentTracks |= 1 << i;
     }
 }
 
-void SoundPlayer::updateStreamTrackMute(const Sound* sound)
+const Sound::StreamSoundInfo* SoundPlayer::getLastPlayedStream_() const
 {
-    SEAD_ASSERT(sound);
+    if (mLastPlayedStream.isValid())
+        return mLastPlayedStream.stream;
 
-    if (sound != mLastPlayedSound)
+    if (mLastPlayedSound && mLastPlayedSound->getSoundType() == Sound::SoundType::Strm)
+        return &mLastPlayedSound->getStreamSoundInfo();
+
+    return nullptr;
+}
+
+const Item* SoundPlayer::getLastPlayedItem() const
+{
+    if (mLastPlayedSound)
+        return mLastPlayedSound;
+
+    return mLastPlayedStream.isValid() ? mLastPlayedStream.stream->getMainWave() : nullptr;
+}
+
+void SoundPlayer::forgetStream(const Sound::StreamSoundInfo* stream)
+{
+    if (mPlayingStream.stream == stream)
+        reset();
+
+    if (mLastPlayedStream.stream == stream)
+        mLastPlayedStream = {};
+}
+
+void SoundPlayer::updateStreamTrackMute(const Sound::StreamSoundInfo* stream)
+{
+    SEAD_ASSERT(stream);
+
+    if (stream != getLastPlayedStream_())
         return;
 
-    readStreamTrackMute_(sound);
+    readStreamTrackMute_(stream);
 
     snd::internal::driver::SoundThreadLock lock;
     initPlayerTrack_();
@@ -320,6 +380,9 @@ f32 SoundPlayer::calcTrackVolume_(u32 trackNo) const
 
 bool SoundPlayer::playLastSound()
 {
+    if (mLastPlayedStream.isValid())
+        return playStream(mLastPlayedStream);
+
     if (mLastPlayedSound)
     {
         Item* prev = sSelectedItem;
@@ -377,9 +440,11 @@ static void SetSoundParam(BasicSoundPlayer* player, const Sound& sound)
     player->setPanCurve(sound.getPanCurve());
 }
 
-static void SetStreamItemParam(StreamSoundPlayer::SetupArg* setupArg, const Sound::StreamSoundInfo& strmSoundInfo, const Bfsar& archive)
+static void SetStreamItemParam(StreamSoundPlayer::SetupArg* setupArg, const StreamSource& source)
 {
-    if (archive.isStreamSendAvailable())
+    const Sound::StreamSoundInfo& strmSoundInfo = *source.stream;
+
+    if (source.enableSend)
     {
         setupArg->pitch = strmSoundInfo.getPitch();
         setupArg->mainSend = strmSoundInfo.getMainSend();
@@ -399,14 +464,14 @@ static void SetStreamItemParam(StreamSoundPlayer::SetupArg* setupArg, const Soun
     }
 }
 
-static void SetStreamTrackParam(nw::snd::SoundArchive::StreamTrackInfo* tmp, const Sound::StreamSoundInfo::Track& trackInfo, const Bfsar& archive)
+static void SetStreamTrackParam(nw::snd::SoundArchive::StreamTrackInfo* tmp, const Sound::StreamSoundInfo::Track& trackInfo, const StreamSource& source)
 {
     tmp->volume = trackInfo.getVolume();
     tmp->pan = trackInfo.getPan();
     tmp->span = trackInfo.getSPan();
     tmp->flags = trackInfo.getFlags();
 
-    if (archive.isStreamSendAvailable())
+    if (source.enableSend)
     {
         tmp->mainSend = trackInfo.getMainSend();
         for (u32 j = 0; j < nw::snd::AUX_BUS_NUM; j++)
@@ -423,7 +488,7 @@ static void SetStreamTrackParam(nw::snd::SoundArchive::StreamTrackInfo* tmp, con
         }
     }
 
-    if (archive.isFilterSupportedVersion())
+    if (source.enableFilter)
     {
         tmp->lpfFreq = trackInfo.getLpfFreq();
         tmp->biquadType = trackInfo.getBiquadType();
@@ -437,35 +502,31 @@ static void SetStreamTrackParam(nw::snd::SoundArchive::StreamTrackInfo* tmp, con
     }
 }
 
-bool SoundPlayer::playStrmSound_(const Sound* sound)
+bool SoundPlayer::playStream_(const StreamSource& source)
 {
-    Sound::StreamSoundInfo::StreamType streamType = sound->getStreamSoundInfo().getStreamType();
+    const Sound::StreamSoundInfo& strmSoundInfo = *source.stream;
 
     sead::FixedSafeString<cPlaybackErrorLength> playbackError;
 
-    if (GetStreamSoundPlaybackError(*sound, &playbackError))
+    if (GetStreamPlaybackError(source, &playbackError))
     {
         PopupMgr::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
 
-    if (streamType == Sound::StreamSoundInfo::StreamType::Opus)
+    if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus)
     {
-        Sound* playable = const_cast<Sound*>(sound);
-        Bfsar* archive = playable->getArchive();
-        SEAD_ASSERT(archive);
+        Bfsar* archive = source.sound ? source.sound->getArchive() : nullptr;
 
-        if (!opusstream::AttachStreamWaves(*archive, playable))
+        if (!archive || !opusstream::AttachStreamWaves(*archive, source.sound))
             return false;
     }
-
-    const Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
 
     StreamSoundPlayer::SetupArg setupArg;
     setupArg.allocChannelCount = strmSoundInfo.getAllocateChannelCount();
     setupArg.allocTrackFlag = strmSoundInfo.getAllocateTrackFlags();
 
-    SetStreamItemParam(&setupArg, strmSoundInfo, GetSoundArchive(*sound));
+    SetStreamItemParam(&setupArg, source);
 
     const WaveFile* mainWave = nullptr;
     WaveFile::Encoding mainEncoding = WaveFile::Encoding::DspAdpcm;
@@ -518,7 +579,7 @@ bool SoundPlayer::playStrmSound_(const Sound* sound)
             }
         }
 
-        SetStreamTrackParam(&tmp, trackInfo, GetSoundArchive(*sound));
+        SetStreamTrackParam(&tmp, trackInfo, source);
         tmp.channelCount = static_cast<u8>(trackInfo.getChannelCount());
 
         playingTracks[i] = &trackInfo;
@@ -541,7 +602,8 @@ bool SoundPlayer::playStrmSound_(const Sound* sound)
         mCurrentPlayer = mStreamPlayer;
         mOwner = mOwnerContext;
 
-        SetSoundParam(mStreamPlayer, *sound);
+        if (source.sound)
+            SetSoundParam(mStreamPlayer, *source.sound);
 
         mStreamPlayer->setup(setupArg);
         mStreamPlayer->prepare(strmSoundInfo);
@@ -558,8 +620,11 @@ bool SoundPlayer::playStrmSound_(const Sound* sound)
             mPlayingStreamTracks[i] = playingTracks[i];
     }
 
-    sSelectedItem = const_cast<Sound*>(sound);
-    mPlayingSound = sound;
+    mPlayingStream = source;
+    mPlayingSound = source.sound;
+
+    if (source.sound)
+        sSelectedItem = source.sound;
 
     return true;
 }
@@ -650,7 +715,7 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
         mSampleCount = 0;
         mSampleRate = 0;
 
-        mPlayingSound = nullptr;
+        resetPlayingSound();
         mPlayingWaveFile = nullptr;
     }
 
@@ -784,7 +849,7 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
         mSampleCount = mWavePlayer.getSampleCount();
         mSampleRate = mWavePlayer.getSampleRate();
 
-        mPlayingSound = nullptr;
+        resetPlayingSound();
         mPlayingWaveFile = &wave;
     }
 
@@ -864,6 +929,7 @@ bool SoundPlayer::seek(f32 progress)
 
 void SoundPlayer::reset()
 {
+    resetPlayingSound();
     resetLastPlayedSound();
     resetPlayingWaveFile();
 
@@ -877,29 +943,27 @@ void SoundPlayer::reset()
 
 void SoundPlayer::refreshPlayingSound_()
 {
-    if (!mPlayingSound || !isCurrentPlayer())
+    if (!isCurrentPlayer() || (!mPlayingSound && !mPlayingStream.isValid()))
         return;
-
-    const Sound& sound = *mPlayingSound;
-    const Bfsar& archive = GetSoundArchive(sound);
 
     snd::internal::driver::SoundThreadLock lock;
 
-    SetSoundParam(mCurrentPlayer, sound);
+    if (mPlayingSound)
+        SetSoundParam(mCurrentPlayer, *mPlayingSound);
 
-    if (isCurrentPlayerWave() && sound.getSoundType() == Sound::SoundType::Wave)
+    if (isCurrentPlayerWave() && mPlayingSound && mPlayingSound->getSoundType() == Sound::SoundType::Wave)
     {
-        mWavePlayer.setWaveSoundInfo(sound, IsWaveSoundFilterSupported(archive));
+        mWavePlayer.setWaveSoundInfo(*mPlayingSound, IsWaveSoundFilterSupported(GetSoundArchive(*mPlayingSound)));
         return;
     }
 
-    if (!isCurrentPlayerStream() || sound.getSoundType() != Sound::SoundType::Strm)
+    if (!isCurrentPlayerStream() || !mPlayingStream.isValid())
         return;
 
-    const Sound::StreamSoundInfo& strmSoundInfo = sound.getStreamSoundInfo();
+    const Sound::StreamSoundInfo& strmSoundInfo = *mPlayingStream.stream;
 
     StreamSoundPlayer::SetupArg setupArg;
-    SetStreamItemParam(&setupArg, strmSoundInfo, archive);
+    SetStreamItemParam(&setupArg, mPlayingStream);
     mStreamPlayer->setItemData(setupArg);
 
     const Sound::StreamSoundInfo::Track::List& trackList = strmSoundInfo.getTrackList();
@@ -914,16 +978,16 @@ void SoundPlayer::refreshPlayingSound_()
                 continue;
 
             nw::snd::SoundArchive::StreamTrackInfo trackInfo;
-            SetStreamTrackParam(&trackInfo, *track, archive);
+            SetStreamTrackParam(&trackInfo, *track, mPlayingStream);
             mStreamPlayer->setTrackDataInfo(trackNo, trackInfo);
             break;
         }
     }
 }
 
-static bool GetStreamRegion(StreamSoundPlayer::Region* region, const Sound& sound, s32 regionNo)
+static bool GetStreamRegion(StreamSoundPlayer::Region* region, const Sound::StreamSoundInfo& stream, s32 regionNo)
 {
-    const StreamFileLayout* layout = sound.getStreamSoundInfo().getFileLayout();
+    const StreamFileLayout* layout = stream.getFileLayout();
 
     if (!layout || regionNo < 0 || regionNo >= static_cast<s32>(layout->regions.size()))
         return false;
@@ -935,21 +999,21 @@ static bool GetStreamRegion(StreamSoundPlayer::Region* region, const Sound& soun
     return true;
 }
 
-bool SoundPlayer::playStreamRegion(const Sound* sound, s32 regionNo)
+bool SoundPlayer::playStreamRegion(const StreamSource& source, s32 regionNo)
 {
     if (mSeqExport.isActive)
         return false;
 
     StreamSoundPlayer::Region region;
 
-    if (!GetStreamRegion(&region, *sound, regionNo))
+    if (!GetStreamRegion(&region, *source.stream, regionNo))
         return false;
 
     snd::internal::driver::SoundThreadLock lock;
 
-    const bool isPlaying = mPlayingSound == sound && isCurrentPlayerStream() && mStreamPlayer->isActive();
+    const bool isPlaying = mPlayingStream.stream == source.stream && isCurrentPlayerStream() && mStreamPlayer->isActive();
 
-    if (!isPlaying && !playSound(sound))
+    if (!isPlaying && !playStream(source))
         return false;
 
     return mStreamPlayer->playRegion(region);
@@ -957,14 +1021,14 @@ bool SoundPlayer::playStreamRegion(const Sound* sound, s32 regionNo)
 
 void SoundPlayer::setNextStreamRegion(s32 regionNo)
 {
-    if (!mPlayingSound || !isCurrentPlayerStream() || !mStreamPlayer->isActive())
+    if (!mPlayingStream.isValid() || !isCurrentPlayerStream() || !mStreamPlayer->isActive())
         return;
 
     snd::internal::driver::SoundThreadLock lock;
 
     StreamSoundPlayer::Region region;
 
-    if (GetStreamRegion(&region, *mPlayingSound, regionNo))
+    if (GetStreamRegion(&region, *mPlayingStream.stream, regionNo))
         mStreamPlayer->setNextRegion(region);
     else
         mStreamPlayer->clearNextRegion();

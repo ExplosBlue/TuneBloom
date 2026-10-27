@@ -1,6 +1,9 @@
 #include <ui/browser/FilesPanelInternal.h>
 
+#include <ui/app/Notifications.h>
+#include <ui/browser/FilesPanel.h>
 #include <ui/file/FileDialogs.h>
+#include <ui/file/RecentFiles.h>
 #include <ui/file/SystemShell.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/settings/ConfigFile.h>
@@ -24,6 +27,7 @@
 namespace fs = std::filesystem;
 
 static constexpr s32 cRecentRootMax    = 8;
+static constexpr u32 cRemovedRootMax   = 8;
 static constexpr f32 cSpinnerRadiusEm  = 0.3f;
 static constexpr f32 cProgressHeightEm = 0.3f;
 static constexpr f32 cProgressTopEm    = 0.15f;
@@ -33,6 +37,7 @@ static constexpr const char* cRootsKey       = "roots";
 static constexpr const char* cOldRootKey     = "root";
 static constexpr const char* cPathKey        = "path";
 static constexpr const char* cPinnedKey      = "pinned";
+static constexpr const char* cFileKey        = "file";
 static constexpr const char* cOpenKey        = "open";
 static constexpr const char* cOpenFoldersKey = "openFolders";
 static constexpr const char* cOpenPrefixKey  = "openPrefixes";
@@ -51,6 +56,9 @@ static std::string MakeCachePath(const std::string& root)
 
 static s32 GetRootButtonCount(const FilesRoot& root)
 {
+    if (root.isFile)
+        return 1;
+
     return root.isPinned ? 2 : 3;
 }
 
@@ -59,6 +67,22 @@ static std::string MakeRootName(const std::string& path)
     const std::string name = fs::path(path).filename().string();
 
     return name.empty() ? path : name;
+}
+
+static FilesRoot MakeRoot(const std::string& path, bool isPinned, bool isFile)
+{
+    FilesRoot root;
+    root.path = path;
+    root.name = MakeRootName(path);
+    root.isPinned = isPinned;
+    root.isFile = isFile;
+
+    return root;
+}
+
+static bool IsInsideFolder(const std::string& path, const std::string& folder)
+{
+    return path.size() > folder.size() && path.compare(0, folder.size(), folder) == 0 && (path[folder.size()] == '/' || path[folder.size()] == '\\');
 }
 
 static bool IsSameName(const std::string& left, const std::string& right)
@@ -117,10 +141,8 @@ void FilesPanel::loadConfig()
             if (!path || path->empty() || findRoot(*path) >= 0)
                 continue;
 
-            FilesRoot root;
-            root.path = *path;
-            root.name = MakeRootName(*path);
-            root.isPinned = entry.getBool(cPinnedKey, false);
+            const bool isFile = entry.getBool(cFileKey, false);
+            FilesRoot root = MakeRoot(*path, isFile || entry.getBool(cPinnedKey, false), isFile);
             root.isOpen = entry.getBool(cOpenKey, true);
 
             if (const json::Value* openFolders = entry.findArray(cOpenFoldersKey))
@@ -148,18 +170,35 @@ void FilesPanel::loadConfig()
     }
     else if (const std::string* oldRoot = section.findString(cOldRootKey); oldRoot && !oldRoot->empty())
     {
-        FilesRoot root;
-        root.path = *oldRoot;
-        root.name = MakeRootName(*oldRoot);
-        mRoots.push_back(std::move(root));
+        mRoots.push_back(MakeRoot(*oldRoot, false, false));
     }
 
     std::stable_partition(mRoots.begin(), mRoots.end(), [](const FilesRoot& root) { return root.isPinned; });
+
+    addLegacyPins();
 
     for (s32 i = static_cast<s32>(mRoots.size()) - 1; i >= 0; i--)
         requestScan(i);
 
     onRootsChanged();
+}
+
+void FilesPanel::addLegacyPins()
+{
+    const std::vector<std::string> paths = TakeLegacyPinnedFiles();
+
+    if (paths.empty())
+        return;
+
+    for (const std::string& path : paths)
+    {
+        const std::string canonical = fileio::CanonicalPath(path.c_str());
+
+        if (!canonical.empty() && findRoot(canonical) < 0)
+            insertRoot(MakeRoot(canonical, true, true));
+    }
+
+    saveConfig();
 }
 
 void FilesPanel::saveConfig() const
@@ -173,6 +212,9 @@ void FilesPanel::saveConfig() const
         entry.setString(cPathKey, root.path.c_str());
         entry.setBool(cPinnedKey, root.isPinned);
         entry.setBool(cOpenKey, root.isOpen);
+
+        if (root.isFile)
+            entry.setBool(cFileKey, true);
 
         if (!root.openPrefixes.empty())
         {
@@ -218,17 +260,19 @@ s32 FilesPanel::insertRoot(FilesRoot root)
     return index;
 }
 
-s32 FilesPanel::addRoot(const std::string& path, bool isPinned)
+s32 FilesPanel::addRoot(const std::string& path, bool isPinned, bool isFile)
 {
-    FilesRoot root;
-    root.path = path;
-    root.name = MakeRootName(path);
-    root.isPinned = isPinned;
-
-    const s32 index = insertRoot(std::move(root));
+    const s32 index = insertRoot(MakeRoot(path, isPinned, isFile));
     requestScan(index);
 
     return index;
+}
+
+void FilesPanel::removeRoot(s32 index)
+{
+    mRoots.erase(mRoots.begin() + index);
+    onRootsChanged();
+    saveConfig();
 }
 
 void FilesPanel::trimRecentRoots()
@@ -255,11 +299,17 @@ void FilesPanel::onRootsChanged()
     for (FilesRoot& root : mRoots)
     {
         root.note.clear();
+        root.isNested = false;
 
         for (const FilesRoot& other : mRoots)
         {
-            if (&other != &root && IsSameName(other.name, root.name))
+            if (&other == &root)
+                continue;
+
+            if (IsSameName(other.name, root.name))
                 root.note = MakeRootName(fs::path(root.path).parent_path().string());
+
+            root.isNested |= !other.isFile && IsInsideFolder(root.path, other.path);
         }
     }
 }
@@ -268,20 +318,23 @@ void FilesPanel::selectRoot(s32 root)
 {
     mSelected = FilesRow { .kind = FilesRowKind::Root, .root = root };
     mScrollToSelected = true;
+    clearMultiSelection();
 }
 
-void FilesPanel::openFolder(const std::string& path, bool isPinned)
+s32 FilesPanel::addPath(const std::string& path, bool isPinned)
 {
     const std::string canonical = fileio::CanonicalPath(path.c_str());
 
     if (canonical.empty())
-        return;
+        return -1;
 
+    std::error_code error;
+    const bool isFile = !fs::is_directory(canonical, error);
     s32 index = findRoot(canonical);
 
     if (index < 0)
     {
-        index = addRoot(canonical, isPinned);
+        index = addRoot(canonical, isPinned || isFile, isFile);
         trimRecentRoots();
         onRootsChanged();
     }
@@ -289,6 +342,76 @@ void FilesPanel::openFolder(const std::string& path, bool isPinned)
         index = togglePin(index);
 
     mRoots[index].isOpen = true;
+    invalidateRows();
+    selectRoot(index);
+    saveConfig();
+
+    return index;
+}
+
+void FilesPanel::pinPaths(const std::vector<std::string>& paths)
+{
+    std::string names;
+    u32 count = 0;
+
+    for (const std::string& path : paths)
+    {
+        const s32 index = addPath(path, true);
+
+        if (index < 0)
+            continue;
+
+        names += count++ == 0 ? "" : ", ";
+        names += mRoots[index].name;
+    }
+
+    if (count == 1)
+        notify::Add(notify::Kind::Success, messages::files::cPinnedOneTitle, names.c_str());
+    else if (count > 1)
+        notify::Add(notify::Kind::Success, sead::FormatFixedSafeString<64>(messages::files::cPinnedTitleFormat, FormatCountText(count).cstr()).cstr(), names.c_str());
+}
+
+void FilesPanel::unpinFile(s32 index)
+{
+    const u32 token = mNextUndoToken++;
+    const std::string name = mRoots[index].name;
+
+    if (mRemovedRoots.size() >= cRemovedRootMax)
+        mRemovedRoots.erase(mRemovedRoots.begin());
+
+    mRemovedRoots.push_back({ token, index, std::move(mRoots[index]) });
+    removeRoot(index);
+
+    notify::Add(notify::Kind::Info, messages::files::cUnpinnedTitle, name.c_str(), { messages::common::cUndo, &UndoFilesPanelUnpin, token });
+}
+
+void FilesPanel::requestUndo(u32 token)
+{
+    mUndoToken = token;
+}
+
+void FilesPanel::applyUndo()
+{
+    const u32 token = mUndoToken;
+    mUndoToken = 0;
+
+    const auto found = std::find_if(mRemovedRoots.begin(), mRemovedRoots.end(), [token](const RemovedRoot& removed) { return removed.token == token; });
+
+    if (token == 0 || found == mRemovedRoots.end())
+        return;
+
+    RemovedRoot removed = std::move(*found);
+    mRemovedRoots.erase(found);
+
+    if (findRoot(removed.root.path) >= 0)
+        return;
+
+    const s32 pinnedCount = static_cast<s32>(std::count_if(mRoots.begin(), mRoots.end(), [](const FilesRoot& root) { return root.isPinned; }));
+    const s32 index = std::min(removed.index, pinnedCount);
+
+    mRoots.insert(mRoots.begin() + index, std::move(removed.root));
+
+    onRootsChanged();
     invalidateRows();
     selectRoot(index);
     saveConfig();
@@ -353,7 +476,10 @@ void FilesPanel::applyPendingAction()
     switch (pending.action)
     {
         case RootAction::TogglePin:
-            togglePin(root);
+            if (mRoots[root].isFile)
+                unpinFile(root);
+            else
+                togglePin(root);
             break;
 
         case RootAction::MoveUp:
@@ -369,13 +495,11 @@ void FilesPanel::applyPendingAction()
             break;
 
         case RootAction::Remove:
-            mRoots.erase(mRoots.begin() + root);
-            onRootsChanged();
-            saveConfig();
+            removeRoot(root);
             break;
 
         case RootAction::Open:
-            openFolder(pending.path, pending.isPinned);
+            addPath(pending.path, pending.isPinned);
             break;
 
         default:
@@ -388,7 +512,7 @@ void FilesPanel::requestScan(s32 index, bool isFullScan)
     FilesRoot& root = mRoots[index];
     std::error_code error;
 
-    root.isMissing = !fs::is_directory(root.path, error);
+    root.isMissing = root.isFile ? !fs::is_regular_file(root.path, error) : !fs::is_directory(root.path, error);
     root.needsScan = !root.isMissing;
     root.isFullScan = root.isFullScan || isFullScan;
     root.scanRequest = ++mScanRequestCount;
@@ -465,6 +589,37 @@ const BrowserFolder* FilesPanel::getPackFolder(const FilesRow& row) const
     return folder.isPack ? &folder : nullptr;
 }
 
+s32 FilesPanel::getRootFolder(s32 root) const
+{
+    const FilesRoot& entry = mRoots[root];
+
+    if (!entry.isFile)
+        return 0;
+
+    if (!entry.hasSnapshot || entry.isMissing)
+        return -1;
+
+    const std::vector<BrowserFolder>& folders = getSnapshot(root).folders;
+
+    for (s32 child : folders.front().folders)
+    {
+        if (folders[child].isPack)
+            return child;
+    }
+
+    return -1;
+}
+
+const BrowserFile* FilesPanel::getRootFile(s32 root) const
+{
+    if (getRootFolder(root) >= 0 || !mRoots[root].hasSnapshot || mRoots[root].isMissing)
+        return nullptr;
+
+    const std::vector<BrowserFile>& files = getSnapshot(root).files;
+
+    return files.size() == 1 ? &files.front() : nullptr;
+}
+
 s32 FilesPanel::findPackAncestor(s32 root, s32 folder) const
 {
     const std::vector<BrowserFolder>& folders = getSnapshot(root).folders;
@@ -518,7 +673,8 @@ void FilesPanel::updateSizeLabelLengths(FilesRoot& root)
 
 std::string FilesPanel::getFolderPath(s32 root, s32 folder) const
 {
-    fs::path path = fs::path(mRoots[root].path) / MakeFolderKey(getSnapshot(root), folder);
+    const fs::path base = mRoots[root].isFile ? fs::path(mRoots[root].path).parent_path() : fs::path(mRoots[root].path);
+    fs::path path = base / MakeFolderKey(getSnapshot(root), folder);
 
     return path.make_preferred().string();
 }
@@ -533,46 +689,44 @@ std::string FilesPanel::makePrefixKey(const FilesRow& row) const
 void FilesPanel::drawRootRow(FrameContext& ctx, const FilesRow& row)
 {
     FilesRoot& root = mRoots[row.root];
-    const bool isOpen = ctx.isSearching || root.isOpen;
+    const BrowserFile* file = getRootFile(row.root);
 
     ImGui::SetNextItemAllowOverlap();
 
     const RowFrame frame = beginRow(ctx, row, 0.0f);
 
-    if (frame.isPressed && !ctx.isSearching)
-        setRowOpen(row, !root.isOpen);
+    if (isExpandable(row) && (file ? isChevronClicked(ctx, frame) : frame.isPressed))
+        setRowOpen(row, !isRowOpen(row));
+    else if (file && frame.isDoubleClicked)
+        openFile(*file);
+    else if (file && frame.isPressed)
+        showFile(*file);
 
     ImGui::OpenPopupOnItemClick(cRootMenuId, ImGuiPopupFlags_MouseButtonRight);
 
     if (IsItemHoveredForDetail())
-        ImGui::SetTooltip(root.isMissing ? messages::recent::cNotFoundFormat : "%s", root.path.c_str());
+    {
+        if (file)
+            drawFileTooltip(*file, true);
+        else
+            ImGui::SetTooltip(root.isMissing ? messages::recent::cNotFoundFormat : "%s", root.path.c_str());
+    }
 
     const bool isRowHovered = ImGui::IsPopupOpen(cRootMenuId) || (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(frame.rowMin, frame.rowMax, false));
-    const bool isScanning = isRootScanning(row.root);
-    const bool showCount = root.hasSnapshot && !root.isMissing && !isScanning && !ctx.isSearching && !ctx.shownCounts[row.root].empty();
     const f32 buttonHit = frame.rowMax.y - frame.rowMin.y;
     const f32 labelRight = frame.rowMax.x - ImGui::GetStyle().CellPadding.x - buttonHit * static_cast<f32>(GetRootButtonCount(root));
-    const ImU32 dimColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
-    const ImU32 nameColor = root.isMissing ? dimColor : ImGui::GetColorU32(ImGuiCol_Text);
-    const ImU32 iconColor = root.isMissing ? dimColor : ImGui::GetColorU32(GetItemValueColor());
-    const char* icon = root.isMissing ? ICON_LC_FOLDER_X : isOpen ? ICON_LC_FOLDER_OPEN : ICON_LC_FOLDER_CLOSED;
-
-    const sead::FormatFixedSafeString<32> count("%u", showCount ? ctx.shownCounts[row.root][0] : 0);
-    const sead::FormatFixedSafeString<288> note("%s%s%s", root.note.c_str(), !root.note.empty() && showCount ? "  " : "", showCount ? count.cstr() : "");
 
     PushTableRowClipRect(frame.rowMin, frame.rowMax);
 
-    ImGui::GetWindowDrawList()->AddText(frame.textPos, dimColor, isOpen ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_RIGHT);
+    const f32 labelEnd = drawRootLabel(ctx, row, frame, labelRight);
 
-    const f32 labelEnd = drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), labelRight, icon, iconColor, root.name.c_str(), nameColor, note.isEmpty() ? nullptr : note.cstr(), dimColor);
-
-    if (isScanning)
+    if (isRootScanning(row.root))
     {
         const f32 radius = ImFloor(ctx.em * cSpinnerRadiusEm);
         const f32 centerX = labelEnd + ImFloor(ctx.em * cIconGapEm) + radius;
 
         if (centerX + radius <= labelRight)
-            DrawSpinner(ImVec2(centerX, frame.textPos.y + ImFloor(ctx.em * 0.5f)), radius, dimColor);
+            DrawSpinner(ImVec2(centerX, frame.textPos.y + ImFloor(ctx.em * 0.5f)), radius, ImGui::GetColorU32(ImGuiCol_TextDisabled));
     }
 
     drawRootButtons(root, row.root, frame, isRowHovered);
@@ -582,6 +736,50 @@ void FilesPanel::drawRootRow(FrameContext& ctx, const FilesRow& row)
     drawRootMenu(root, row.root);
 }
 
+f32 FilesPanel::drawRootLabel(const FrameContext& ctx, const FilesRow& row, const RowFrame& frame, f32 right)
+{
+    const FilesRoot& root = mRoots[row.root];
+    const BrowserFile* file = getRootFile(row.root);
+    const s32 folder = getRootFolder(row.root);
+    const bool canOpen = isExpandable(row);
+    const bool isOpen = canOpen && isRowOpen(row);
+    const bool showCount = folder >= 0 && root.hasSnapshot && !root.isMissing && !isRootScanning(row.root) && !ctx.isSearching && folder < static_cast<s32>(ctx.shownCounts[row.root].size());
+    const OpenFileMark* openMark = file ? findOpenFile(ctx, file->path) : nullptr;
+    const ImU32 dimColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+
+    const char* icon = isOpen ? ICON_LC_FOLDER_OPEN : ICON_LC_FOLDER_CLOSED;
+    ImU32 iconColor = ImGui::GetColorU32(GetItemValueColor());
+
+    if (root.isMissing)
+    {
+        icon = root.isFile ? ICON_LC_FILE_X : ICON_LC_FOLDER_X;
+        iconColor = dimColor;
+    }
+    else if (file)
+    {
+        icon = getFileIcon(*file, &iconColor);
+    }
+    else if (root.isFile && folder >= 0)
+    {
+        icon = ICON_LC_FOLDER_ARCHIVE;
+        iconColor = ImGui::GetColorU32(GetFileKindColor(BrowserFileKind::AudioResource));
+    }
+    else if (root.isFile)
+    {
+        icon = ICON_LC_FILE;
+    }
+
+    const sead::FixedSafeString<32> count = FormatCountText(showCount ? ctx.shownCounts[row.root][folder] : 0);
+    const sead::FormatFixedSafeString<288> note("%s%s%s", root.note.c_str(), !root.note.empty() && showCount ? "  " : "", showCount ? count.cstr() : "");
+    const char* noteText = openMark ? cOpenFileMark : note.isEmpty() ? nullptr : note.cstr();
+    const ImU32 noteColor = openMark ? getOpenMarkColor(openMark) : dimColor;
+
+    if (canOpen)
+        ImGui::GetWindowDrawList()->AddText(frame.textPos, dimColor, isOpen ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_RIGHT);
+
+    return drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), right, icon, iconColor, root.name.c_str(), root.isMissing ? dimColor : getOpenNameColor(openMark), noteText, noteColor);
+}
+
 void FilesPanel::drawRootButtons(const FilesRoot& root, s32 index, const RowFrame& frame, bool isRowHovered)
 {
     const f32 hit = frame.rowMax.y - frame.rowMin.y;
@@ -589,7 +787,7 @@ void FilesPanel::drawRootButtons(const FilesRoot& root, s32 index, const RowFram
     const f32 pinX = frame.rowMax.x - ImGui::GetStyle().CellPadding.x - hit;
     const ImVec2 hitSize(hit, hit);
 
-    if (!isRootScanning(index))
+    if (!root.isFile && !isRootScanning(index))
     {
         ImGui::SetCursorScreenPos(ImVec2(pinX - hit, frame.rowMin.y));
 
@@ -620,6 +818,18 @@ void FilesPanel::drawRootMenu(const FilesRoot& root, s32 index)
     const bool canMoveUp = index > 0 && mRoots[index - 1].isPinned == root.isPinned;
     const bool canMoveDown = index + 1 < count && mRoots[index + 1].isPinned == root.isPinned;
 
+    if (const BrowserFile* file = getRootFile(index))
+    {
+        if (drawSelectionMenu(*file))
+        {
+            EndContextMenu();
+            return;
+        }
+
+        drawFileCommands(*file);
+        ContextMenuSeparator();
+    }
+
     if (ContextMenuItem(ICON_LC_PIN, root.isPinned ? messages::recent::cUnpin : messages::recent::cPin))
         requestAction(RootAction::TogglePin, index);
 
@@ -634,19 +844,27 @@ void FilesPanel::drawRootMenu(const FilesRoot& root, s32 index)
 
     ContextMenuSeparator();
 
-    if (ContextMenuItem(ICON_LC_REFRESH_CW, messages::files::cRescan, !isRootScanning(index)))
+    if (getRootFolder(index) >= 0 && ContextMenuItem(ICON_LC_REFRESH_CW, messages::files::cRescan, !isRootScanning(index)))
         requestAction(RootAction::Rescan, index);
 
     if (ContextMenuItem(ICON_LC_FOLDER_OPEN, messages::recent::cShowInFileManager, !root.isMissing))
-        OpenFolder(root.path);
+    {
+        if (root.isFile)
+            ShowInFileManager(root.path);
+        else
+            OpenFolder(root.path);
+    }
 
     if (ContextMenuItem(ICON_LC_COPY, messages::mainmenu::cCopyPath))
         ImGui::SetClipboardText(root.path.c_str());
 
-    ContextMenuSeparator();
+    if (!root.isFile)
+    {
+        ContextMenuSeparator();
 
-    if (ContextMenuItem(ICON_LC_X, messages::recent::cRemove))
-        requestAction(RootAction::Remove, index);
+        if (ContextMenuItem(ICON_LC_X, messages::recent::cRemove))
+            requestAction(RootAction::Remove, index);
+    }
 
     EndContextMenu();
 }
@@ -659,8 +877,11 @@ void FilesPanel::drawFolderMenu(s32 root, s32 folder)
     const std::string path = getFolderPath(root, folder);
     const s32 pack = findPackAncestor(root, folder);
 
-    if (pack < 0 && ContextMenuItem(ICON_LC_PIN, messages::recent::cPin))
-        requestAction(RootAction::Open, -1, path, true);
+    if (pack < 0)
+    {
+        drawPinItem(path);
+        ContextMenuSeparator();
+    }
 
     if (ContextMenuItem(ICON_LC_FOLDER_OPEN, messages::recent::cShowInFileManager))
     {
@@ -674,6 +895,22 @@ void FilesPanel::drawFolderMenu(s32 root, s32 folder)
         ImGui::SetClipboardText(path.c_str());
 
     EndContextMenu();
+}
+
+void FilesPanel::drawPinItem(const std::string& path)
+{
+    const s32 root = findRoot(fileio::CanonicalPath(path.c_str()));
+
+    if (root >= 0 && mRoots[root].isPinned)
+    {
+        if (ContextMenuItem(ICON_LC_PIN, messages::recent::cUnpin))
+            requestAction(RootAction::TogglePin, root);
+
+        return;
+    }
+
+    if (ContextMenuItem(ICON_LC_PIN, messages::recent::cPin))
+        requestAction(RootAction::Open, -1, path, true);
 }
 
 void FilesPanel::drawStatusRow(FrameContext& ctx, const FilesRow& row)
@@ -749,9 +986,9 @@ void FilesPanel::drawScanProgress(const FilesRoot& root, const ImVec2& pos, f32 
     if (!isScanning)
         text = messages::files::cWaiting;
     else if (!index.isListDone())
-        text.format(messages::files::cIndexingFormat, index.getFoundCount());
+        text.format(messages::files::cIndexingFormat, FormatCountText(index.getFoundCount()).cstr());
     else
-        text.format(messages::files::cReadingFormat, index.getScannedCount(), index.getFoundCount());
+        text.format(messages::files::cReadingFormat, FormatCountText(index.getScannedCount()).cstr(), FormatCountText(index.getFoundCount()).cstr());
 
     DrawSpinner(ImVec2(pos.x + ImFloor(em * 0.5f), centerY), radius, dimColor);
     ImGui::GetWindowDrawList()->AddText(ImVec2(textX, pos.y), dimColor, text.cstr());
@@ -782,7 +1019,7 @@ void FilesPanel::drawAddFolderRow(const FrameContext& ctx)
     if (ImGui::InvisibleButton("##addFolder", ImVec2(labelWidth, rowHeight)))
         chooseFolder();
 
-    ImGui::SetItemTooltip("%s", messages::files::cDropFolderTip);
+    ImGui::SetItemTooltip("%s", messages::files::cDropPinTip);
 
     const bool isHovered = ImGui::IsItemHovered();
 

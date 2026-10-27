@@ -9,6 +9,7 @@
 #include <ui/browser/FilesPanelInternal.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/ListFilter.h>
+#include <ui/widgets/RowSelection.h>
 #include <ui/Messages.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
@@ -106,18 +107,50 @@ static FilesPanel sFilesPanel;
 
 static std::mutex sRequestedRootMutex;
 
-static std::vector<std::string> sRequestedRoots;
+struct RootRequest
+{
+    std::string path;
+    bool isPinned = false;
+};
+
+struct DropTarget
+{
+    ImVec2 min;
+    ImVec2 max;
+    s32 frame = -1;
+};
+
+static std::vector<RootRequest> sRequestedRoots;
+
+static DropTarget sDropTarget;
 
 static bool sIsFolderDialogRequested = false;
 
-static std::vector<std::string> TakeRequestedRoots()
+static std::vector<RootRequest> TakeRequestedRoots()
 {
     const std::lock_guard<std::mutex> lock(sRequestedRootMutex);
 
-    std::vector<std::string> roots;
+    std::vector<RootRequest> roots;
     roots.swap(sRequestedRoots);
 
     return roots;
+}
+
+static void UpdateDropTarget()
+{
+    const std::lock_guard<std::mutex> lock(sRequestedRootMutex);
+
+    if (ImGui::GetWindowViewport() != ImGui::GetMainViewport())
+    {
+        sDropTarget.frame = -1;
+        return;
+    }
+
+    const ImVec2 origin = ImGui::GetMainViewport()->Pos;
+
+    sDropTarget.min = ImGui::GetWindowPos() - origin;
+    sDropTarget.max = sDropTarget.min + ImGui::GetWindowSize();
+    sDropTarget.frame = ImGui::GetFrameCount();
 }
 
 bool FilesPanel::isFileShown(const BrowserFile& file) const
@@ -140,7 +173,7 @@ void FilesPanel::drawKindMenu()
 
     for (s32 filter = 0; filter < cKindFilterCount; filter++)
     {
-        sead::FormatFixedSafeString<64> label(messages::files::cKindFilterFormat, cKindFilters[filter].label, counts[filter]);
+        sead::FormatFixedSafeString<64> label(messages::files::cKindFilterFormat, cKindFilters[filter].label, FormatCountText(counts[filter]).cstr());
 
         if (!ContextMenuCheckItem(label.cstr(), mKindShown[filter], counts[filter] > 0))
             continue;
@@ -287,6 +320,9 @@ void FilesPanel::drawFooter(FrameContext& ctx)
 {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().CellPadding.x);
 
+    if (drawSelectionSummary())
+        return;
+
     const u32 total = ctx.totalFileCount;
 
     if (ctx.shownSoundCount > 0)
@@ -297,7 +333,7 @@ void FilesPanel::drawFooter(FrameContext& ctx)
 
     if (ctx.shownFileCount != total)
     {
-        ImGui::TextDisabled(messages::files::cShownFormat, ctx.shownFileCount, total);
+        ImGui::TextDisabled(messages::files::cShownFormat, FormatCountText(ctx.shownFileCount).cstr(), FormatCountText(total).cstr());
         return;
     }
 
@@ -307,12 +343,12 @@ void FilesPanel::drawFooter(FrameContext& ctx)
     if (total == 1)
         ImGui::TextDisabled(messages::files::cSummaryOneFormat, size.cstr());
     else
-        ImGui::TextDisabled(messages::files::cSummaryFormat, total, size.cstr());
+        ImGui::TextDisabled(messages::files::cSummaryFormat, FormatCountText(total).cstr(), size.cstr());
 }
 
 void FilesPanel::drawMatchSummary(const FrameContext& ctx)
 {
-    const sead::FormatFixedSafeString<32> sounds(ctx.shownSoundCount == 1 ? messages::files::cSoundCountOne : messages::files::cSoundCountFormat, ctx.shownSoundCount);
+    const sead::FormatFixedSafeString<32> sounds(ctx.shownSoundCount == 1 ? messages::files::cSoundCountOne : messages::files::cSoundCountFormat, FormatCountText(ctx.shownSoundCount).cstr());
 
     if (ctx.shownFileCount == 0)
     {
@@ -320,9 +356,22 @@ void FilesPanel::drawMatchSummary(const FrameContext& ctx)
         return;
     }
 
-    const sead::FormatFixedSafeString<32> files(ctx.shownFileCount == 1 ? messages::files::cFileCountOne : messages::common::cFileCountFormat, ctx.shownFileCount);
+    const sead::FormatFixedSafeString<32> files(ctx.shownFileCount == 1 ? messages::files::cFileCountOne : messages::common::cFileCountFormat, FormatCountText(ctx.shownFileCount).cstr());
 
     ImGui::TextDisabled(messages::common::cPairFormat, files.cstr(), sounds.cstr());
+}
+
+bool FilesPanel::drawSelectionSummary()
+{
+    if (mSelectedSorted.size() < 2)
+        return false;
+
+    sead::FixedSafeString<32> size;
+    FormatItemSize(&size, mSelectedSize);
+
+    ImGui::TextDisabled(messages::files::cSelectedFormat, FormatCountText(mSelectedSorted.size()).cstr(), size.cstr());
+
+    return true;
 }
 
 static bool IsSelectableRow(const FilesRow& row)
@@ -397,14 +446,60 @@ void FilesPanel::handleKeys(FrameContext& ctx)
         mScrollToSelected = true;
     }
 
+    if (shortcuts::Pressed(shortcuts::Action::SelectAll))
+        selectAll(ctx);
+
+    if (!mSelectedPaths.empty() && shortcuts::Pressed(shortcuts::Action::ClearSelection))
+        clearMultiSelection();
+
     if (current >= 0 && shortcuts::Pressed(shortcuts::Action::ConfirmSelection))
         confirmRow(ctx, mSelected);
 }
 
+bool FilesPanel::isExpandable(const FilesRow& row) const
+{
+    if (isSearching())
+        return row.childCount > 0;
+
+    if (row.kind == FilesRowKind::Root)
+        return getRootFolder(row.root) >= 0;
+
+    return row.kind == FilesRowKind::Folder || row.kind == FilesRowKind::Prefix;
+}
+
+const BrowserFile* FilesPanel::getRowFile(const FilesRow& row) const
+{
+    if (row.root < 0)
+        return nullptr;
+
+    if (row.kind == FilesRowKind::File)
+        return &getFile(row);
+
+    return row.kind == FilesRowKind::Root ? getRootFile(row.root) : nullptr;
+}
+
+bool FilesPanel::isSearching() const
+{
+    return mSearch[0] != '\0';
+}
+
+const std::string& FilesPanel::getSearchKey(const FilesRow& row) const
+{
+    return row.kind == FilesRowKind::Root ? mRoots[row.root].path : getFile(row).path;
+}
+
+bool FilesPanel::isSearchClosed(const std::string& key) const
+{
+    return std::find(mSearchClosed.begin(), mSearchClosed.end(), key) != mSearchClosed.end();
+}
+
 bool FilesPanel::isRowOpen(const FilesRow& row) const
 {
+    if (isSearching())
+        return isExpandable(row) && !isSearchClosed(getSearchKey(row));
+
     if (row.kind == FilesRowKind::Root)
-        return mRoots[row.root].isOpen;
+        return mRoots[row.root].isOpen && isExpandable(row);
 
     if (row.kind == FilesRowKind::Prefix)
     {
@@ -419,6 +514,18 @@ bool FilesPanel::isRowOpen(const FilesRow& row) const
 void FilesPanel::setRowOpen(const FilesRow& row, bool isOpen)
 {
     invalidateRows();
+
+    if (isSearching())
+    {
+        const std::string& key = getSearchKey(row);
+
+        std::erase(mSearchClosed, key);
+
+        if (!isOpen)
+            mSearchClosed.push_back(key);
+
+        return;
+    }
 
     if (row.kind == FilesRowKind::Folder)
     {
@@ -452,7 +559,7 @@ s32 FilesPanel::collapseRow(const FrameContext& ctx, s32 current)
 {
     const FilesRow& row = ctx.rows[current];
 
-    if (!ctx.isSearching && isRowOpen(row))
+    if (isRowOpen(row))
     {
         setRowOpen(row, false);
         return current;
@@ -471,10 +578,10 @@ s32 FilesPanel::expandRow(const FrameContext& ctx, s32 current)
 {
     const FilesRow& row = ctx.rows[current];
 
-    if (row.kind != FilesRowKind::Folder && row.kind != FilesRowKind::Prefix && row.kind != FilesRowKind::Root)
+    if (!isExpandable(row))
         return current;
 
-    if (!ctx.isSearching && !isRowOpen(row))
+    if (!isRowOpen(row))
     {
         setRowOpen(row, true);
         return current;
@@ -487,17 +594,19 @@ s32 FilesPanel::expandRow(const FrameContext& ctx, s32 current)
 
 void FilesPanel::confirmRow(const FrameContext& ctx, const FilesRow& row)
 {
+    if (const BrowserFile* file = getRowFile(row))
+    {
+        openFile(*file);
+        return;
+    }
+
     switch (row.kind)
     {
         case FilesRowKind::Root:
         case FilesRowKind::Folder:
         case FilesRowKind::Prefix:
-            if (!ctx.isSearching)
+            if (isExpandable(row))
                 setRowOpen(row, !isRowOpen(row));
-            break;
-
-        case FilesRowKind::File:
-            openFile(getFile(row));
             break;
 
         case FilesRowKind::Sound:
@@ -511,15 +620,127 @@ void FilesPanel::confirmRow(const FrameContext& ctx, const FilesRow& row)
 
 void FilesPanel::select(const FrameContext& ctx, const FilesRow& row)
 {
+    const BrowserFile* file = getRowFile(row);
+
     mSelected = row;
+    mSelectAnchor = file ? file->path : std::string();
+    clearMultiSelection();
 
     if (!mAutoPlay)
         return;
 
-    if (row.kind == FilesRowKind::File)
-        previewFile(getFile(row));
+    if (file)
+        previewFile(*file);
     else
         mPreview.stop();
+}
+
+void FilesPanel::clickSelection(const FrameContext& ctx, const FilesRow& row, const BrowserFile& file)
+{
+    const BrowserFile* focusFile = getRowFile(mSelected);
+    std::string focus = focusFile ? focusFile->path : std::string();
+
+    const RowSelection<std::string> selection { &mSelectedPaths, &mSelectAnchor, &focus };
+
+    ClickRowSelection(selection, collectSelectablePaths(ctx), file.path, shortcuts::Held(shortcuts::Modifier::ToggleSelection), shortcuts::Held(shortcuts::Modifier::ExtendSelection), true);
+
+    if (focus == file.path)
+        mSelected = row;
+    else if (focus.empty())
+        mSelected = FilesRow();
+
+    onSelectionChanged();
+}
+
+void FilesPanel::selectAll(const FrameContext& ctx)
+{
+    mSelectedPaths = collectSelectablePaths(ctx);
+
+    if (!mSelectedPaths.empty())
+        mSelectAnchor = mSelectedPaths.front();
+
+    onSelectionChanged();
+}
+
+void FilesPanel::clearMultiSelection()
+{
+    mSelectedPaths.clear();
+    mSelectedSorted.clear();
+    mSelectedSize = 0;
+    mCanExportSelection = false;
+}
+
+void FilesPanel::onSelectionChanged()
+{
+    std::vector<std::string> shown = collectSelectablePaths(mFrame);
+    std::sort(shown.begin(), shown.end());
+
+    std::erase_if(mSelectedPaths, [&shown](const std::string& path) { return !std::binary_search(shown.begin(), shown.end(), path); });
+
+    mSelectedSorted = mSelectedPaths;
+    std::sort(mSelectedSorted.begin(), mSelectedSorted.end());
+    mSelectedSorted.erase(std::unique(mSelectedSorted.begin(), mSelectedSorted.end()), mSelectedSorted.end());
+
+    mSelectedSize = 0;
+    mCanExportSelection = false;
+
+    for (const BrowserFile* file : collectSelectedFiles())
+    {
+        mSelectedSize += file->size;
+        mCanExportSelection |= CanExportFileContents(file->probe);
+    }
+}
+
+bool FilesPanel::isPathSelected(const std::string& path) const
+{
+    return std::binary_search(mSelectedSorted.begin(), mSelectedSorted.end(), path);
+}
+
+bool FilesPanel::isRowSelected(const FilesRow& row) const
+{
+    if (mSelectedSorted.empty())
+        return mSelected.isSame(row);
+
+    const BrowserFile* file = getRowFile(row);
+
+    return file && isPathSelected(file->path);
+}
+
+std::vector<std::string> FilesPanel::collectSelectablePaths(const FrameContext& ctx) const
+{
+    std::vector<std::string> paths;
+
+    for (const FilesRow& row : ctx.rows)
+    {
+        if (const BrowserFile* file = getRowFile(row))
+            paths.push_back(file->path);
+    }
+
+    return paths;
+}
+
+std::vector<const BrowserFile*> FilesPanel::collectSelectedFiles() const
+{
+    std::vector<const BrowserFile*> files;
+    std::vector<u8> isCollected(mSelectedSorted.size(), 0);
+
+    for (const FilesRow& row : mFrame.rows)
+    {
+        const BrowserFile* file = getRowFile(row);
+
+        if (!file)
+            continue;
+
+        const auto it = std::lower_bound(mSelectedSorted.begin(), mSelectedSorted.end(), file->path);
+
+        if (it == mSelectedSorted.end() || *it != file->path || isCollected[it - mSelectedSorted.begin()])
+            continue;
+
+        isCollected[it - mSelectedSorted.begin()] = 1;
+        files.push_back(file);
+    }
+
+    return files;
 }
 
 void FilesPanel::setAutoPlay(bool isOn)
@@ -604,10 +825,12 @@ const OpenFileMark* FilesPanel::findOpenFile(const FrameContext& ctx, const std:
 
 void FilesPanel::draw()
 {
+    applyUndo();
     applyPendingAction();
     updateScans();
     mPreview.update();
-    mWavExport.update();
+
+    UpdateDropTarget();
 
     FrameContext& ctx = mFrame;
     ctx.em = ImGui::GetFontSize();
@@ -654,11 +877,23 @@ void LoadFilesPanelConfig()
     sFilesPanel.loadConfig();
 }
 
-void RequestFilesPanelRoot(const char* path)
+void RequestFilesPanelRoot(const char* path, bool isPinned)
 {
     const std::lock_guard<std::mutex> lock(sRequestedRootMutex);
 
-    sRequestedRoots.emplace_back(path);
+    sRequestedRoots.push_back({ path, isPinned });
+}
+
+bool IsFilesPanelDropTarget(f32 x, f32 y)
+{
+    const std::lock_guard<std::mutex> lock(sRequestedRootMutex);
+
+    return sDropTarget.frame >= ImGui::GetFrameCount() - 1 && x >= sDropTarget.min.x && y >= sDropTarget.min.y && x < sDropTarget.max.x && y < sDropTarget.max.y;
+}
+
+void UndoFilesPanelUnpin(u32 token)
+{
+    sFilesPanel.requestUndo(token);
 }
 
 void RequestFilesPanelFolderDialog()
@@ -670,11 +905,19 @@ bool TakeFilesPanelRequests()
 {
     bool isShown = false;
 
-    for (const std::string& root : TakeRequestedRoots())
+    std::vector<std::string> pinPaths;
+
+    for (const RootRequest& request : TakeRequestedRoots())
     {
-        sFilesPanel.openFolder(root);
+        if (request.isPinned)
+            pinPaths.push_back(request.path);
+        else
+            sFilesPanel.addPath(request.path);
+
         isShown = true;
     }
+
+    sFilesPanel.pinPaths(pinPaths);
 
     if (sIsFolderDialogRequested)
     {

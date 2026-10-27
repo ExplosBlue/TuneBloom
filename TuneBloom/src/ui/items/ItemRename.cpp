@@ -45,6 +45,9 @@ bool CanRenameItem(const Item* item)
             return resource && resource->canRenameAsset(*asset);
         }
 
+        case Item::ItemType::WaveFile:
+            return !static_cast<const WaveFile*>(item)->hasStandaloneTarget();
+
         default:
             return IsItemNameOptional(item);
     }

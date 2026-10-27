@@ -1,5 +1,7 @@
 #include <ui/player/PlaybackDrawer.h>
 
+#include <ui/file/Document.h>
+#include <ui/resource/ResourceViews.h>
 #include <ui/widgets/DockNode.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
@@ -14,6 +16,7 @@
 
 #include <imgui/imgui_custom.h>
 
+#include <aal/AudioAsset.h>
 #include <snd/SoundSystem.h>
 
 #include <cmath>
@@ -46,18 +49,26 @@ constexpr f32 cDisplayRowGap       = 4.0f;
 constexpr f32 cDisplayTextRaise    = 1.0f;
 constexpr f32 cDisplaySeekMinEm    = 4.0f;
 constexpr f32 cDisplayLoopHoverMix = 0.4f;
-constexpr f32 cVolumeSliderWidth   = 120.0f;
-constexpr f32 cVolumeSliderMinEm   = 3.0f;
-constexpr f32 cVolumeSliderRatio   = 0.1f;
-constexpr f32 cVolumeValueMinEm    = 40.0f;
-constexpr f32 cVolumeTrackHeight   = 4.0f;
-constexpr f32 cVolumeHandleWidth   = 8.0f;
-constexpr f32 cVolumeHandleHeight  = 16.0f;
-constexpr f32 cVolumeStepDb        = 0.5f;
-constexpr f32 cVolumeWheelStepDb   = 1.0f;
-constexpr f32 cVolumeMeterHeight   = 4.0f;
-constexpr f32 cVolumeMeterGap      = 2.0f;
-constexpr f32 cVolumeMeterOffset   = 3.0f;
+
+constexpr f32 cVolumeSliderMaxEm    = 6.0f;
+constexpr f32 cVolumeSliderMinEm    = 3.0f;
+constexpr f32 cVolumeSliderRatio    = 0.1f;
+constexpr f32 cPlayerVolumeSliderEm = 6.5f;
+constexpr f32 cVolumeValueMinEm     = 40.0f;
+constexpr f32 cVolumeTrackHeightEm  = 0.2f;
+constexpr f32 cVolumeHandleWidthEm  = 0.4f;
+constexpr f32 cVolumeHandleHeightEm = 0.8f;
+constexpr f32 cVolumeStepDb         = 0.5f;
+constexpr f32 cVolumeWheelStepDb    = 1.0f;
+constexpr f32 cVolumeMeterHeightEm  = 0.25f;
+constexpr f32 cVolumeMeterGapEm     = 0.1f;
+constexpr f32 cVolumeMeterOffsetEm  = 0.3f;
+
+enum class TransportRowForm
+{
+    Editor,
+    Player,
+};
 
 static bool sShowRemainingTime = false;
 
@@ -144,8 +155,13 @@ bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
     return seeked;
 }
 
-static const WaveFile* ResolvePrimaryWaveFile(const Sound* sound)
+static const WaveFile* ResolvePrimaryWaveFile(const Item* item)
 {
+    if (item->getItemType() == Item::ItemType::WaveFile)
+        return static_cast<const WaveFile*>(item);
+
+    const Sound* sound = static_cast<const Sound*>(item);
+
     if (sound->getSoundType() == Sound::SoundType::Wave)
         return static_cast<const WaveFile*>(sound->getWaveSoundInfo().getWaveFileRef().getItem());
 
@@ -153,6 +169,39 @@ static const WaveFile* ResolvePrimaryWaveFile(const Sound* sound)
         return sound->getStreamSoundInfo().getMainWave();
 
     return nullptr;
+}
+
+static PlayableFile FindDocumentFile()
+{
+    Document* document = ActiveDocument();
+
+    return document ? document->playableFile() : PlayableFile();
+}
+
+static StreamSource FindLooseDocumentStream()
+{
+    return FindDocumentFile().stream;
+}
+
+static const Item* GetPlayableFileItem(const PlayableFile& file)
+{
+    if (file.stream.isValid())
+        return file.stream.stream->getMainWave();
+
+    if (file.wave)
+        return file.wave;
+
+    return file.asset ? file.asset->getPreviewWave() : nullptr;
+}
+
+static void PlayDocumentFile(const PlayableFile& file)
+{
+    if (file.stream.isValid())
+        sSoundPlayer.playStream(file.stream);
+    else if (file.wave)
+        sSoundPlayer.playWaveFile(*file.wave);
+    else if (file.asset)
+        PlayAudioAsset(file.asset);
 }
 
 const Item* ResolveDisplayItem()
@@ -168,7 +217,10 @@ const Item* ResolveDisplayItem()
     if (sSelectedItem && (sSelectedItem->getItemType() == Item::ItemType::WaveFile || sSelectedItem->getItemType() == Item::ItemType::Sound))
         return sSelectedItem;
 
-    return sSoundPlayer.getLastPlayedSound();
+    if (const Item* fileItem = GetPlayableFileItem(FindDocumentFile()))
+        return fileItem;
+
+    return sSoundPlayer.getLastPlayedItem();
 }
 
 static const char* GetDisplayTypeName(const Item* item)
@@ -292,23 +344,8 @@ static PlaybackProgress BuildPlaybackProgress()
 
     if (!isSeq)
     {
-        const WaveFile* wave = nullptr;
-
-        if (active && sSoundPlayer.getPlayingWaveFile())
-        {
-            wave = sSoundPlayer.getPlayingWaveFile();
-        }
-        else if (sSelectedItem && (sSelectedItem->getItemType() == Item::ItemType::WaveFile || sSelectedItem->getItemType() == Item::ItemType::Sound))
-        {
-            if (sSelectedItem->getItemType() == Item::ItemType::WaveFile)
-                wave = static_cast<WaveFile *>(sSelectedItem);
-            else
-                wave = ResolvePrimaryWaveFile(static_cast<Sound *>(sSelectedItem));
-        }
-        else if (sSoundPlayer.getLastPlayedSound())
-        {
-            wave = ResolvePrimaryWaveFile(sSoundPlayer.getLastPlayedSound());
-        }
+        const Item* item = ResolveDisplayItem();
+        const WaveFile* wave = item ? ResolvePrimaryWaveFile(item) : nullptr;
 
         if (wave)
         {
@@ -344,9 +381,22 @@ static bool DrawTransportButton(const char* id, TransportGlyph glyph, f32 size, 
     return DrawGlyphButton(id, glyph, ImVec2(size, size), size, lit, tint, flags);
 }
 
+static StreamSource FindDisplayLooseStream()
+{
+    if (!sSoundPlayer.isActive())
+        return FindLooseDocumentStream();
+
+    const StreamSource& playing = sSoundPlayer.getPlayingStreamSource();
+
+    return playing.isValid() && !playing.sound ? playing : StreamSource();
+}
+
 bool CanTogglePlayback()
 {
-    return sSoundPlayer.isCurrentPlayer() && (sSoundPlayer.isActive() || sSoundPlayer.getLastPlayedSound());
+    if (sSoundPlayer.isActive() || FindDocumentFile().isValid())
+        return true;
+
+    return sSoundPlayer.isCurrentPlayer() && sSoundPlayer.hasLastPlayed();
 }
 
 void TogglePlayback()
@@ -354,10 +404,24 @@ void TogglePlayback()
     if (!CanTogglePlayback())
         return;
 
-    if (!sSoundPlayer.isActive())
-        sSoundPlayer.playLastSound();
-    else
+    if (sSoundPlayer.isActive())
+    {
         sSoundPlayer.pause(!sSoundPlayer.isPause());
+        return;
+    }
+
+    if (FindDocumentFile().isValid())
+        PlayActiveDocumentFile();
+    else
+        sSoundPlayer.playLastSound();
+}
+
+void PlayActiveDocumentFile()
+{
+    const PlayableFile file = FindDocumentFile();
+
+    if (file.isValid())
+        PlayDocumentFile(file);
 }
 
 static void SetRemainingTimeShown(bool shown)
@@ -396,8 +460,8 @@ static void DrawTransportButtons(f32 size)
 
     if (!canTransport)
         ImGui::SetItemTooltip("%s", messages::playback::cNothingToPlay);
-    else if (!sSoundPlayer.isActive() && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
-        ImGui::SetTooltip(messages::playback::cLastSoundFormat, sSoundPlayer.getLastPlayedSound()->getFormattedName().cstr());
+    else if (!sSoundPlayer.isActive() && !FindDocumentFile().isValid() && ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip))
+        ImGui::SetTooltip(messages::playback::cLastSoundFormat, sSoundPlayer.getLastPlayedItem()->getFormattedName().cstr());
 
     ImGui::SameLine();
 
@@ -513,9 +577,9 @@ static void FormatDisplayRegion(sead::BufferedSafeString* out, const StreamFileL
 
 static f32 DrawDisplayRegion(const ImVec2& pos, f32 pad)
 {
-    const Sound* sound = sSoundPlayer.getPlayingSound();
-    const s32 regionNo = sound ? sSoundPlayer.getPlayingStreamRegion() : -1;
-    const StreamFileLayout* layout = regionNo != -1 ? sound->getStreamSoundInfo().getFileLayout() : nullptr;
+    const Sound::StreamSoundInfo* stream = sSoundPlayer.getPlayingStream();
+    const s32 regionNo = stream ? sSoundPlayer.getPlayingStreamRegion() : -1;
+    const StreamFileLayout* layout = regionNo != -1 ? stream->getFileLayout() : nullptr;
 
     if (!layout || regionNo >= static_cast<s32>(layout->regions.size()))
         return pos.x;
@@ -613,12 +677,14 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     f32 infoLeft = right - ImGui::CalcTextSize(ICON_LC_REPEAT).x;
     DrawDisplayLoop(progress, ImVec2(infoLeft, row1));
 
-    const Item* item = ResolveDisplayItem();
+    const StreamSource looseStream = FindDisplayLooseStream();
+    const Item* item = looseStream.isValid() ? nullptr : ResolveDisplayItem();
+    const bool hasDisplay = item || looseStream.isValid();
 
     // Type and sample rate
-    if (large && item)
+    if (large && hasDisplay)
     {
-        sead::FixedSafeString<64> info(GetDisplayTypeName(item));
+        sead::FixedSafeString<64> info(item ? GetDisplayTypeName(item) : messages::common::cStream);
 
         if (progress.sampleRate != 0)
         {
@@ -637,8 +703,16 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
 
     if (nameRight > nameLeft)
     {
-        const sead::FixedSafeString<256> name = item ? item->getFormattedName() : sead::FixedSafeString<256>(sSoundPlayer.isActive() ? "" : messages::playback::cNoSound);
-        const bool bright = item && sSoundPlayer.isActive();
+        sead::FixedSafeString<256> name(sSoundPlayer.isActive() ? "" : messages::playback::cNoSound);
+
+        if (item && item == GetPlayableFileItem(FindDocumentFile()))
+            name = ActiveDocument()->displayName().c_str();
+        else if (item)
+            name = item->getFormattedName();
+        else if (looseStream.isValid())
+            name = looseStream.getDisplayName();
+
+        const bool bright = hasDisplay && sSoundPlayer.isActive();
 
         ImGui::PushStyleColor(ImGuiCol_Text, bright ? ImGui::GetStyleColorVec4(ImGuiCol_Text) : GetItemValueColor());
         ImGui::RenderTextEllipsis(draw, ImVec2(nameLeft, row1), ImVec2(nameRight, row1 + em), nameRight, nameRight, name.cstr(), nullptr, nullptr);
@@ -768,10 +842,16 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
 {
     const f32 spacing = ImGui::GetStyle().ItemSpacing.x;
     const f32 em = ImGui::GetFontSize();
-    const f32 metersHeight = cVolumeMeterHeight * 2.0f + cVolumeMeterGap;
+
+    const f32 trackHeight = ImFloor(em * cVolumeTrackHeightEm);
+    const ImVec2 handleSize(ImFloor(em * cVolumeHandleWidthEm), ImFloor(em * cVolumeHandleHeightEm));
+    const f32 meterHeight = ImFloor(em * cVolumeMeterHeightEm);
+    const f32 meterGap = ImFloor(em * cVolumeMeterGapEm);
+    const f32 meterOffset = ImFloor(em * cVolumeMeterOffsetEm);
+    const f32 groupHeight = (em + handleSize.y) * 0.5f + meterOffset + meterHeight * 2.0f + meterGap;
 
     const ImVec2 min = ImGui::GetCursorScreenPos();
-    const f32 top = ImFloor(min.y + (height - em - cVolumeMeterOffset - metersHeight) * 0.5f);
+    const f32 top = ImFloor(min.y + (height - groupHeight) * 0.5f);
 
     ImGui::PushID("##master");
 
@@ -782,8 +862,8 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
 
     // Fader
     const ImVec2 faderMin(min.x + ImGui::CalcTextSize(ICON_LC_VOLUME_2).x + spacing, top);
-    const f32 trackStart = faderMin.x + cVolumeHandleWidth * 0.5f;
-    const f32 trackWidth = faderWidth - cVolumeHandleWidth;
+    const f32 trackStart = faderMin.x + handleSize.x * 0.5f;
+    const f32 trackWidth = faderWidth - handleSize.x;
 
     ImGui::SetCursorScreenPos(faderMin);
     ImGui::InvisibleButton("##vol", ImVec2(faderWidth, em));
@@ -825,12 +905,16 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
     else if (!hovered)
         handleColor = GetItemValueColor();
 
-    draw->AddRectFilled(ImVec2(trackStart, centerY - cVolumeTrackHeight * 0.5f), ImVec2(trackStart + trackWidth, centerY + cVolumeTrackHeight * 0.5f), GetTrackColorU32(ImGui::GetColorU32(hovered || held ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg)), cVolumeTrackHeight * 0.5f);
-    draw->AddRectFilled(ImVec2(trackStart, centerY - cVolumeTrackHeight * 0.5f), ImVec2(handleX, centerY + cVolumeTrackHeight * 0.5f), ImGui::GetColorU32(fillColor), cVolumeTrackHeight * 0.5f);
-    draw->AddRectFilled(ImVec2(handleX - cVolumeHandleWidth * 0.5f, centerY - cVolumeHandleHeight * 0.5f), ImVec2(handleX + cVolumeHandleWidth * 0.5f, centerY + cVolumeHandleHeight * 0.5f), ImGui::GetColorU32(handleColor), 2.0f);
+    const f32 trackTop = centerY - trackHeight * 0.5f;
+    const f32 trackBottom = trackTop + trackHeight;
+    const ImVec2 handleMin(handleX - handleSize.x * 0.5f, centerY - handleSize.y * 0.5f);
+
+    draw->AddRectFilled(ImVec2(faderMin.x, trackTop), ImVec2(faderMin.x + faderWidth, trackBottom), GetTrackColorU32(ImGui::GetColorU32(hovered || held ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg)), trackHeight * 0.5f);
+    draw->AddRectFilled(ImVec2(faderMin.x, trackTop), ImVec2(handleX, trackBottom), ImGui::GetColorU32(fillColor), trackHeight * 0.5f);
+    draw->AddRectFilled(handleMin, handleMin + handleSize, ImGui::GetColorU32(handleColor), 2.0f);
 
     // Output meter
-    DrawOutputMeterRows(ImVec2(trackStart, top + em + cVolumeMeterOffset), trackWidth, cVolumeMeterHeight, cVolumeMeterGap);
+    DrawOutputMeterRows(ImVec2(trackStart, handleMin.y + handleSize.y + meterOffset), trackWidth, meterHeight, meterGap);
 
     // Value
     if (showValue)
@@ -838,7 +922,9 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
         char value[16];
         FormatMasterVolume(value, sizeof(value));
 
-        draw->AddText(ImVec2(faderMin.x + faderWidth + spacing, top), GetDisplayValueColor(), value);
+        const f32 valueRight = faderMin.x + faderWidth + spacing + ImGui::CalcTextSize(messages::playback::cVolumeWidest).x;
+
+        draw->AddText(ImVec2(valueRight - ImGui::CalcTextSize(value).x, top), GetDisplayValueColor(), value);
     }
 
     ImGui::PopID();
@@ -922,8 +1008,10 @@ static void UpdatePlayerBarHeight(f32 transportHeight, f32 drawerHeight)
     SetDockNodeHeight(node, height);
 }
 
-static void DrawTransportRow(f32 height)
+static void DrawTransportRow(f32 height, TransportRowForm form)
 {
+    const bool showOverrides = form == TransportRowForm::Editor;
+
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
     const PlaybackProgress progress = BuildPlaybackProgress();
@@ -935,18 +1023,18 @@ static void DrawTransportRow(f32 height)
     const f32 buttonSize = ImFloor(em * cTransportButtonEm);
     const f32 buttonsWidth = buttonSize * 2.0f + style.ItemSpacing.x;
 
-    const bool showVolumeValue = availWidth >= em * cVolumeValueMinEm;
-    const f32 faderWidth = sead::Mathf::clamp2(em * cVolumeSliderMinEm, availWidth * cVolumeSliderRatio, cVolumeSliderWidth);
+    const bool showVolumeValue = form == TransportRowForm::Editor && availWidth >= em * cVolumeValueMinEm;
+    const f32 faderWidth = form == TransportRowForm::Player ? ImFloor(em * cPlayerVolumeSliderEm) : sead::Mathf::clamp2(em * cVolumeSliderMinEm, availWidth * cVolumeSliderRatio, ImFloor(em * cVolumeSliderMaxEm));
     const f32 masterWidth = MasterVolumeWidth(faderWidth, showVolumeValue);
-    const f32 overridesWidth = CalcPlaybackOverrideButtonsWidth();
+    const f32 overridesWidth = showOverrides ? CalcPlaybackOverrideButtonsWidth() + gap : 0.0f;
 
-    const f32 fixedWidth = buttonsWidth + overridesWidth + masterWidth + gap * 3.0f;
+    const f32 fixedWidth = buttonsWidth + overridesWidth + masterWidth + gap * 2.0f;
     const f32 displayWidth = sead::Mathf::clamp2(em * cDisplayMinWidthEm, availWidth - fixedWidth, em * cDisplayMaxWidthEm);
 
     const f32 buttonsX = origin.x + ImFloor(sead::Mathf::max((availWidth - fixedWidth - displayWidth) * 0.5f, 0.0f));
     const f32 displayX = buttonsX + buttonsWidth + gap;
     const f32 overridesX = displayX + displayWidth + gap;
-    const f32 masterX = overridesX + overridesWidth + gap;
+    const f32 masterX = displayX + displayWidth + gap + overridesWidth;
 
     ImGui::SetCursorScreenPos(ImVec2(buttonsX, origin.y + ImFloor((height - buttonSize) * 0.5f)));
     DrawTransportButtons(buttonSize);
@@ -954,8 +1042,11 @@ static void DrawTransportRow(f32 height)
     ImGui::SetCursorScreenPos(ImVec2(displayX, origin.y));
     DrawTransportDisplay(progress, displayWidth, height);
 
-    ImGui::SetCursorScreenPos(ImVec2(overridesX, origin.y + ImFloor((height - ImGui::GetFrameHeight()) * 0.5f)));
-    DrawPlaybackOverrideButtons();
+    if (showOverrides)
+    {
+        ImGui::SetCursorScreenPos(ImVec2(overridesX, origin.y + ImFloor((height - ImGui::GetFrameHeight()) * 0.5f)));
+        DrawPlaybackOverrideButtons();
+    }
 
     ImGui::SetCursorScreenPos(ImVec2(masterX, origin.y));
     DrawMasterVolume(faderWidth, height, showVolumeValue);
@@ -972,12 +1063,12 @@ static void DrawTransportWindow()
         if (win && win->DockNode)
             win->DockNode->LocalFlags |= ImGuiDockNodeFlags_NoResize;
 
-        const f32 height = ImFloor(ImGui::GetFontSize() * cTransportHeightEm);
+        const f32 height = CalcTransportRowHeight();
         const f32 drawerWidth = ImGui::GetContentRegionAvail().x;
         const PlaybackDrawerLayout drawerLayout = CalcPlaybackDrawerLayout();
 
         DrawPlaybackDrawer(drawerLayout, CalcPlaybackDrawerHeight(drawerLayout, drawerWidth));
-        DrawTransportRow(height);
+        DrawTransportRow(height, TransportRowForm::Editor);
         UpdatePlayerBarHeight(height, CalcPlaybackDrawerHeight(drawerLayout, drawerWidth));
     }
     ImGui::End();
@@ -987,5 +1078,17 @@ void DrawPlayerUI()
 {
     HandleTransportShortcuts();
     DrawTransportWindow();
+    sSoundPlayer.update();
+}
+
+f32 CalcTransportRowHeight()
+{
+    return ImFloor(ImGui::GetFontSize() * cTransportHeightEm);
+}
+
+void DrawCompactPlayerBar()
+{
+    HandleTransportShortcuts();
+    DrawTransportRow(CalcTransportRowHeight(), TransportRowForm::Player);
     sSoundPlayer.update();
 }

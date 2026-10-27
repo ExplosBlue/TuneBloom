@@ -122,5 +122,10 @@ const char* GetAudioAssetKindExtension(AudioAssetKind kind);
 AudioAssetKind DetectAudioAssetKind(const std::vector<u8>& file);
 bool ReadAudioAssetBwav(const AudioAssetFile& file, aal::Bwav* out);
 bool IsReadableFwav(const std::vector<u8>& file);
-WaveFile* ReadFwavFile(const std::vector<u8>& file);
+WaveFile* ReadFwavFile(const void* data, size_t size);
+
+inline WaveFile* ReadFwavFile(const std::vector<u8>& file)
+{
+    return ReadFwavFile(file.data(), file.size());
+}
 bool DecodeAudioFile(const AudioAssetFile& file, DecodedPcm* out);

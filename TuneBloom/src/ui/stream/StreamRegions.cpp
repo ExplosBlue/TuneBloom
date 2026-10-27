@@ -64,7 +64,7 @@ enum class RegionAlign
 
 struct RegionTable
 {
-    Sound* sound;
+    StreamSource source;
     WaveFile* wave;
     StreamFileLayout* layout;
     u32 sampleRate;
@@ -328,7 +328,7 @@ static void DrawRegionRow(const RegionTable& view, s32 regionNo, RegionEdit* edi
         BeginItemActionCell();
 
         if (DrawRowPlayButton(static_cast<u32>(regionNo), view.playbackError, regionNo == view.playingNo))
-            sSoundPlayer.playStreamRegion(view.sound, regionNo);
+            sSoundPlayer.playStreamRegion(view.source, regionNo);
 
         EndItemActionCell();
     }
@@ -397,7 +397,7 @@ static void DrawRegionTable(RegionTable& view, RegionEdit* edit)
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(cRegionColumn_Name);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextDisabled("%s", view.sound ? messages::stream::cRegionNone : messages::stream::cTrackNoSound);
+        ImGui::TextDisabled("%s", view.source.isValid() ? messages::stream::cRegionNone : messages::stream::cTrackNoSound);
     }
 
     for (s32 regionNo = 0; regionNo < regionCount; regionNo++)
@@ -466,23 +466,15 @@ static void ApplyRegionEdit(const RegionTable& view, const RegionEdit& edit)
         ImGui::OpenPopup("###RegionNameInvalid");
 }
 
-static bool HasRegionSupport(const Sound* sound)
-{
-    if (ActiveSoundArchive().getFormat() != ArchiveFormat::BFSAR)
-        return false;
-
-    return !sound || sound->getStreamSoundInfo().getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary;
-}
-
 static const char* FindRegionEditReason(const RegionTable& view, sead::BufferedSafeString* text)
 {
-    if (!HasRegionSupport(view.sound))
+    if (!view.source.hasRegionSupport())
     {
         text->format(messages::stream::cRegionTypeUnsupportedFormat, GetInnerFileDisplayName(ArchiveFormat::BFSAR, InnerFileKind::Stream));
         return text->cstr();
     }
 
-    if (!view.sound)
+    if (!view.source.isValid())
         return messages::stream::cTrackNoSound;
 
     return view.wave ? nullptr : messages::stream::cRegionNoWave;
@@ -490,15 +482,15 @@ static const char* FindRegionEditReason(const RegionTable& view, sead::BufferedS
 
 static void SetupRegionTable(RegionTable* view, sead::BufferedSafeString* editReason, sead::BufferedSafeString* addReason, sead::BufferedSafeString* playbackError)
 {
-    view->sound = GetSelectedStreamSound();
-    view->wave = view->sound ? view->sound->getStreamSoundInfo().getMainWave() : nullptr;
+    view->source = GetActiveStreamSource();
+    view->wave = view->source.isValid() ? view->source.stream->getMainWave() : nullptr;
     view->playingNo = -1;
     view->nextNo = -1;
     view->tableId = ImGui::GetID("RegionTable");
     view->editReason = FindRegionEditReason(*view, editReason);
     view->addReason = view->editReason;
 
-    if (view->sound && SoundPlayer::GetSoundPlaybackError(*view->sound, playbackError))
+    if (view->source.isValid() && SoundPlayer::GetStreamPlaybackError(view->source, playbackError))
         view->playbackError = playbackError->cstr();
 
     if (!view->wave)
@@ -526,12 +518,17 @@ static void DockBesideTracksAtFirstUse()
         ImGui::SetNextWindowDockID(tracksWindow->DockId, ImGuiCond_FirstUseEver);
 }
 
-static s32 GetSelectedRegionNum()
+static s32 GetRegionNum(const StreamSource& source)
 {
-    const Sound* sound = GetSelectedStreamSound();
-    const StreamFileLayout* layout = sound ? sound->getStreamSoundInfo().getFileLayout() : nullptr;
+    const StreamFileLayout* layout = source.isValid() && source.hasRegionSupport() ? source.stream->getFileLayout() : nullptr;
 
     return layout ? static_cast<s32>(layout->regions.size()) : -1;
+}
+
+static void DrawRegionPopups()
+{
+    WarningPopup("###RegionNameInvalid", messages::stream::cRegionNameInvalidDetail);
+    DrawStreamRegionImportDialog();
 }
 
 void DrawStreamRegionsWindow()
@@ -542,7 +539,7 @@ void DrawStreamRegionsWindow()
     DockBesideTracksAtFirstUse();
 
     const TabRowTitle title = { ICON_LC_FLAG, messages::common::cRegions, "###StreamRegionsWindow", 2 };
-    const s32 regionNum = HasRegionSupport(GetSelectedStreamSound()) ? GetSelectedRegionNum() : -1;
+    const s32 regionNum = GetRegionNum(GetActiveStreamSource());
 
     sead::FixedSafeString<64> name;
     FormatTabRowTitle(&name, title, regionNum);
@@ -558,7 +555,7 @@ void DrawStreamRegionsWindow()
     RegionTable view = {};
     SetupRegionTable(&view, &editReason, &addReason, &playbackError);
 
-    SetTabRowDisabled(HasRegionSupport(view.sound) ? nullptr : view.editReason);
+    SetTabRowDisabled(view.source.hasRegionSupport() ? nullptr : view.editReason);
 
     RegionEdit edit;
     bool toggleFold = false;
@@ -574,9 +571,26 @@ void DrawStreamRegionsWindow()
     }
 
     ApplyRegionEdit(view, edit);
-
-    WarningPopup("###RegionNameInvalid", messages::stream::cRegionNameInvalidDetail);
-    DrawStreamRegionImportDialog();
+    DrawRegionPopups();
 
     ImGui::End();
+}
+
+void DrawStreamRegionsSection()
+{
+    sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
+    sead::FixedSafeString<96> editReason;
+    sead::FixedSafeString<96> addReason;
+
+    RegionTable view = {};
+    SetupRegionTable(&view, &editReason, &addReason, &playbackError);
+
+    RegionEdit edit;
+
+    BeginTitleRowTools(messages::common::cRegions, CalcTabRowToolsWidth(cRegionToolNum));
+    DrawRegionTools(view, false, &edit);
+    DrawRegionTable(view, &edit);
+
+    ApplyRegionEdit(view, edit);
+    DrawRegionPopups();
 }

@@ -117,7 +117,7 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
             return nullptr;
 
         sEncoding = WaveFile::Encoding::DspAdpcm;
-        GetFileStem(&sFileName, sRiffWaveInfo.path);
+        fileio::GetFileStem(&sFileName, sRiffWaveInfo.path);
 
         if (MatchesInnerFileExtension(sRiffWaveInfo.path.cstr(), InnerFileKind::Wave))
         {
@@ -201,7 +201,12 @@ void RequestWaveFileReplace(WaveFile* wave)
 
     sEncoding = WaveFile::Encoding::DspAdpcm;
     sImportWaveFile = wave;
-    GetFileStem(&sWavFileName, sRiffWaveInfo.path);
+    fileio::GetFileStem(&sWavFileName, sRiffWaveInfo.path);
+}
+
+bool IsWaveFileReplacePending(const WaveFile* wave)
+{
+    return wave && sImportWaveFile == wave;
 }
 
 void RequestWaveFileReimport(WaveFile* wave)
@@ -449,6 +454,18 @@ void DrawWaveFilesUI()
     );
 }
 
+static const char* FormatRegionsPastEndWarning(sead::BufferedSafeString* out)
+{
+    const u32 count = sImportWaveFile ? sImportWaveFile->getStreamFileLayout().countRegionsAfter(CalcWaveImportOutputLength(sRiffWaveInfo)) : 0;
+
+    if (count == 0)
+        return nullptr;
+
+    out->format(count == 1 ? messages::stream::cRegionsPastEndOneFormat : messages::stream::cRegionsPastEndFormat, count);
+
+    return out->cstr();
+}
+
 void DrawWaveFileReplacePopup()
 {
     if (sImportWaveFile && !sRiffWaveInfo.path.isEmpty())
@@ -461,9 +478,11 @@ void DrawWaveFileReplacePopup()
 
     if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_REPLACE " %s###WavImport", messages::import::cReplaceWaveFileMenuLabel).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
+        sead::FixedSafeString<96> regionWarning;
+
         const WaveImportResult result = DrawWaveImportBody(
             sead::FormatFixedSafeString<560>(messages::import::cWaveReplaceHeaderFormat, sWavFileName.cstr()).cstr(),
-            &sEncoding, &sRiffWaveInfo, messages::common::cReplace);
+            &sEncoding, &sRiffWaveInfo, messages::common::cReplace, FormatRegionsPastEndWarning(&regionWarning));
 
         if (result == WaveImportResult::Commit)
         {
@@ -479,8 +498,10 @@ void DrawWaveFileReplacePopup()
 
             if (success)
             {
-                sImportWaveFile->getName() = sWavFileName;
-                TrimStreamRegions(sImportWaveFile);
+                if (CanRenameItem(sImportWaveFile))
+                    sImportWaveFile->getName() = sWavFileName;
+
+                RemoveStreamRegionsPastEnd(sImportWaveFile);
                 SetUnsavedChanges(true);
             }
         }
@@ -512,7 +533,7 @@ void DrawWavRegionDropImport()
         sDropEncoding = WaveFile::Encoding::DspAdpcm;
         sDropTarget = static_cast<BankFile::VelocityRegion*>(sWavDropTargetVel);
 
-        GetFileStem(&sDropName, sDropInfo.path);
+        fileio::GetFileStem(&sDropName, sDropInfo.path);
 
         const bool ok = WaveFile::readRiffWavInfo(&sDropInfo);
 

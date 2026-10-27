@@ -1,11 +1,18 @@
 #pragma once
 
 #include <bfsar/files/InnerFile.h>
+#include <bfsar/files/StreamWaveOwner.h>
 #include <bfsar/model/Sound.h>
 #include <bfsar/model/StateHash.h>
 
 #include <filedevice/seadFileDevice.h>
 #include <prim/seadEndian.h>
+
+namespace nw { namespace snd { namespace internal {
+
+class StreamSoundFileReader;
+
+} } }
 
 class BfstmFile
 {
@@ -26,13 +33,19 @@ public:
         return version >= 0x00040000; // FSTM
     }
 
-    static u32 GetFileVersion(const Sound::StreamSoundInfo &soundInfo, u32 archiveVersion, ArchiveFormat format);
+    static u32 GetFileVersion(const Sound::StreamSoundInfo &soundInfo, const InnerFileTarget &target);
 
-    static bool WriteBfstmFile(sead::FileHandle &handle, const Sound::StreamSoundInfo &soundInfo, u32 archiveVersion, sead::Endian::Types endian, ArchiveFormat format = ArchiveFormat::BFSAR);
-    static u64 ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, u32 archiveVersion, sead::Endian::Types endian, ArchiveFormat format);
+    static bool WriteBfstmFile(sead::FileHandle &handle, const Sound::StreamSoundInfo &soundInfo, const InnerFileTarget &target);
+    static u64 ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, const InnerFileTarget &target);
     static bool IsComplete(const void *data, u32 size);
 };
 
+bool ReadStreamFileTracks(nw::snd::internal::StreamSoundFileReader &reader, Sound::StreamSoundInfo &soundInfo, sead::Heap *heap);
+void ApplyStreamTrackLayout(Sound::StreamSoundInfo &soundInfo, u32 trackCount, u32 channelCount);
+u32 GetDefaultStreamTrackCount(u32 channelCount);
+bool StreamWavesCoverLayout(const Sound::StreamSoundInfo &soundInfo);
+
+bool ReadStreamWaves(StreamWaveOwner &owner, Sound::StreamSoundInfo &soundInfo, const sead::SafeString &streamName, const void *strmFile, u32 strmFileSize);
 bool ReadStreamWaves(Bfsar &archive, Sound *sound, const void *strmFile, u32 strmFileSize, const Sound *srcSound);
 void MixWaveChannelData(StateHash &hash, const WaveFile &wave);
 

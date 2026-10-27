@@ -281,7 +281,7 @@ void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
 
     bool enableStreamSoundExtension = strmSoundInfo.isEnableStreamSoundExtension();
     bool changed = false;
-    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Extension", messages::stream::cExtensionTitle).cstr(), &enableStreamSoundExtension, &changed);
+    const bool open = BeginSoundSection(sead::FormatFixedSafeString<64>("%s###Extension", messages::common::cExtension).cstr(), &enableStreamSoundExtension, &changed);
 
     if (changed)
     {

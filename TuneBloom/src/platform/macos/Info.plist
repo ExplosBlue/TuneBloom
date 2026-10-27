@@ -100,6 +100,62 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
+            <string>Nintendo Stream (BFSTM)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>bfstm</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Nintendo Stream (BCSTM)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>bcstm</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Nintendo Wave (BFWAV)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>bfwav</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Nintendo Wave (BCWAV)</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>CFBundleTypeIconFile</key>
+            <string>icon</string>
+            <key>CFBundleTypeExtensions</key>
+            <array>
+                <string>bcwav</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeName</key>
             <string>Compressed File (zs)</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>

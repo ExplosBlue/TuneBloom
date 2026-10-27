@@ -6,6 +6,7 @@
 
 class Sound;
 class SoundSet;
+struct StreamSource;
 
 void DrawAllSoundsUI();
 void DrawStreamSoundsUI();
@@ -40,8 +41,9 @@ void InsertSoundIntoSet(SoundSet* targetSet, Sound* newSound, Item* afterItem);
 void InsertSoundAtHook(Item *afterItem, Item *newItem);
 void RemoveSoundWithCascade(Item *item);
 
-void DrawStreamTracksUI(Sound* sound);
-bool DrawStreamTracksTabRow(Sound* sound);
+void DrawStreamTracksUI(const StreamSource& source);
+bool DrawStreamTracksTabRow(const StreamSource& source);
+void DrawStreamTracksSection(const StreamSource& source, f32 height);
 void HighlightStreamTrack(Item* track);
 
 bool IsTrackMixerView();

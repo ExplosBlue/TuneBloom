@@ -31,6 +31,7 @@ struct Snapshot
 };
 
 void Update();
+const char* GetFailureTitle();
 void OnClean();
 void OnDocumentClosed();
 void KeepPreviousVersion(const char* destPath = nullptr);

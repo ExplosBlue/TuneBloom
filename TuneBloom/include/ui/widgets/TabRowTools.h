@@ -10,6 +10,8 @@ f32 CalcTabRowToolsWidth(s32 toolNum);
 bool BeginTabRowTools(ImGuiDockNode* node, f32 toolsWidth);
 void EndTabRowTools();
 
+void BeginTitleRowTools(const char* title, f32 toolsWidth);
+
 bool DrawTabRowTool(const char* label, bool inTabBar);
 bool DrawTabRowCommand(const char* label, const char* tooltip, const char* disabledReason, bool inTabBar);
 

@@ -207,7 +207,7 @@ static void ImportPendingSequenceFile()
         return;
 
     sead::FixedSafeString<256> fileName;
-    GetFileStem(&fileName, path);
+    fileio::GetFileStem(&fileName, path);
 
     SequenceFile* sequence = new SequenceFile();
     sequence->setArchive(&archive);

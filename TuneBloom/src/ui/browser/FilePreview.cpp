@@ -4,6 +4,8 @@
 #include <browser/FileProbe.h>
 #include <ui/player/PlayerViews.h>
 #include <bfsar/player/SoundPlayer.h>
+#include <bfsar/files/LooseStreamFile.h>
+#include <bfsar/files/LooseWaveFile.h>
 #include <bfsar/files/WaveFile.h>
 
 static WaveFile* BuildPcmWave(const DecodedPcm& pcm)
@@ -17,12 +19,9 @@ static WaveFile* BuildPcmWave(const DecodedPcm& pcm)
     return nullptr;
 }
 
-void DecodeAudioFileAt(DecodedAudioFile* file)
+void DecodeAudioBytes(DecodedAudioFile* file)
 {
-    if (!ReadFileContents(file->path, &file->bytes))
-        return;
-
-    if (DetectAudioAssetKind(file->bytes) == AudioAssetKind::Fwav)
+    if (LooseWaveFile::IsWaveFile(file->bytes.data(), static_cast<u32>(file->bytes.size())))
     {
         file->isWaveFile = true;
         file->isDecoded = true;
@@ -31,6 +30,21 @@ void DecodeAudioFileAt(DecodedAudioFile* file)
 
     const AudioAssetFile data = std::make_shared<const std::vector<u8>>(std::move(file->bytes));
     file->isDecoded = DecodeAudioFile(data, &file->pcm);
+}
+
+static void ReadPreviewFileAt(DecodedAudioFile* file)
+{
+    if (!ReadFileContents(file->path, &file->bytes))
+        return;
+
+    if (LooseStreamFile::IsStreamFile(file->bytes.data(), static_cast<u32>(file->bytes.size())))
+    {
+        file->isStream = true;
+        file->isDecoded = true;
+        return;
+    }
+
+    DecodeAudioBytes(file);
 }
 
 WaveFile* BuildDecodedWave(const DecodedAudioFile& file)
@@ -49,9 +63,16 @@ WaveFile* BuildDecodedWave(const DecodedAudioFile& file)
     return wave;
 }
 
+FilePreview::FilePreview() = default;
+
+FilePreview::~FilePreview() = default;
+
 void FilePreview::play(const std::string& path, const std::string& name)
 {
     releaseWave();
+
+    if (sSoundPlayer.isActive())
+        sSoundPlayer.reset();
 
     mRequestedPath = path;
     mRequestedName = name;
@@ -86,7 +107,13 @@ void FilePreview::update()
 
 bool FilePreview::isPlaying(const std::string& path) const
 {
-    return mWave && mWavePath == path && sSoundPlayer.isActive() && !sSoundPlayer.getPlayingSound() && sSoundPlayer.getPlayingWaveFile() == mWave;
+    if (mWavePath != path || !sSoundPlayer.isActive())
+        return false;
+
+    if (mStream)
+        return sSoundPlayer.getPlayingStream() == &mStream->getStream();
+
+    return mWave && !sSoundPlayer.getPlayingSound() && sSoundPlayer.getPlayingWaveFile() == mWave;
 }
 
 void FilePreview::startDecode()
@@ -99,11 +126,47 @@ void FilePreview::startDecode()
 
     mJob.start([decoding]()
     {
-        DecodeAudioFileAt(decoding);
+        ReadPreviewFileAt(decoding);
     });
 }
 
-void FilePreview::startPlayback(const DecodedAudioFile& decoded)
+void FilePreview::startPlayback(DecodedAudioFile& decoded)
+{
+    if (decoded.isStream)
+    {
+        if (startStream(decoded))
+            return;
+
+        decoded.isStream = false;
+        DecodeAudioBytes(&decoded);
+    }
+
+    startWave(decoded);
+}
+
+bool FilePreview::startStream(const DecodedAudioFile& decoded)
+{
+    std::unique_ptr<LooseStreamFile> stream = std::make_unique<LooseStreamFile>();
+    sead::FixedSafeString<256> error;
+
+    if (!stream->open(decoded.bytes.data(), static_cast<u32>(decoded.bytes.size()), sead::FixedSafeString<512>(decoded.path.c_str()), &error))
+        return false;
+
+    sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
+
+    if (SoundPlayer::GetStreamPlaybackError(stream->getStreamSource(), &playbackError))
+        return true;
+
+    mStream = std::move(stream);
+    mWavePath = decoded.path;
+
+    if (sSoundPlayer.playStream(mStream->getStreamSource()))
+        sSoundPlayer.disownPlayback();
+
+    return true;
+}
+
+void FilePreview::startWave(const DecodedAudioFile& decoded)
 {
     WaveFile* wave = BuildDecodedWave(decoded);
 
@@ -127,13 +190,20 @@ void FilePreview::startPlayback(const DecodedAudioFile& decoded)
 
 void FilePreview::releaseWave()
 {
-    if (!mWave)
-        return;
+    if (mStream)
+    {
+        sSoundPlayer.forgetStream(&mStream->getStream());
+        mStream.reset();
+    }
 
-    if (sSoundPlayer.getPlayingWaveFile() == mWave)
-        sSoundPlayer.reset();
+    if (mWave)
+    {
+        if (sSoundPlayer.getPlayingWaveFile() == mWave)
+            sSoundPlayer.reset();
 
-    delete mWave;
-    mWave = nullptr;
+        delete mWave;
+        mWave = nullptr;
+    }
+
     mWavePath.clear();
 }

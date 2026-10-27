@@ -375,6 +375,7 @@ public:
     u64 computeStateSignature() const override;
 
     void drawUI() override;
+    void drawEditorUI(bool fillHeight);
 
     void setup(sead::Endian::Types endian) const
     {
@@ -388,6 +389,23 @@ public:
     }
 
     InnerFileTarget getTarget() const;
+    bool writeFile(const sead::SafeString& path) const;
+
+    bool hasStandaloneTarget() const
+    {
+        return mStandaloneTarget.has_value();
+    }
+
+    sead::FixedSafeString<256> getFormattedName() const override
+    {
+        if (!hasStandaloneTarget())
+            return Item::getFormattedName();
+
+        sead::FixedSafeString<256> name;
+        name.copy(getNameOrNull());
+
+        return name;
+    }
 
 private:
     bool doRead(const void* fileAddr) override;
@@ -534,6 +552,14 @@ public:
             size += mChannels.nth(i)->getDataSizeMin();
 
         return size + 0x100;
+    }
+
+    void setLoop(bool isLoop, u32 loopStartFrame, u32 loopEndFrame)
+    {
+        mIsLoop = isLoop;
+        mLoopStartFrame = loopStartFrame;
+        mLoopEndFrame = loopEndFrame;
+        mIsLoopDirty = true;
     }
 
     void updateLoop();

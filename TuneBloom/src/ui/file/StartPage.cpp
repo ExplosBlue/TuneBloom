@@ -66,7 +66,7 @@ static void OpenDiscord()
 }
 
 static const StartRow cFileRows[] = {
-    { ICON_LC_FILE,        messages::common::cNewArchive,  GetNewArchiveShortcut,  RequestNewFile },
+    { ICON_LC_FILE,        messages::common::cNewFile,     GetNewArchiveShortcut,  RequestNewFile },
     { ICON_LC_FOLDER_OPEN, messages::common::cOpenArchive, GetOpenArchiveShortcut, OpenArchive },
 };
 
@@ -163,17 +163,8 @@ static bool DrawStartRecent(const ImVec2& size, std::string* outPath)
 
     if (BeginStartChild("##StartRecent", size))
     {
-        const f32 width = ImGui::GetContentRegionAvail().x;
-
-        if (HasPinnedFiles())
-        {
-            DrawSectionTitle(messages::common::cPinned, width);
-            open |= DrawPinnedFilesTable(outPath);
-            DrawStartGap(ImFloor(ImGui::GetFontSize() * cStartGapEm));
-        }
-
-        DrawSectionTitle(messages::common::cRecentFiles, width);
-        open |= DrawRecentFilesTable(outPath);
+        DrawSectionTitle(messages::common::cRecentFiles, ImGui::GetContentRegionAvail().x);
+        open = DrawRecentFilesTable(outPath);
     }
     ImGui::EndChild();
 

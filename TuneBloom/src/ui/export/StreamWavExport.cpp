@@ -56,9 +56,9 @@ static void DecodeWaveFileChannels(const WaveFile* wave, std::vector<std::vector
     }
 }
 
-const WaveFile* FindStreamExportWave(const Sound* sound)
+const WaveFile* FindStreamExportWave(const Sound::StreamSoundInfo& stream)
 {
-    const auto& trackList = sound->getStreamSoundInfo().getTrackList();
+    const auto& trackList = stream.getTrackList();
 
     for (auto it = trackList.robustBegin(); it != trackList.robustEnd(); ++it)
     {
@@ -142,10 +142,10 @@ static void ResampleChannels(std::vector<std::vector<s16>>& channels, u32 srcRat
     }
 }
 
-static std::vector<StreamRegion> MakeExportRegions(const Sound* sound, u32 sampleRate, size_t sampleCount)
+static std::vector<StreamRegion> MakeExportRegions(const Sound::StreamSoundInfo& stream, u32 sampleRate, size_t sampleCount)
 {
     std::vector<StreamRegion> regions;
-    const WaveFile* mainWave = sound->getStreamSoundInfo().getMainWave();
+    const WaveFile* mainWave = stream.getMainWave();
 
     if (!mainWave || mainWave->getSampleRate() == 0)
         return regions;
@@ -164,11 +164,11 @@ static std::vector<StreamRegion> MakeExportRegions(const Sound* sound, u32 sampl
     return regions;
 }
 
-bool ExportStreamSoundToWav(Sound* sound, const char* path, bool multiChannel, u32 loopCount, f32 fadeSec, u32 targetRate, bool loopMarkers)
+bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool multiChannel, u32 loopCount, f32 fadeSec, u32 targetRate, bool loopMarkers)
 {
-    const WaveFile* loopWave = FindStreamExportWave(sound);
+    const WaveFile* loopWave = FindStreamExportWave(stream);
 
-    auto& trackList = sound->getStreamSoundInfo().getTrackList();
+    auto& trackList = stream.getTrackList();
 
     std::vector<std::vector<std::vector<s16>>> trackChannels;
     std::vector<u32> trackSampleRates;
@@ -226,7 +226,7 @@ bool ExportStreamSoundToWav(Sound* sound, const char* path, bool multiChannel, u
         ApplyLoopAndFade(allChannels, loop.start, loop.end, loopCount, static_cast<u32>(fadeSec * sampleRate));
     }
 
-    const std::vector<StreamRegion> regions = MakeExportRegions(sound, sampleRate, allChannels.empty() ? 0 : allChannels[0].size());
+    const std::vector<StreamRegion> regions = MakeExportRegions(stream, sampleRate, allChannels.empty() ? 0 : allChannels[0].size());
 
     if (multiChannel)
     {

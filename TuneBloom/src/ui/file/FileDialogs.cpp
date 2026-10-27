@@ -31,21 +31,22 @@ static std::vector<std::string> BuildFilterList(u32 filterCount, const FileFilte
     return list;
 }
 
+static bool UseCapturePath(sead::BufferedSafeString* outPath, const char* capturePath)
+{
+    if (!capturePath)
+        return false;
+
+    outPath->copy(capturePath);
+    return true;
+}
+
 bool OpenFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 filterCount, FileFilter* filters)
 {
     LOG_FMT("title=\"%s\" filterCount=%u", title ? title : "nullptr", filterCount);
     SEAD_ASSERT(outPath);
 
     if (testhooks::IsEnabled())
-    {
-        const char* capturePath = testhooks::GetOpenFilePath();
-
-        if (!capturePath)
-            return false;
-
-        outPath->copy(capturePath);
-        return true;
-    }
+        return UseCapturePath(outPath, testhooks::GetOpenFilePath());
 
     const std::vector<std::string> filtersVec = BuildFilterList(filterCount, filters);
 
@@ -115,7 +116,7 @@ bool SelectFolderDialog(sead::BufferedSafeString* outPath, const char* title)
     SEAD_ASSERT(outPath);
 
     if (testhooks::IsEnabled())
-        return false;
+        return UseCapturePath(outPath, testhooks::GetSaveFilePath());
 
     std::string result;
 #if defined(SEAD_PLATFORM_MACOSX)
@@ -167,7 +168,7 @@ bool SaveFileDialog(sead::BufferedSafeString* outPath, const char* title, u32 fi
     SEAD_ASSERT(outPath);
 
     if (testhooks::IsEnabled())
-        return false;
+        return UseCapturePath(outPath, testhooks::GetSaveFilePath());
 
     std::string defaultPath;
     if (defaultName && *defaultName)

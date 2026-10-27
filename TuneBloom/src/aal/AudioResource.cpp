@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <memory>
 #include <unordered_map>
 
 namespace fs = std::filesystem;
@@ -74,27 +75,61 @@ static void UpdateMetaFromInfo(AudioAsset* asset)
 static bool WriteWaveFileBytes(const WaveFile& wave, std::vector<u8>* out)
 {
     const sead::FormatFixedSafeString<fileio::cPathLengthMax> tempPath("%s/tunebloom_resource_wave_%p.bin", fileio::GetTempFolder(), static_cast<const void*>(&wave));
-    const InnerFileTarget target = wave.getTarget();
 
-    {
-        sead::FileHandle handle;
-
-        if (!fileio::OpenForWrite(&handle, tempPath))
-            return false;
-
-        {
-            sead::FileDeviceWriteStream stream(&handle, sead::Stream::Modes::eBinary);
-            wave.setup(target.endian);
-            wave.write(&handle, &stream, target.endian, true);
-        }
-
-        handle.close();
-    }
+    if (!wave.writeFile(tempPath))
+        return false;
 
     const bool isRead = fileio::ReadWholeFile(tempPath.cstr(), out);
     fileio::RemoveFile(tempPath.cstr());
 
     return isRead && !out->empty();
+}
+
+static bool StoreWaveFile(AudioAsset* asset, const WaveFile& wave, const char** outError)
+{
+    std::vector<u8> bytes;
+
+    if (!WriteWaveFileBytes(wave, &bytes))
+    {
+        *outError = messages::resource::cEncodeFailed;
+        return false;
+    }
+
+    asset->setFile(MakeAssetFile(std::move(bytes)));
+    UpdateMetaFromInfo(asset);
+
+    return true;
+}
+
+static bool SetWaveFileLoop(AudioAsset* asset, bool isLoop, u32 loopStartFrame, const char** outError)
+{
+    const AudioAssetFile file = asset->getFile();
+    std::unique_ptr<WaveFile> wave(ReadFwavFile(*file));
+
+    if (!wave)
+    {
+        *outError = messages::resource::cAudioDamaged;
+        return false;
+    }
+
+    const u32 sampleCount = wave->getSampleCount();
+
+    if (isLoop && loopStartFrame >= sampleCount)
+    {
+        *outError = messages::wavefile::cInvalidLoopRange;
+        return false;
+    }
+
+    const InnerFileTarget target = wave->getTarget();
+    const u32 alignment = WaveFile::isOriginalLoopAvailable(target.format, target.version) ? 0 : wave->getLoopStartAlignmentFrames(false);
+
+    if (alignment > 1)
+        loopStartFrame -= loopStartFrame % alignment;
+
+    wave->setLoop(isLoop, isLoop ? loopStartFrame : 0, sampleCount);
+    wave->updateLoop();
+
+    return StoreWaveFile(asset, *wave, outError);
 }
 
 static bool ReadWavPcm(const WaveFile::RiffWaveInfo& info, std::vector<std::vector<s16>>* out, u32* outLoopStartFrame, const char** outError)
@@ -1138,9 +1173,17 @@ bool AudioResource::canReplaceAudio(const AudioAsset& asset, const char** outRea
 
 bool AudioResource::canSetLoop(const AudioAsset& asset, const char** outReason) const
 {
-    if (asset.getInfo().kind != AudioAssetKind::Bwav)
+    const AudioAssetKind kind = asset.getInfo().kind;
+
+    if (kind != AudioAssetKind::Bwav && kind != AudioAssetKind::Fwav)
     {
-        *outReason = messages::resource::cLoopNeedsBwav;
+        *outReason = messages::resource::cLoopUnsupported;
+        return false;
+    }
+
+    if (asset.getInfo().channelCount == 0)
+    {
+        *outReason = messages::resource::cAudioDamaged;
         return false;
     }
 
@@ -1182,18 +1225,7 @@ bool AudioResource::replaceAudio(AudioAsset* asset, const WaveFile::RiffWaveInfo
 
         wave.updateLoop();
 
-        std::vector<u8> bytes;
-
-        if (!WriteWaveFileBytes(wave, &bytes))
-        {
-            *outError = messages::resource::cEncodeFailed;
-            return false;
-        }
-
-        asset->setFile(MakeAssetFile(std::move(bytes)));
-        UpdateMetaFromInfo(asset);
-
-        return true;
+        return StoreWaveFile(asset, wave, outError);
     }
 
     std::vector<std::vector<s16>> pcm;
@@ -1305,6 +1337,9 @@ bool AudioResource::setLoop(AudioAsset* asset, bool isLoop, u32 loopStartFrame, 
 {
     if (!canSetLoop(*asset, outError))
         return false;
+
+    if (asset->getInfo().kind == AudioAssetKind::Fwav)
+        return SetWaveFileLoop(asset, isLoop, loopStartFrame, outError);
 
     aal::Bwav bwav;
 

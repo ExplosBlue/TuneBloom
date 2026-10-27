@@ -122,17 +122,17 @@ static bool IsFwavChannelInBounds(const ByteView& view, u64 channelInfo, u64 inf
     return channelInfo + view.readU32(channelInfo + cFwavChannelAdpcmRef + cNwReferenceOffset) + cFwavAdpcmInfoSize <= infoEnd;
 }
 
-static bool IsFwavInBounds(const std::vector<u8>& file)
+static bool IsFwavInBounds(const u8* file, size_t size)
 {
-    if (file.size() < cNwHeaderSize || !ByteView::IsByteOrderMark(file.data(), file.size(), cNwHeaderByteOrder))
+    if (size < cNwHeaderSize || !ByteView::IsByteOrderMark(file, size, cNwHeaderByteOrder))
         return false;
 
-    const ByteView view(file.data(), file.size(), ByteView::IsBigEndianMark(file.data(), file.size(), cNwHeaderByteOrder));
+    const ByteView view(file, size, ByteView::IsBigEndianMark(file, size, cNwHeaderByteOrder));
 
     NwBlock info;
     NwBlock data;
 
-    if (view.readU32(cNwHeaderFileSize) > file.size() ||
+    if (view.readU32(cNwHeaderFileSize) > size ||
         !FindNwBlock(view, nw::snd::internal::ElementType_WaveFile_InfoBlock, &info) ||
         !FindNwBlock(view, nw::snd::internal::ElementType_WaveFile_DataBlock, &data))
         return false;
@@ -165,20 +165,22 @@ static bool IsFwavInBounds(const std::vector<u8>& file)
     return true;
 }
 
-WaveFile* ReadFwavFile(const std::vector<u8>& file)
+WaveFile* ReadFwavFile(const void* data, size_t size)
 {
-    if (!IsFwavInBounds(file))
+    const u8* file = static_cast<const u8*>(data);
+
+    if (!IsFwavInBounds(file, size))
         return nullptr;
 
     WaveFile* wave = new WaveFile();
 
-    if (!wave->read(file.data()) || wave->getChannels().isEmpty())
+    if (!wave->read(file) || wave->getChannels().isEmpty())
     {
         delete wave;
         return nullptr;
     }
 
-    wave->setStandaloneTarget({ FindInnerFileFormat(file.data(), InnerFileKind::Wave)->format, wave->getVersion(), wave->getEndian() });
+    wave->setStandaloneTarget({ FindInnerFileFormat(file, InnerFileKind::Wave)->format, wave->getVersion(), wave->getEndian() });
 
     return wave;
 }

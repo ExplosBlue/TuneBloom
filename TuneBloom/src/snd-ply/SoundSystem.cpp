@@ -1,5 +1,9 @@
 #include "snd/SoundSystem.h"
 
+#include <core/TestHooks.h>
+
+#include <cstring>
+
 #include "snd/SoundThread.h"
 #include "snd/VoiceImpl.h"
 #include "snd/DriverCommand.h"
@@ -51,7 +55,7 @@ u32 SoundSystem::sSynthesizeBufferSize = 0;
 //static void OboeInit(sead::Heap* heap);
 //static void OboeQuit();
 
-static void InitSDK(sead::Heap* heap);
+static void InitSDK(const SoundSystem::SoundSystemParam& param);
 static void QuitSDK();
 
 void SoundSystem::initialize(const SoundSystemParam& param, sead::Heap* heap)
@@ -134,7 +138,7 @@ void SoundSystem::initialize(const SoundSystemParam& param, sead::Heap* heap)
     //internal::AxVoice::setSamplesPerSec(AX_IN_SAMPLES_PER_SEC);
 
     //OboeInit(heap);
-    InitSDK(heap);
+    InitSDK(param);
 
     sIsInitialized = true;
 }
@@ -325,8 +329,12 @@ f32* SoundSystem::calcFFT()
     return sFFTData;
 }
 
+static constexpr f32 cOutputIdleSeconds = 3.0f;
+
 static u32 sOutputSampleRate = 48000;
 static ma_device device;
+static bool sIsOutputHeld = false;
+static f32 sOutputIdleTime = 0.0f;
 
 static ma_context sContext;
 static bool sContextReady = false;
@@ -417,18 +425,37 @@ static void DataCallback(ma_device* pDevice, void* pOutput, const void*, ma_uint
             }
         }
     }
+
+    if (testhooks::IsEnabled())
+        std::memset(outData, 0, sizeof(f32) * frameCount * cChannelCount);
 }
 
-static void InitSDK(sead::Heap* heap)
+static s32 FindPlaybackDevice(const char* name)
 {
-    sead::CurrentHeapSetter chs(heap);
-    sOutputSampleRate = internal::driver::HardwareMgr::cSampleRate;
+    if (!name || !*name)
+        return 0;
+
+    for (ma_uint32 i = 0; i < sPlaybackInfoCount; i++)
+    {
+        if (strcmp(sPlaybackInfos[i].name, name) == 0)
+            return static_cast<s32>(i + 1);
+    }
+
+    return -1;
+}
+
+static void InitSDK(const SoundSystem::SoundSystemParam& param)
+{
+    sead::CurrentHeapSetter chs(sead::HeapMgr::getUnboundHeap());
+    sOutputSampleRate = param.output_sample_rate != 0 ? param.output_sample_rate : internal::driver::HardwareMgr::cSampleRate;
 
     if (ma_context_init(nullptr, 0, nullptr, &sContext) == MA_SUCCESS)
     {
         sContextReady = true;
         ma_context_get_devices(&sContext, &sPlaybackInfos, &sPlaybackInfoCount, nullptr, nullptr);
     }
+
+    sSelectedPlaybackDevice = sead::Mathi::max(FindPlaybackDevice(param.playback_device_name), 0);
 
     InitDevice();
 }
@@ -444,14 +471,64 @@ static void QuitSDK()
     }
 }
 
+static void StopOutput()
+{
+    if (ma_device_is_started(&device))
+        ma_device_stop(&device);
+}
+
+static void StartOutput()
+{
+    if (ma_device_get_state(&device) != ma_device_state_uninitialized && !ma_device_is_started(&device))
+        ma_device_start(&device);
+}
+
+static bool IsOutputWanted()
+{
+    if (internal::DriverCommand::instance()->getCommandListCount() > 0 || internal::DriverCommandForTaskThread::instance()->getCommandListCount() > 0)
+        return true;
+
+    internal::driver::SoundThreadLock lock;
+
+    return internal::driver::SoundThread::instance()->hasPlayerCallback()
+        || internal::driver::ChannelMgr::instance()->getChannelCount() > 0
+        || internal::driver::MultiVoiceMgr::instance()->getActiveCount() > 0;
+}
+
 void SoundSystem::pauseAudio()
 {
-    ma_device_stop(&device);
+    sIsOutputHeld = true;
+    StopOutput();
 }
 
 void SoundSystem::resumeAudio()
 {
-    ma_device_start(&device);
+    sIsOutputHeld = false;
+    sOutputIdleTime = 0.0f;
+    StartOutput();
+}
+
+bool SoundSystem::isOutputRunning()
+{
+    return ma_device_is_started(&device);
+}
+
+void SoundSystem::updateIdleOutput(f32 deltaTime)
+{
+    if (sIsOutputHeld || !sIsInitialized)
+        return;
+
+    if (IsOutputWanted())
+    {
+        sOutputIdleTime = 0.0f;
+        StartOutput();
+        return;
+    }
+
+    sOutputIdleTime += deltaTime;
+
+    if (sOutputIdleTime >= cOutputIdleSeconds)
+        StopOutput();
 }
 
 void SoundSystem::setOutputSampleRate(u32 rate)
@@ -524,20 +601,10 @@ void SoundSystem::setPlaybackDevice(u32 index)
 
 void SoundSystem::setPlaybackDeviceByName(const char *name)
 {
-    if (!name || !*name)
-    {
-        setPlaybackDevice(0);
-        return;
-    }
+    const s32 index = FindPlaybackDevice(name);
 
-    for (ma_uint32 i = 0; i < sPlaybackInfoCount; i++)
-    {
-        if (strcmp(sPlaybackInfos[i].name, name) == 0)
-        {
-            setPlaybackDevice(i + 1);
-            return;
-        }
-    }
+    if (index >= 0)
+        setPlaybackDevice(static_cast<u32>(index));
 }
 
 SoundSystem::OutputInfo SoundSystem::getOutputInfo()

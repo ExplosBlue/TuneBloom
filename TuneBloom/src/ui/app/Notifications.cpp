@@ -52,6 +52,9 @@ struct Entry
     Kind kind = Kind::Info;
     sead::FixedSafeString<192> title;
     sead::FixedSafeString<512> detail;
+    sead::FixedSafeString<32> actionLabel;
+    ActionCallback actionCallback = nullptr;
+    u32 actionToken = 0;
     std::time_t time = 0;
     u32 serial = 0;
 
@@ -69,6 +72,9 @@ struct Pending
     Kind kind = Kind::Info;
     sead::FixedSafeString<192> title;
     sead::FixedSafeString<512> detail;
+    sead::FixedSafeString<32> actionLabel;
+    ActionCallback actionCallback = nullptr;
+    u32 actionToken = 0;
 };
 
 // Oldest first
@@ -111,7 +117,7 @@ static f32 GetToastSeconds(Kind kind)
     return kind == Kind::Warning ? cToastWarningSeconds : cToastSeconds;
 }
 
-void Add(Kind kind, const char* title, const char* text)
+void Add(Kind kind, const char* title, const char* text, const Action& action)
 {
     if (!title || title[0] == '\0')
         return;
@@ -125,9 +131,19 @@ void Add(Kind kind, const char* title, const char* text)
     pending.kind = kind;
     pending.title.cutOffCopy(title);
     pending.detail.cutOffCopy(text ? text : "");
+    pending.actionLabel.cutOffCopy(action.callback && action.label ? action.label : "");
+    pending.actionCallback = action.callback;
+    pending.actionToken = action.token;
 }
 
-static void AddEntry(const Pending& pending)
+static void CopyAction(const Pending& pending, Entry* entry)
+{
+    entry->actionLabel.copy(pending.actionLabel);
+    entry->actionCallback = pending.actionCallback;
+    entry->actionToken = pending.actionToken;
+}
+
+static void AddEntry(const Pending& pending, bool showToasts)
 {
     if (sEntryNum != 0)
     {
@@ -137,6 +153,7 @@ static void AddEntry(const Pending& pending)
         {
             last.age = 0.0f;
             last.time = std::time(nullptr);
+            CopyAction(pending, &last);
             return;
         }
     }
@@ -154,19 +171,20 @@ static void AddEntry(const Pending& pending)
     entry.kind = pending.kind;
     entry.title.copy(pending.title);
     entry.detail.copy(pending.detail);
+    CopyAction(pending, &entry);
     entry.time = std::time(nullptr);
     entry.serial = sNextSerial++;
     entry.isUnread = !sListOpen;
-    entry.isToast = !sListOpen;
+    entry.isToast = !sListOpen && showToasts;
 }
 
-static void TakePending()
+static void TakePending(bool showToasts)
 {
     {
         std::lock_guard<std::mutex> lock(sPendingMutex);
 
         for (s32 i = 0; i < sPendingNum; i++)
-            AddEntry(sPending[i]);
+            AddEntry(sPending[i], showToasts);
 
         sPendingNum = 0;
     }
@@ -180,10 +198,10 @@ static void TakePending()
         if (!entry.isToast || entry.isClosing)
             continue;
 
-        if (++toastNum <= cToastMax)
+        if (showToasts && ++toastNum <= cToastMax)
             continue;
 
-        if (entry.alpha <= 0.0f)
+        if (!showToasts || entry.alpha <= 0.0f)
             entry.isToast = false;
         else
             entry.isClosing = true;
@@ -235,6 +253,20 @@ static f32 CalcToastBottom(const ImGuiViewport* viewport)
     return top;
 }
 
+static bool DrawToastAction(const Entry& entry, const ImVec2& pos, bool* isHovered)
+{
+    ImGui::SetCursorPos(pos);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_CheckMark));
+
+    const bool isPressed = ImGui::SmallButton(entry.actionLabel.cstr());
+
+    ImGui::PopStyleColor();
+
+    *isHovered = ImGui::IsItemHovered();
+
+    return isPressed;
+}
+
 static f32 DrawToast(Entry& entry, const ImGuiViewport* viewport, f32 right, f32 bottom, bool animated)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
@@ -275,10 +307,22 @@ static f32 DrawToast(Entry& entry, const ImGuiViewport* viewport, f32 right, f32
 
         const f32 closeSize = em;
         const ImVec2 start = ImGui::GetCursorPos();
+        const bool hasAction = entry.actionCallback != nullptr;
+        const f32 actionWidth = hasAction ? ImGui::CalcTextSize(entry.actionLabel.cstr()).x + style.FramePadding.x * 2.0f + style.ItemSpacing.x : 0.0f;
+        const f32 closeX = ImGui::GetWindowContentRegionMax().x - closeSize;
 
-        DrawEntryText(entry, closeSize + style.ItemSpacing.x);
+        DrawEntryText(entry, closeSize + style.ItemSpacing.x + actionWidth);
 
-        ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - closeSize, start.y));
+        bool isActionHovered = false;
+
+        if (hasAction && DrawToastAction(entry, ImVec2(closeX - actionWidth, start.y), &isActionHovered))
+        {
+            entry.actionCallback(entry.actionToken);
+            entry.actionCallback = nullptr;
+            close = true;
+        }
+
+        ImGui::SetCursorPos(ImVec2(closeX, start.y));
 
         if (ImGui::InvisibleButton("##Close", ImVec2(closeSize, closeSize)))
             close = true;
@@ -291,7 +335,7 @@ static f32 DrawToast(Entry& entry, const ImGuiViewport* viewport, f32 right, f32
 
         hovered = ImGui::IsWindowHovered();
 
-        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        if (hovered && !isActionHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             close = true;
     }
 
@@ -518,11 +562,13 @@ f32 DrawBell(f32 right, f32 top, f32 bottom)
     return width;
 }
 
-void Draw()
+void Draw(bool showToasts)
 {
-    TakePending();
+    TakePending(showToasts);
     DrawList();
-    DrawToasts();
+
+    if (showToasts)
+        DrawToasts();
 }
 
 }

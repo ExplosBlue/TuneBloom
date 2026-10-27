@@ -5,6 +5,7 @@
 #include <ui/items/ItemList.h>
 #include <ui/widgets/Knob.h>
 #include <ui/wave/LoopWaveformEditor.h>
+#include <ui/wave/WaveformBox.h>
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/app/PopupMgr.h>
@@ -22,9 +23,6 @@
 #include <vector>
 
 static constexpr f32 cWaveViewHeightEm   = 7.0f;
-static constexpr f32 cWaveTitleGapEm     = 0.3f;
-static constexpr f32 cLoopFieldWidthEm   = 7.0f;
-static constexpr f32 cLoopDragRange      = 2000.0f;
 static constexpr u32 cWaveViewMaxSamples = 12000000;
 
 class AudioAssetPanel
@@ -50,7 +48,7 @@ private:
     void drawName(const FrameContext& ctx);
     void drawWaveformBox(FrameContext& ctx);
     void drawWaveCanvas(FrameContext& ctx);
-    void drawLoopSection(FrameContext& ctx);
+    void drawLoopFields(FrameContext& ctx);
     void drawAudioBox(const FrameContext& ctx);
     void drawStreamBox(const FrameContext& ctx);
     void drawMetadataBox(const FrameContext& ctx);
@@ -176,7 +174,6 @@ void AudioAssetPanel::draw(AudioAsset* asset)
 
     drawName(ctx);
     drawWaveformBox(ctx);
-    drawLoopSection(ctx);
     drawAudioBox(ctx);
 
     if (asset->isStream())
@@ -200,23 +197,12 @@ void AudioAssetPanel::drawName(const FrameContext& ctx)
 
 void AudioAssetPanel::drawWaveCanvas(FrameContext& ctx)
 {
-    sead::FixedSafeString<96> readout;
-
-    if (ctx.info->isLoop && mLoopEndFrame > mLoopStartFrame)
-    {
-        u32 minutes = 0;
-        f64 seconds = 0.0;
-        SplitSampleTime(mLoopEndFrame - mLoopStartFrame, ctx.info->sampleRate, &minutes, &seconds);
-
-        readout.format(messages::wavefile::cLoopReadoutFormat, minutes, seconds);
-    }
-
     const f32 playheadSample = ctx.playing ? static_cast<f32>(sSoundPlayer.getPlaySamplePosition(true)) : -1.0f;
     const ImGui::LoopWaveformState::Dragging dragBefore = mState.dragging;
     f64 seekSample = -1.0;
 
     ImGui::LoopWaveformEditor("asset", mState, mMono, ctx.info->sampleRate, mLoopStartFrame, mLoopEndFrame, playheadSample, ctx.info->isLoop, ctx.canSetLoop,
-                              readout.cstr(), ImVec2(0.0f, ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm)), true, &seekSample);
+                              nullptr, ImVec2(0.0f, ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm)), true, &seekSample);
 
     if (dragBefore == ImGui::LoopWaveformState::Dragging::Start && mState.dragging != dragBefore && mLoopStartFrame != ctx.info->loopStartFrame)
         commitLoop(ctx, true, mLoopStartFrame);
@@ -231,12 +217,9 @@ void AudioAssetPanel::drawWaveformBox(FrameContext& ctx)
         return;
 
     const f32 buttonSize = ImGui::GetFrameHeight();
-    const ImVec2 headerPos = ImGui::GetCursorScreenPos();
 
-    RegionHeader(messages::wavefile::cWaveform, buttonSize + ImGui::GetStyle().ItemSpacing.x);
-
-    ImGui::SameLine();
-    ImGui::SetCursorScreenPos(ImVec2(headerPos.x + ImGui::GetContentRegionAvail().x - buttonSize, headerPos.y));
+    if (BeginWaveformHeader(buttonSize, ctx.info->isLoop, ctx.canSetLoop ? nullptr : ctx.loopReason))
+        commitLoop(ctx, !ctx.info->isLoop, ctx.info->loopStartFrame);
 
     sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
     const bool canPlay = !ctx.asset->getPlaybackError(&playbackError);
@@ -245,80 +228,35 @@ void AudioAssetPanel::drawWaveformBox(FrameContext& ctx)
 
     if (PlayToggleButton(ctx.playing ? TransportGlyph::Stop : TransportGlyph::Play, "###Play", ImVec2(buttonSize, buttonSize), ctx.playing))
     {
-        const WaveFile* wave = ctx.playing ? nullptr : ctx.asset->getPreviewWave();
-
         if (ctx.playing)
             sSoundPlayer.fadeOutPlayers();
-        else if (wave)
-            sSoundPlayer.playWaveFile(*wave, -1, nullptr, 0, false);
+        else
+            PlayAudioAsset(ctx.asset);
     }
 
     ImGui::EndDisabled();
     ImGui::SetItemTooltip("%s", canPlay ? (ctx.playing ? messages::common::cStop : messages::common::cPlay) : playbackError.cstr());
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(ImGui::GetFontSize() * cWaveTitleGapEm));
+    EndWaveformHeader();
 
     if (mMono.empty())
         ImGui::TextDisabled("%s", mTooLong ? messages::wavefile::cTooLong : (canPlay ? messages::wavefile::cNoData : playbackError.cstr()));
     else
         drawWaveCanvas(ctx);
 
+    drawLoopFields(ctx);
+
     EndPropertyBox();
 }
 
-void AudioAssetPanel::drawLoopSection(FrameContext& ctx)
+void AudioAssetPanel::drawLoopFields(FrameContext& ctx)
 {
-    bool isLoop = ctx.info->isLoop;
-    bool toggled = false;
+    u32 loopEndFrame = mLoopEndFrame;
+    const LoopFieldsResult fields = DrawLoopFields(&mLoopStartFrame, &loopEndFrame, ctx.info->sampleCount, ctx.info->sampleRate, ctx.canSetLoop && ctx.info->isLoop,
+                                                   messages::resource::cLoopEndFixed);
 
-    const sead::FormatFixedSafeString<64> title("%s###AssetLoop", messages::common::cLoop);
-    const char* state = ctx.canSetLoop ? nullptr : (isLoop ? messages::common::cOn : messages::common::cOff);
-    const bool open = BeginPropertySection(title.cstr(), ctx.canSetLoop ? &isLoop : nullptr, &toggled, true, 1, nullptr, state);
-
-    if (toggled)
-        commitLoop(ctx, isLoop, ctx.info->loopStartFrame);
-
-    if (!open)
-        return;
-
-    if (!ctx.canSetLoop)
-    {
-        ImGui::PushTextWrapPos(0.0f);
-        ImGui::TextDisabled("%s", ctx.loopReason);
-        ImGui::PopTextWrapPos();
-    }
-
-    if (!ctx.canSetLoop && !ctx.info->isLoop)
-    {
-        EndPropertySection();
-        return;
-    }
-
-    ImGui::BeginDisabled(!ctx.canSetLoop || !ctx.info->isLoop);
-
-    const u32 minFrame = 0;
-    const u32 maxFrame = ctx.info->sampleCount > 0 ? ctx.info->sampleCount - 1 : 0;
-    u32 loopStartFrame = mLoopStartFrame;
-
-    PropertyRow(messages::common::cStart);
-    ImGui::SetNextItemWidth(ImFloor(ImGui::GetFontSize() * cLoopFieldWidthEm));
-    DragField("##LoopStart", ImGuiDataType_U32, &loopStartFrame, sead::Mathf::max(1.0f, static_cast<f32>(maxFrame) / cLoopDragRange), &minFrame, &maxFrame);
-
-    const bool commit = ImGui::IsItemDeactivatedAfterEdit();
-    mLoopStartFrame = loopStartFrame;
-
-    ImGui::SameLine();
-    ImGui::TextDisabled("%s", messages::common::cSamples);
-
-    ImGui::EndDisabled();
-
-    if (commit && loopStartFrame != ctx.info->loopStartFrame)
-        commitLoop(ctx, true, loopStartFrame);
-
-    PropertyRow(messages::common::cEnd, ctx.info->kind == AudioAssetKind::Bwav ? messages::resource::cLoopEndFixed : nullptr);
-    ImGui::TextDisabled(messages::wavefile::cSamplesFormat, ctx.info->sampleCount);
-
-    EndPropertySection();
+    if (fields.startCommit && mLoopStartFrame != ctx.info->loopStartFrame)
+        commitLoop(ctx, true, mLoopStartFrame);
 }
 
 void AudioAssetPanel::drawAudioBox(const FrameContext& ctx)

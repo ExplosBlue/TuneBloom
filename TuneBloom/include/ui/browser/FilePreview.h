@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+class LooseStreamFile;
 class WaveFile;
 
 struct DecodedAudioFile
@@ -16,15 +17,19 @@ struct DecodedAudioFile
     std::vector<u8> bytes;
     DecodedPcm pcm;
     bool isWaveFile = false;
+    bool isStream = false;
     bool isDecoded = false;
 };
 
-void DecodeAudioFileAt(DecodedAudioFile* file);
+void DecodeAudioBytes(DecodedAudioFile* file);
 WaveFile* BuildDecodedWave(const DecodedAudioFile& file);
 
 class FilePreview
 {
 public:
+    FilePreview();
+    ~FilePreview();
+
     void play(const std::string& path, const std::string& name);
     void stop();
     void update();
@@ -32,7 +37,9 @@ public:
 
 private:
     void startDecode();
-    void startPlayback(const DecodedAudioFile& decoded);
+    void startPlayback(DecodedAudioFile& decoded);
+    bool startStream(const DecodedAudioFile& decoded);
+    void startWave(const DecodedAudioFile& decoded);
     void releaseWave();
 
     BackgroundJob mJob;
@@ -40,5 +47,6 @@ private:
     std::string mRequestedPath;
     std::string mRequestedName;
     WaveFile* mWave = nullptr;
+    std::unique_ptr<LooseStreamFile> mStream;
     std::string mWavePath;
 };

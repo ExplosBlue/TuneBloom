@@ -51,6 +51,8 @@ void RegisterOutputMeterSettings();
 void DrawOutputMeterWindow();
 bool IsOutputMeterWindowVisible();
 void SetOutputMeterWindowVisible(bool visible);
+bool TakeOutputMeterPlaceRequest();
+f32 CalcOutputMeterWindowHeight();
 void DrawOutputMeterBar(const OutputMeter::ChannelState& state, const ImVec2& min, const ImVec2& max, bool horizontal);
 void DrawOutputMeterRows(const ImVec2& min, f32 width, f32 rowHeight, f32 gap);
 f32 OutputMeterDbToPosition(f32 db);

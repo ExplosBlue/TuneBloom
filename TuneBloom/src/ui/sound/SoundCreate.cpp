@@ -17,6 +17,7 @@
 
 #include <bfsar/model/Sound.h>
 #include <bfsar/files/WaveFile.h>
+#include <bfsar/io/FileIo.h>
 
 #include <filedevice/seadPath.h>
 
@@ -82,7 +83,7 @@ static Item* FirstItem(const Item::List& list)
 static void SuggestNameFromPath(const sead::SafeString& path)
 {
     sead::FixedSafeString<512> name;
-    GetFileStem(&name, path);
+    fileio::GetFileStem(&name, path);
 
     SuggestCreateItemName(name);
 }
@@ -206,7 +207,7 @@ static void PickImportWave()
         return;
     }
 
-    GetFileStem(&sImportName, sImportInfo.path);
+    fileio::GetFileStem(&sImportName, sImportInfo.path);
 
     SuggestCreateItemName(sImportName);
 }
@@ -399,7 +400,7 @@ static void PickStreamImportFiles()
     ClearImportWave();
 
     sStreamMainInfo = info;
-    GetFileStem(&sStreamMainName, sStreamMainInfo.path);
+    fileio::GetFileStem(&sStreamMainName, sStreamMainInfo.path);
 
     paths.erase(paths.begin());
     SetStreamCreateFiles(paths);

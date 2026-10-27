@@ -96,6 +96,14 @@ void Bfsar::create(ArchiveFormat format)
     create(format, getDefaultPlatformForFormat(format));
 }
 
+InnerFileTarget Bfsar::GetNewFileTarget(ArchiveFormat format, ArchivePlatform platform, InnerFileKind kind)
+{
+    Bfsar archive;
+    archive.create(format, platform);
+
+    return kind == InnerFileKind::Stream ? archive.getStreamFileTarget() : archive.getWaveFileTarget();
+}
+
 void Bfsar::create(ArchiveFormat format, ArchivePlatform platform)
 {
     LOG_FUNC();

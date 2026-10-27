@@ -2,6 +2,8 @@
 
 #include <ui/file/AudioResourceDocument.h>
 #include <ui/file/DocumentState.h>
+#include <ui/file/LooseStreamDocument.h>
+#include <ui/file/LooseWaveDocument.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/file/SoundArchiveDocument.h>
@@ -145,6 +147,18 @@ const char* Document::Load(const sead::SafeString& path, File* outFile)
         return nullptr;
     }
 
+    if (LooseStreamFile::IsStreamFile(outFile->data, outFile->size))
+    {
+        outFile->kind = Kind::StreamFile;
+        return nullptr;
+    }
+
+    if (LooseWaveFile::IsWaveFile(outFile->data, outFile->size))
+    {
+        outFile->kind = Kind::WaveFile;
+        return nullptr;
+    }
+
     if (bea::IsBea(outFile->data, outFile->size))
         return LoadFromBea(outFile);
 
@@ -179,12 +193,21 @@ bool Document::Check(const File& file, const char** outError)
 {
     *outError = nullptr;
 
-    if (file.kind == Kind::SoundArchive)
-        return CheckSoundArchiveFile(file.data, file.size);
+    switch (file.kind)
+    {
+        case Kind::SoundArchive:
+            return CheckSoundArchiveFile(file.data, file.size);
 
-    *outError = AudioResource::GetResourceDataError(file.data, file.size);
+        case Kind::AudioResource:
+            *outError = AudioResource::GetResourceDataError(file.data, file.size);
+            return *outError == nullptr;
 
-    return *outError == nullptr;
+        case Kind::StreamFile:
+        case Kind::WaveFile:
+            return true;
+    }
+
+    return false;
 }
 
 bool Document::PeekEndian(const File& file, sead::Endian::Types* outEndian)
@@ -223,8 +246,20 @@ bool Document::IsCompleteFile(const u8* header, u64 fileSize)
 
 Document* Document::Open(File* file, const sead::SafeString& path, const sead::SafeString* metadataSource)
 {
-    if (file->kind == Kind::AudioResource)
-        return AudioResourceDocument::Open(file, path);
+    switch (file->kind)
+    {
+        case Kind::AudioResource:
+            return AudioResourceDocument::Open(file, path);
+
+        case Kind::StreamFile:
+            return LooseStreamDocument::Open(file, path);
+
+        case Kind::WaveFile:
+            return LooseWaveDocument::Open(file, path);
+
+        case Kind::SoundArchive:
+            break;
+    }
 
     return SoundArchiveDocument::Open(file, path, metadataSource);
 }

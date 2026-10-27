@@ -53,9 +53,9 @@ void GetPlayingStreamRegions(const WaveFile* wave, s32* playingNo, s32* nextNo)
     *playingNo = -1;
     *nextNo = -1;
 
-    const Sound* sound = sSoundPlayer.getPlayingSound();
+    const Sound::StreamSoundInfo* stream = sSoundPlayer.getPlayingStream();
 
-    if (!sound || sound->getSoundType() != Sound::SoundType::Strm || sound->getStreamSoundInfo().getMainWave() != wave)
+    if (!stream || stream->getMainWave() != wave)
         return;
 
     *playingNo = sSoundPlayer.getPlayingStreamRegion();
@@ -336,23 +336,28 @@ void DrawStreamRegionImportDialog()
     ImGui::EndPopup();
 }
 
-void TrimStreamRegions(WaveFile* wave)
+u32 RemoveStreamRegionsPastEnd(WaveFile* wave)
 {
     const u32 removedCount = wave->getStreamFileLayout().removeRegionsAfter(wave->getSampleCount());
+
+    if (removedCount != 0 && sSelectedRegionWave == wave)
+        sSelectedRegionNo = -1;
+
+    return removedCount;
+}
+
+static void TrimStreamRegions(WaveFile* wave)
+{
+    const u32 removedCount = RemoveStreamRegionsPastEnd(wave);
 
     if (removedCount == 0)
         return;
 
-    if (sSelectedRegionWave == wave)
-        sSelectedRegionNo = -1;
-
     notify::Add(notify::Kind::Warning, messages::stream::cRegionsRemovedTitle, sead::FormatFixedSafeString<128>(messages::stream::cRegionsRemovedFormat, removedCount).cstr());
 }
 
-void KeepStreamRegions(Sound* sound, WaveFile* oldMainWave)
+void KeepStreamRegions(WaveFile* mainWave, WaveFile* oldMainWave)
 {
-    WaveFile* mainWave = sound->getStreamSoundInfo().getMainWave();
-
     if (!oldMainWave || !mainWave || mainWave == oldMainWave)
         return;
 

@@ -9,7 +9,6 @@
 
 #include <string>
 
-void GetFileStem(sead::BufferedSafeString* out, const sead::SafeString& path);
 void NormalizePathSlashes(sead::BufferedSafeString* path);
 
 enum class TransportGlyph
@@ -31,6 +30,7 @@ bool DrawIconButton(const char* id, const char* icon, const ImVec2& itemSize, f3
 bool DrawGlyphButton(const char* id, TransportGlyph glyph, const ImVec2& itemSize, f32 frameSize, bool lit, IconButtonTint tint = IconButtonTint::Accent, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft);
 bool TransportButton(TransportGlyph glyph, const char* id, const ImVec2& size = ImVec2(0.0f, 0.0f));
 bool PlayToggleButton(TransportGlyph glyph, const char* id, const ImVec2& size, bool playing);
+bool ToggleButton(const char* label, bool on, const ImVec2& size = ImVec2(0.0f, 0.0f));
 f32 GetRowButtonSize();
 bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing);
 bool DrawRowOpenButton(u32 id, const char* tooltip, const char* disabledReason = nullptr);
@@ -45,6 +45,7 @@ bool ComboScroll(const char* label, s32* current, const char* const items[], con
 
 sead::FixedSafeString<24> FormatPanLabel(f32 pan);
 sead::FixedSafeString<24> FormatPanLabel(u8 pan, u8 min, u8 center, u8 max);
+sead::FixedSafeString<32> FormatCountText(u64 count);
 
 bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format, bool showLabel = true);
 bool DrawInnerVersionUI(u32 *versionPtr, u32 versionByteNum = 3);

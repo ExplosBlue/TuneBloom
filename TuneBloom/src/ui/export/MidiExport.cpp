@@ -427,29 +427,6 @@ static void DrawMidiExportHead()
     DrawPageHeader(single ? GetItemIcon(sMidiExport.sounds[0]) : ICON_LC_FILE_MUSIC, title.cstr(), detail.cstr());
 }
 
-static bool DrawMidiRowCheck(bool* enabled)
-{
-    ImGui::TableNextRow();
-    ImGui::TableSetColumnIndex(0);
-    ImGui::AlignTextToFramePadding();
-
-    bool rowHovered = false;
-
-    ImGui::SetNextItemAllowOverlap();
-
-    bool changed = DrawTableRowSelectable("##Row", false, &rowHovered);
-
-    if (changed)
-        *enabled = !*enabled;
-
-    ImGui::SameLine(0.0f, 0.0f);
-
-    if (ImGui::Checkbox("##On", enabled))
-        changed = true;
-
-    return changed;
-}
-
 template <typename Row>
 static void DrawMidiListBox(const char* title, const MidiListColumns& columns, std::vector<Row>* rows, bool* changed)
 {
@@ -484,7 +461,7 @@ static void DrawMidiListBox(const char* title, const MidiListColumns& columns, s
         {
             ImGui::PushID(&row);
 
-            if (DrawMidiRowCheck(&row.enabled))
+            if (DrawDialogListCheck(&row.enabled))
                 *changed = true;
 
             const ImVec4 valueColor = row.enabled ? GetItemValueColor() : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
@@ -496,7 +473,7 @@ static void DrawMidiListBox(const char* title, const MidiListColumns& columns, s
             DrawDialogListText(row.detail.c_str(), ImGui::GetColorU32(valueColor));
 
             ImGui::TableSetColumnIndex(3);
-            DrawDialogListText(sead::FormatFixedSafeString<16>("%u", row.noteCount).cstr(), ImGui::GetColorU32(valueColor), true);
+            DrawDialogListText(FormatCountText(row.noteCount).cstr(), ImGui::GetColorU32(valueColor), true);
 
             ImGui::PopID();
         }

@@ -42,15 +42,23 @@ void FocusInfoWindow();
 void FocusPropertiesWindow();
 
 void DrawUI();
+void DrawAppDialogs();
 
 class Sound;
+struct StreamSource;
+
 Sound* GetSelectedStreamSound();
+StreamSource GetActiveStreamSource();
 bool IsStreamPanelShown();
 
 bool IsSystemWindowShown();
 void SetSystemWindowShown(bool shown);
 
+bool IsFileEditorShown();
+void SetFileEditorShown(bool shown);
+
 void RequestResetLayout();
+void RegisterLayoutSettings();
 
 void DrawEmptyDetailPane(const char* text);
 void DrawSplitDivider(f32 listWidth, f32 gap);

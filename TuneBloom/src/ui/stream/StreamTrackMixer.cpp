@@ -108,7 +108,7 @@ static void DrawTrackVolumeFader(Sound::StreamSoundInfo::Track* track, const ImV
 static f32 CalcTrackDetailWidth(const TrackContext& ctx)
 {
     const TrackTableLayout layout = CalcTrackTableLayout(ctx);
-    const s32 columnNum = 1 + (ctx.enableSend ? 1 : 0) + (ctx.enableFilter ? 1 : 0);
+    const s32 columnNum = 1 + (ctx.source.enableSend ? 1 : 0) + (ctx.source.enableFilter ? 1 : 0);
 
     const f32 width = layout.filterWidth + layout.sendWidth + MakeTrackSlots(cTrackSurroundLabels, IM_ARRAYSIZE(cTrackSurroundLabels)).calcWidth() + (layout.cellPadding.x * 2.0f + 1.0f) * columnNum + 1.0f;
 
@@ -158,7 +158,7 @@ static void DrawTrackDetail(const TrackContext& ctx, s32 index, f32 width)
 
     TrackTableLayout layout = CalcTrackTableLayout(ctx);
     TrackSlots surroundSlots = MakeTrackSlots(cTrackSurroundLabels, IM_ARRAYSIZE(cTrackSurroundLabels));
-    const s32 columnNum = 1 + (ctx.enableSend ? 1 : 0) + (ctx.enableFilter ? 1 : 0);
+    const s32 columnNum = 1 + (ctx.source.enableSend ? 1 : 0) + (ctx.source.enableFilter ? 1 : 0);
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::BeginChild("TrackDetail", ImVec2(width, 0.0f), ImGuiChildFlags_Border, ImGuiWindowFlags_HorizontalScrollbar);
@@ -172,10 +172,10 @@ static void DrawTrackDetail(const TrackContext& ctx, s32 index, f32 width)
 
     if (ImGui::BeginTable("TrackDetailPanels", columnNum, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_NoHostExtendX))
     {
-        if (ctx.enableFilter)
+        if (ctx.source.enableFilter)
             ImGui::TableSetupColumn(messages::common::cFilter, ImGuiTableColumnFlags_WidthFixed, layout.filterWidth);
 
-        if (ctx.enableSend)
+        if (ctx.source.enableSend)
             ImGui::TableSetupColumn(messages::panel::cSend, ImGuiTableColumnFlags_WidthFixed, layout.sendWidth);
 
         ImGui::TableSetupColumn(messages::common::cSurround, ImGuiTableColumnFlags_WidthFixed, surroundSlots.calcWidth());
@@ -183,10 +183,10 @@ static void DrawTrackDetail(const TrackContext& ctx, s32 index, f32 width)
         ImGui::PushID(track);
         ImGui::TableNextRow(ImGuiTableRowFlags_None, ImGui::GetContentRegionAvail().y - layout.cellPadding.x * 2.0f - 1.0f);
 
-        if (ctx.enableFilter)
+        if (ctx.source.enableFilter)
             DrawTrackDetailPanel(ctx, index, messages::common::cFilter, layout.filterSlots, cTrackFilterParams);
 
-        if (ctx.enableSend)
+        if (ctx.source.enableSend)
             DrawTrackDetailPanel(ctx, index, messages::panel::cSend, layout.sendSlots, cTrackSendParams);
 
         DrawTrackDetailPanel(ctx, index, messages::common::cSurround, surroundSlots, cTrackMixParams + cTrackSurroundFirst);
@@ -233,10 +233,10 @@ static void CalcTrackStripSizes(const TrackContext& ctx, TrackStripLayout* layou
 
     f32 fullHeight = frameHeight + sectionGap + knobSize * 2.0f + gap * 2.0f + frameHeight + sectionGap + em + gap + faderMinHeight + gap + frameHeight + gap + frameHeight;
 
-    if (ctx.enableFilter)
+    if (ctx.source.enableFilter)
         fullHeight += knobSize * 2.0f + frameHeight + gap * 2.0f + sectionGap;
 
-    if (ctx.enableSend)
+    if (ctx.source.enableSend)
         fullHeight += knobSize * 4.0f + gap * 3.0f + sectionGap;
 
     const bool isShort = trackNum > 0 && fullHeight + frameExtra > avail.y;
@@ -356,10 +356,10 @@ static void PlaceTrackStripControls(const TrackContext& ctx, TrackStripLayout* l
     }
     else
     {
-        if (ctx.enableFilter)
+        if (ctx.source.enableFilter)
             AddTrackStripSlots(ctx, layout, cTrackFilterLabels, cTrackFilterParams, IM_ARRAYSIZE(cTrackFilterParams));
 
-        if (ctx.enableSend)
+        if (ctx.source.enableSend)
             AddTrackStripSlots(ctx, layout, cTrackSendLabels, cTrackSendParams, IM_ARRAYSIZE(cTrackSendParams));
 
         AddTrackStripSlots(ctx, layout, cTrackMixLabels + cTrackPanIndex, cTrackMixParams + cTrackPanIndex, IM_ARRAYSIZE(cTrackMixParams) - cTrackPanIndex);
@@ -407,7 +407,7 @@ static void DrawTrackStripVolume(Sound::StreamSoundInfo::Track* track, const Tra
 
 static void DrawTrackStripLevel(const TrackContext& ctx, s32 trackIdx, const TrackStripLayout& layout, const ImVec2& screenPos, bool playing)
 {
-    const s32 channelNum = ctx.tracks[trackIdx]->getChannelCount(ctx.sound->getStreamSoundInfo().getStreamType()) >= 2 ? 2 : 1;
+    const s32 channelNum = ctx.tracks[trackIdx]->getChannelCount(ctx.source.stream->getStreamType()) >= 2 ? 2 : 1;
     const f32 width = channelNum == 2 ? layout.barWidth : layout.meterWidth;
 
     for (s32 ch = 0; ch < channelNum && trackIdx < static_cast<s32>(cStrmTrackNum); ch++)
@@ -469,7 +469,7 @@ static void DrawTrackStrip(const TrackContext& ctx, s32 trackIdx, const TrackStr
     DrawTrackStripVolume(track, layout, pos, screenPos);
     DrawTrackStripLevel(ctx, trackIdx, layout, screenPos, input.playing);
 
-    if (!ctx.sound->getStreamSoundInfo().isTrackAudible(static_cast<u32>(trackIdx)))
+    if (!ctx.source.stream->isTrackAudible(static_cast<u32>(trackIdx)))
         ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(screenPos.x - layout.padding.x, screenPos.y - layout.padding.y), ImVec2(screenPos.x + layout.stripWidth + layout.padding.x, screenPos.y + layout.faderY + layout.faderHeight + ImFloor(layout.gap * 0.5f)), ImGui::GetColorU32(ImGuiCol_WindowBg, cTrackSilentAlpha));
 
     // Mute and Solo
@@ -540,7 +540,7 @@ void DrawTrackStrips(const TrackContext& ctx, TrackEdit* edit)
     TrackStripInput input = {};
     input.hoveredColumn = ImGui::TableGetHoveredColumn();
     input.clicked = ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
-    input.playing = sSoundPlayer.getPlayingSound() == ctx.sound;
+    input.playing = sSoundPlayer.getPlayingStream() == ctx.source.stream;
 
     for (s32 trackIdx = 0; trackIdx < layout.trackNum; trackIdx++)
         DrawTrackStrip(ctx, trackIdx, layout, input, edit);

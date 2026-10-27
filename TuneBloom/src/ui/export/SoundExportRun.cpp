@@ -15,6 +15,7 @@
 #include <bfsar/model/Sound.h>
 #include <bfsar/audio/WavWriter.h>
 #include <bfsar/files/WaveFile.h>
+#include <bfsar/io/FileIo.h>
 #include <midi/SeqMidiExporter.h>
 
 #include <framework/glfw/seadGameFrameworkBaseGlfw.h>
@@ -199,7 +200,7 @@ static bool ExportTaskAtOnce(const ExportTask& task)
     const SoundExportOptions& options = sRun.options;
 
     if (task.sound->getSoundType() == Sound::SoundType::Strm)
-        return ExportStreamSoundToWav(task.sound, task.path.cstr(), options.multiChannel, options.loopCount, options.fadeSec, options.sampleRate, options.loopMarkers);
+        return ExportStreamToWav(task.sound->getStreamSoundInfo(), task.path.cstr(), options.multiChannel, options.loopCount, options.fadeSec, options.sampleRate, options.loopMarkers);
 
     if (task.sound->getSoundType() != Sound::SoundType::Wave)
         return false;
@@ -257,12 +258,20 @@ static void StepSoundExport()
         EndExportTask(ExportTaskAtOnce(task));
 }
 
-static void SetExportWindowTitle()
+void UpdateExportWindowTitle(bool isExporting)
 {
     sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
 
-    if (!fw || sExportTitleSet)
+    if (!fw || sExportTitleSet == isExporting)
         return;
+
+    sExportTitleSet = isExporting;
+
+    if (!isExporting)
+    {
+        glfwSetWindowTitle(fw->getWindowHandle(), sExportOriginalTitle.cstr());
+        return;
+    }
 
     const char* current = glfwGetWindowTitle(fw->getWindowHandle());
     sExportOriginalTitle = current ? current : "TuneBloom";
@@ -270,31 +279,19 @@ static void SetExportWindowTitle()
     sead::FixedSafeString<512> exportTitle;
     exportTitle.format(messages::exporting::cWindowTitleFormat, sExportOriginalTitle.cstr());
     glfwSetWindowTitle(fw->getWindowHandle(), exportTitle.cstr());
-    sExportTitleSet = true;
 }
 
-static void RestoreWindowTitle()
+bool BeginExportProgressDialog(const char* popupId)
 {
-    sead::GameFrameworkBaseGlfw* fw = sead::DynamicCast<sead::GameFrameworkBaseGlfw>(util::getFramework());
-
-    if (!fw || !sExportTitleSet)
-        return;
-
-    glfwSetWindowTitle(fw->getWindowHandle(), sExportOriginalTitle.cstr());
-    sExportTitleSet = false;
-}
-
-static bool BeginExportProgressDialog()
-{
-    ImGui::OpenPopup(cProgressPopupId);
+    ImGui::OpenPopup(popupId);
 
     CenterNextDialog();
     ImGui::SetNextWindowSize(ImVec2(ImFloor(ImGui::GetFontSize() * cProgressWidthEm), 0.0f));
 
-    return BeginDialog(cProgressPopupId, nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    return BeginDialog(popupId, nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 }
 
-static bool DrawExportProgressRows(const char* fileName, s32 fileNo, s32 fileNum, f32 fraction)
+bool DrawExportProgressRows(const char* fileName, s32 fileNo, s32 fileNum, f32 fraction)
 {
     const sead::FormatFixedSafeString<576> title(messages::exporting::cProgressFileFormat, fileName);
 
@@ -316,7 +313,7 @@ void DrawSoundExportProgressPreview(f32 fraction)
 
 static void DrawExportProgressPreview()
 {
-    if (!BeginExportProgressDialog())
+    if (!BeginExportProgressDialog(cProgressPopupId))
         return;
 
     DrawExportProgressRows("BGM_LP_BOSS1_track3", 3, 8, sPreviewFraction);
@@ -324,12 +321,12 @@ static void DrawExportProgressPreview()
     ImGui::EndPopup();
 }
 
-static void CloseExportProgressDialog()
+void CloseExportProgressDialog(const char* popupId)
 {
-    if (!ImGui::IsPopupOpen(cProgressPopupId))
+    if (!ImGui::IsPopupOpen(popupId))
         return;
 
-    if (BeginExportProgressDialog())
+    if (BeginExportProgressDialog(popupId))
     {
         ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
@@ -346,14 +343,11 @@ void DrawSoundExportProgress()
 
     if (!sRun.active)
     {
-        CloseExportProgressDialog();
-        RestoreWindowTitle();
+        CloseExportProgressDialog(cProgressPopupId);
         return;
     }
 
-    SetExportWindowTitle();
-
-    if (!BeginExportProgressDialog())
+    if (!BeginExportProgressDialog(cProgressPopupId))
         return;
 
     const s32 taskNum = static_cast<s32>(sRun.tasks.size());
@@ -361,7 +355,7 @@ void DrawSoundExportProgress()
     const f32 taskFraction = sRun.rendering ? sSoundPlayer.getSeqExportProgress() : 0.0f;
 
     sead::FixedSafeString<256> fileName;
-    GetFileStem(&fileName, sRun.tasks[current].path);
+    fileio::GetFileStem(&fileName, sRun.tasks[current].path);
 
     if (DrawExportProgressRows(fileName.cstr(), current + 1, taskNum, (sRun.current + taskFraction) / taskNum))
         CancelSoundExportRun();

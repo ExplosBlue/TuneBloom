@@ -20,6 +20,7 @@ void BankFileContextMenuFunc(Item* item);
 void DrawBankFileMenuItems(bool hasItem, const std::vector<BankFile*>& bankFiles);
 
 void RequestWaveFileReplace(WaveFile* wave);
+bool IsWaveFileReplacePending(const WaveFile* wave);
 void RequestWaveFileReimport(WaveFile* wave);
 void DrawWaveFileReplacePopup();
 

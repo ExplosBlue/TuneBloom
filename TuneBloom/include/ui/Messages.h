@@ -46,11 +46,14 @@ inline constexpr const char* cName = "Name";
 inline constexpr const char* cType = "Type";
 inline constexpr const char* cFormat = "Format";
 inline constexpr const char* cLength = "Length";
+inline constexpr const char* cTimeTenthsFormat = "%u:%02u.%u";
 inline constexpr const char* cSize = "Size";
 inline constexpr const char* cSampleRate = "Sample Rate";
 inline constexpr const char* cChannels = "Channels";
 inline constexpr const char* cEncoding = "Encoding";
 inline constexpr const char* cLoop = "Loop";
+inline constexpr const char* cLoopOn = "Loop: on";
+inline constexpr const char* cLoopOff = "Loop: off";
 inline constexpr const char* cStart = "Start";
 inline constexpr const char* cEnd = "End";
 inline constexpr const char* cVolume = "Volume";
@@ -78,6 +81,7 @@ inline constexpr const char* cTheme = "Theme";
 inline constexpr const char* cSystem = "System";
 inline constexpr const char* cRecentFiles = "Recent Files";
 inline constexpr const char* cPinned = "Pinned";
+inline constexpr const char* cUndo = "Undo";
 inline constexpr const char* cSamples = "samples";
 
 inline constexpr const char* cUnknown = "Unknown";
@@ -108,7 +112,10 @@ inline constexpr const char* cImport = "Import";
 inline constexpr const char* cFind = "Find";
 inline constexpr const char* cGoTo = "Go To";
 inline constexpr const char* cHelp = "Help";
-inline constexpr const char* cNewArchive = "New Archive";
+inline constexpr const char* cNewFile = "New File";
+inline constexpr const char* cSoundArchive = "Sound Archive";
+inline constexpr const char* cFileType = "File Type";
+inline constexpr const char* cExtension = "Extension";
 inline constexpr const char* cOpenArchive = "Open Archive";
 inline constexpr const char* cPause = "Pause";
 inline constexpr const char* cPlay = "Play";
@@ -130,15 +137,17 @@ inline constexpr const char* cWaves = "Waves";
 inline constexpr const char* cLoops = "Loops";
 inline constexpr const char* cRegions = "Regions";
 
-inline constexpr const char* cCountOfFormat = "%d of %d";
+inline constexpr const char* cCountOfFormat = "%s of %s";
+inline constexpr const char* cDigitGroupSeparator = ",";
 inline constexpr const char* cPairFormat = "%s, %s";
-inline constexpr const char* cFileCountFormat = "%u files";
+inline constexpr const char* cFileCountFormat = "%s files";
 inline constexpr const char* cMillisecondsFormat = "%.0f ms";
 inline constexpr const char* cMegabytesFormat = "%.1f MB";
 inline constexpr const char* cSecondsFormat = "%.2f s";
 inline constexpr const char* cPercentFormat = "%d%%";
 inline constexpr const char* cPercentFloatFormat = "%.0f%%";
 inline constexpr const char* cChannelCountFormat = "%u Channels";
+inline constexpr const char* cChannelCountOneFormat = "%u Channel";
 
 }
 
@@ -181,6 +190,8 @@ inline constexpr const char* cFileMissingFormat = "'%s' could not be found next 
 inline constexpr const char* cFileIncompleteFormat = "'%s' could not be loaded: the file is incomplete";
 inline constexpr const char* cFileUnreadableFormat = "'%s' could not be read as a stream file";
 inline constexpr const char* cFileNotStream = "Not a valid stream file";
+inline constexpr const char* cOpenFilter = "Stream File (*.bfstm, *.bcstm)";
+inline constexpr const char* cStreamTypeFormat = "Nintendo Stream (%s)";
 inline constexpr const char* cFileNoInfoBlockFormat = "The INFO block of the %s file could not be found";
 inline constexpr const char* cFileBlocksMisalignedFormat = "The %s file has an invalid block size";
 inline constexpr const char* cFileNotLoaded = "The stream file is not loaded";
@@ -245,6 +256,7 @@ inline constexpr const char* cTypeUnsupportedFormat = "Only %s and Opus streams 
 inline constexpr const char* cTrackAddTip = "Add Track";
 inline constexpr const char* cTrackMixerView = "Mixer View";
 inline constexpr const char* cTrackTableView = "Table View";
+inline constexpr const char* cTrackMixNotInFile = "This file stores no track volume or pan";
 inline constexpr const char* cTrackFold = "Minimize";
 inline constexpr const char* cTrackNoSound = "No Stream Sound Selected";
 inline constexpr const char* cTrackNone = "No Tracks";
@@ -295,7 +307,6 @@ inline constexpr const char* cTypeNativeDetail = "NintendoWare stream file";
 inline constexpr const char* cTypeInfoDetail   = "Stream type info, no known use";
 inline constexpr const char* cLoopFromWaveFile = "Set by the first track's Wave File";
 
-inline constexpr const char* cExtensionTitle = "Extension";
 inline constexpr const char* cPrefetchLabel  = "Prefetch";
 inline constexpr const char* cTypeLabel      = "Stream Type";
 inline constexpr const char* cLoopStartLabel = "Loop Start";
@@ -336,6 +347,8 @@ inline constexpr const char* cRegionReplaceFormat       = "Regions in '%s': %u\n
 
 inline constexpr const char* cRegionsRemovedTitle       = "Regions removed";
 inline constexpr const char* cRegionsRemovedFormat      = "%u past the end of the new Wave File";
+inline constexpr const char* cRegionsPastEndOneFormat   = "%u Region past the new end will be removed";
+inline constexpr const char* cRegionsPastEndFormat      = "%u Regions past the new end will be removed";
 inline constexpr const char* cRegionsReplacedTitle      = "Regions replaced";
 inline constexpr const char* cRegionsReplacedFormat     = "Replaced by the %u in Track 0's new Wave File";
 inline constexpr const char* cSelectedNotStream = "Selected Sound Is Not a Stream";
@@ -458,7 +471,6 @@ inline constexpr const char* cSegmentIntro             = "Intro";
 inline constexpr const char* cSegmentLoopFormat        = "Loop %d";
 inline constexpr const char* cSegmentFade              = "Fade";
 inline constexpr const char* cSampleRateOriginalFormat = "Original (%u Hz)";
-inline constexpr const char* cFileType                 = "File Type";
 inline constexpr const char* cFileTypeWav              = "WAV, 16-bit";
 inline constexpr const char* cLoopRangeFormat          = "%s to %s";
 inline constexpr const char* cLoopNotFound             = "Not found";
@@ -468,7 +480,6 @@ inline constexpr const char* cFadeOut                  = "Fade Out";
 inline constexpr const char* cFadeOutFormat            = "%.1f s";
 inline constexpr const char* cNoEndLengthDetail        = "Used when a sequence has no loop or end";
 inline constexpr const char* cTimeFormat               = "%u:%02u";
-inline constexpr const char* cTimeTenthsFormat         = "%u:%02u.%u";
 inline constexpr const char* cSampleRateOriginalDetail = "Rate of the source; 48000 Hz for sequences";
 inline constexpr const char* cFilesOne                 = "One multi-channel file";
 inline constexpr const char* cFilesOneDetail           = "All tracks as channels of one WAV file";
@@ -1075,7 +1086,7 @@ inline constexpr const char* cBlockNotFoundFormat = "%s: the %s block could not 
 
 inline constexpr const char* cUntitledFileNameFormat = "Untitled.%s";
 inline constexpr const char* cOpenFilter = "Sound Archive (*.bfsar, *.bcsar, *.cmpbin, *.bea)";
-inline constexpr const char* cOpenFilterAll = "All Supported Files (*.bfsar, *.bcsar, *.cmpbin, *.bea, *.bars, *.bwav, *.zs, *.pack)";
+inline constexpr const char* cOpenFilterAll = "All Supported Files (*.bfsar, *.bcsar, *.cmpbin, *.bea, *.bars, *.bwav, *.bfstm, *.bcstm, *.bfwav, *.bcwav, *.zs, *.pack)";
 inline constexpr const char* cSoundArchiveTypeFormat = "Nintendo Sound Archive (%s)";
 
 inline constexpr const char* cSaveOpenFailed = "The output file could not be opened";
@@ -1146,10 +1157,11 @@ inline constexpr const char* cRowWaveFiles      = "Wave Files";
 inline constexpr const char* cRowSequenceFiles  = "Sequence Files";
 inline constexpr const char* cRowBankFiles      = "Bank Files";
 inline constexpr const char* cRowFileStatistics = "File Statistics";
-inline constexpr const char* cRowAudioAssets    = "Audio Assets";
 
 inline constexpr const char* cInfoWindowTitle       = "Info";
 inline constexpr const char* cPropertiesWindowTitle = "Properties";
+
+inline constexpr const char* cViewUnavailable = "Only sound archives have a project";
 
 inline constexpr const char* cStringTable        = "String Table";
 inline constexpr const char* cVersionRangeFormat = "Valid range: %s";
@@ -1179,6 +1191,7 @@ inline constexpr const char* cReimportDecodeFailed = "This Wave File could not b
 
 inline constexpr const char* cReimportMenuLabel = "Reimport";
 inline constexpr const char* cReplaceWaveFileMenuLabel = "Replace Wave File";
+inline constexpr const char* cReplaceAudioTip = "Import a WAV file in place of the audio";
 inline constexpr const char* cReimportWaveFileMenuLabel = "Reimport Wave File";
 inline constexpr const char* cReplaceWaveFileTip = "Replace the audio with a WAV file";
 inline constexpr const char* cReimportWaveFileTip = "Change this Wave File's import settings";
@@ -1223,8 +1236,6 @@ inline constexpr const char* cWaveLoopReadoutPeriodsFormat = "Loop %s  -  %u sam
 inline constexpr const char* cWaveLoopReadoutFormat = "Loop %s  -  %u samples";
 inline constexpr const char* cWavePreviewResume = "Resume";
 inline constexpr const char* cWavePreviewPlay = "Play preview";
-inline constexpr const char* cWaveLoopPlaybackOn = "Loop: on";
-inline constexpr const char* cWaveLoopPlaybackOff = "Loop: off";
 inline constexpr const char* cWaveFitAll = "Fit All";
 inline constexpr const char* cWaveFitLoop = "Fit Loop";
 inline constexpr const char* cWaveSampleRateTip = "Resampled to this rate on import";
@@ -1312,7 +1323,11 @@ inline constexpr const char* cMoveDown          = "Move Down";
 inline constexpr const char* cSearchHint        = "Search files";
 inline constexpr const char* cRecentFolders     = "Recent Folders";
 
-inline constexpr const char* cDropFolderTip = "Drop a folder to add it";
+inline constexpr const char* cDropPinTip = "Drop a folder or file here to pin it";
+
+inline constexpr const char* cUnpinnedTitle     = "Unpinned file";
+inline constexpr const char* cPinnedOneTitle    = "Pinned 1 item";
+inline constexpr const char* cPinnedTitleFormat = "Pinned %s items";
 inline constexpr const char* cNoAudio    = "No sound files in this folder";
 inline constexpr const char* cNoMatch     = "No files match the search";
 inline constexpr const char* cRootMissing = "This folder no longer exists";
@@ -1320,22 +1335,29 @@ inline constexpr const char* cWaiting     = "Waiting to scan";
 
 inline constexpr const char* cKindResources = "Resources";
 
-inline constexpr const char* cKindFilterFormat = "%s (%u)";
+inline constexpr const char* cKindFilterFormat = "%s (%s)";
 
-inline constexpr const char* cIndexingFormat   = "Scanning... %u files";
-inline constexpr const char* cReadingFormat    = "Reading %u of %u files";
-inline constexpr const char* cSummaryFormat    = "%u files, %s";
+inline constexpr const char* cIndexingFormat   = "Scanning... %s files";
+inline constexpr const char* cReadingFormat    = "Reading %s of %s files";
+inline constexpr const char* cSummaryFormat    = "%s files, %s";
 inline constexpr const char* cSummaryOneFormat = "1 file, %s";
-inline constexpr const char* cShownFormat      = "%u of %u files";
+inline constexpr const char* cShownFormat      = "%s of %s files";
 inline constexpr const char* cFileCountOne     = "1 file";
-inline constexpr const char* cSoundCountFormat = "%u Sounds";
+inline constexpr const char* cSoundCountFormat = "%s Sounds";
 inline constexpr const char* cSoundCountOne    = "1 Sound";
 
 inline constexpr const char* cCopyName = "Copy Name";
 
+inline constexpr const char* cSelectedFormat        = "%s files selected, %s";
+inline constexpr const char* cExportNeedsAudio      = "Select a wave, stream or resource file";
+inline constexpr const char* cFormatAudio           = "audio";
+inline constexpr const char* cSkippedFilesFormat    = "Skipped %s files";
+inline constexpr const char* cSkippedFileFormat     = "Skipped %s";
+inline constexpr const char* cSkippedFilesDetail    = "The Browser exports wave, stream and resource files";
+
 inline constexpr const char* cFormatVersionFormat = "%s %s";
 inline constexpr const char* cCompressed          = "zstd compressed";
-inline constexpr const char* cAssetCountFormat    = "%u Audio Assets";
+inline constexpr const char* cAssetCountFormat    = "%s Audio Assets";
 inline constexpr const char* cAssetCountOne       = "1 Audio Asset";
 inline constexpr const char* cStreamStart         = "Start of a stream";
 inline constexpr const char* cSoundInFileFormat   = "%s in %s";
@@ -1371,12 +1393,11 @@ inline constexpr const char* cStatsTotalFormat  = "%s in %u Wave Files";
 inline constexpr const char* cStatsEmpty        = "No matching Wave Files";
 inline constexpr const char* cStatsUseUnused     = "Unused";
 inline constexpr const char* cStatsUseOnlyFormat = "(%s only)";
-inline constexpr const char* cStatsFilesOneFormat = "%u file";
 inline constexpr const char* cStatsShareFormat   = "%.1f%%";
 inline constexpr const char* cStatsShareDetailFormat = "%.2f%%";
 inline constexpr const char* cStatsShare         = "Share";
-inline constexpr const char* cCountOneFormat = "%d %s";
-inline constexpr const char* cCountAllFormat = "%d %ss";
+inline constexpr const char* cCountOneFormat = "1 %s";
+inline constexpr const char* cCountAllFormat = "%s %ss";
 inline constexpr const char* cNoItemsFormat  = "No %ss";
 
 inline constexpr const char* cColumnId          = "ID";
@@ -1457,6 +1478,16 @@ inline constexpr const char* cSoundLimit = "Sound Limit";
 inline constexpr const char* cHeapSize   = "Heap Size";
 
 inline constexpr const char* cHeapSizeUnit = "bytes";
+
+}
+
+namespace playerframe
+{
+
+inline constexpr const char* cWindowTitle     = "TuneBloom Player";
+inline constexpr const char* cFactSeparator   = " · ";
+inline constexpr const char* cEditTip         = "Show the editor panels of this file";
+inline constexpr const char* cReplaceTrackTip = "Import a WAV file in place of a track";
 
 }
 
@@ -1551,8 +1582,6 @@ inline constexpr const char* cPlayLeft         = "Play the left channel";
 inline constexpr const char* cPlayRight        = "Play the right channel";
 inline constexpr const char* cTooLong          = "Too long to show as a waveform";
 inline constexpr const char* cNoData           = "No sample data";
-inline constexpr const char* cLoopReadoutFormat      = "Loop %u:%06.3f";
-inline constexpr const char* cLoopDirtyReadoutFormat = "Loop %u:%06.3f  -  rebuilt on play or save";
 
 inline constexpr const char* cEncodingPcm8 = "Pcm8";
 inline constexpr const char* cEncodingPcm16 = "Pcm16";
@@ -1561,6 +1590,9 @@ inline constexpr const char* cEncodingDspAdpcm = "DspAdpcm";
 inline constexpr const char* cInvalidEncoding = "The encoding is invalid";
 inline constexpr const char* cInvalidLoopRange = "The loop start or end is invalid";
 inline constexpr const char* cNoDataToWrite = "No data to write";
+inline constexpr const char* cOpenFilter = "Wave File (*.bfwav, *.bcwav)";
+inline constexpr const char* cFileUnreadableFormat = "'%s' could not be read as a wave file";
+inline constexpr const char* cWriteFailedFormat = "The wave file '%s' could not be written";
 inline constexpr const char* cNeedsChannel = "A Wave File needs at least 1 channel";
 inline constexpr const char* cChannelLimit = "A Wave File can have up to 2 channels";
 inline constexpr const char* cLoopInvalidFormat = "The loop starts after it ends";
@@ -1585,7 +1617,6 @@ namespace resource
 {
 
 inline constexpr const char* cResourceTypeFormat = "Nintendo Audio Resource (%s)";
-inline constexpr const char* cCompressedResourceTypeFormat = "Compressed Nintendo Audio Resource (%s)";
 inline constexpr const char* cWaveTypeFormat = "Nintendo Wave (%s)";
 inline constexpr const char* cBarsDamaged = "The BARS file is damaged";
 inline constexpr const char* cBarsVersionUnsupported = "This BARS version is not supported";
@@ -1623,7 +1654,7 @@ inline constexpr const char* cEncodeFailed = "Couldn't encode the audio";
 inline constexpr const char* cRenameFailed = "Couldn't rename the metadata of this Audio Asset";
 inline constexpr const char* cReplaceUnsupported = "Only BWAV, BFWAV and BFSTP audio can be replaced";
 inline constexpr const char* cPrefetchBuildFailed = "Couldn't build the start of the stream from the new file";
-inline constexpr const char* cLoopNeedsBwav = "Only BWAV loops can be edited";
+inline constexpr const char* cLoopUnsupported = "Only BWAV, BFWAV and BCWAV loops are editable";
 inline constexpr const char* cImportKindMismatch = "The file must have the same format as the current audio";
 inline constexpr const char* cImportUnsupported = "Only BWAV, BFWAV and BFSTM files can be imported";
 inline constexpr const char* cImportNeedsCompleteBwav = "The BWAV must contain the whole sound, not only its start";
@@ -1636,7 +1667,7 @@ inline constexpr const char* cSelectOneAudioAsset = "Select one Audio Asset";
 inline constexpr const char* cExportMixedFormats = "The selected Audio Assets must have the same format";
 
 inline constexpr const char* cStoredInArchive = "Stored";
-inline constexpr const char* cLoopEndFixed = "BWAV loops always end at the last sample";
+inline constexpr const char* cLoopEndFixed = "The loop always ends at the last sample";
 inline constexpr const char* cStreamState = "State";
 inline constexpr const char* cStreamLoaded = "Loaded from the Stream folder";
 inline constexpr const char* cStreamMissing = "Not in the Stream folder";
@@ -1778,11 +1809,12 @@ inline constexpr const char* cStartupStartPageDetail = "Shows recent files and l
 inline constexpr const char* cStartupLastArchive = "Last Archive";
 
 inline constexpr const char* cAssociationLabel = "File Association";
-inline constexpr const char* cAssociationNone = "Not Associated";
-inline constexpr const char* cAssociationOn = "Associated";
-inline constexpr const char* cAssociationAdd = "Associate";
-inline constexpr const char* cAssociationRemove = "Remove";
-inline constexpr const char* cAssociationDetail = "Opens sound archive files in TuneBloom";
+inline constexpr const char* cAssociationChoose = "Choose...";
+inline constexpr const char* cAssociationCountFormat = "%u of %u Types";
+inline constexpr const char* cAssociationDetail = "File types that open in TuneBloom";
+inline constexpr const char* cAssociationAppColumn = "Opens With";
+inline constexpr const char* cAssociationOnlyApp = "No other app opens this file type";
+inline constexpr const char* cAssociationUserChoice = "Windows Settings selects the app for this file type";
 inline constexpr const char* cAssociationFailed = "Couldn't change the file association";
 
 inline constexpr const char* cDeviceLabel = "Playback Device";
@@ -2137,6 +2169,7 @@ inline constexpr const char* cShowUnsaved      = "Show Unsaved Changes";
 inline constexpr const char* cCreateBackup     = "Create Backup";
 inline constexpr const char* cShowBackupFolder = "Show Backup Folder";
 inline constexpr const char* cCopyPath         = "Copy Path";
+inline constexpr const char* cOpenFullEditor   = "Open in Full Editor";
 
 inline constexpr const char* cInnerFileFormat   = "%s File";
 inline constexpr const char* cBankBundle        = "Bank Bundle";
@@ -2198,6 +2231,7 @@ inline constexpr const char* cNextItem       = "Next Item";
 inline constexpr const char* cFirstItem      = "First Item";
 inline constexpr const char* cLastItem       = "Last Item";
 inline constexpr const char* cShowSelection  = "Scroll to Selection";
+inline constexpr const char* cClearSelection = "Clear Selection";
 inline constexpr const char* cCollapseFolder = "Collapse Folder";
 inline constexpr const char* cExpandFolder   = "Expand Folder";
 

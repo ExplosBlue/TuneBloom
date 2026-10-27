@@ -13,8 +13,6 @@
 #include <imgui/imgui_custom.h>
 #include <imgui/imgui_internal.h>
 
-#include <filedevice/seadPath.h>
-
 #include <snd/snd_Util.h>
 
 #include <cstring>
@@ -24,15 +22,6 @@ void NormalizePathSlashes(sead::BufferedSafeString* path)
     for (s32 i = 0; i < path->calcLength(); i++)
         if (path->getBuffer()[i] == '\\')
             path->getBuffer()[i] = '/';
-}
-
-void GetFileStem(sead::BufferedSafeString* out, const sead::SafeString& path)
-{
-    sead::Path::getFileName(out, path);
-
-    s32 dotPos = out->rfindIndex(".");
-    if (dotPos != -1)
-        out->trim(dotPos);
 }
 
 static constexpr f32 cRowButtonEm              = 1.15f;
@@ -293,6 +282,24 @@ bool PlayToggleButton(TransportGlyph glyph, const char* id, const ImVec2& size, 
     return pressed;
 }
 
+bool ToggleButton(const char* label, bool on, const ImVec2& size)
+{
+    if (on)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Button, GetThemeAccent());
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, GetThemeAccent());
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, GetThemeAccent());
+        ImGui::PushStyleColor(ImGuiCol_Text, GetOnAccentTextColor());
+    }
+
+    const bool pressed = ImGui::Button(label, size);
+
+    if (on)
+        ImGui::PopStyleColor(4);
+
+    return pressed;
+}
+
 f32 GetRowButtonSize()
 {
     return ImFloor(ImGui::GetFontSize() * cRowButtonEm);
@@ -492,6 +499,23 @@ sead::FixedSafeString<24> FormatPanLabel(u8 pan, u8 min, u8 center, u8 max)
         normalized = static_cast<f32>(pan - center) / static_cast<f32>(max - center);
 
     return FormatPanLabel(normalized);
+}
+
+sead::FixedSafeString<32> FormatCountText(u64 count)
+{
+    const sead::FormatFixedSafeString<32> digits("%llu", static_cast<unsigned long long>(count));
+    const s32 digitNum = digits.calcLength();
+    sead::FixedSafeString<32> out;
+
+    for (s32 i = 0; i < digitNum; i++)
+    {
+        if (i > 0 && (digitNum - i) % 3 == 0)
+            out.append(messages::common::cDigitGroupSeparator);
+
+        out.append(digits.at(i));
+    }
+
+    return out;
 }
 
 static const char* ArchiveVersionRangeStr(bool isBcsar)

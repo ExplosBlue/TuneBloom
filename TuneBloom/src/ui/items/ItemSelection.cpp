@@ -1,8 +1,10 @@
 #include <ui/items/ItemListInternal.h>
 
+#include <ui/file/Document.h>
 #include <ui/file/DocumentState.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/widgets/RowRename.h>
+#include <ui/widgets/RowSelection.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/Workspace.h>
 
@@ -42,19 +44,6 @@ void PruneFilteredSelection(const std::vector<Item*>& listItems, ItemFilterCallb
         if (sMultiSelectAnchor == item)
             sMultiSelectAnchor = nullptr;
     }
-}
-
-static void CollectVisibleRange(const std::vector<Item*>& rows, Item* anchor, Item* target, std::vector<Item*>* outRange)
-{
-    outRange->clear();
-
-    const auto anchorIt = std::find(rows.begin(), rows.end(), anchor);
-    const auto targetIt = std::find(rows.begin(), rows.end(), target);
-
-    if (anchorIt == rows.end() || targetIt == rows.end())
-        return;
-
-    outRange->assign(std::min(anchorIt, targetIt), std::max(anchorIt, targetIt) + 1);
 }
 
 void HandleItemListKeys(ItemListContext& ctx)
@@ -128,6 +117,16 @@ void HandleItemListKeys(ItemListContext& ctx)
         else if (current < ctx.rowNum)
             RequestItemDelete(selectedItem);
     }
+
+    if (ctx.deselectable && shortcuts::Pressed(shortcuts::Action::ClearSelection))
+        ClearItemListSelection(ctx);
+}
+
+void ClearItemListSelection(ItemListContext& ctx)
+{
+    *ctx.selection = nullptr;
+    sMultiSelectedItems.clear();
+    sMultiSelectAnchor = nullptr;
 }
 
 void SelectItemListRow(ItemListContext& ctx, Item* item)
@@ -137,59 +136,10 @@ void SelectItemListRow(ItemListContext& ctx, Item* item)
     if (!sMultiSelectedItems.empty() && sMultiSelectedItems.front()->list() != &ctx.list)
         sMultiSelectedItems.clear();
 
-    const bool toggleSelection = shortcuts::Held(shortcuts::Modifier::ToggleSelection);
-    const bool extendSelection = shortcuts::Held(shortcuts::Modifier::ExtendSelection);
+    const RowSelection<Item*> selection { &sMultiSelectedItems, &sMultiSelectAnchor, &selectedItem };
+    const bool canAddFocus = selectedItem && selectedItem->list() == &ctx.list;
 
-    std::vector<Item*> range;
-    if (extendSelection)
-        CollectVisibleRange(ctx.rows, sMultiSelectAnchor, item, &range);
-
-    if (toggleSelection && extendSelection && !range.empty())
-    {
-        for (Item* cur : range)
-        {
-            if (std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), cur) == sMultiSelectedItems.end())
-                sMultiSelectedItems.push_back(cur);
-        }
-
-        selectedItem = item;
-    }
-    else if (toggleSelection)
-    {
-        auto it = std::find(sMultiSelectedItems.begin(), sMultiSelectedItems.end(), item);
-        if (it != sMultiSelectedItems.end())
-        {
-            sMultiSelectedItems.erase(it);
-            if (sMultiSelectedItems.empty())
-            {
-                selectedItem = nullptr;
-                sMultiSelectAnchor = nullptr;
-            }
-            else
-            {
-                sMultiSelectAnchor = sMultiSelectedItems.back();
-            }
-        }
-        else
-        {
-            if (sMultiSelectedItems.empty() && selectedItem && selectedItem != item && selectedItem->list() == &ctx.list)
-                sMultiSelectedItems.push_back(selectedItem);
-            sMultiSelectedItems.push_back(item);
-            selectedItem = item;
-            sMultiSelectAnchor = item;
-        }
-    }
-    else if (extendSelection && !range.empty())
-    {
-        sMultiSelectedItems = range;
-        selectedItem = item;
-    }
-    else
-    {
-        sMultiSelectedItems.clear();
-        selectedItem = item;
-        sMultiSelectAnchor = item;
-    }
+    ClickRowSelection(selection, ctx.rows, item, shortcuts::Held(shortcuts::Modifier::ToggleSelection), shortcuts::Held(shortcuts::Modifier::ExtendSelection), canAddFocus);
 
     FocusPropertiesWindow();
     SetSelectionInSubWindow(ctx.isSubWindow);
@@ -303,6 +253,9 @@ void SelectItem(Item* item)
         default:
             break;
     }
+
+    if (const Document* document = ActiveDocument(); document && !document->hasProjectList())
+        tab = document->defaultTab();
 
     SelectionState& selection = GetTabSelection(tab);
     selection.selectedItem = item;

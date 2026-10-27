@@ -1,11 +1,11 @@
 #include <ui/resource/ResourceViews.h>
 
 #include <ui/file/File.h>
+#include <ui/file/LooseFileInfo.h>
 #include <ui/widgets/Knob.h>
 #include <ui/Messages.h>
 #include <ui/widgets/Properties.h>
 
-static constexpr f32 cInfoColumnEm     = 30.0f;
 static constexpr u32 cVersionShift     = 8;
 static constexpr u32 cVersionMinorMask = 0xFF;
 
@@ -43,7 +43,7 @@ static void DrawResourceFormatBox()
     sead::FixedSafeString<16> version;
     FormatResourceVersion(&version, ActiveAudioResource().getVersion());
 
-    RegionHeader(messages::common::cFormat);
+    RegionHeader(messages::common::cFile);
 
     PropertyRow(messages::common::cFormat);
     ImGui::TextUnformatted(ActiveAudioResource().getContainer() == AudioResource::Container::Sarc ? messages::resource::cSarcFormat : GetResourceFormatInfo(ActiveAudioResource().getFormat()).displayName);
@@ -52,7 +52,7 @@ static void DrawResourceFormatBox()
     ImGui::TextUnformatted(version.cstr());
 
     PropertyRow(messages::innerfile::cByteOrder);
-    ImGui::TextUnformatted(ActiveAudioResource().isBigEndian() ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian);
+    ImGui::TextUnformatted(GetByteOrderText(ActiveAudioResource().isBigEndian() ? sead::Endian::eBig : sead::Endian::eLittle));
 
     PropertyRow(messages::resource::cCompression, messages::resource::cCompressionDetail);
     ImGui::TextUnformatted(ActiveAudioResource().isCompressed() ? messages::resource::cCompressionZstd : messages::common::cNone);
@@ -62,15 +62,13 @@ static void DrawResourceFormatBox()
 
 static void DrawResourceContentBox()
 {
-    if (!BeginPropertyBox("ResourceContent"))
+    const StreamCounts counts = CountStreams();
+    const u32 otherFiles = ActiveAudioResource().getOtherFileCount();
+
+    if ((counts.streams == 0 && otherFiles == 0) || !BeginPropertyBox("ResourceContent"))
         return;
 
-    const StreamCounts counts = CountStreams();
-
     RegionHeader(messages::resource::cContentTitle);
-
-    PropertyRow(messages::project::cRowAudioAssets);
-    ImGui::Text("%u", static_cast<u32>(ActiveAudioResource().getAssetList().size()));
 
     if (counts.streams > 0)
     {
@@ -78,7 +76,7 @@ static void DrawResourceContentBox()
         ImGui::Text(messages::resource::cStreamsLoadedFormat, counts.loaded, counts.streams);
     }
 
-    if (const u32 otherFiles = ActiveAudioResource().getOtherFileCount())
+    if (otherFiles > 0)
     {
         PropertyRow(messages::resource::cOtherFiles, messages::resource::cOtherFilesDetail);
         ImGui::Text("%u", otherFiles);
@@ -94,10 +92,6 @@ void FormatResourceVersion(sead::BufferedSafeString* out, u16 version)
 
 void DrawAudioResourceInfoUI()
 {
-    const PageColumn column = BeginPageColumn(cInfoColumnEm);
-
     DrawResourceFormatBox();
     DrawResourceContentBox();
-
-    EndPageColumn(column);
 }

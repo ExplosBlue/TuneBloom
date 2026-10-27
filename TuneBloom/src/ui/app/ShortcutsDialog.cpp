@@ -52,7 +52,7 @@ struct KeyText
 };
 
 const ActionRow cArchiveRows[] = {
-    { messages::common::cNewArchive,      Action::NewProject },
+    { messages::common::cNewFile,         Action::NewProject },
     { messages::common::cOpenArchive,     Action::OpenProject },
     { messages::common::cSave,            Action::SaveProject },
     { messages::mainmenu::cSaveAs,          Action::SaveProjectAs },
@@ -72,6 +72,7 @@ const ActionRow cListRows[] = {
     { messages::keys::cCollapseFolder, Action::CollapseFolder },
     { messages::keys::cExpandFolder,   Action::ExpandFolder },
     { messages::keys::cShowSelection,  Action::ScrollToSelection },
+    { messages::keys::cClearSelection, Action::ClearSelection },
     { messages::common::cRename,       Action::RenameSelection },
     { messages::common::cDuplicate,    Action::DuplicateSelection },
     { messages::common::cDelete,       Action::DeleteSelection },

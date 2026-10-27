@@ -3,7 +3,6 @@
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Properties.h>
-#include <ui/settings/Theme.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/widgets/Widgets.h>
 
@@ -17,22 +16,6 @@ namespace waveimport
 
 constexpr f32 cWaveformHeightEm = 8.0f;
 constexpr f32 cToolGroupGapEm   = 0.6f;
-
-static void PushToggleButtonColors(bool on)
-{
-    if (!on)
-        return;
-
-    ImGui::PushStyleColor(ImGuiCol_Button, GetThemeAccent());
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, GetThemeAccent());
-    ImGui::PushStyleColor(ImGuiCol_Text, GetOnAccentTextColor());
-}
-
-static void PopToggleButtonColors(bool on)
-{
-    if (on)
-        ImGui::PopStyleColor(3);
-}
 
 bool WaveImportPanel::isPreviewActive() const
 {
@@ -146,9 +129,7 @@ void WaveImportPanel::drawWaveformTools(FrameContext& ctx, f32 groupGap)
     ImGui::SameLine(0.0f, groupGap);
     ImGui::BeginDisabled(!ctx.cropEditable);
 
-    PushToggleButtonColors(curveOn);
-
-    if (ImGui::Button(messages::common::cCurve))
+    if (ToggleButton(messages::common::cCurve, curveOn))
     {
         mSettings.curveEnabled = !mSettings.curveEnabled;
 
@@ -158,8 +139,6 @@ void WaveImportPanel::drawWaveformTools(FrameContext& ctx, f32 groupGap)
         mPreviewStale = true;
         mTouched = true;
     }
-
-    PopToggleButtonColors(curveOn);
 
     ImGui::SetItemTooltip("%s", messages::import::cWaveCurveTip);
     ImGui::EndDisabled();
@@ -260,17 +239,13 @@ void WaveImportPanel::drawPreviewTransport(FrameContext& ctx, f32 buttonSize)
 
     const bool loopOn = mLoopPlayback && ctx.loopActive;
 
-    PushToggleButtonColors(loopOn);
-
-    if (ImGui::Button(ICON_LC_REPEAT "###LoopPlayback", size))
+    if (ToggleButton(ICON_LC_REPEAT "###LoopPlayback", loopOn, size))
     {
         mLoopPlayback = !mLoopPlayback;
         mPreviewStale = true;
     }
 
-    PopToggleButtonColors(loopOn);
-
-    ImGui::SetItemTooltip("%s", mLoopPlayback ? messages::import::cWaveLoopPlaybackOn : messages::import::cWaveLoopPlaybackOff);
+    ImGui::SetItemTooltip("%s", mLoopPlayback ? messages::common::cLoopOn : messages::common::cLoopOff);
 
     ImGui::EndDisabled();
 }

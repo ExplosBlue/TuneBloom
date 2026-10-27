@@ -742,9 +742,11 @@ void DrawItemCount(s32 shown, s32 total, const char* typeName, const char* note)
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().CellPadding.x);
 
     if (shown != total)
-        ImGui::TextDisabled(messages::common::cCountOfFormat, shown, total);
+        ImGui::TextDisabled(messages::common::cCountOfFormat, FormatCountText(shown).cstr(), FormatCountText(total).cstr());
+    else if (shown == 1)
+        ImGui::TextDisabled(messages::item::cCountOneFormat, typeName);
     else
-        ImGui::TextDisabled(shown == 1 ? messages::item::cCountOneFormat : messages::item::cCountAllFormat, shown, typeName);
+        ImGui::TextDisabled(messages::item::cCountAllFormat, FormatCountText(shown).cstr(), typeName);
 
     if (note)
     {

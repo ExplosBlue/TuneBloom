@@ -2,8 +2,8 @@
 
 #include <core/Debug.h>
 
-#include <bfsar/archive/BfsarInternal.h>
 #include <bfsar/archive/BfsarOpenContext.h>
+#include <bfsar/files/BfstmFile.h>
 #include <bfsar/files/BfstpFile.h>
 #include <bfsar/files/BfwsdFile.h>
 #include <bfsar/files/OpusStream.h>
@@ -472,9 +472,7 @@ void Bfsar::readStreamTrackInfoTable_(BfsarOpenContext& ctx, Sound* sound, const
     {
         Sound::StreamSoundInfo::Track* track = new(ctx.heap) Sound::StreamSoundInfo::Track();
         track->mId = i;
-
-        track->mEnableName = true;
-        track->mName = "Track";
+        track->setDefaultName();
 
         const SoundArchiveFile::StreamTrackInfo* trackInfo = trackInfoTable->GetTrackInfo(i);
 
@@ -551,7 +549,7 @@ bool Bfsar::readStreamFileTracks_(BfsarOpenContext& ctx, Sound* sound, const Byt
     if (mReadStreamFileVersion == 0)
         mReadStreamFileVersion = static_cast<const nw::ut::BinaryFileHeader*>(strmFile.data())->version;
 
-    if (reader.IsTrackInfoAvailable() && !readEmbeddedStreamTracks(reader, stream, ctx.heap))
+    if (reader.IsTrackInfoAvailable() && !ReadStreamFileTracks(reader, stream, ctx.heap))
         stream.mTrackList.clear();
 
     return true;
@@ -604,7 +602,7 @@ void Bfsar::readStreamFileWaves_(BfsarOpenContext& ctx, Sound* sound, const Byte
         detachStreamWaves(sound);
     }
 
-    sound->mStreamFileSignature = BfstmFile::ComputeContentSignature(sound->mStreamSoundInfo, getVersionForBfstm(), mEndian, mFormat);
+    sound->mStreamFileSignature = BfstmFile::ComputeContentSignature(sound->mStreamSoundInfo, getStreamFileTarget());
     sound->mHasStreamFileBaseline = true;
 }
 

@@ -12,10 +12,12 @@
 #include <ui/Messages.h>
 #include <ui/file/OpenQueue.h>
 #include <ui/app/PopupMgr.h>
+#include <ui/player/PlayerFrame.h>
 #include <ui/project/Sidebar.h>
 #include <ui/file/RecentFiles.h>
 #include <core/TestHooks.h>
 #include <ui/file/UnsavedChanges.h>
+#include <ui/items/Selection.h>
 #include <ui/app/Workspace.h>
 
 #include <bfsar/files/InnerFile.h>
@@ -103,7 +105,19 @@ static bool IsDocumentFile(const char* path)
     if (error || !ProbeFile(path, fileSize, ProbeDepth::Kind, &probe))
         return false;
 
-    return probe.kind == BrowserFileKind::SoundArchive || probe.kind == BrowserFileKind::AudioResource;
+    return probe.kind == BrowserFileKind::SoundArchive || probe.kind == BrowserFileKind::AudioResource || probe.kind == BrowserFileKind::Stream || probe.kind == BrowserFileKind::Wave;
+}
+
+bool PinExternalPath(const char* path)
+{
+    std::error_code error;
+
+    if (!std::filesystem::is_directory(path, error) && !IsDocumentFile(path))
+        return false;
+
+    RequestFilesPanelRoot(path, true);
+
+    return true;
 }
 
 bool OpenExternalPath(const char* path)
@@ -174,11 +188,13 @@ bool OpenFile()
 {
     sead::FixedSafeString<512> filePath;
 
-    const u32 filterCount = 3;
+    const u32 filterCount = 5;
     FileFilter filters[filterCount] = {
-        { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bea *.bars *.bwav *.zs *.pack" },
+        { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bea *.bars *.bwav *.bfstm *.bcstm *.bfwav *.bcwav *.zs *.pack" },
         { messages::archive::cOpenFilter, "*.bfsar *.bcsar *.cmpbin *.bea" },
-        { messages::resource::cOpenFilter, "*.bars *.bwav *.zs *.pack" }
+        { messages::resource::cOpenFilter, "*.bars *.bwav *.zs *.pack" },
+        { messages::stream::cOpenFilter, "*.bfstm *.bcstm" },
+        { messages::wavefile::cOpenFilter, "*.bfwav *.bcwav" }
     };
 
     if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
@@ -214,14 +230,21 @@ void RunStartupAction()
 {
     if (!sStartupFile.isEmpty())
     {
-        openqueue::Push(sStartupFile.cstr());
+        openqueue::Push(sStartupFile.cstr(), openqueue::Mode::Pin, openqueue::Origin::System);
         sStartupFile.clear();
+    }
+
+    openqueue::Request launch;
+
+    if (openqueue::Peek(&launch))
+    {
+        PreparePlayerFrame(launch);
         return;
     }
 
     const StartupSettings& settings = GetStartupSettings();
 
-    if (settings.action == StartupAction::StartPage || testhooks::IsEnabled() || !openqueue::IsEmpty())
+    if (settings.action == StartupAction::StartPage || testhooks::IsEnabled())
         return;
 
     std::vector<std::string> documents = settings.sessionDocuments;
@@ -321,17 +344,22 @@ static bool LoadDocumentFile(const sead::SafeString& filePath, bool isPreview, D
     MarkArchiveInSync();
 
     SetUITab(document->defaultTab());
+
+    if (Item* item = document->defaultSelection())
+        sSelectedItem = item;
+
     return true;
 }
 
 static void ShowOpenedDocument(const openqueue::Request& request)
 {
-    if (request.origin == openqueue::Origin::App && request.mode != openqueue::Mode::Reload)
+    if (request.origin != openqueue::Origin::Browser && request.mode != openqueue::Mode::Reload)
         ShowSidebarProject();
 }
 
 static void OpenRequestedFile(const openqueue::Request& request)
 {
+    Document* previous = ActiveDocument();
     Document* openDocument = FindOpenDocument(request.path.c_str());
 
     if (openDocument && request.mode != openqueue::Mode::Reload)
@@ -342,6 +370,7 @@ static void OpenRequestedFile(const openqueue::Request& request)
         if (request.mode == openqueue::Mode::Pin)
             PinDocument(openDocument);
 
+        NotifyPlayerFrameOpen(request, previous, openDocument);
         return;
     }
 
@@ -365,6 +394,8 @@ static void OpenRequestedFile(const openqueue::Request& request)
     loadprogress::Begin(fileName.cstr());
     const bool loaded = LoadDocumentFile(filePath, request.mode == openqueue::Mode::Preview, openDocument);
     loadprogress::End();
+
+    NotifyPlayerFrameOpen(request, previous, loaded ? ActiveDocument() : nullptr);
 
     if (!loaded)
         return;
@@ -394,7 +425,9 @@ void UpdatePendingOpen()
         sPendingOpenTime = ImGui::GetTime();
     }
 
-    if (!testhooks::IsEnabled() && ImGui::GetTime() - sPendingOpenTime < cPendingOpenDelay)
+    const bool waitsForFade = sPendingOpen.origin != openqueue::Origin::System && !testhooks::IsEnabled();
+
+    if (waitsForFade && ImGui::GetTime() - sPendingOpenTime < cPendingOpenDelay)
         return;
 
     const openqueue::Request request = sPendingOpen;

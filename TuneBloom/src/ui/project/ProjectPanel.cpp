@@ -229,87 +229,77 @@ static bool DrawProjectRow(const ProjectRow& row, s32 count, f32 indent)
     return pressed;
 }
 
-void DrawProjectUI()
+void DrawProjectList()
 {
-    if (ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER " %s###ProjectWindow", messages::common::cProject).cstr()))
+    bool selected = false;
+
+    s32 counts[static_cast<size_t>(UIType::Max) + 1] = {};
+    const ProjectRowTable table = GetProjectRows(counts);
+
+    const f32 em = ImGui::GetFontSize();
+    const ImGuiStyle& style = ImGui::GetStyle();
+
+    const s32 rowNum = table.count;
+    const s32 groupNum = table.rows[rowNum - 1].group + 1;
+
+    const f32 rowGap = CalcNavRowGap();
+    const f32 roomyPadY = CalcNavBoxPadding(true).y;
+    const f32 roomyHeight = rowNum * em + (rowNum - groupNum) * rowGap + groupNum * roomyPadY * 2.0f + (groupNum - 1) * rowGap;
+    const bool roomy = ImGui::GetContentRegionAvail().y >= roomyHeight;
+
+    const ImVec2 boxPad = CalcNavBoxPadding(roomy);
+    const f32 childIndent = ImFloor(em * cProjectChildIndentEm);
+    s32 group = -1;
+    f32 indent = 0.0f;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, roomy ? rowGap : style.ItemSpacing.y));
+
+    auto endGroup = [&group]()
     {
-        bool selected = false;
+        if (group < 0)
+            return;
 
-        s32 counts[static_cast<size_t>(UIType::Max) + 1] = {};
-        const ProjectRowTable table = GetProjectRows(counts);
+        EndNavBox();
+        group = -1;
+    };
 
-        const f32 em = ImGui::GetFontSize();
-        const ImGuiStyle& style = ImGui::GetStyle();
+    for (s32 rowIndex = 0; rowIndex < table.count; rowIndex++)
+    {
+        const ProjectRow& row = table.rows[rowIndex];
 
-        const s32 rowNum = table.count;
-        const s32 groupNum = table.rows[rowNum - 1].group + 1;
-
-        const f32 rowGap = CalcNavRowGap();
-        const f32 roomyPadY = CalcNavBoxPadding(true).y;
-        const f32 roomyHeight = rowNum * em + (rowNum - groupNum) * rowGap + groupNum * roomyPadY * 2.0f + (groupNum - 1) * rowGap;
-        const bool roomy = ImGui::GetContentRegionAvail().y >= roomyHeight;
-
-        const ImVec2 boxPad = CalcNavBoxPadding(roomy);
-        const f32 childIndent = ImFloor(em * cProjectChildIndentEm);
-        s32 group = -1;
-        f32 indent = 0.0f;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, roomy ? rowGap : style.ItemSpacing.y));
-
-        auto endGroup = [&group]()
+        if (row.group != group)
         {
-            if (group < 0)
-                return;
+            endGroup();
 
-            EndNavBox();
-            group = -1;
-        };
+            if (!BeginNavBox(sead::FormatFixedSafeString<16>("##Group%d", row.group).cstr(), boxPad, roomy || row.counted))
+                break;
 
-        for (s32 rowIndex = 0; rowIndex < table.count; rowIndex++)
-        {
-            const ProjectRow& row = table.rows[rowIndex];
-
-            if (row.group != group)
-            {
-                endGroup();
-
-                if (!BeginNavBox(sead::FormatFixedSafeString<16>("##Group%d", row.group).cstr(), boxPad, roomy || row.counted))
-                    break;
-
-                group = row.group;
-                indent = 0.0f;
-            }
-
-            if (DrawProjectRow(row, counts[static_cast<size_t>(row.type)], indent))
-            {
-                SetUITab(row.type);
-                selected = true;
-            }
-
-            if (row.title)
-                indent = childIndent;
+            group = row.group;
+            indent = 0.0f;
         }
 
-        endGroup();
-        ImGui::PopStyleVar();
-
-        if (ImGui::IsWindowFocused())
+        if (DrawProjectRow(row, counts[static_cast<size_t>(row.type)], indent))
         {
-            if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
-                StepProjectRow(table, -1);
-
-            if (shortcuts::Pressed(shortcuts::Action::SelectNext))
-                StepProjectRow(table, 1);
+            SetUITab(row.type);
+            selected = true;
         }
 
-        if (selected)
-        {
-            ImGuiWindow* w = ImGui::FindWindowByName("###InfoWindow");
-            if (w && w->DockIsActive && w->Hidden)
-            {
-                ImGui::SetWindowFocus("###InfoWindow");
-            }
-        }
+        if (row.title)
+            indent = childIndent;
     }
-    ImGui::End();
+
+    endGroup();
+    ImGui::PopStyleVar();
+
+    if (ImGui::IsWindowFocused())
+    {
+        if (shortcuts::Pressed(shortcuts::Action::SelectPrevious))
+            StepProjectRow(table, -1);
+
+        if (shortcuts::Pressed(shortcuts::Action::SelectNext))
+            StepProjectRow(table, 1);
+    }
+
+    if (selected)
+        FocusInfoWindow();
 }

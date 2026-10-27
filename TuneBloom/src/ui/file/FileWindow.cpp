@@ -9,125 +9,189 @@
 #include <bfsar/files/SequenceFile.h>
 
 #include <libs/IconsLucide.h>
-#include <imgui/imgui_internal.h>
 
-static bool sFileWindowFocused = false;
+#include <climits>
+
+static s32 sFileWindowFocusFrame = INT_MIN;
+static bool sFocusRequest = false;
 
 static ItemList& GetFileWindows()
 {
     return ActiveDocumentState().fileWindows;
 }
 
-void CloseAllFileWindows()
+static FileWindow* FindFileWindow(const Item* file)
 {
-    GetFileWindows().clear();
+    for (Item* item : GetFileWindows())
+    {
+        FileWindow* window = static_cast<FileWindow*>(item);
+
+        if (window->getFileRef().getItem() == file)
+            return window;
+    }
+
+    return nullptr;
 }
 
-void DrawFileWindows(ImGuiID dockspaceId)
+void CloseAllFileWindows()
 {
-    ItemList& fileWindows = GetFileWindows();
+    DocumentState& state = ActiveDocumentState();
+
+    state.fileWindows.clear();
+    state.shownFileWindow = nullptr;
+}
+
+void UpdateFileWindows()
+{
+    DocumentState& state = ActiveDocumentState();
+    ItemList& fileWindows = state.fileWindows;
 
     for (auto it = fileWindows.robustBegin(); it != fileWindows.robustEnd(); ++it)
     {
         FileWindow* window = static_cast<FileWindow*>(it->val());
         SEAD_ASSERT(window);
 
-        if (!window->isOpen() || !window->getFileRef().isAttached())
+        if (window->isOpen() && window->getFileRef().isAttached())
+            continue;
+
+        if (state.shownFileWindow == window)
         {
             auto* neighbourNode = fileWindows.prev(window);
             if (!neighbourNode)
                 neighbourNode = fileWindows.next(window);
 
-            const Item* neighbourFile = neighbourNode ? static_cast<FileWindow*>(neighbourNode->val())->getFileRef().getItem() : nullptr;
-            if (neighbourFile)
-                ImGui::SetWindowFocus(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%p", neighbourFile->getFormattedName().cstr(), neighbourFile).cstr());
-
-            delete window;
+            state.shownFileWindow = neighbourNode ? static_cast<FileWindow*>(neighbourNode->val()) : nullptr;
         }
+
+        delete window;
     }
+}
 
-    bool anyFocused = false;
+FileWindow* GetShownFileWindow()
+{
+    FileWindow* window = ActiveDocumentState().shownFileWindow;
 
-    for (Item* item : fileWindows)
+    if (!window || !window->isOpen() || !window->getFileRef().isAttached())
+        return nullptr;
+
+    return window;
+}
+
+void ShowFileWindow(FileWindow* window)
+{
+    ActiveDocumentState().shownFileWindow = window;
+    sFocusRequest = window != nullptr;
+}
+
+const char* GetFileWindowIcon(const FileWindow& window)
+{
+    const Item* file = window.getFileRef().getItem();
+
+    if (!file)
+        return ICON_LC_FILE;
+
+    switch (file->getItemType())
     {
-        FileWindow* window = static_cast<FileWindow*>(item);
+        case Item::ItemType::BankFile:
+            return ICON_LC_KEYBOARD_MUSIC;
 
-        Item* file = window->getFileRef().getItem();
+        case Item::ItemType::SequenceFile:
+            return ICON_LC_FILE_MUSIC;
 
-        ImGui::SetNextWindowDockID(dockspaceId, ImGuiCond_Appearing);
+        default:
+            return ICON_LC_FILE;
+    }
+}
 
-        bool dirty = false;
-        ImGuiWindowFlags flags = ImGuiWindowFlags_None;
-        if (file->getItemType() == Item::ItemType::SequenceFile)
-        {
-            SequenceFile* seq = static_cast<SequenceFile*>(file);
+bool IsFileWindowDirty(const FileWindow& window)
+{
+    const Item* file = window.getFileRef().getItem();
 
-            dirty = seq->isDirty();
-            flags |= dirty ? ImGuiWindowFlags_UnsavedDocument : 0;
-        }
+    if (!file || file->getItemType() != Item::ItemType::SequenceFile)
+        return false;
 
-        bool visible = ImGui::Begin(sead::FormatFixedSafeString<512>(ICON_LC_FILE " %s###%p", file->getFormattedName().cstr(), file).cstr(), window->getOpenPtr(), flags);
+    return static_cast<const SequenceFile*>(file)->isDirty();
+}
 
-        const bool focused = visible && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-        anyFocused = anyFocused || focused;
-
-        if (focused && shortcuts::Pressed(shortcuts::Action::CloseFileWindow) && !dirty)
-            *window->getOpenPtr() = false;
-
-        if (!window->isOpen() && dirty)
-        {
-            *window->getOpenPtr() = true;
-            PopupMgr::instance()->addPopup({ messages::sequence::cCompileFirst });
-        }
-
-        if (visible)
-        {
-            switch (file->getItemType())
-            {
-                case Item::ItemType::BankFile:
-                {
-                    BankFile* bank = static_cast<BankFile*>(file);
-                    bank->drawFileUI();
-                    break;
-                }
-
-                case Item::ItemType::SequenceFile:
-                {
-                    SequenceFile* seq = static_cast<SequenceFile*>(file);
-                    seq->drawFileUI();
-                    break;
-                }
-
-                default:
-                    break;
-            }
-        }
-        ImGui::End();
+void RequestCloseFileWindow(FileWindow* window)
+{
+    if (IsFileWindowDirty(*window))
+    {
+        PopupMgr::instance()->addPopup({ messages::sequence::cCompileFirst });
+        return;
     }
 
-    sFileWindowFocused = anyFocused;
+    *window->getOpenPtr() = false;
+}
+
+static void DrawFileUI(Item* file)
+{
+    switch (file->getItemType())
+    {
+        case Item::ItemType::BankFile:
+            static_cast<BankFile*>(file)->drawFileUI();
+            break;
+
+        case Item::ItemType::SequenceFile:
+            static_cast<SequenceFile*>(file)->drawFileUI();
+            break;
+
+        default:
+            break;
+    }
+}
+
+bool DrawShownFileWindow()
+{
+    FileWindow* window = GetShownFileWindow();
+
+    if (!window)
+        return false;
+
+    Item* file = window->getFileRef().getItem();
+
+    if (ImGui::BeginChild(ImGui::GetID(file), ImVec2(0.0f, 0.0f), ImGuiChildFlags_AlwaysUseWindowPadding))
+    {
+        if (sFocusRequest)
+        {
+            ImGui::SetWindowFocus();
+            sFocusRequest = false;
+        }
+
+        const bool isFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
+
+        if (isFocused)
+            sFileWindowFocusFrame = ImGui::GetFrameCount();
+
+        if (isFocused && shortcuts::Pressed(shortcuts::Action::CloseFileWindow))
+            RequestCloseFileWindow(window);
+
+        DrawFileUI(file);
+    }
+
+    ImGui::EndChild();
+
+    return true;
 }
 
 bool IsFileWindowFocused()
 {
-    return sFileWindowFocused;
+    return sFileWindowFocusFrame >= ImGui::GetFrameCount() - 1;
 }
 
 FileWindow* OpenFileWindow(Item* item)
 {
-    sead::FormatFixedSafeString<512> windowName("###%p", item);
+    FileWindow* window = FindFileWindow(item);
+    const bool isNew = window == nullptr;
 
-    ImGuiWindow* imguiWindow = ImGui::FindWindowByName(windowName.cstr());
-    if (!imguiWindow || !imguiWindow->WasActive)
+    if (isNew)
     {
-        FileWindow* window = new FileWindow(item);
-
+        window = new FileWindow(item);
         GetFileWindows().pushBack(window);
-
-        return window;
     }
 
-    ImGui::SetWindowFocus(windowName.cstr());
+    *window->getOpenPtr() = true;
+    ShowFileWindow(window);
 
-    return nullptr;
+    return isNew ? window : nullptr;
 }

@@ -39,14 +39,14 @@ static void TakeExternalPaths()
     sExternalCount = 0;
 }
 
-void Push(const char* path, Mode mode)
+void Push(const char* path, Mode mode, Origin origin)
 {
     if (!path || !path[0])
         return;
 
     TakeExternalPaths();
 
-    sRequests.push_back({ path, mode });
+    sRequests.push_back({ path, mode, origin });
 }
 
 bool Take(Request* outRequest)

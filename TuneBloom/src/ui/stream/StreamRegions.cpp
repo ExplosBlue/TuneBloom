@@ -541,7 +541,7 @@ void DrawStreamRegionsWindow()
 
     DockBesideTracksAtFirstUse();
 
-    const TabRowTitle title = { ICON_LC_FLAG, messages::stream::cRegionsWindowTitle, "###StreamRegionsWindow", 2 };
+    const TabRowTitle title = { ICON_LC_FLAG, messages::common::cRegions, "###StreamRegionsWindow", 2 };
     const s32 regionNum = HasRegionSupport(GetSelectedStreamSound()) ? GetSelectedRegionNum() : -1;
 
     sead::FixedSafeString<64> name;

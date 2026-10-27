@@ -17,6 +17,12 @@ enum class BrowserFileKind
     Count
 };
 
+enum class ProbeDepth
+{
+    Kind,
+    Contents
+};
+
 struct FileProbe
 {
     BrowserFileKind kind = BrowserFileKind::SoundArchive;
@@ -30,9 +36,10 @@ struct FileProbe
     u32 sampleCount = 0;
     bool isLoop = false;
     bool isPrefetch = false;
+    bool isPack = false;
     ArchiveContents contents;
 };
 
 bool ProbeFileBytes(const void* data, u64 size, FileProbe* out);
-bool ProbeFile(const std::filesystem::path& path, u64 fileSize, FileProbe* out);
+bool ProbeFile(const std::filesystem::path& path, u64 fileSize, ProbeDepth depth, FileProbe* out);
 bool ReadFileContents(const std::filesystem::path& path, std::vector<u8>* out);

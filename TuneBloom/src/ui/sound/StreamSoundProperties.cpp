@@ -4,7 +4,6 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/app/UI.h>
 
-#include <filedevice/seadPath.h>
 
 #include <filesystem>
 
@@ -45,8 +44,7 @@ bool PickStreamFilePath(sead::BufferedSafeString* outPath, Item* owner)
 
     sead::FixedSafeString<512> archiveDir;
 
-    if (!sead::Path::getDirectoryName(&archiveDir, archive.getFilePath()) &&
-        !sead::Path::getDirectoryName(&archiveDir, archive.getLoadedArchivePath()))
+    if (!Bfsar::GetStreamFolder(archive.getFilePath(), &archiveDir) && !Bfsar::GetStreamFolder(archive.getLoadedArchivePath(), &archiveDir))
     {
         PopupMgr::instance()->addPopup({messages::stream::cReloadNoArchiveFolder, owner});
         return false;

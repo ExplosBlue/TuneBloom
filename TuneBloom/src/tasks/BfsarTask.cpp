@@ -11,11 +11,9 @@
 #include "snd-ply/snd/SoundSystem.h"
 
 #include "ui/app/UI.h"
-#include "ui/browser/FilesPanel.h"
 #include "ui/file/DocumentMgr.h"
 #include "ui/file/File.h"
 #include "ui/file/LoadProgress.h"
-#include "ui/file/OpenQueue.h"
 #include "ui/player/OutputMeter.h"
 #include "ui/Messages.h"
 #include "ui/app/Notifications.h"
@@ -25,7 +23,6 @@
 #include <libs/stb_image.h>
 
 #include <cstring>
-#include <filesystem>
 
 #include <core/Debug.h>
 
@@ -97,29 +94,12 @@ void BfsarTask::prepare()
         if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
             return; // ignore dropped files while a popup is open
 
-        for (s32 i = 0; i < count; i++)
-        {
-            std::error_code error;
-
-            if (std::filesystem::is_directory(paths[i], error))
-            {
-                RequestFilesPanelRoot(paths[i]);
-                return;
-            }
-        }
-
-        bool hasDocument = false;
+        bool hasOpened = false;
 
         for (s32 i = 0; i < count; i++)
-        {
-            if (IsDocumentPath(paths[i]))
-            {
-                openqueue::PushExternal(paths[i]);
-                hasDocument = true;
-            }
-        }
+            hasOpened |= OpenExternalPath(paths[i]);
 
-        if (hasDocument)
+        if (hasOpened)
         {
             glfwFocusWindow(window);
             return;

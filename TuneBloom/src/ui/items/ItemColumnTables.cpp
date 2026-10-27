@@ -606,7 +606,7 @@ static void DrawLoopStartTooltip(bool loop, u32 loopStartFrame, u32 sampleRate)
 
     if (sampleRate == 0)
     {
-        ImGui::SetTooltip("%s", messages::item::cLoopTooltip);
+        ImGui::SetTooltip("%s", messages::common::cLoops);
         return;
     }
 
@@ -799,7 +799,7 @@ static const ItemColumn cSequenceFileColumns[] = {
 
 static const ItemColumn cBankFileColumns[] = {
     { "Instruments", messages::common::cInstruments, "0000", &FormatBankFileInstrumentsColumn, &GetBankFileInstrumentsKey, cItemColumnFlag_None, &DrawBankFileInstrumentsTooltip },
-    { "Waves",       messages::item::cColumnWaves,       "0000", &FormatBankFileWavesColumn,       &GetBankFileWavesKey, cItemColumnFlag_Hidden }
+    { "Waves",       messages::common::cWaves,       "0000", &FormatBankFileWavesColumn,       &GetBankFileWavesKey, cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cBankColumns[] = {
@@ -809,7 +809,7 @@ static const ItemColumn cBankColumns[] = {
 };
 
 static const ItemColumn cInstrumentColumns[] = {
-    { "Regions", messages::item::cColumnRegions, "0000", &FormatInstrumentRegionsColumn, &GetInstrumentRegionsKey, cItemColumnFlag_WarnZero }
+    { "Regions", messages::common::cRegions, "0000", &FormatInstrumentRegionsColumn, &GetInstrumentRegionsKey, cItemColumnFlag_WarnZero }
 };
 
 const char* GetItemTypeName(Item::ItemType itemType)

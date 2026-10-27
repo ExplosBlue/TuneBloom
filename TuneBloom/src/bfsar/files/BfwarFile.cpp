@@ -35,7 +35,7 @@ u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
 
         writer.align(0x20);
 
-        const u32 dataAlign = (mFormat == ArchiveFormat::BFSAR && mEndian == sead::Endian::eLittle) ? 0x40 : 0x20;
+        const u32 dataAlign = GetInnerFileDataAlignment(mFormat, mEndian);
 
         u32 i = 0;
         for (const WaveFile* wave : mWaveFiles)
@@ -76,9 +76,6 @@ u32 BfwarFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
         writer.closeSizedReferenceTable("WaveTable");
 
         LOG_FMT("FileBlock done, total files written=%d", (s32)mWaveFiles.size());
-
-        if (mWaveFiles.size() == 0)
-            writer.align(dataAlign);
 
         writer.closeBlock();
     }

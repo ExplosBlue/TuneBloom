@@ -1719,7 +1719,20 @@ void TextEditor::Render()
 						const std::string::size_type nameEnd = head.find(' ');
 						const ImVec4 dimColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
 
-						ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(floorf(ImGui::GetFontSize() * 0.6f), floorf(ImGui::GetFontSize() * 0.4f)));
+						const ImVec2 padding(floorf(ImGui::GetFontSize() * 0.6f), floorf(ImGui::GetFontSize() * 0.4f));
+						const float wrapX = ImGui::GetFontSize() * 28.0f;
+						float hoverHeight = padding.y * 2.0f + ImGui::GetTextLineHeight();
+						if (headEnd != std::string::npos)
+							hoverHeight += ImGui::GetStyle().ItemSpacing.y + ImGui::CalcTextSize(description.c_str() + headEnd + 1, nullptr, false, wrapX - padding.x).y;
+
+						const Coordinates wordStart = FindWordStart(mouseCoords);
+						const float wordX = cursorScreenPos.x + mTextStart + TextDistanceToLineStart(wordStart) - padding.x;
+						const float lineY = cursorScreenPos.y + LineToRow(wordStart.mLine) * mCharAdvance.y;
+						const float gap = 2.0f;
+						const bool above = lineY - gap - hoverHeight >= ImGui::GetWindowPos().y;
+
+						ImGui::SetNextWindowPos(ImVec2(wordX, above ? lineY - gap : lineY + mCharAdvance.y + gap), ImGuiCond_Always, ImVec2(0.0f, above ? 1.0f : 0.0f));
+						ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, padding);
 						ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, floorf(ImGui::GetFontSize() * 0.4f));
 						ImGui::BeginTooltip();
 						ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(mPalette[(int)PaletteIndex::Keyword]), "%s", head.substr(0, nameEnd).c_str());
@@ -1732,7 +1745,7 @@ void TextEditor::Render()
 
 						if (headEnd != std::string::npos)
 						{
-							ImGui::PushTextWrapPos(ImGui::GetFontSize() * 28.0f);
+							ImGui::PushTextWrapPos(wrapX);
 							ImGui::TextColored(dimColor, "%s", description.c_str() + headEnd + 1);
 							ImGui::PopTextWrapPos();
 						}

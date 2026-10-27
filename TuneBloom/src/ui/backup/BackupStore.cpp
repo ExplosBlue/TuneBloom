@@ -484,7 +484,7 @@ static bool ReadLegacyInfo(const fs::path& path, Snapshot* snapshot)
     return true;
 }
 
-bool ReadInfoFile(const fs::path& dir, Snapshot* snapshot)
+static bool ReadInfoFile(const fs::path& dir, Snapshot* snapshot)
 {
     if (!ReadInfoJson(dir / cInfoFile, snapshot) && !ReadLegacyInfo(dir / cLegacyInfoFile, snapshot))
         return false;
@@ -673,7 +673,7 @@ static void Rotate(const fs::path& keyDir)
     }
 }
 
-fs::path GetMarkerPath()
+static fs::path GetMarkerPath()
 {
     const std::string documentSuffix = "-" + std::to_string(ActiveDocumentState().serial);
 
@@ -786,7 +786,7 @@ static void FindPreviousStreams(const std::vector<Snapshot>& previous, Document:
     }
 }
 
-bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
+bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result)
 {
     *result = Bfsar::BackupResult::OpenFailed;
 
@@ -838,9 +838,6 @@ bool WriteSnapshot(Kind kind, Bfsar::BackupResult* result, std::string* outDir)
         WriteMarker(snapshot.dir);
 
     Rotate(keyDir);
-
-    if (outDir)
-        *outDir = snapshot.dir;
 
     return true;
 }
@@ -1011,11 +1008,6 @@ const Recovery& GetNextRecovery()
 void DropNextRecovery()
 {
     sRecoveries.pop_back();
-}
-
-void AddRecovery(Recovery&& recovery)
-{
-    sRecoveries.push_back(std::move(recovery));
 }
 
 void RemoveRecoveryMarker(const Recovery& recovery)

@@ -13,7 +13,6 @@
 #include <ui/app/PopupMgr.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
-#include <filedevice/seadPath.h>
 
 #include <snd/snd_StreamSoundFileReader.h>
 #include <snd/snd_WaveSoundFileReader.h>
@@ -33,8 +32,9 @@ using nw::snd::internal::WaveSoundFile;
 namespace
 {
 
-constexpr u32 cPathBufferSize = 512;
-constexpr u32 cNameBufferSize = 256;
+constexpr u32 cPathBufferSize    = 512;
+constexpr u32 cNameBufferSize    = 256;
+constexpr u32 cTrimmedPaddingMax = 0x20;
 
 enum class StreamFileState
 {
@@ -44,6 +44,22 @@ enum class StreamFileState
     Complete
 };
 
+}
+
+static ByteRange RestoreTrimmedPadding(const u8* data, u32 size)
+{
+    const u32 declaredSize = ReadDeclaredFileSize(data, size);
+
+    if (declaredSize <= size || declaredSize - size >= cTrimmedPaddingMax)
+        return ByteRange(data, size);
+
+    u8* padded = new u8[declaredSize];
+    std::memcpy(padded, data, size);
+    std::memset(padded + size, 0, declaredSize - size);
+
+    delete[] data;
+
+    return ByteRange(padded, declaredSize);
 }
 
 ByteRange LoadFileBytes(const sead::SafeString& path)
@@ -59,7 +75,7 @@ ByteRange LoadFileBytes(const sead::SafeString& path)
 
     const u8* data = device->tryLoad(arg);
 
-    return data ? ByteRange(data, arg.read_size) : ByteRange();
+    return data ? RestoreTrimmedPadding(data, arg.read_size) : ByteRange();
 }
 
 void FreeFileBytes(const ByteRange& file)
@@ -106,7 +122,7 @@ bool Bfsar::open_(const nw::snd::MemorySoundArchive& soundArchive, u32 bfsarSize
 
     readArchiveVersion_(ctx);
 
-    const ArchiveLayoutVersion layoutVersion = { isStreamTrackInfoAvailable(), isStreamSendAvailable(), isFilterSupportedVersion() };
+    const ArchiveLayoutVersion layoutVersion = { isStreamTrackInfoAvailable(), isStreamSendAvailable(), isFilterSupportedVersion(), isFileAttachedGroupAvailable() };
 
     if (!CheckSoundArchiveLayout(soundArchive, bfsarSize, layoutVersion))
         return false;
@@ -179,9 +195,23 @@ void Bfsar::readArchiveVersion_(const BfsarOpenContext& ctx)
     mIncludeStringTable = ctx.soundArchive.mStringBlockBody != nullptr;
 }
 
+static u32 ReadArchiveNameHash(const BfsarOpenContext& ctx)
+{
+    const Util::Reference* toNameHash = reinterpret_cast<const Util::Reference*>(ctx.soundArchive.mInfoBlockBody + 1);
+
+    if (!ctx.archiveBytes.containsStruct(toNameHash) || toNameHash->typeId != nw::snd::internal::ElementType_SoundArchiveFile_NameHashInfo)
+        return 0;
+
+    const nw::ut::ResU32* nameHash = static_cast<const nw::ut::ResU32*>(sead::PtrUtil::addOffset(ctx.soundArchive.mInfoBlockBody, toNameHash->offset));
+
+    return ctx.archiveBytes.containsStruct(nameHash) ? static_cast<u32>(*nameHash) : 0;
+}
+
 void Bfsar::readPlayerSettings_(const BfsarOpenContext& ctx)
 {
     const SoundArchiveFile::SoundArchivePlayerInfo* playerInfo = ctx.soundArchive.GetSoundArchivePlayerInfo();
+
+    mArchiveNameHash = isV3Bfsar() ? ReadArchiveNameHash(ctx) : 0;
 
     mSoundArchivePlayerInfo.sequenceSoundMax = playerInfo->sequenceSoundMax;
     mSoundArchivePlayerInfo.sequenceTrackMax = playerInfo->sequenceTrackMax;
@@ -190,7 +220,7 @@ void Bfsar::readPlayerSettings_(const BfsarOpenContext& ctx)
     mSoundArchivePlayerInfo.streamChannelMax = playerInfo->streamChannelMax;
     mSoundArchivePlayerInfo.waveSoundMax = playerInfo->waveSoundMax;
     mSoundArchivePlayerInfo.waveTrackMax = playerInfo->waveTrackMax;
-    mSoundArchivePlayerInfo.streamBufferTimes = isStreamPrefetchAvailable() ? playerInfo->streamBufferTimes : 1;
+    mSoundArchivePlayerInfo.streamBufferTimes = playerInfo->streamBufferTimes;
     mSoundArchivePlayerInfo.options = playerInfo->options;
 }
 
@@ -475,7 +505,7 @@ bool Bfsar::findStreamFilePath_(const Sound* sound, sead::BufferedSafeString* ou
     const char* streamPath = sound->mStreamSoundInfo.mPath.cstr();
     sead::FixedSafeString<cPathBufferSize> archiveDir;
 
-    if (!sead::Path::getDirectoryName(&archiveDir, getFilePath()))
+    if (!Bfsar::GetStreamFolder(getFilePath(), &archiveDir))
     {
         PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<1024>(messages::archive::cPathDirectoryInvalidFormat, getFilePath().cstr()));
         return false;
@@ -517,6 +547,9 @@ bool Bfsar::readStreamFileTracks_(BfsarOpenContext& ctx, Sound* sound, const Byt
         PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         return false;
     }
+
+    if (mReadStreamFileVersion == 0)
+        mReadStreamFileVersion = static_cast<const nw::ut::BinaryFileHeader*>(strmFile.data())->version;
 
     if (reader.IsTrackInfoAvailable() && !readEmbeddedStreamTracks(reader, stream, ctx.heap))
         stream.mTrackList.clear();
@@ -734,18 +767,7 @@ void Bfsar::readWaveSoundParams_(Sound* sound, const nw::snd::internal::WaveSoun
         wave.mAdshrCurve.release = curve.release;
     }
 
-    u32 wsdVersion = reader.mHeader->header.version;
-    const InnerFileFormatInfo* wsdFormat = FindInnerFileFormat(reader.mHeader->header.signature, InnerFileKind::WaveSoundData);
-
-    if (wsdFormat && wsdFormat->format == ArchiveFormat::BCSAR)
-    {
-        const u32 major = (wsdVersion >> 24) & 0xFF;
-        const u32 minor = (wsdVersion >> 16) & 0xFF;
-
-        wsdVersion = (major << 16) | (minor << 8);
-    }
-
-    const bool isFilterModeled = BfwsdFile::isFilterSupportedVersion(wsdVersion, mFormat);
+    const bool isFilterModeled = BfwsdFile::isFilterSupportedVersion(reader.mHeader->header.version, mFormat);
 
     if (isFilterModeled)
     {

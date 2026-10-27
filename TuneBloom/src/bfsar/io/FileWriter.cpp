@@ -218,6 +218,22 @@ void FileWriter::align(u32 alignment)
     }
 }
 
+void FileWriter::alignInFile(u32 alignment)
+{
+    if (!mBlockOpen)
+    {
+        SEAD_ASSERT_MSG(false, "block not open");
+        return;
+    }
+
+    const u32 padBytes = (alignment - getPosition() % alignment) % alignment;
+
+    for (u32 i = 0; i < padBytes; i++)
+    {
+        mStream->writeU8(0);
+    }
+}
+
 void FileWriter::openReference(const sead::SafeString& name)
 {
     LOG_FUNC();

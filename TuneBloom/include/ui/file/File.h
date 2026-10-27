@@ -25,7 +25,7 @@ const sead::SafeString& GetDocumentLoadedPath();
 const char* GetDocumentExtension();
 void RenumberDocumentList(Item::List& list);
 std::string GetDocumentName();
-bool IsDocumentPath(const char* path);
+bool OpenExternalPath(const char* path);
 bool IsValidDocumentName(const sead::SafeString& name);
 bool IsUniqueDocumentName(const sead::SafeString& name, const Item* ignoreItem);
 

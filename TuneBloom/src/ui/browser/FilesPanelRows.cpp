@@ -17,16 +17,19 @@
 #include <cctype>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 
-static constexpr f32 cIndentEm         = 1.1f;
-static constexpr f32 cCountGapEm       = 0.5f;
+static constexpr f32 cCountGapEm      = 0.5f;
 static constexpr f32 cNameMinEm        = 8.0f;
 static constexpr f32 cNameComfortEm    = 20.0f;
 static constexpr f32 cFolderCountChars = 4.0f;
 static constexpr u32 cPrefixMinLength  = 3;
+static constexpr u32 cPrefixGroupMin   = 2;
+static constexpr u32 cGroupPrefixMin   = 2;
 static constexpr char cPrefixSeparator = '_';
 
+static constexpr const char* cRowMenuId       = "##menu";
 static constexpr const char* cPrefixMarker    = "..";
 static constexpr const char* cWidthSampleChar = "0";
 static constexpr const char* cOpenFileMark    = ICON_LC_DOT;
@@ -58,15 +61,40 @@ static const SoundTypeInfo& GetSoundType(ArchiveSoundType type)
     return cSoundTypes[static_cast<s32>(type)];
 }
 
-static s32 SharedPrefixLength(const std::string& left, const std::string& right)
+static s32 SharedPrefixLength(std::string_view left, std::string_view right)
 {
     const size_t common = std::mismatch(left.begin(), left.begin() + std::min(left.size(), right.size()), right.begin()).first - left.begin();
     const size_t separator = left.rfind(cPrefixSeparator, common == 0 ? 0 : common - 1);
 
-    if (common == 0 || separator == std::string::npos || separator + 1 < cPrefixMinLength)
+    if (common == 0 || separator == std::string_view::npos || separator + 1 < cPrefixMinLength)
         return 0;
 
     return static_cast<s32>(separator + 1);
+}
+
+static std::string_view GetGroupName(const std::string& stem)
+{
+    const size_t separator = stem.find(cPrefixSeparator);
+
+    if (separator == std::string::npos || separator + 1 < cGroupPrefixMin || separator + 1 == stem.size())
+        return stem;
+
+    return std::string_view(stem).substr(0, separator);
+}
+
+static bool IsGroupBase(const std::string& stem)
+{
+    return GetGroupName(stem).size() == stem.size();
+}
+
+static std::string_view GetShownStem(const FileIndexSnapshot& snapshot, const FilesRow& row)
+{
+    return std::string_view(snapshot.files[row.index].stem).substr(row.nameStart);
+}
+
+static bool IsSiblingFileRow(const FilesRow& row, const FilesRow& other)
+{
+    return other.kind == FilesRowKind::File && other.depth == row.depth;
 }
 
 static s32 CalcHiddenPrefixLength(const char* name, s32 prefixLength, f32 width)
@@ -97,99 +125,295 @@ static bool ContainsIgnoreCase(const std::string& text, const char* query)
     return found != text.end();
 }
 
-void FilesPanel::countShownFiles(FrameContext& ctx, s32 folder)
+static bool IsContentRow(const FilesRow& row)
 {
-    const BrowserFolder& entry = ctx.snapshot->folders[folder];
+    return row.kind == FilesRowKind::Folder || row.kind == FilesRowKind::Prefix || row.kind == FilesRowKind::File || row.kind == FilesRowKind::Sound;
+}
+
+void FilesPanel::countShownFiles(FrameContext& ctx, s32 root, s32 folder)
+{
+    const FileIndexSnapshot& snapshot = getSnapshot(root);
+    const BrowserFolder& entry = snapshot.folders[folder];
+    std::vector<u32>& shownCounts = ctx.shownCounts[root];
     u32 count = 0;
 
     for (s32 child : entry.folders)
     {
-        countShownFiles(ctx, child);
-        count += ctx.shownCounts[child];
+        countShownFiles(ctx, root, child);
+        count += shownCounts[child];
     }
 
     for (s32 file : entry.files)
     {
-        if (isFileShown(ctx.snapshot->files[file]))
+        if (isFileShown(snapshot.files[file]))
             count++;
     }
 
-    ctx.shownCounts[folder] = count;
+    shownCounts[folder] = count;
 }
 
-void FilesPanel::collectFolderRows(FrameContext& ctx, s32 folder, s32 depth)
+void FilesPanel::collectFolderRows(const FrameContext& ctx, std::vector<FilesRow>& rows, s32 root, s32 folder, s32 depth, bool isAllOpen)
 {
-    const BrowserFolder& entry = ctx.snapshot->folders[folder];
+    const FileIndexSnapshot& snapshot = getSnapshot(root);
+    const BrowserFolder& entry = snapshot.folders[folder];
 
     for (s32 child : entry.folders)
     {
-        if (ctx.shownCounts[child] == 0)
+        if (ctx.shownCounts[root][child] == 0)
             continue;
 
-        ctx.rows.push_back({ FilesRowKind::Folder, child, -1, depth });
+        rows.push_back({ .kind = FilesRowKind::Folder, .root = root, .index = child, .depth = depth });
 
-        if (mExpanded[child])
-            collectFolderRows(ctx, child, depth + 1);
+        if (isAllOpen || mRoots[root].expanded[child])
+            collectFolderRows(ctx, rows, root, child, depth + 1, isAllOpen);
     }
 
-    const size_t firstFile = ctx.rows.size();
+    const size_t firstFile = rows.size();
 
-    for (s32 file : entry.files)
+    collectFileRows(rows, root, folder, depth, isAllOpen);
+
+    for (size_t i = firstFile; i < rows.size(); i++)
     {
-        if (isFileShown(ctx.snapshot->files[file]))
-            ctx.rows.push_back({ FilesRowKind::File, file, -1, depth });
+        FilesRow& row = rows[i];
+
+        if (row.kind != FilesRowKind::File)
+            continue;
+
+        const std::string_view stem = GetShownStem(snapshot, row);
+        const s32 previous = i > firstFile && IsSiblingFileRow(row, rows[i - 1]) ? SharedPrefixLength(stem, GetShownStem(snapshot, rows[i - 1])) : 0;
+        const s32 next = i + 1 < rows.size() && IsSiblingFileRow(row, rows[i + 1]) ? SharedPrefixLength(stem, GetShownStem(snapshot, rows[i + 1])) : 0;
+
+        row.prefixLength = std::max(previous, next);
+    }
+}
+
+void FilesPanel::collectFileRows(std::vector<FilesRow>& rows, s32 root, s32 folder, s32 depth, bool isAllOpen)
+{
+    const FileIndexSnapshot& snapshot = getSnapshot(root);
+    std::vector<s32> files;
+
+    for (s32 file : snapshot.folders[folder].files)
+    {
+        if (isFileShown(snapshot.files[file]))
+            files.push_back(file);
     }
 
-    for (size_t i = firstFile; i < ctx.rows.size(); i++)
-    {
-        const std::string& stem = ctx.snapshot->files[ctx.rows[i].index].stem;
-        const s32 previous = i > firstFile ? SharedPrefixLength(stem, ctx.snapshot->files[ctx.rows[i - 1].index].stem) : 0;
-        const s32 next = i + 1 < ctx.rows.size() ? SharedPrefixLength(stem, ctx.snapshot->files[ctx.rows[i + 1].index].stem) : 0;
+    std::vector<s32> leaders(files.size(), -1);
+    std::vector<u32> groupSizes(files.size(), 0);
+    const auto stemOf = [&](s32 position) -> const std::string& { return snapshot.files[files[position]].stem; };
 
-        ctx.rows[i].prefixLength = std::max(previous, next);
+    if (mGroupByPrefix)
+    {
+        std::vector<s32> order(files.size());
+
+        for (s32 i = 0; i < static_cast<s32>(order.size()); i++)
+            order[i] = i;
+
+        std::stable_sort(order.begin(), order.end(), [&](s32 left, s32 right) { return GetGroupName(stemOf(left)) < GetGroupName(stemOf(right)); });
+
+        for (size_t start = 0; start < order.size();)
+        {
+            const std::string_view name = GetGroupName(stemOf(order[start]));
+            bool hasPrefixedFile = false;
+            size_t end = start;
+
+            while (end < order.size() && GetGroupName(stemOf(order[end])) == name)
+                hasPrefixedFile |= !IsGroupBase(stemOf(order[end++]));
+
+            if (hasPrefixedFile && end - start >= cPrefixGroupMin)
+            {
+                for (size_t member = start; member < end; member++)
+                    leaders[order[member]] = order[start];
+
+                groupSizes[order[start]] = static_cast<u32>(end - start);
+            }
+
+            start = end;
+        }
+    }
+
+    for (s32 i = 0; i < static_cast<s32>(files.size()); i++)
+    {
+        if (leaders[i] < 0)
+        {
+            rows.push_back({ .kind = FilesRowKind::File, .root = root, .index = files[i], .depth = depth });
+            continue;
+        }
+
+        if (leaders[i] != i)
+            continue;
+
+        const BrowserFile& first = snapshot.files[files[i]];
+        const s32 prefixLength = static_cast<s32>(GetGroupName(first.stem).size() + 1);
+        FilesRow group = { .kind = FilesRowKind::Prefix, .root = root, .index = folder, .sound = files[i], .depth = depth, .nameStart = prefixLength, .childCount = groupSizes[i] };
+
+        for (s32 member = i; member < static_cast<s32>(files.size()); member++)
+        {
+            if (leaders[member] != i)
+                continue;
+
+            const BrowserFile& file = snapshot.files[files[member]];
+
+            group.groupSize += file.size;
+            group.isMixedFormat |= strcmp(file.probe.formatName, first.probe.formatName) != 0;
+        }
+
+        rows.push_back(group);
+
+        if (!isAllOpen && !isRowOpen(group))
+            continue;
+
+        for (s32 member = i; member < static_cast<s32>(files.size()); member++)
+        {
+            if (leaders[member] == i)
+                rows.push_back({ .kind = FilesRowKind::File, .root = root, .index = files[member], .depth = depth + 1, .nameStart = IsGroupBase(stemOf(member)) ? 0 : prefixLength });
+        }
+    }
+}
+
+void FilesPanel::invalidateRows()
+{
+    mRowsGeneration++;
+}
+
+bool FilesPanel::isRowsKeyCurrent(const FrameContext& ctx) const
+{
+    const auto isSamePath = [](const std::string& path, const OpenFileMark& mark) { return path == mark.path; };
+
+    return mRowsKey.rowsGeneration == mRowsGeneration && mRowsKey.snapshotGeneration == mSnapshotGeneration && mRowsKey.em == ctx.em && mRowsKey.search == mSearch
+        && std::equal(mRowsKey.openPaths.begin(), mRowsKey.openPaths.end(), ctx.openFiles.begin(), ctx.openFiles.end(), isSamePath);
+}
+
+void FilesPanel::updateRows(FrameContext& ctx)
+{
+    if (isRowsKeyCurrent(ctx))
+        return;
+
+    mRowsKey.rowsGeneration = mRowsGeneration;
+    mRowsKey.snapshotGeneration = mSnapshotGeneration;
+    mRowsKey.em = ctx.em;
+    mRowsKey.search = mSearch;
+    mRowsKey.openPaths.clear();
+
+    for (const OpenFileMark& mark : ctx.openFiles)
+        mRowsKey.openPaths.push_back(mark.path);
+
+    collectRows(ctx);
+
+    std::vector<FilesRow> allOpenRows;
+
+    if (!ctx.isSearching)
+        collectAllOpenRows(ctx, allOpenRows);
+
+    const std::vector<FilesRow>& measureRows = ctx.isSearching ? ctx.rows : allOpenRows;
+
+    PushItemTablePadding();
+    calcValueWidths(ctx, measureRows);
+    ctx.nameWant = calcNameWant(ctx, measureRows);
+    ImGui::PopStyleVar();
+}
+
+void FilesPanel::collectAllOpenRows(const FrameContext& ctx, std::vector<FilesRow>& rows)
+{
+    for (s32 root = 0; root < static_cast<s32>(mRoots.size()); root++)
+    {
+        const FilesRoot& entry = mRoots[root];
+
+        if (entry.isOpen && !entry.isMissing && entry.hasSnapshot && !ctx.shownCounts[root].empty() && ctx.shownCounts[root][0] > 0)
+            collectFolderRows(ctx, rows, root, 0, 1, true);
     }
 }
 
 void FilesPanel::collectRows(FrameContext& ctx)
 {
-    ctx.shownCounts.assign(ctx.snapshot->folders.size(), 0);
+    ctx.isSearching = mSearch[0] != '\0';
+    ctx.rows.clear();
+    ctx.shownCounts.resize(mRoots.size());
+    ctx.shownFileCount = 0;
+    ctx.shownSoundCount = 0;
+    ctx.totalFileCount = 0;
+    ctx.totalSize = 0;
 
-    if (ctx.snapshot->folders.empty())
+    if (ctx.isSearching)
+        updateSoundMatches();
+
+    for (s32 root = 0; root < static_cast<s32>(mRoots.size()); root++)
+    {
+        const FileIndexSnapshot& snapshot = getSnapshot(root);
+
+        ctx.shownCounts[root].assign(snapshot.folders.size(), 0);
+
+        if (!snapshot.folders.empty())
+            countShownFiles(ctx, root, 0);
+
+        ctx.totalFileCount += static_cast<u32>(snapshot.files.size());
+        ctx.totalSize += snapshot.totalSize;
+
+        if (ctx.isSearching)
+        {
+            collectSearchRows(ctx, root);
+            continue;
+        }
+
+        const bool hasPinned = mRoots.front().isPinned;
+
+        if (root == 0 && hasPinned)
+            ctx.rows.push_back({ .kind = FilesRowKind::Group, .index = 0 });
+        else if (hasPinned && !mRoots[root].isPinned && mRoots[root - 1].isPinned)
+            ctx.rows.push_back({ .kind = FilesRowKind::Group, .index = 1 });
+
+        collectRootRows(ctx, root);
+    }
+
+    if (!ctx.isSearching || mRoots.empty())
+        ctx.rows.push_back({ .kind = FilesRowKind::AddFolder });
+}
+
+void FilesPanel::collectRootRows(FrameContext& ctx, s32 root)
+{
+    const FilesRoot& entry = mRoots[root];
+    const u32 shown = ctx.shownCounts[root].empty() ? 0 : ctx.shownCounts[root][0];
+
+    ctx.shownFileCount += shown;
+    ctx.rows.push_back({ .kind = FilesRowKind::Root, .root = root });
+
+    if (!entry.isOpen)
         return;
 
-    countShownFiles(ctx, 0);
-    ctx.isSearching = mSearch[0] != '\0';
-
-    if (!ctx.isSearching)
+    if (entry.isMissing || !entry.hasSnapshot || shown == 0)
     {
-        ctx.shownFileCount = ctx.shownCounts[0];
-        collectFolderRows(ctx, 0, 0);
+        ctx.rows.push_back({ .kind = FilesRowKind::Status, .root = root, .depth = 1 });
         return;
     }
 
-    collectSearchRows(ctx);
+    collectFolderRows(ctx, ctx.rows, root, 0, 1, false);
 }
 
-void FilesPanel::collectSearchRows(FrameContext& ctx)
+void FilesPanel::collectSearchRows(FrameContext& ctx, s32 root)
 {
-    updateSoundMatches(ctx);
+    const FileIndexSnapshot& snapshot = getSnapshot(root);
+    const std::vector<FilesRow>& soundRows = mSoundMatches.rows[root];
+    const std::vector<u8>& hasMatch = mSoundMatches.hasMatch[root];
+    const size_t rootRow = ctx.rows.size();
 
-    for (s32 file = 0; file < static_cast<s32>(ctx.snapshot->files.size()); file++)
+    ctx.rows.push_back({ .kind = FilesRowKind::Root, .root = root });
+
+    for (s32 file = 0; file < static_cast<s32>(snapshot.files.size()); file++)
     {
-        const BrowserFile& entry = ctx.snapshot->files[file];
+        const BrowserFile& entry = snapshot.files[file];
 
-        if (!isFileShown(entry) || mSoundMatches.hasMatch[file] || !ContainsIgnoreCase(entry.name, mSearch))
+        if (!isFileShown(entry) || hasMatch[file] || !ContainsIgnoreCase(entry.name, mSearch))
             continue;
 
-        ctx.rows.push_back({ FilesRowKind::File, file, -1, 0 });
+        ctx.rows.push_back({ .kind = FilesRowKind::File, .root = root, .index = file, .depth = 1 });
         ctx.shownFileCount++;
     }
 
     s32 archive = -1;
 
-    for (const FilesRow& row : mSoundMatches.rows)
+    for (const FilesRow& row : soundRows)
     {
-        const BrowserFile& entry = ctx.snapshot->files[row.index];
+        const BrowserFile& entry = snapshot.files[row.index];
 
         if (!isFileShown(entry))
             continue;
@@ -197,73 +421,90 @@ void FilesPanel::collectSearchRows(FrameContext& ctx)
         if (row.index != archive)
         {
             archive = row.index;
-            ctx.rows.push_back({ FilesRowKind::File, archive, -1, 0 });
+            ctx.rows.push_back({ .kind = FilesRowKind::File, .root = root, .index = archive, .depth = 1 });
             ctx.shownFileCount += ContainsIgnoreCase(entry.name, mSearch) ? 1 : 0;
         }
 
         ctx.rows.push_back(row);
         ctx.shownSoundCount++;
     }
+
+    if (ctx.rows.size() == rootRow + 1)
+        ctx.rows.pop_back();
 }
 
-void FilesPanel::updateSoundMatches(const FrameContext& ctx)
+void FilesPanel::updateSoundMatches()
 {
     if (mSoundMatches.generation == mSnapshotGeneration && mSoundMatches.query == mSearch)
         return;
 
     mSoundMatches.query = mSearch;
     mSoundMatches.generation = mSnapshotGeneration;
-    mSoundMatches.rows.clear();
-    mSoundMatches.hasMatch.assign(ctx.snapshot->files.size(), 0);
+    mSoundMatches.rows.assign(mRoots.size(), {});
+    mSoundMatches.hasMatch.assign(mRoots.size(), {});
 
-    for (s32 file = 0; file < static_cast<s32>(ctx.snapshot->files.size()); file++)
+    for (s32 root = 0; root < static_cast<s32>(mRoots.size()); root++)
     {
-        const std::vector<ArchiveSound>& sounds = ctx.snapshot->files[file].probe.contents.sounds;
+        const std::vector<BrowserFile>& files = getSnapshot(root).files;
 
-        for (s32 sound = 0; sound < static_cast<s32>(sounds.size()); sound++)
+        mSoundMatches.hasMatch[root].assign(files.size(), 0);
+
+        for (s32 file = 0; file < static_cast<s32>(files.size()); file++)
         {
-            if (sounds[sound].name.empty() || !ContainsIgnoreCase(sounds[sound].name, mSearch))
-                continue;
+            const std::vector<ArchiveSound>& sounds = files[file].probe.contents.sounds;
 
-            mSoundMatches.rows.push_back({ FilesRowKind::Sound, file, sound, 1 });
-            mSoundMatches.hasMatch[file] = 1;
+            for (s32 sound = 0; sound < static_cast<s32>(sounds.size()); sound++)
+            {
+                if (sounds[sound].name.empty() || !ContainsIgnoreCase(sounds[sound].name, mSearch))
+                    continue;
+
+                mSoundMatches.rows[root].push_back({ .kind = FilesRowKind::Sound, .root = root, .index = file, .sound = sound, .depth = 2 });
+                mSoundMatches.hasMatch[root][file] = 1;
+            }
         }
     }
 }
 
-const std::string& FilesPanel::getRowName(const FrameContext& ctx, const FilesRow& row) const
+const std::string& FilesPanel::getRowName(const FilesRow& row) const
 {
+    if (row.kind == FilesRowKind::Root)
+        return mRoots[row.root].name;
+
     if (row.kind == FilesRowKind::Folder)
-        return ctx.snapshot->folders[row.index].name;
+        return getSnapshot(row.root).folders[row.index].name;
 
-    const BrowserFile& file = ctx.snapshot->files[row.index];
+    const BrowserFile& file = getFile(row);
 
-    return row.kind == FilesRowKind::Sound ? file.probe.contents.sounds[row.sound].name : file.stem;
+    return row.kind == FilesRowKind::Sound ? file.probe.contents.sounds[row.sound].name : file.name;
 }
 
 f32 FilesPanel::calcRowNoteWidth(const FrameContext& ctx, const FilesRow& row) const
 {
     const f32 gap = ImFloor(ctx.em * cCountGapEm);
 
-    if (row.kind == FilesRowKind::Folder)
+    if (row.kind == FilesRowKind::Folder || row.kind == FilesRowKind::Prefix)
         return gap + ImGui::CalcTextSize(cWidthSampleChar).x * cFolderCountChars;
 
-    if (row.kind == FilesRowKind::File && findOpenFile(ctx, ctx.snapshot->files[row.index].path))
+    if (row.kind == FilesRowKind::File && findOpenFile(ctx, getFile(row).path))
         return gap + ImGui::CalcTextSize(cOpenFileMark).x;
 
     return 0.0f;
 }
 
-f32 FilesPanel::calcNameWant(const FrameContext& ctx) const
+f32 FilesPanel::calcNameWant(const FrameContext& ctx, const std::vector<FilesRow>& rows) const
 {
     const f32 charWidth = ImGui::CalcTextSize(cWidthSampleChar).x;
     const f32 indent = ImFloor(ctx.em * cIndentEm);
     const f32 lead = ctx.chevronWidth + ctx.em + ImFloor(ctx.em * cIconGapEm) + ImGui::GetStyle().CellPadding.x * 2.0f;
     f32 widest = 0.0f;
 
-    for (const FilesRow& row : ctx.rows)
+    for (const FilesRow& row : rows)
     {
-        const f32 width = row.depth * indent + lead + getRowName(ctx, row).size() * charWidth + calcRowNoteWidth(ctx, row);
+        if (!IsContentRow(row))
+            continue;
+
+        const size_t nameLength = row.kind == FilesRowKind::Prefix ? row.nameStart : getRowName(row).size() - row.nameStart;
+        const f32 width = row.depth * indent + lead + nameLength * charWidth + calcRowNoteWidth(ctx, row);
 
         widest = sead::Mathf::max(widest, width);
     }
@@ -271,35 +512,52 @@ f32 FilesPanel::calcNameWant(const FrameContext& ctx) const
     return std::clamp(widest, ctx.em * cNameMinEm, ctx.em * cNameComfortEm);
 }
 
-void FilesPanel::updateSizeLabelLengths()
-{
-    const std::vector<BrowserFile>& files = mIndex.getSnapshot().files;
-
-    mSizeLabelLengths.resize(files.size());
-
-    for (size_t i = 0; i < files.size(); i++)
-    {
-        sead::FixedSafeString<32> size;
-        FormatItemSize(&size, files[i].size);
-
-        mSizeLabelLengths[i] = static_cast<u8>(size.calcLength());
-    }
-}
-
-void FilesPanel::calcValueWidths(FrameContext& ctx) const
+void FilesPanel::calcValueWidths(FrameContext& ctx, const std::vector<FilesRow>& rows) const
 {
     const char* widestFormat = nullptr;
     size_t widestFormatLength = 0;
-    s32 widestSizeFile = -1;
-    u8 widestSizeLength = 0;
+    u64 widestSize = 0;
+    s32 widestSizeLength = 0;
+    sead::FixedSafeString<32> size;
 
-    for (const FilesRow& row : ctx.rows)
+    for (const FilesRow& row : rows)
     {
-        if (row.kind == FilesRowKind::Folder)
-            continue;
+        const BrowserFolder* pack = getPackFolder(row);
+        const char* format = nullptr;
+        u64 rowSize = 0;
+        s32 sizeLength = 0;
 
-        const BrowserFile& file = ctx.snapshot->files[row.index];
-        const char* format = row.kind == FilesRowKind::Sound ? GetSoundType(file.probe.contents.sounds[row.sound].type).shortLabel : file.probe.formatName;
+        if (pack)
+        {
+            format = pack->packFormat.c_str();
+            rowSize = pack->packSize;
+        }
+        else if (row.kind == FilesRowKind::Prefix)
+        {
+            format = row.isMixedFormat ? "" : getSnapshot(row.root).files[row.sound].probe.formatName;
+            rowSize = row.groupSize;
+        }
+        else if (row.kind == FilesRowKind::File)
+        {
+            format = getFile(row).probe.formatName;
+            rowSize = getFile(row).size;
+            sizeLength = mRoots[row.root].sizeLabelLengths[row.index];
+        }
+        else if (row.kind == FilesRowKind::Sound)
+        {
+            format = GetSoundType(getFile(row).probe.contents.sounds[row.sound].type).shortLabel;
+        }
+        else
+        {
+            continue;
+        }
+
+        if (pack || row.kind == FilesRowKind::Prefix)
+        {
+            FormatItemSize(&size, rowSize);
+            sizeLength = size.calcLength();
+        }
+
         const size_t formatLength = strlen(format);
 
         if (formatLength > widestFormatLength)
@@ -308,31 +566,29 @@ void FilesPanel::calcValueWidths(FrameContext& ctx) const
             widestFormatLength = formatLength;
         }
 
-        if (row.kind == FilesRowKind::File && mSizeLabelLengths[row.index] > widestSizeLength)
+        if (sizeLength > widestSizeLength)
         {
-            widestSizeFile = row.index;
-            widestSizeLength = mSizeLabelLengths[row.index];
+            widestSize = rowSize;
+            widestSizeLength = sizeLength;
         }
     }
 
     ctx.formatWidth = widestFormat ? CalcItemValueCellWidth(widestFormat) : 0.0f;
+    ctx.sizeWidth = 0.0f;
 
-    if (widestSizeFile < 0)
+    if (widestSizeLength == 0)
         return;
 
-    sead::FixedSafeString<32> size;
-    FormatItemSize(&size, ctx.snapshot->files[widestSizeFile].size);
+    FormatItemSize(&size, widestSize);
 
     ctx.sizeWidth = CalcItemValueCellWidth(size.cstr());
 }
 
 void FilesPanel::setupColumns(FrameContext& ctx)
 {
-    calcValueWidths(ctx);
-
     const f32 cellPadding = ImGui::GetStyle().CellPadding.x * 2.0f;
-    const f32 avail = ImGui::GetContentRegionAvail().x;
-    const f32 nameWant = calcNameWant(ctx);
+    const f32 avail = ctx.tableWidth;
+    const f32 nameWant = ctx.nameWant;
     const f32 formatWidth = ctx.formatWidth + cellPadding;
     const f32 sizeWidth = ctx.sizeWidth + cellPadding;
 
@@ -340,7 +596,7 @@ void FilesPanel::setupColumns(FrameContext& ctx)
     ctx.showFormat = ctx.showSize && ctx.formatWidth > 0.0f && avail >= nameWant + sizeWidth + formatWidth;
 }
 
-void FilesPanel::drawRowLabel(const ImVec2& pos, f32 right, const char* icon, ImU32 iconColor, const char* name, ImU32 nameColor, const char* note, ImU32 noteColor, s32 prefixLength)
+f32 FilesPanel::drawRowLabel(const ImVec2& pos, f32 right, const char* icon, ImU32 iconColor, const char* name, ImU32 nameColor, const char* note, ImU32 noteColor, s32 prefixLength)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const f32 em = ImGui::GetFontSize();
@@ -353,8 +609,12 @@ void FilesPanel::drawRowLabel(const ImVec2& pos, f32 right, const char* icon, Im
     const f32 noteWidth = note ? noteGap + ImGui::CalcTextSize(note).x : 0.0f;
     const f32 nameEnd = drawRowName(drawList, ImVec2(nameX, pos.y), sead::Mathf::max(right - noteWidth, nameX), name, nameColor, prefixLength);
 
-    if (note)
-        drawList->AddText(ImVec2(nameEnd + noteGap, pos.y), noteColor, note);
+    if (!note)
+        return nameEnd;
+
+    drawList->AddText(ImVec2(nameEnd + noteGap, pos.y), noteColor, note);
+
+    return nameEnd + noteWidth;
 }
 
 f32 FilesPanel::drawRowName(ImDrawList* drawList, const ImVec2& pos, f32 right, const char* name, ImU32 color, s32 prefixLength)
@@ -406,25 +666,63 @@ FilesPanel::RowFrame FilesPanel::beginRow(FrameContext& ctx, const FilesRow& row
     }
 
     frame.isDoubleClicked = hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+    frame.rowMin = ImGui::GetItemRectMin();
+    frame.rowMax = ImGui::GetItemRectMax();
 
     return frame;
 }
 
 void FilesPanel::drawFolderRow(FrameContext& ctx, const FilesRow& row)
 {
-    const BrowserFolder& folder = ctx.snapshot->folders[row.index];
-    const bool isExpanded = mExpanded[row.index] != 0;
+    const BrowserFolder& folder = getSnapshot(row.root).folders[row.index];
+    const bool isExpanded = isRowOpen(row);
     const RowFrame frame = beginRow(ctx, row, 0.0f);
 
     if (frame.isPressed)
-        mExpanded[row.index] = isExpanded ? 0 : 1;
+        setRowOpen(row, !isExpanded);
+
+    ImGui::OpenPopupOnItemClick(cFolderMenuId, ImGuiPopupFlags_MouseButtonRight);
 
     const char* chevron = isExpanded ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_RIGHT;
-    const char* icon = isExpanded ? ICON_LC_FOLDER_OPEN : ICON_LC_FOLDER_CLOSED;
-    sead::FormatFixedSafeString<32> count("%u", ctx.shownCounts[row.index]);
+    const char* folderIcon = isExpanded ? ICON_LC_FOLDER_OPEN : ICON_LC_FOLDER_CLOSED;
+    const char* icon = folder.isPack ? ICON_LC_FOLDER_ARCHIVE : folderIcon;
+    const ImVec4 iconColor = folder.isPack ? GetFileKindColor(BrowserFileKind::AudioResource) : GetItemValueColor();
+    sead::FormatFixedSafeString<32> count("%u", ctx.shownCounts[row.root][row.index]);
 
     ImGui::GetWindowDrawList()->AddText(frame.textPos, ImGui::GetColorU32(ImGuiCol_TextDisabled), chevron);
-    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, icon, ImGui::GetColorU32(GetItemValueColor()), folder.name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), count.cstr(), ImGui::GetColorU32(ImGuiCol_TextDisabled));
+    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, icon, ImGui::GetColorU32(iconColor), folder.name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), count.cstr(), ImGui::GetColorU32(ImGuiCol_TextDisabled));
+
+    if (folder.isPack)
+    {
+        sead::FixedSafeString<32> size;
+        FormatItemSize(&size, folder.packSize);
+
+        drawValueCells(ctx, folder.packFormat.c_str(), size.cstr());
+    }
+
+    drawFolderMenu(row.root, row.index);
+}
+
+void FilesPanel::drawPrefixRow(FrameContext& ctx, const FilesRow& row)
+{
+    const BrowserFile& first = getSnapshot(row.root).files[row.sound];
+    const bool isExpanded = isRowOpen(row);
+    const RowFrame frame = beginRow(ctx, row, 0.0f);
+
+    if (frame.isPressed)
+        setRowOpen(row, !isExpanded);
+
+    const std::string name = std::string(GetGroupName(first.stem)) + cPrefixSeparator;
+    const char* chevron = isExpanded ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_RIGHT;
+    const ImU32 dimColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    sead::FormatFixedSafeString<32> count("%u", row.childCount);
+    sead::FixedSafeString<32> size;
+
+    FormatItemSize(&size, row.groupSize);
+
+    ImGui::GetWindowDrawList()->AddText(frame.textPos, dimColor, chevron);
+    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, ICON_LC_FILE_STACK, ImGui::GetColorU32(GetFileKindColor(first.probe.kind)), name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), count.cstr(), dimColor);
+    drawValueCells(ctx, row.isMixedFormat ? "" : first.probe.formatName, size.cstr());
 }
 
 void FilesPanel::drawArchiveContents(const ArchiveContents& contents)
@@ -505,7 +803,7 @@ void FilesPanel::drawFileTooltip(const BrowserFile& file)
         ImGui::TextDisabled("%s", messages::files::cStreamStart);
 
     if (probe.isLoop)
-        ImGui::TextDisabled("%s", messages::files::cLooping);
+        ImGui::TextDisabled("%s", messages::common::cLoops);
 
     if (probe.kind == BrowserFileKind::SoundArchive)
         drawArchiveContents(probe.contents);
@@ -525,16 +823,25 @@ void FilesPanel::drawSoundTooltip(const BrowserFile& file, const ArchiveSound& s
 
 void FilesPanel::drawFileMenu(const BrowserFile& file)
 {
-    if (!BeginContextMenu("##menu"))
+    if (!BeginContextMenu(cRowMenuId))
         return;
 
-    if (ContextMenuItem(ICON_LC_FOLDER_OPEN, messages::files::cOpen))
+    const bool isAudio = isPreviewable(file.probe);
+
+    if (ContextMenuItem(ICON_LC_FILE_PEN, messages::common::cOpen))
         openFile(file);
 
-    if (isPreviewable(file.probe) && ContextMenuItem(ICON_LC_PLAY, messages::common::cPlay))
-        mPreview.play(file.path, file.stem);
+    if (isAudio && ContextMenuItem(ICON_LC_PLAY, messages::common::cPlay))
+        previewFile(file);
 
-    if (ContextMenuItem(ICON_LC_FOLDER_SEARCH, messages::recent::cShowInFileManager))
+    ContextMenuSeparator();
+
+    if (isAudio && ContextMenuItem(ICON_LC_FILE_AUDIO, messages::menu::cExportWav, !mWavExport.isExporting(file.path)))
+        mWavExport.request(file.path, file.stem);
+
+    ContextMenuSeparator();
+
+    if (ContextMenuItem(ICON_LC_FOLDER_OPEN, messages::recent::cShowInFileManager))
         ShowInFileManager(file.path);
 
     if (ContextMenuItem(ICON_LC_COPY, messages::mainmenu::cCopyPath))
@@ -554,7 +861,7 @@ void FilesPanel::drawValueCells(FrameContext& ctx, const char* format, const cha
 
 void FilesPanel::drawFileRow(FrameContext& ctx, const FilesRow& row)
 {
-    const BrowserFile& file = ctx.snapshot->files[row.index];
+    const BrowserFile& file = getFile(row);
     const OpenFileMark* openMark = findOpenFile(ctx, file.path);
     const RowFrame frame = beginRow(ctx, row, ctx.isSearching ? 0.0f : ctx.chevronWidth);
 
@@ -563,7 +870,7 @@ void FilesPanel::drawFileRow(FrameContext& ctx, const FilesRow& row)
     else if (frame.isPressed)
         showFile(file);
 
-    ImGui::OpenPopupOnItemClick("##menu", ImGuiPopupFlags_MouseButtonRight);
+    ImGui::OpenPopupOnItemClick(cRowMenuId, ImGuiPopupFlags_MouseButtonRight);
 
     if (IsItemHoveredForDetail())
         drawFileTooltip(file);
@@ -575,7 +882,7 @@ void FilesPanel::drawFileRow(FrameContext& ctx, const FilesRow& row)
     const ImU32 nameColor = ImGui::GetColorU32(isActive ? GetAccentTextColor() : ImGui::GetStyleColorVec4(ImGuiCol_Text));
     const ImU32 markColor = ImGui::GetColorU32(openMark && openMark->isUnsaved ? uicolors::Warning() : GetAccentTextColor());
 
-    drawRowLabel(frame.textPos, frame.right, icon, iconColor, file.stem.c_str(), nameColor, openMark ? cOpenFileMark : nullptr, markColor, row.prefixLength);
+    drawRowLabel(frame.textPos, frame.right, icon, iconColor, file.name.c_str() + row.nameStart, nameColor, openMark ? cOpenFileMark : nullptr, markColor, row.prefixLength);
 
     sead::FixedSafeString<32> size;
     FormatItemSize(&size, file.size);
@@ -586,13 +893,15 @@ void FilesPanel::drawFileRow(FrameContext& ctx, const FilesRow& row)
 
 void FilesPanel::drawSoundRow(FrameContext& ctx, const FilesRow& row)
 {
-    const BrowserFile& file = ctx.snapshot->files[row.index];
+    const BrowserFile& file = getFile(row);
     const ArchiveSound& sound = file.probe.contents.sounds[row.sound];
     const SoundTypeInfo& type = GetSoundType(sound.type);
     const RowFrame frame = beginRow(ctx, row, 0.0f);
 
     if (frame.isDoubleClicked)
         openSound(ctx, file, sound);
+
+    ImGui::OpenPopupOnItemClick(cRowMenuId, ImGuiPopupFlags_MouseButtonRight);
 
     if (IsItemHoveredForDetail())
         drawSoundTooltip(file, sound);
@@ -601,4 +910,21 @@ void FilesPanel::drawSoundRow(FrameContext& ctx, const FilesRow& row)
 
     drawRowLabel(frame.textPos, frame.right, type.icon, iconColor, sound.name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), nullptr, 0);
     drawValueCells(ctx, type.shortLabel, "");
+    drawSoundMenu(ctx, file, sound);
+}
+
+void FilesPanel::drawSoundMenu(const FrameContext& ctx, const BrowserFile& file, const ArchiveSound& sound)
+{
+    if (!BeginContextMenu(cRowMenuId))
+        return;
+
+    if (ContextMenuItem(ICON_LC_FILE_PEN, messages::common::cOpen))
+        openSound(ctx, file, sound);
+
+    ContextMenuSeparator();
+
+    if (ContextMenuItem(ICON_LC_COPY, messages::files::cCopyName))
+        ImGui::SetClipboardText(sound.name.c_str());
+
+    EndContextMenu();
 }

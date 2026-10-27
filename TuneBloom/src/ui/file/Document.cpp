@@ -10,7 +10,10 @@
 #include <aal/Bars.h>
 #include <aal/Bwav.h>
 #include <core/ByteView.h>
+#include <core/Sarc.h>
+#include <bfsar/archive/Bea.h>
 #include <bfsar/archive/Cmpbin.h>
+#include <bfsar/io/PackFile.h>
 #include <core/Debug.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
@@ -45,9 +48,7 @@ static bool HasByteOrderMark(const u8* mark)
 
 static bool CheckSoundArchiveFile(const u8* file, u32 size)
 {
-    using FileHeader = nw::snd::internal::SoundArchiveFile::FileHeader;
-
-    const bool hasHeader = size >= sizeof(FileHeader);
+    const bool hasHeader = size >= sizeof(nw::snd::internal::SoundArchiveFile::FileHeader);
     const bool isFsar = hasHeader && sead::MemUtil::compare(file, "FSAR", 4) == 0;
     const bool isCsar = hasHeader && sead::MemUtil::compare(file, "CSAR", 4) == 0;
     const u8* byteOrderMark = file + offsetof(nw::ut::BinaryFileHeader, byteOrder);
@@ -58,37 +59,84 @@ static bool CheckSoundArchiveFile(const u8* file, u32 size)
         return false;
     }
 
-    const FileHeader& header = *reinterpret_cast<const FileHeader*>(file);
-
-    sFileEndian = sead::Endian::markToEndian(*reinterpret_cast<const u16*>(byteOrderMark));
-
     if (!isFsar)
         return true;
 
-    const bool inLegacyRange = header.version >= cBfsarLegacyVersionMin && header.version < cBfsarLegacyVersionEnd;
+    const bool isBigEndian = byteOrderMark[0] == 0xFE;
+    const u32 version = ByteView(file, size, isBigEndian).readU32(offsetof(nw::ut::BinaryFileHeader, version));
 
-    if (inLegacyRange || header.version == cBfsarV3Version)
+    const bool inLegacyRange = version >= cBfsarLegacyVersionMin && version < cBfsarLegacyVersionEnd;
+
+    if (inLegacyRange || version == cBfsarV3Version)
         return true;
 
-    PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::archive::cBfsarVersionUnsupportedFormat, static_cast<u32>(header.version)), nullptr });
+    PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::archive::cBfsarVersionUnsupportedFormat, version), nullptr });
     return false;
 }
 
-const char* Document::Load(const sead::SafeString& path, File* outFile)
+static void TakeBytes(std::vector<u8>&& bytes, Document::File* outFile)
 {
+    outFile->data = new u8[bytes.size()];
+    outFile->size = static_cast<u32>(bytes.size());
+    std::memcpy(outFile->data, bytes.data(), bytes.size());
+}
+
+static const char* LoadFromBea(Document::File* outFile)
+{
+    std::vector<u8> container(outFile->data, outFile->data + outFile->size);
+    std::vector<u8> archive;
+
+    Document::Free(outFile);
+
+    switch (bea::ExtractSoundArchive(std::move(container), &archive, &outFile->container))
+    {
+        case bea::ExtractResult::Ok:
+            break;
+
+        case bea::ExtractResult::NoSoundArchive:
+            return messages::archive::cBeaNoSoundArchive;
+
+        case bea::ExtractResult::Damaged:
+            return messages::archive::cBeaDamaged;
+    }
+
+    TakeBytes(std::move(archive), outFile);
+
+    return nullptr;
+}
+
+static bool LoadFileBytes(const sead::SafeString& path, Document::File* outFile)
+{
+    std::vector<u8> bytes;
+
+    if (packfile::IsPackPath(path.cstr()))
+    {
+        if (!packfile::ReadFile(path.cstr(), &bytes) || bytes.empty())
+            return false;
+
+        TakeBytes(std::move(bytes), outFile);
+        return true;
+    }
+
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     SEAD_ASSERT(device);
-
-    LOG_STR(path.cstr());
 
     sead::FileDevice::LoadArg arg;
     arg.path = path;
 
-    *outFile = File();
     outFile->data = device->tryLoad(arg);
     outFile->size = static_cast<u32>(arg.read_size);
 
-    if (!outFile->data)
+    return outFile->data != nullptr;
+}
+
+const char* Document::Load(const sead::SafeString& path, File* outFile)
+{
+    LOG_STR(path.cstr());
+
+    *outFile = File();
+
+    if (!LoadFileBytes(path, outFile))
         return messages::archive::cOpenFailed;
 
     if (cmpbin::IsZstdFrame(outFile->data, outFile->size) || AudioResource::IsResourceFile(outFile->data, outFile->size))
@@ -96,6 +144,9 @@ const char* Document::Load(const sead::SafeString& path, File* outFile)
         outFile->kind = Kind::AudioResource;
         return nullptr;
     }
+
+    if (bea::IsBea(outFile->data, outFile->size))
+        return LoadFromBea(outFile);
 
     if (!cmpbin::IsCompressed(outFile->data, outFile->size))
         return nullptr;
@@ -111,9 +162,7 @@ const char* Document::Load(const sead::SafeString& path, File* outFile)
     if (!decoded)
         return messages::archive::cCmpbinDecompressFailed;
 
-    outFile->data = new u8[decompressed.size()];
-    outFile->size = static_cast<u32>(decompressed.size());
-    std::memcpy(outFile->data, decompressed.data(), decompressed.size());
+    TakeBytes(std::move(decompressed), outFile);
 
     return nullptr;
 }
@@ -154,11 +203,14 @@ bool Document::PeekEndian(const File& file, sead::Endian::Types* outEndian)
 
 bool Document::IsCompleteFile(const u8* header, u64 fileSize)
 {
-    if (cmpbin::IsZstdFrame(header, fileSize) || aal::IsBwav(header, fileSize))
+    if (cmpbin::IsZstdFrame(header, fileSize) || bea::IsBea(header, fileSize) || aal::IsBwav(header, fileSize))
         return true;
 
     if (aal::IsBars(header, fileSize))
         return ByteView(header, fileSize, ByteView::IsBigEndianMark(header, fileSize, cBarsHeaderByteOrder)).readU32(cBarsHeaderFileSize) <= fileSize;
+
+    if (sarc::IsSarc(header, fileSize))
+        return sarc::GetDeclaredFileSize(header, fileSize) == fileSize;
 
     if (fileSize < sizeof(nw::ut::BinaryFileHeader))
         return false;
@@ -231,6 +283,7 @@ std::string Document::archiveName() const
 void Document::closeWindows()
 {
     mState->fileWindows.clear();
+    mState->shownFileWindow = nullptr;
 }
 
 void Document::AddInnerExtension(sead::BufferedSafeString* path, const char* innerExtension, const char* outerExtension)

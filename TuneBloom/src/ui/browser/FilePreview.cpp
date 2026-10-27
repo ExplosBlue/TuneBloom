@@ -17,6 +17,38 @@ static WaveFile* BuildPcmWave(const DecodedPcm& pcm)
     return nullptr;
 }
 
+void DecodeAudioFileAt(DecodedAudioFile* file)
+{
+    if (!ReadFileContents(file->path, &file->bytes))
+        return;
+
+    if (DetectAudioAssetKind(file->bytes) == AudioAssetKind::Fwav)
+    {
+        file->isWaveFile = true;
+        file->isDecoded = true;
+        return;
+    }
+
+    const AudioAssetFile data = std::make_shared<const std::vector<u8>>(std::move(file->bytes));
+    file->isDecoded = DecodeAudioFile(data, &file->pcm);
+}
+
+WaveFile* BuildDecodedWave(const DecodedAudioFile& file)
+{
+    if (!file.isDecoded)
+        return nullptr;
+
+    WaveFile* wave = file.isWaveFile ? ReadFwavFile(file.bytes) : BuildPcmWave(file.pcm);
+
+    if (!wave)
+        return nullptr;
+
+    wave->setEnableName(true);
+    wave->getName() = file.name.c_str();
+
+    return wave;
+}
+
 void FilePreview::play(const std::string& path, const std::string& name)
 {
     releaseWave();
@@ -39,8 +71,7 @@ void FilePreview::update()
     {
         if (mDecoding->path == mRequestedPath)
         {
-            if (mDecoding->isDecoded)
-                startPlayback(*mDecoding);
+            startPlayback(*mDecoding);
 
             mRequestedPath.clear();
             mRequestedName.clear();
@@ -60,38 +91,24 @@ bool FilePreview::isPlaying(const std::string& path) const
 
 void FilePreview::startDecode()
 {
-    mDecoding = std::make_unique<DecodedFile>();
+    mDecoding = std::make_unique<DecodedAudioFile>();
     mDecoding->path = mRequestedPath;
     mDecoding->name = mRequestedName;
 
-    DecodedFile* decoding = mDecoding.get();
+    DecodedAudioFile* decoding = mDecoding.get();
 
     mJob.start([decoding]()
     {
-        if (!ReadFileContents(decoding->path, &decoding->bytes))
-            return;
-
-        if (DetectAudioAssetKind(decoding->bytes) == AudioAssetKind::Fwav)
-        {
-            decoding->isWaveFile = true;
-            decoding->isDecoded = true;
-            return;
-        }
-
-        const AudioAssetFile file = std::make_shared<const std::vector<u8>>(std::move(decoding->bytes));
-        decoding->isDecoded = DecodeAudioFile(file, &decoding->pcm);
+        DecodeAudioFileAt(decoding);
     });
 }
 
-void FilePreview::startPlayback(const DecodedFile& decoded)
+void FilePreview::startPlayback(const DecodedAudioFile& decoded)
 {
-    WaveFile* wave = decoded.isWaveFile ? ReadFwavFile(decoded.bytes) : BuildPcmWave(decoded.pcm);
+    WaveFile* wave = BuildDecodedWave(decoded);
 
     if (!wave)
         return;
-
-    wave->setEnableName(true);
-    wave->getName() = decoded.name.c_str();
 
     sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> error;
 

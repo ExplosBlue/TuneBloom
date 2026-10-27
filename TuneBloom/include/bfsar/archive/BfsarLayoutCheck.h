@@ -82,8 +82,10 @@ struct ArchiveLayoutVersion
     bool streamTrackInfo;
     bool streamSend;
     bool streamFilter;
+    bool fileAttachedGroups;
 };
 
+u32 ReadDeclaredFileSize(const void* data, u64 size);
 bool CheckSoundArchiveHeader(const void* data, u32 size);
 bool CheckSoundArchiveLayout(const nw::snd::MemorySoundArchive& archive, u32 size, const ArchiveLayoutVersion& version);
 const char* FindArchiveString(const nw::snd::MemorySoundArchive& archive, const ByteRange& file, u32 stringId);

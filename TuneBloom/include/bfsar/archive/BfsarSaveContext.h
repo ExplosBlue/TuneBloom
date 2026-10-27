@@ -101,6 +101,7 @@ struct BfsarSaveContext
     std::vector<std::pair<const Group*, const BfgrpFile*>> externalGroupFiles;
     std::unordered_set<u32> externalGroupFileIds;
     std::unordered_set<u32> nullDataFileIds;
+    std::unordered_set<u32> linkedOrigFileIds;
 };
 
 inline const WaveArchive* FindWaveArchiveForGroup(const VectorMap<const Group*, const WaveArchive*>& warcMap, const Group* group)
@@ -114,3 +115,4 @@ inline const WaveArchive* FindWaveArchiveForGroup(const VectorMap<const Group*, 
 }
 
 void PrepareInnerFileForWrite(const BfsarSaveContext& ctx, const File& file, const Group* embedGroup);
+u32 GetSameIndexOrigFileId(const BfsarSaveContext& ctx, const File& file);

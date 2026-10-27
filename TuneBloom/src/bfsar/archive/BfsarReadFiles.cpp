@@ -226,6 +226,9 @@ void Bfsar::readWaveArchiveWaves_(BfsarOpenContext& ctx, u32 warcIndex, u32 wave
 
         ReadInnerFileItem(this, wave, waveBytes, CheckInnerFileBlocks(waveBytes));
 
+        if (mReadWaveFileVersion == 0)
+            mReadWaveFileVersion = wave->getVersion();
+
         mWaveFileList.pushBack(wave);
         wave->setSerializedHash(hash);
         wave->mWaveArchiveId = waveArchiveId;
@@ -296,6 +299,64 @@ bool Bfsar::readWaveArchives_(BfsarOpenContext& ctx)
     return true;
 }
 
+struct FileDataRange
+{
+    u32 fileId;
+    u64 start;
+    u64 end;
+};
+
+static bool GetFileDataRange(const nw::snd::MemorySoundArchive& soundArchive, u32 fileId, FileDataRange* outRange)
+{
+    const SoundArchiveFile::FileInfo* fileInfo = soundArchive.detail_GetFileInfo(fileId);
+    const SoundArchiveFile::InternalFileInfo* internalInfo = fileInfo ? fileInfo->GetInternalFileInfo() : nullptr;
+
+    if (!internalInfo || internalInfo->GetOffsetFromFileBlockHead() == SoundArchiveFile::InternalFileInfo::INVALID_OFFSET)
+        return false;
+
+    outRange->fileId = fileId;
+    outRange->start = internalInfo->GetOffsetFromFileBlockHead();
+    outRange->end = outRange->start + internalInfo->GetFileSize();
+
+    return true;
+}
+
+static std::vector<u32> FindFileHomeGroups(const nw::snd::MemorySoundArchive& soundArchive)
+{
+    const u32 fileCount = soundArchive.detail_GetFileCount();
+    std::vector<FileDataRange> groupRanges;
+
+    for (u32 i = 0; i < soundArchive.GetGroupCount(); i++)
+    {
+        const SoundArchiveFile::GroupInfo* groupInfo = soundArchive.GetGroupInfo(soundArchive.GetGroupIdFromIndex(i));
+        FileDataRange range;
+
+        if (groupInfo && groupInfo->fileId < fileCount && GetFileDataRange(soundArchive, groupInfo->fileId, &range))
+            groupRanges.push_back(range);
+    }
+
+    std::vector<u32> homeGroups(fileCount, nw::snd::SoundArchive::INVALID_ID);
+
+    for (u32 i = 0; i < fileCount; i++)
+    {
+        FileDataRange file;
+
+        if (!GetFileDataRange(soundArchive, i, &file))
+            continue;
+
+        for (const FileDataRange& group : groupRanges)
+        {
+            if (file.start > group.start && file.end <= group.end)
+            {
+                homeGroups[i] = group.fileId;
+                break;
+            }
+        }
+    }
+
+    return homeGroups;
+}
+
 void Bfsar::readFileGroupTables_(BfsarOpenContext& ctx)
 {
     const u32 fileCount = ctx.soundArchive.detail_GetFileCount();
@@ -332,7 +393,7 @@ void Bfsar::readFileGroupTables_(BfsarOpenContext& ctx)
         mFileOriginalIncludeInBfsar[i] = true;
         mFileOriginalHasData[i] = internalInfo->GetOffsetFromFileBlockHead() != SoundArchiveFile::InternalFileInfo::INVALID_OFFSET;
 
-        if (internalInfo->toAttachedGroupIdTable.typeId != nw::snd::internal::ElementType_Category_Tables ||
+        if (!isFileAttachedGroupAvailable() || internalInfo->toAttachedGroupIdTable.typeId != nw::snd::internal::ElementType_Category_Tables ||
             !internalInfo->toAttachedGroupIdTable.IsValidOffset())
             continue;
 
@@ -344,6 +405,8 @@ void Bfsar::readFileGroupTables_(BfsarOpenContext& ctx)
         for (u32 j = 0; j < groupTable->count; j++)
             ids.push_back(groupTable->item[j]);
     }
+
+    mFileOriginalHomeGroup = FindFileHomeGroups(ctx.soundArchive);
 
     LOG_FMT("Preserved attached group tables for %zu files, originalIncludeInBfsar for %zu files",
         mFileAttachedGroups.size(), std::count(mFileOriginalIncludeInBfsar.begin(), mFileOriginalIncludeInBfsar.end(), true));

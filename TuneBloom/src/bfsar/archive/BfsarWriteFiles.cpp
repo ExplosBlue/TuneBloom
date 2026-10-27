@@ -8,6 +8,8 @@
 
 #include <ui/Messages.h>
 
+#include <algorithm>
+
 static bool ItemInGroupOfType(BfsarSaveContext& ctx, const Item* item, Group::OutputType outputType)
 {
     for (const Group* group : ctx.itemAttachedGroups[item])
@@ -247,6 +249,7 @@ void Bfsar::setupWaveSoundFiles_(BfsarSaveContext& ctx)
 
         File file(ctx.files.size(), innerFile, includeInBfsar);
         file.origId = getItemOrigFileId_(soundSet);
+        file.isSharedOutput = soundSet->getWaveArchiveType() == WaveArchiveType::AutomaticShared;
 
         ctx.itemFileIds.try_emplace(soundSet, file);
         ctx.files.push_back(file);
@@ -303,6 +306,7 @@ void Bfsar::setupBankFiles_(BfsarSaveContext& ctx)
 
         File file(ctx.files.size(), bankFile, includeInBfsar);
         file.origId = getItemOrigFileId_(bank);
+        file.isSharedOutput = bank->getWaveArchiveType() == WaveArchiveType::AutomaticShared;
 
         ctx.itemFileIds.try_emplace(bank, file);
         ctx.files.push_back(file);
@@ -390,6 +394,28 @@ void Bfsar::setupGroupFiles_(BfsarSaveContext& ctx)
     }
 }
 
+static bool HasOriginalFile(const Group* group, u32 fileId)
+{
+    const std::vector<u32>& groupFiles = group->getOriginalFileOrder();
+
+    return std::find(groupFiles.begin(), groupFiles.end(), fileId) != groupFiles.end();
+}
+
+u32 Bfsar::getGroupSharedWarcOrigFileId_(const Group* group) const
+{
+    const u32 warcFileId = group->getOriginalSharedWarcFileId();
+
+    for (const Item* item : mGroupList)
+    {
+        const Group* other = static_cast<const Group*>(item);
+
+        if (HasOriginalFile(other, warcFileId) != (other == group))
+            return nw::snd::SoundArchive::INVALID_ID;
+    }
+
+    return warcFileId;
+}
+
 void Bfsar::setupGeneratedWaveArchiveFiles_(BfsarSaveContext& ctx)
 {
     //? Other BFWAR
@@ -406,6 +432,10 @@ void Bfsar::setupGeneratedWaveArchiveFiles_(BfsarSaveContext& ctx)
         ctx.generatedInnerFiles.push_back(innerFile);
 
         File file(ctx.files.size(), innerFile, includeInBfsar);
+        file.isSharedOutput = attachGroups.size() != 0;
+
+        if (attachGroups.size() == 1)
+            file.origId = getGroupSharedWarcOrigFileId_(*attachGroups.begin());
 
         ctx.itemFileIds.try_emplace(warc, file);
         ctx.files.push_back(file);
@@ -597,8 +627,7 @@ void Bfsar::collectGroupFiles_(BfsarSaveContext& ctx)
             AttachWarcFileToGroup(ctx, warc, Group::ItemInfo::LoadFlag::LoadAll, group);
         }
 
-        if (group->getOutputType() == Group::OutputType::External)
-            attachExtraFilesToGroup_(ctx, group);
+        attachExtraFilesToGroup_(ctx, group);
 
         restoreGroupFileOrder_(ctx, group);
     }
@@ -680,8 +709,20 @@ void Bfsar::collectEmbeddedFiles_(BfsarSaveContext& ctx)
 
         for (u32 fileId : files->second)
         {
+            const File& file = ctx.files[fileId];
+
+            if (file.isSharedOutput && file.includeInBfsar)
+                continue;
+
             ctx.embeddedFileIds.insert(fileId);
-            ctx.embeddedFileToGroupFile.try_emplace(fileId, groupFileId);
+
+            if (isOriginalHomeGroup_(file, ctx.files[groupFileId]))
+                ctx.embeddedFileToGroupFile[fileId] = groupFileId;
+            else
+                ctx.embeddedFileToGroupFile.try_emplace(fileId, groupFileId);
+
+            if (file.isSharedOutput && !keepsGroupFilePointer_(file))
+                ctx.nullDataFileIds.insert(fileId);
         }
     }
 }
@@ -745,16 +786,41 @@ void Bfsar::collectExternalGroupFiles_(BfsarSaveContext& ctx)
     }
 }
 
+u32 GetSameIndexOrigFileId(const BfsarSaveContext& ctx, const File& file)
+{
+    if (file.origId != nw::snd::SoundArchive::INVALID_ID || ctx.linkedOrigFileIds.count(file.id))
+        return nw::snd::SoundArchive::INVALID_ID;
+
+    return file.id;
+}
+
+bool Bfsar::isOriginalHomeGroup_(const File& file, const File& groupFile) const
+{
+    return file.origId < mFileOriginalHomeGroup.size() && groupFile.origId != nw::snd::SoundArchive::INVALID_ID && mFileOriginalHomeGroup[file.origId] == groupFile.origId;
+}
+
+bool Bfsar::keepsGroupFilePointer_(const File& file) const
+{
+    return file.origId < mFileOriginalHasData.size() && mFileOriginalHasData[file.origId];
+}
+
 bool Bfsar::getOrigIncludeInBfsar_(const BfsarSaveContext& ctx, const File& file) const
 {
-    if (file.isPrefetch || ctx.externalGroupFileIds.count(file.id))
+    if (file.isPrefetch)
         return true;
 
     if (file.origId < mFileOriginalIncludeInBfsar.size())
         return mFileOriginalIncludeInBfsar[file.origId];
 
+    if (ctx.externalGroupFileIds.count(file.id))
+        return true;
+
     if (!isV3Bfsar())
-        return (file.origId == nw::snd::SoundArchive::INVALID_ID && file.id < mFileOriginalIncludeInBfsar.size()) ? mFileOriginalIncludeInBfsar[file.id] : file.includeInBfsar;
+    {
+        const u32 sameIndexFileId = GetSameIndexOrigFileId(ctx, file);
+
+        return sameIndexFileId < mFileOriginalIncludeInBfsar.size() ? mFileOriginalIncludeInBfsar[sameIndexFileId] : file.includeInBfsar;
+    }
 
     return file.includeInBfsar || ctx.embeddedFileIds.count(file.id) != 0;
 }

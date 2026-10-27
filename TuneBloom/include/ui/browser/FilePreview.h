@@ -9,6 +9,19 @@
 
 class WaveFile;
 
+struct DecodedAudioFile
+{
+    std::string path;
+    std::string name;
+    std::vector<u8> bytes;
+    DecodedPcm pcm;
+    bool isWaveFile = false;
+    bool isDecoded = false;
+};
+
+void DecodeAudioFileAt(DecodedAudioFile* file);
+WaveFile* BuildDecodedWave(const DecodedAudioFile& file);
+
 class FilePreview
 {
 public:
@@ -18,22 +31,12 @@ public:
     bool isPlaying(const std::string& path) const;
 
 private:
-    struct DecodedFile
-    {
-        std::string path;
-        std::string name;
-        std::vector<u8> bytes;
-        DecodedPcm pcm;
-        bool isWaveFile = false;
-        bool isDecoded = false;
-    };
-
     void startDecode();
-    void startPlayback(const DecodedFile& decoded);
+    void startPlayback(const DecodedAudioFile& decoded);
     void releaseWave();
 
     BackgroundJob mJob;
-    std::unique_ptr<DecodedFile> mDecoding;
+    std::unique_ptr<DecodedAudioFile> mDecoding;
     std::string mRequestedPath;
     std::string mRequestedName;
     WaveFile* mWave = nullptr;

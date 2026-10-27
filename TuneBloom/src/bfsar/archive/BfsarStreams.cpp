@@ -28,12 +28,22 @@
 #include <unordered_set>
 #include <vector>
 
+bool Bfsar::GetStreamFolder(const sead::SafeString& archivePath, sead::BufferedSafeString* outFolder)
+{
+    if (!sead::Path::getDirectoryName(outFolder, archivePath))
+        return false;
+
+    if (HasFileExtension(archivePath.cstr(), static_cast<size_t>(archivePath.calcLength()), cBeaExtension))
+        sead::Path::getDirectoryName(outFolder, *outFolder);
+
+    return true;
+}
+
 bool Bfsar::hasArchiveDirectory() const
 {
     sead::FixedSafeString<512> dir;
 
-    return sead::Path::getDirectoryName(&dir, getFilePath()) ||
-           sead::Path::getDirectoryName(&dir, getLoadedArchivePath());
+    return GetStreamFolder(getFilePath(), &dir) || GetStreamFolder(getLoadedArchivePath(), &dir);
 }
 
 bool Bfsar::resolveStreamFilePath(const Sound& sound, sead::BufferedSafeString* out) const
@@ -49,7 +59,7 @@ bool Bfsar::resolveStreamFilePath(const Sound& sound, sead::BufferedSafeString* 
     {
         sead::FixedSafeString<512> dir;
 
-        if (!sead::Path::getDirectoryName(&dir, *archivePath))
+        if (!GetStreamFolder(*archivePath, &dir))
             continue;
 
         sead::FixedSafeString<1024> candidate;
@@ -852,14 +862,14 @@ void Bfsar::planStreamSaves(std::vector<StreamSaveJob> &out, std::vector<Skipped
 {
     sead::FixedSafeString<512> archiveDir;
 
-    if (!sead::Path::getDirectoryName(&archiveDir, getFilePath()))
+    if (!GetStreamFolder(getFilePath(), &archiveDir))
         return;
 
     const bool inPlace = mLoadedArchivePath && getFilePath() == *mLoadedArchivePath;
     sead::FixedSafeString<512> sourceDir;
 
     if (!inPlace && mLoadedArchivePath)
-        sead::Path::getDirectoryName(&sourceDir, *mLoadedArchivePath);
+        GetStreamFolder(*mLoadedArchivePath, &sourceDir);
 
     std::unordered_set<std::string> seen;
 
@@ -985,7 +995,7 @@ bool Bfsar::buildStreamPrefetchFromFile_(const Sound *sound, const std::vector<S
     const u32 bufferTimes = mSoundArchivePlayerInfo.streamBufferTimes;
     sead::FixedSafeString<512> archiveDir;
 
-    if (strmSoundInfo.getPath().isEmpty() || !sead::Path::getDirectoryName(&archiveDir, getFilePath()))
+    if (strmSoundInfo.getPath().isEmpty() || !GetStreamFolder(getFilePath(), &archiveDir))
         return false;
 
     const std::string savePath = std::string(archiveDir.cstr()) + "/" + strmSoundInfo.getPath().cstr();

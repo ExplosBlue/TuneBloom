@@ -1,5 +1,7 @@
 #include <browser/FileIndex.h>
 
+#include <bfsar/io/FileIo.h>
+#include <bfsar/io/PackFile.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <browser/FileIndexCache.h>
 #include <core/ParallelFor.h>
@@ -7,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <iterator>
 #include <unordered_map>
 
 namespace fs = std::filesystem;
@@ -15,6 +18,8 @@ struct ScannedFile
 {
     fs::path path;
     std::string key;
+    size_t mergedFolderStart = 0;
+    size_t mergedFolderEnd = 0;
     u64 size = 0;
     s64 modified = 0;
     bool isAudio = false;
@@ -46,7 +51,7 @@ static bool IsNameLess(const std::string& left, const std::string& right)
     });
 }
 
-static std::vector<ScannedFile> CollectFiles(const fs::path& root, const std::atomic<bool>& cancel)
+static std::vector<ScannedFile> CollectFiles(const fs::path& root, const std::atomic<bool>& cancel, std::atomic<u32>* foundCount)
 {
     std::vector<ScannedFile> files;
     std::error_code error;
@@ -70,6 +75,7 @@ static std::vector<ScannedFile> CollectFiles(const fs::path& root, const std::at
             file.size = entry.file_size(error);
             file.modified = entry.last_write_time(error).time_since_epoch().count();
             files.push_back(std::move(file));
+            (*foundCount)++;
         }
 
         error.clear();
@@ -79,17 +85,20 @@ static std::vector<ScannedFile> CollectFiles(const fs::path& root, const std::at
     return files;
 }
 
-static s32 AddFolder(FileIndexSnapshot* snapshot, std::unordered_map<std::string, s32>* folderIds, const fs::path& relativeFolder)
+static s32 AddFolder(FileIndexSnapshot* snapshot, std::unordered_map<std::string, s32>* folderIds, const ScannedFile& file, size_t folderEnd)
 {
+    const std::string& path = file.key;
     s32 folder = 0;
-    fs::path walked;
 
-    for (const fs::path& part : relativeFolder)
+    for (size_t start = 0; start < folderEnd;)
     {
-        walked /= part;
-
-        const std::string key = walked.generic_string();
+        const bool isMerged = start == file.mergedFolderStart && file.mergedFolderEnd > start;
+        const size_t end = isMerged ? file.mergedFolderEnd : std::min(path.find('/', start), folderEnd);
+        const std::string key = path.substr(0, end);
         const auto found = folderIds->find(key);
+        const size_t partStart = start;
+
+        start = end + 1;
 
         if (found != folderIds->end())
         {
@@ -100,7 +109,7 @@ static s32 AddFolder(FileIndexSnapshot* snapshot, std::unordered_map<std::string
         const s32 created = static_cast<s32>(snapshot->folders.size());
 
         BrowserFolder child;
-        child.name = part.string();
+        child.name = path.substr(partStart, end - partStart);
         child.parent = folder;
         snapshot->folders.push_back(std::move(child));
         snapshot->folders[folder].folders.push_back(created);
@@ -134,6 +143,8 @@ static void BuildSnapshot(const fs::path& root, std::vector<ScannedFile>& scanne
 {
     std::unordered_map<std::string, s32> folderIds;
 
+    std::sort(scanned.begin(), scanned.end(), [](const ScannedFile& left, const ScannedFile& right) { return IsNameLess(left.key, right.key); });
+
     BrowserFolder rootFolder;
     rootFolder.name = root.filename().string();
     snapshot->folders.push_back(std::move(rootFolder));
@@ -143,13 +154,17 @@ static void BuildSnapshot(const fs::path& root, std::vector<ScannedFile>& scanne
         if (!scannedFile.isAudio)
             continue;
 
-        std::error_code error;
-        const fs::path relative = fs::relative(scannedFile.path, root, error);
-
-        if (error)
+        if (scannedFile.probe.isPack)
+        {
+            BrowserFolder& pack = snapshot->folders[AddFolder(snapshot, &folderIds, scannedFile, scannedFile.key.size())];
+            pack.isPack = true;
+            pack.packSize = scannedFile.size;
+            pack.packFormat = scannedFile.probe.formatName;
             continue;
+        }
 
-        const s32 folder = AddFolder(snapshot, &folderIds, relative.parent_path());
+        const size_t nameStart = scannedFile.key.rfind('/');
+        const s32 folder = AddFolder(snapshot, &folderIds, scannedFile, nameStart == std::string::npos ? 0 : nameStart);
         const s32 fileId = static_cast<s32>(snapshot->files.size());
 
         BrowserFile file;
@@ -195,10 +210,104 @@ static void SaveScannedFiles(const fs::path& cachePath, const std::vector<Scanne
     SaveFileIndexCache(cachePath, cache);
 }
 
-void FileIndex::scan(const std::string& root, const std::string& cachePath)
+static void ProbePackFiles(const fs::path& packPath, std::vector<ScannedFile>* files, const std::vector<u64>& offsets, const std::vector<u8>& isCached, const std::atomic<bool>& cancel, std::atomic<u32>* probedCount)
+{
+    std::vector<u8> bytes;
+
+    if (!fileio::ReadWholeFile(packPath.string().c_str(), &bytes))
+        return;
+
+    ParallelFor(static_cast<u32>(files->size()), [&](u32 index)
+    {
+        ScannedFile& file = (*files)[index];
+
+        if (cancel || isCached[index] || offsets[index] + file.size > bytes.size())
+            return;
+
+        file.isAudio = ProbeFileBytes(bytes.data() + offsets[index], file.size, &file.probe);
+        (*probedCount)++;
+    });
+}
+
+static size_t GetSharedFolderLength(const std::vector<packfile::Resource>& resources)
+{
+    if (resources.empty())
+        return 0;
+
+    const std::string& first = resources.front().name;
+    size_t length = first.rfind('/') == std::string::npos ? 0 : first.rfind('/') + 1;
+
+    for (const packfile::Resource& resource : resources)
+    {
+        const size_t common = std::mismatch(first.begin(), first.begin() + std::min(length, resource.name.size()), resource.name.begin()).first - first.begin();
+
+        length = common == 0 ? 0 : first.rfind('/', common - 1) + 1;
+    }
+
+    return length;
+}
+
+static void AddPackFiles(const ScannedFile& pack, const FileIndexCache& cache, const std::atomic<bool>& cancel, std::atomic<u32>* probedCount, std::vector<ScannedFile>* out)
+{
+    std::vector<packfile::Resource> resources;
+
+    if (!packfile::ListResources(pack.path.string(), &resources))
+        return;
+
+    const size_t sharedFolderLength = GetSharedFolderLength(resources);
+    std::vector<ScannedFile> files;
+    std::vector<u64> offsets;
+    std::vector<u8> isCached;
+
+    for (const packfile::Resource& resource : resources)
+    {
+        ScannedFile file;
+        file.path = packfile::MakePath(pack.path.string(), resource.name);
+        file.key = pack.key + '/' + resource.name;
+
+        if (sharedFolderLength > 0)
+        {
+            file.mergedFolderStart = pack.key.size() + 1;
+            file.mergedFolderEnd = file.mergedFolderStart + sharedFolderLength - 1;
+        }
+        file.size = resource.size;
+        file.modified = pack.modified;
+        isCached.push_back(ReadCachedProbe(cache, &file) ? 1 : 0);
+
+        files.push_back(std::move(file));
+        offsets.push_back(resource.offset);
+    }
+
+    if (std::find(isCached.begin(), isCached.end(), 0) != isCached.end())
+        ProbePackFiles(pack.path, &files, offsets, isCached, cancel, probedCount);
+
+    out->insert(out->end(), std::make_move_iterator(files.begin()), std::make_move_iterator(files.end()));
+}
+
+static void AddAllPackFiles(std::vector<ScannedFile>* scanned, const FileIndexCache& cache, const std::atomic<bool>& cancel, std::atomic<u32>* probedCount)
+{
+    std::vector<ScannedFile> packFiles;
+
+    for (const ScannedFile& file : *scanned)
+    {
+        if (!cancel && file.isAudio && file.probe.isPack)
+            AddPackFiles(file, cache, cancel, probedCount, &packFiles);
+    }
+
+    scanned->insert(scanned->end(), std::make_move_iterator(packFiles.begin()), std::make_move_iterator(packFiles.end()));
+}
+
+FileIndex::~FileIndex()
+{
+    cancel();
+}
+
+void FileIndex::scan(const std::string& root, const std::string& cachePath, bool isCacheRead)
 {
     cancel();
 
+    mListDone = false;
+    mFoundCount = 0;
     mScannedCount = 0;
     mProbedCount = 0;
     mPending = std::make_unique<FileIndexSnapshot>();
@@ -206,15 +315,17 @@ void FileIndex::scan(const std::string& root, const std::string& cachePath)
 
     FileIndexSnapshot* pending = mPending.get();
 
-    mJob.start([this, pending, cachePath]()
+    mJob.start([this, pending, cachePath, isCacheRead]()
     {
         FileIndexCache cache;
 
-        if (!cachePath.empty())
+        if (isCacheRead && !cachePath.empty())
             LoadFileIndexCache(cachePath, &cache);
 
         const fs::path rootPath(pending->root);
-        std::vector<ScannedFile> scanned = CollectFiles(rootPath, mCancel);
+        std::vector<ScannedFile> scanned = CollectFiles(rootPath, mCancel, &mFoundCount);
+
+        mListDone = true;
 
         ParallelFor(static_cast<u32>(scanned.size()), [this, &scanned, &cache](u32 index)
         {
@@ -225,12 +336,14 @@ void FileIndex::scan(const std::string& root, const std::string& cachePath)
 
             if (!ReadCachedProbe(cache, &file))
             {
-                file.isAudio = ProbeFile(file.path, file.size, &file.probe);
+                file.isAudio = ProbeFile(file.path, file.size, ProbeDepth::Contents, &file.probe);
                 mProbedCount++;
             }
 
             mScannedCount++;
         });
+
+        AddAllPackFiles(&scanned, cache, mCancel, &mProbedCount);
 
         if (mCancel)
             return;
@@ -250,11 +363,12 @@ void FileIndex::cancel()
     mCancel = false;
 }
 
-bool FileIndex::update()
+bool FileIndex::update(FileIndexSnapshot* previous)
 {
     if (!mJob.finish() || !mPending)
         return false;
 
+    *previous = std::move(mSnapshot);
     mSnapshot = std::move(*mPending);
     mPending.reset();
 
@@ -264,6 +378,16 @@ bool FileIndex::update()
 bool FileIndex::isScanning() const
 {
     return mJob.isBusy();
+}
+
+bool FileIndex::isListDone() const
+{
+    return mListDone;
+}
+
+u32 FileIndex::getFoundCount() const
+{
+    return mFoundCount;
 }
 
 u32 FileIndex::getScannedCount() const

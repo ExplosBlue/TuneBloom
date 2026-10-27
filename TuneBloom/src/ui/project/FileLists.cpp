@@ -50,8 +50,8 @@ static void SequenceFileRowActionFunc(Item* item)
 
     if (DrawRowOpenButton(seq->getId(), messages::item::cOpenFileTip))
     {
-        OpenFileWindow(seq);
         SelectItem(seq);
+        OpenFileWindow(seq);
     }
 }
 

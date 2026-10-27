@@ -47,6 +47,12 @@ bool Bfsar::save_(sead::FileHandle &handle, const std::vector<GroupFileSave>& gr
     if (streamFilesLast)
         setupStreamFiles_(ctx);
 
+    for (const File& file : ctx.files)
+    {
+        if (file.origId != nw::snd::SoundArchive::INVALID_ID)
+            ctx.linkedOrigFileIds.insert(file.origId);
+    }
+
     collectGroupFiles_(ctx);
     collectEmbeddedFiles_(ctx);
     collectExternalGroupFiles_(ctx);
@@ -251,17 +257,26 @@ void PrepareInnerFileForWrite(const BfsarSaveContext& ctx, const File& file, con
     }
 }
 
+bool Bfsar::isFileBlockFile_(const BfsarSaveContext& ctx, const File& file) const
+{
+    if (file.external || !getOrigIncludeInBfsar_(ctx, file) || !file.innerFile)
+        return false;
+
+    return !ctx.embeddedFileIds.count(file.id) && !ctx.nullDataFileIds.count(file.id);
+}
+
 void Bfsar::writeFileBlock_(BfsarSaveContext& ctx)
 {
     ctx.writer.openBlock(nw::snd::internal::ElementType_SoundArchiveFile_FileBlock, "FILE");
 
     u32 fileBlockPos = ctx.writer.getPosition() - sizeof(nw::ut::BinaryBlockHeader);
-    ctx.writer.align(0x20);
+    const u32 fileAlignment = GetInnerFileDataAlignment(mFormat, mEndian);
+    ctx.writer.alignInFile(fileAlignment);
 
     u32 lastFileId = nw::snd::SoundArchive::INVALID_ID;
     for (auto it = ctx.files.rbegin(); it != ctx.files.rend(); ++it)
     {
-        if (getOrigIncludeInBfsar_(ctx, *it) && !ctx.nullDataFileIds.count(it->id))
+        if (isFileBlockFile_(ctx, *it))
         {
             lastFileId = it->id;
             break;
@@ -279,13 +294,10 @@ void Bfsar::writeFileBlock_(BfsarSaveContext& ctx)
     // First pass: write all non-embedded files (including group files)
     for (const File &file : ctx.files)
     {
-        if (file.external || !getOrigIncludeInBfsar_(ctx, file) || !file.innerFile)
+        if (!isFileBlockFile_(ctx, file))
             continue;
 
-        if (ctx.embeddedFileIds.count(file.id) || ctx.nullDataFileIds.count(file.id))
-            continue;
-
-        ctx.writer.align(0x20);
+        ctx.writer.alignInFile(fileAlignment);
 
         const InnerFile *innerFile = file.innerFile;
         const BfgrpFile *bfgrpFile = sead::DynamicCast<const BfgrpFile>(innerFile);
@@ -314,7 +326,7 @@ void Bfsar::writeFileBlock_(BfsarSaveContext& ctx)
     // Second pass: write embedded files (just close sized refs, no data write)
     for (const File &file : ctx.files)
     {
-        if (!ctx.embeddedFileIds.count(file.id))
+        if (!ctx.embeddedFileIds.count(file.id) || ctx.nullDataFileIds.count(file.id))
             continue;
 
         if (file.external || !getOrigIncludeInBfsar_(ctx, file) || !file.innerFile)

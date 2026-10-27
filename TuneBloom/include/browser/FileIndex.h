@@ -25,6 +25,9 @@ struct BrowserFolder
     std::vector<s32> folders;
     std::vector<s32> files;
     u32 fileCount = 0;
+    bool isPack = false;
+    u64 packSize = 0;
+    std::string packFormat;
 };
 
 struct FileIndexSnapshot
@@ -39,17 +42,23 @@ struct FileIndexSnapshot
 class FileIndex
 {
 public:
-    void scan(const std::string& root, const std::string& cachePath);
+    ~FileIndex();
+
+    void scan(const std::string& root, const std::string& cachePath, bool isCacheRead);
     void cancel();
-    bool update();
+    bool update(FileIndexSnapshot* previous);
 
     bool isScanning() const;
+    bool isListDone() const;
+    u32 getFoundCount() const;
     u32 getScannedCount() const;
     const FileIndexSnapshot& getSnapshot() const;
 
 private:
     BackgroundJob mJob;
     std::atomic<bool> mCancel { false };
+    std::atomic<bool> mListDone { false };
+    std::atomic<u32> mFoundCount { 0 };
     std::atomic<u32> mScannedCount { 0 };
     std::atomic<u32> mProbedCount { 0 };
     std::unique_ptr<FileIndexSnapshot> mPending;

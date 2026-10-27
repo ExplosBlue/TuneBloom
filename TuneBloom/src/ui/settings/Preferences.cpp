@@ -20,7 +20,6 @@
 #include <ui/widgets/TimeUtil.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
-#include <ui/widgets/WindowAnimation.h>
 #include <ui/app/Workspace.h>
 
 #include <libs/IconsLucide.h>
@@ -62,17 +61,14 @@ struct SampleRate
 
 }
 
-static constexpr f32 cWindowWidthEm  = 40.0f;
-static constexpr f32 cWindowHeightEm = 27.0f;
-static constexpr f32 cWindowPadEm    = 0.8f;
+static constexpr f32 cWindowWidthEm  = 42.0f;
+static constexpr f32 cWindowHeightEm = 29.0f;
 static constexpr f32 cNavWidthEm     = 10.0f;
 static constexpr f32 cNavRowGapEm    = 0.5f;
 static constexpr f32 cPagePadXEm     = 1.0f;
 static constexpr f32 cPagePadYEm     = 0.8f;
 static constexpr f32 cRowGapEm       = 0.4f;
-static constexpr f32 cFooterGapEm    = 0.4f;
-static constexpr f32 cLabelWidthEm   = 8.5f;
-static constexpr f32 cCloseWidthEm   = 6.0f;
+static constexpr f32 cLabelWidthEm   = 10.0f;
 static constexpr f32 cRowButtonEm    = 6.5f;
 static constexpr f32 cHueHandleEm    = 0.5f;
 static constexpr f32 cNavBarWidthEm  = 0.15f;
@@ -151,24 +147,49 @@ static void DrawRowLabel(const char* label)
     GroupBoxRowLabel(label, ImFloor(ImGui::GetFontSize() * cLabelWidthEm));
 }
 
-static ImDrawList* BeginSliderFill()
+struct SliderFill
 {
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    drawList->ChannelsSplit(2);
-    drawList->ChannelsSetCurrent(1);
+    ImDrawList* drawList;
+    bool drawText;
+};
+
+static SliderFill BeginSliderFill(const char* id)
+{
+    SliderFill fill;
+    fill.drawList = ImGui::GetWindowDrawList();
+    fill.drawText = !ImGui::TempInputIsActive(ImGui::GetID(id));
+
+    fill.drawList->ChannelsSplit(2);
+    fill.drawList->ChannelsSetCurrent(1);
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg, uicolors::cTransparent);
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, uicolors::cTransparent);
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, uicolors::cTransparent);
+    ImGui::PushStyleColor(ImGuiCol_Text, fill.drawText ? uicolors::cTransparent : ImGui::GetStyleColorVec4(ImGuiCol_Text));
 
-    return drawList;
+    return fill;
 }
 
-static void EndSliderFill(ImDrawList* drawList, f32 fraction)
+static f32 CalcSliderValueX(f32 min, f32 max, f32 grabMin, f32 grabMax, f32 textWidth)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 gap = style.ItemInnerSpacing.x;
+    const f32 centerX = ImFloor((min + max - textWidth) * 0.5f);
+
+    if (centerX + textWidth + gap <= grabMin || centerX - gap >= grabMax)
+        return centerX;
+
+    if (grabMax + gap + textWidth <= max - style.FramePadding.x)
+        return grabMax + gap;
+
+    return grabMin - gap - textWidth;
+}
+
+static void EndSliderFill(const SliderFill& fill, f32 fraction, const char* text)
 {
     constexpr f32 cGrabPadding = 2.0f;
 
-    ImGui::PopStyleColor(3);
+    ImGui::PopStyleColor(4);
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 min = ImGui::GetItemRectMin();
@@ -176,6 +197,16 @@ static void EndSliderFill(ImDrawList* drawList, f32 fraction)
     const f32 travel = max.x - min.x - cGrabPadding * 2.0f - style.GrabMinSize;
     const f32 fillX = ImFloor(min.x + cGrabPadding + travel * sead::Mathf::clamp2(0.0f, fraction, 1.0f) + style.GrabMinSize * 0.5f);
     const ImGuiCol frameColor = ImGui::IsItemActive() ? ImGuiCol_FrameBgActive : ImGui::IsItemHovered() ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg;
+
+    ImDrawList* drawList = fill.drawList;
+
+    if (fill.drawText)
+    {
+        const f32 grabHalf = style.GrabMinSize * 0.5f;
+        const f32 textX = CalcSliderValueX(min.x, max.x, fillX - grabHalf, fillX + grabHalf, ImGui::CalcTextSize(text).x);
+
+        drawList->AddText(ImVec2(textX, min.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), text);
+    }
 
     drawList->ChannelsSetCurrent(0);
     drawList->AddRectFilled(min, max, ImGui::GetColorU32(frameColor), style.FrameRounding);
@@ -280,9 +311,12 @@ static bool DrawCountSliderRow(const char* label, const char* id, s32* value, s3
 
     DrawRowLabel(label);
 
-    ImDrawList* drawList = BeginSliderFill();
+    const SliderFill fill = BeginSliderFill(id);
     ImGui::SliderInt(id, value, min, max, "%d", ImGuiSliderFlags_AlwaysClamp);
-    EndSliderFill(drawList, static_cast<f32>(*value - min) / (max - min));
+
+    char text[32];
+    ImFormatString(text, sizeof(text), "%d", *value);
+    EndSliderFill(fill, static_cast<f32>(*value - min) / (max - min), text);
 
     const bool done = ResetItemOnRightClick(value, reset) || ImGui::IsItemDeactivatedAfterEdit();
 
@@ -301,9 +335,12 @@ static bool DrawAmountSliderRow(const char* label, const char* id, f32* value, f
 {
     DrawRowLabel(label);
 
-    ImDrawList* drawList = BeginSliderFill();
+    const SliderFill fill = BeginSliderFill(id);
     bool changed = ImGui::SliderFloat(id, value, min, max, format, ImGuiSliderFlags_AlwaysClamp);
-    EndSliderFill(drawList, (*value - min) / (max - min));
+
+    char text[64];
+    ImFormatString(text, sizeof(text), format, *value);
+    EndSliderFill(fill, (*value - min) / (max - min), text);
 
     if (ResetItemOnRightClick(value, reset))
     {
@@ -361,7 +398,7 @@ static void DrawBackupFolderRow()
     const sead::FormatFixedSafeString<64> usage(messages::preferences::cBackupUsageFormat, sBackupCount, sBackupCount == 1 ? messages::common::cBackup : messages::common::cBackups, size);
     const bool empty = sBackupCount == 0;
 
-    if (DrawValueButtonRow(messages::preferences::cBackupFolderLabel, empty ? messages::common::cEmpty : usage.cstr(), empty, messages::preferences::cOpenFolder, sBackupFolderFound))
+    if (DrawValueButtonRow(messages::preferences::cBackupFolderLabel, empty ? messages::common::cEmpty : usage.cstr(), empty, messages::common::cOpenFolder, sBackupFolderFound))
         OpenFolder(backup::GetRootFolder());
 }
 
@@ -480,7 +517,7 @@ static void DrawOpeningRows()
         PopupMgr* popupMgr = PopupMgr::instance();
 
         const size_t count = popupMgr->getIgnoredWarningArchiveCount();
-        const sead::FormatFixedSafeString<64> text(messages::preferences::cIgnoredCountFormat, count, count == 1 ? messages::common::cArchive : messages::preferences::cIgnoredArchivePlural);
+        const sead::FormatFixedSafeString<64> text(messages::preferences::cIgnoredCountFormat, count, count == 1 ? messages::common::cArchive : messages::common::cArchives);
 
         if (DrawValueButtonRow(messages::preferences::cIgnoredLabel, count == 0 ? messages::common::cNone : text.cstr(), count == 0, messages::common::cReset, count != 0, messages::preferences::cIgnoredDetail))
             popupMgr->clearIgnoredWarnings();
@@ -1148,7 +1185,7 @@ static void DrawAdvancedPage()
     {
         const std::string folder = GetConfigDir();
 
-        if (DrawValueButtonRow(messages::preferences::cSettingsFolderLabel, CutPathStart(folder, cFolderTextMax).c_str(), false, messages::preferences::cOpenFolder, true))
+        if (DrawValueButtonRow(messages::preferences::cSettingsFolderLabel, CutPathStart(folder, cFolderTextMax).c_str(), false, messages::common::cOpenFolder, true))
             OpenFolder(folder);
 
         EndGroupBox();
@@ -1184,6 +1221,37 @@ void DrawPreferencesMenu()
     }
 }
 
+static void DrawNavRows()
+{
+    const f32 em = ImGui::GetFontSize();
+
+    ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_FrameBg, cNavTintAlpha));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
+    ImGui::PushItemFlag(ImGuiItemFlags_SelectableDontClosePopup, true);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImFloor(em * cNavRowGapEm)));
+
+    for (const PageInfo& info : cPages)
+    {
+        ImGui::PushID(static_cast<s32>(info.page));
+
+        if (DrawNavRow(info.icon, info.name, sPage == info.page))
+            sPage = info.page;
+
+        if (sPage == info.page)
+        {
+            const ImVec2 rowMin = ImGui::GetItemRectMin();
+            const ImVec2 rowMax = ImGui::GetItemRectMax();
+
+            ImGui::GetWindowDrawList()->AddRectFilled(rowMin, ImVec2(rowMin.x + ImFloor(em * cNavBarWidthEm), rowMax.y), ImGui::GetColorU32(ImGuiCol_CheckMark));
+        }
+
+        ImGui::PopID();
+    }
+
+    ImGui::PopStyleVar();
+    ImGui::PopItemFlag();
+}
+
 void DrawPreferencesWindow()
 {
     const sead::FormatFixedSafeString<64> title(ICON_LC_SETTINGS_2 " %s###PrefsPopup", messages::mainmenu::cPreferences);
@@ -1200,28 +1268,14 @@ void DrawPreferencesWindow()
         ImGui::OpenPopup(title.cstr());
     }
 
-    const f32 em = ImGui::GetFontSize();
-
     CenterNextDialog();
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(ImFloor(em * cWindowPadEm), ImFloor(em * cWindowPadEm)));
 
-    const ImVec4 background = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_PopupBg));
-
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, background);
-
-    const bool open = ImGui::BeginPopupModal(title.cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar();
-
-    if (!open)
+    if (!BeginDialog(title.cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
-    AnimateWindow(WindowAnimation::Dialog);
-
+    const f32 em = ImGui::GetFontSize();
     const ImVec2 size(ImFloor(em * cWindowWidthEm), ImFloor(em * cWindowHeightEm));
     const ImVec2 padding(ImFloor(em * cPagePadXEm), ImFloor(em * cPagePadYEm));
-    const ImVec2 origin = ImGui::GetCursorScreenPos();
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, padding);
 
@@ -1231,31 +1285,7 @@ void DrawPreferencesWindow()
         ImGui::TableSetupColumn("##Page", ImGuiTableColumnFlags_WidthStretch);
 
         ImGui::TableNextColumn();
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_FrameBg, cNavTintAlpha));
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
-        ImGui::PushItemFlag(ImGuiItemFlags_SelectableDontClosePopup, true);
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImFloor(em * cNavRowGapEm)));
-
-        for (const PageInfo& info : cPages)
-        {
-            ImGui::PushID(static_cast<s32>(info.page));
-
-            if (DrawNavRow(info.icon, info.name, sPage == info.page))
-                sPage = info.page;
-
-            if (sPage == info.page)
-            {
-                const ImVec2 rowMin = ImGui::GetItemRectMin();
-                const ImVec2 rowMax = ImGui::GetItemRectMax();
-
-                ImGui::GetWindowDrawList()->AddRectFilled(rowMin, ImVec2(rowMin.x + ImFloor(em * cNavBarWidthEm), rowMax.y), ImGui::GetColorU32(ImGuiCol_CheckMark));
-            }
-
-            ImGui::PopID();
-        }
-
-        ImGui::PopStyleVar();
-        ImGui::PopItemFlag();
+        DrawNavRows();
 
         ImGui::TableNextColumn();
 
@@ -1297,11 +1327,10 @@ void DrawPreferencesWindow()
         ApplyTheme();
     }
 
-    const f32 closeWidth = ImFloor(em * cCloseWidthEm);
+    GroupBoxGap();
+    BeginDialogFooter({messages::common::cClose}, false);
 
-    ImGui::SetCursorScreenPos(ImVec2(origin.x + size.x - closeWidth, ImGui::GetCursorScreenPos().y + ImFloor(em * cFooterGapEm)));
-
-    if (ImGui::Button(messages::common::cClose, ImVec2(closeWidth, 0.0f)) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && shortcuts::Pressed(shortcuts::Action::CloseDialog)))
+    if (DialogButton(messages::common::cClose) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && shortcuts::Pressed(shortcuts::Action::CloseDialog)))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();

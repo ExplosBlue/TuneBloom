@@ -46,7 +46,7 @@ static void DrawResourceFormatBox()
     RegionHeader(messages::common::cFormat);
 
     PropertyRow(messages::common::cFormat);
-    ImGui::TextUnformatted(GetResourceFormatInfo(ActiveAudioResource().getFormat()).displayName);
+    ImGui::TextUnformatted(ActiveAudioResource().getContainer() == AudioResource::Container::Sarc ? messages::resource::cSarcFormat : GetResourceFormatInfo(ActiveAudioResource().getFormat()).displayName);
 
     PropertyRow(messages::common::cVersion);
     ImGui::TextUnformatted(version.cstr());
@@ -74,8 +74,14 @@ static void DrawResourceContentBox()
 
     if (counts.streams > 0)
     {
-        PropertyRow(messages::resource::cStreams, messages::resource::cStreamsDetail);
+        PropertyRow(messages::common::cStreams, messages::resource::cStreamsDetail);
         ImGui::Text(messages::resource::cStreamsLoadedFormat, counts.loaded, counts.streams);
+    }
+
+    if (const u32 otherFiles = ActiveAudioResource().getOtherFileCount())
+    {
+        PropertyRow(messages::resource::cOtherFiles, messages::resource::cOtherFilesDetail);
+        ImGui::Text("%u", otherFiles);
     }
 
     EndPropertyBox();

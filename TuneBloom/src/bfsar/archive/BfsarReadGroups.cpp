@@ -41,7 +41,6 @@ namespace
 constexpr u32 cPathBufferSize       = 512;
 constexpr u32 cGroupSearchEntryMax  = 20000;
 constexpr s32 cGroupSearchDepthMax  = 8;
-constexpr u64 cGroupOrderStepMax    = 100000;
 constexpr const char* cPathBadChars = "\\/:*?\"<>|";
 
 }
@@ -424,6 +423,8 @@ void Bfsar::addGroupItem_(BfsarOpenContext& ctx, const GroupFileReader& reader, 
     Group::ItemInfo* itemInfo = new(ctx.heap) Group::ItemInfo(group);
     itemInfo->mId = itemIdx;
     itemInfo->mIsDisabled = itemInfoEx.itemId == 0 || itemInfoEx.itemId == nw::snd::SoundArchive::INVALID_ID;
+    itemInfo->mDetachedLoadFlag = itemInfoEx.loadFlag;
+    itemInfo->mOriginalItemId = itemInfoEx.itemId;
 
     if (!itemInfo->mIsDisabled)
     {
@@ -450,7 +451,6 @@ void Bfsar::addGroupItem_(BfsarOpenContext& ctx, const GroupFileReader& reader, 
                 break;
         }
 
-        itemInfo->mOriginalItemId = itemInfoEx.itemId;
         itemInfo->mItemRef.attach(getItem(itemInfoEx.itemId, getItemList(itemInfo->mItemRefType)));
 
         if (itemInfo->mItemRef.isAttached())
@@ -472,11 +472,18 @@ static void AddGroupWaveArchiveFile(const BfsarOpenContext& ctx, const BfsarGrou
 
 static void AddGroupSharedWaveArchiveFile(const BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 fileId, const std::unordered_map<u64, u32>& fileWarcIds)
 {
-    const u32 fileGroupId = item.group->getOutputType() == Group::OutputType::Link ? nw::snd::SoundArchive::INVALID_ID : item.groupId;
-    const auto it = fileWarcIds.find(MakeGroupFileKey(fileId, fileGroupId));
+    const bool isLink = item.group->getOutputType() == Group::OutputType::Link;
+    const auto it = fileWarcIds.find(MakeGroupFileKey(fileId, isLink ? nw::snd::SoundArchive::INVALID_ID : item.groupId));
 
-    if (it != fileWarcIds.end() && it->second != nw::snd::SoundArchive::INVALID_ID)
-        AddGroupWaveArchiveFile(ctx, item, it->second);
+    if (it == fileWarcIds.end() || it->second == nw::snd::SoundArchive::INVALID_ID)
+        return;
+
+    AddGroupWaveArchiveFile(ctx, item, it->second);
+
+    const SoundArchiveFile::WaveArchiveInfo* warcInfo = ctx.soundArchive.GetWaveArchiveInfo(it->second);
+
+    if (!isLink && warcInfo)
+        item.group->setOriginalSharedWarcFileId(warcInfo->fileId);
 }
 
 void Bfsar::addGroupBankFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 bankId)
@@ -660,94 +667,6 @@ static void InsertAnonymousWaveArchiveFiles(const nw::snd::MemorySoundArchive& s
     }
 }
 
-static bool IsStartOf(const VectorSet<u32>& start, const std::vector<u32>& all)
-{
-    if (start.size() > all.size())
-        return false;
-
-    for (u32 i = 0; i < start.size(); i++)
-    {
-        if (start[i] != all[i])
-            return false;
-    }
-
-    return true;
-}
-
-static bool FindGroupItemOrder(const std::vector<VectorSet<u32>>& itemFileMap, const std::vector<u32>& groupFileIds, std::vector<u32>& outOrder)
-{
-    const u32 itemCount = static_cast<u32>(itemFileMap.size());
-
-    std::vector<bool> used(itemCount, false);
-    std::vector<u32> nextItem(1, 0);
-    std::vector<u32> fileCountBefore;
-    VectorSet<u32> orderedFileIds;
-    u64 stepCount = 1;
-
-    outOrder.reserve(itemCount);
-    orderedFileIds.reserve(static_cast<u32>(groupFileIds.size()));
-
-    if (itemCount == 0)
-        return orderedFileIds == groupFileIds;
-
-    while (!nextItem.empty())
-    {
-        bool isItemAdded = false;
-
-        for (u32& i = nextItem.back(); i < itemCount && !isItemAdded; i++)
-        {
-            if (used[i])
-                continue;
-
-            const u32 fileCount = static_cast<u32>(orderedFileIds.size());
-
-            for (u32 fileId : itemFileMap[i])
-                orderedFileIds.insert(fileId);
-
-            if (!IsStartOf(orderedFileIds, groupFileIds))
-            {
-                orderedFileIds.resize(fileCount);
-                continue;
-            }
-
-            if (++stepCount > cGroupOrderStepMax)
-                return false;
-
-            if (outOrder.size() + 1 == itemCount && !(orderedFileIds == groupFileIds))
-            {
-                orderedFileIds.resize(fileCount);
-                continue;
-            }
-
-            used[i] = true;
-            outOrder.push_back(i);
-            fileCountBefore.push_back(fileCount);
-            isItemAdded = true;
-        }
-
-        if (isItemAdded && outOrder.size() == itemCount)
-            return true;
-
-        if (isItemAdded)
-        {
-            nextItem.push_back(0);
-            continue;
-        }
-
-        nextItem.pop_back();
-
-        if (outOrder.empty())
-            continue;
-
-        used[outOrder.back()] = false;
-        orderedFileIds.resize(fileCountBefore.back());
-        outOrder.pop_back();
-        fileCountBefore.pop_back();
-    }
-
-    return false;
-}
-
 void Bfsar::addGroupItemsByFile_(BfsarOpenContext& ctx, const GroupFileReader& reader, Group* group)
 {
     std::unordered_map<u32, Item*> fileToItem;
@@ -860,31 +779,14 @@ void Bfsar::readGroupFile_(BfsarOpenContext& ctx, Group* group, u32 groupId, con
 
     InsertAnonymousWaveArchiveFiles(ctx.soundArchive, groupFileIds, itemFileMap);
 
-    if (group->mOutputType == Group::OutputType::External)
-    {
-        group->mOriginalFileOrder = groupFileIds;
-        group->mOriginalExtraFiles = FindFilesOfNoItem(groupFileIds, itemFileMap);
-    }
+    group->mOriginalFileOrder = groupFileIds;
+    group->mOriginalExtraFiles = FindFilesOfNoItem(groupFileIds, itemFileMap);
 
-    std::vector<u32> itemOrder;
-
-    if (FindGroupItemOrder(itemFileMap, groupFileIds, itemOrder))
-    {
-        for (u32 itemIdx : itemOrder)
-            addGroupItem_(ctx, reader, group, itemIdx);
-    }
-    else if (!itemFileMap.empty())
-    {
-        for (u32 i = 0; i < itemFileMap.size(); i++)
-            addGroupItem_(ctx, reader, group, i);
-
-        LOG_FMT("Group '%s' (id=%u) has items but the file order could not be determined", group->mName.cstr(), group->getId());
-        PopupMgr::instance()->pushCurrentItemWarning(messages::archive::cGroupItemOrderNotFound);
-    }
-    else
-    {
+    if (itemFileMap.empty())
         addGroupItemsByFile_(ctx, reader, group);
-    }
+
+    for (u32 i = 0; i < itemFileMap.size(); i++)
+        addGroupItem_(ctx, reader, group, i);
 
     updateList(group->getItemInfoList());
 }

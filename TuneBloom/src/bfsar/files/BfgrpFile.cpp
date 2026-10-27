@@ -13,7 +13,7 @@
 static u32 GetMaskedGroupItemId(const Group::ItemInfo& itemInfo)
 {
     if (itemInfo.getIsDisabled() || !itemInfo.getItemRef().isAttached())
-        return 0;
+        return itemInfo.getOriginalItemId() == nw::snd::SoundArchive::INVALID_ID ? nw::snd::SoundArchive::INVALID_ID : 0;
 
     nw::snd::internal::ItemType itemType;
     switch (itemInfo.getItemRefType())
@@ -59,7 +59,7 @@ static std::vector<GroupItemEntry> CollectGroupItemEntries(const Group& group, b
 
         const u32 itemId = GetMaskedGroupItemId(*itemInfo);
 
-        if (itemId != 0 || !sortById)
+        if ((itemId != 0 && itemId != nw::snd::SoundArchive::INVALID_ID) || !sortById)
             entries.push_back({itemId, itemInfo->getLoadFlag()});
     }
 
@@ -120,26 +120,30 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
         LOG_FMT("Writing FILE block, outputType=%d", (int)mGroup->getOutputType());
         writer.openBlock(nw::snd::internal::ElementType_GroupFile_FileBlock, "FILE");
 
-        writer.align(0x20);
+        const u32 fileAlignment = GetInnerFileDataAlignment(mFormat, mEndian);
+        writer.alignInFile(fileAlignment);
 
         if (mGroup->getOutputType() != Group::OutputType::Link)
         {
             mEmbeddedFileInfos.clear();
 
+            u32 itemIndex = 0;
+
             for (u32 i : itemFiles)
             {
                 const File& file = files[i];
+                const bool isLastItem = ++itemIndex == itemFiles.size();
 
                 const InnerFile* innerFile = file.innerFile;
                 SEAD_ASSERT(innerFile);
 
-                writer.align(0x20);
+                writer.alignInFile(fileAlignment);
 
                 PrepareInnerFileForWrite(*mSaveContext, file, mGroup);
 
                 u32 pos = writer.getPosition();
                 {
-                    innerFile->write(handle, stream, mEndian, file.id == itemFiles.size() - 1);
+                    innerFile->write(handle, stream, mEndian, isLastItem);
                 }
                 u32 size = writer.getPosition() - pos;
                 LOG_FMT("Embedded file %u at pos=%u size=%u", file.id, pos, size);
@@ -182,9 +186,7 @@ u32 BfgrpFile::doWrite(sead::FileHandle* handle, sead::WriteStream* stream, bool
         fileSize = writer.getPosition();
 
         if (!isLast)
-        {
-            writer.align(0x20);
-        }
+            writer.align(GetInnerFileDataAlignment(mFormat, mEndian));
 
         writer.closeBlock();
     }

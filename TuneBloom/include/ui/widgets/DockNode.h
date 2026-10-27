@@ -13,20 +13,3 @@ inline void SetDockNodeHeight(ImGuiDockNode* node, f32 height)
     node->Size.y = height;
     node->WantLockSizeOnce = true;
 }
-
-inline void SetDockNodeWidth(ImGuiDockNode* node, f32 width)
-{
-    if (ImAbs(node->Size.x - width) < 1.0f)
-        return;
-
-    node->Size.x = width;
-    node->WantLockSizeOnce = true;
-}
-
-inline ImGuiDockNode* FindDockColumnNode(ImGuiDockNode* node)
-{
-    while (node && node->ParentNode && node->ParentNode->SplitAxis != ImGuiAxis_X)
-        node = node->ParentNode;
-
-    return node && node->ParentNode ? node : nullptr;
-}

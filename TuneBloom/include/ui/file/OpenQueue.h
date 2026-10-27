@@ -12,14 +12,21 @@ enum class Mode
     Reload
 };
 
+enum class Origin
+{
+    App,
+    Browser
+};
+
 struct Request
 {
     std::string path;
     Mode mode = Mode::Pin;
+    Origin origin = Origin::App;
 };
 
 void PushExternal(const char* path);
-void Push(const char* path, Mode mode = Mode::Pin);
+void Push(const char* path, Mode mode = Mode::Pin, Origin origin = Origin::App);
 bool Take(Request* outRequest);
 bool IsEmpty();
 void Clear();

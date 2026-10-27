@@ -250,8 +250,17 @@ static void CaptureUnloadedLayout(Document& document)
 
     layout.fileWindows.clear();
 
-    for (const Item* window : state.fileWindows)
-        layout.fileWindows.push_back(locate(static_cast<const FileWindow*>(window)->getFileRef().getItem()));
+    for (const Item* item : state.fileWindows)
+    {
+        const FileWindow* window = static_cast<const FileWindow*>(item);
+
+        if (window->isOpen())
+            layout.fileWindows.push_back(locate(window->getFileRef().getItem()));
+    }
+
+    const FileWindow* shown = state.shownFileWindow;
+
+    layout.shownFile = shown && shown->isOpen() ? locate(shown->getFileRef().getItem()) : ItemLocator();
 }
 
 static void RestoreUnloadedLayout(Document& document)
@@ -296,6 +305,11 @@ static void RestoreUnloadedLayout(Document& document)
         if (Item* item = resolve(locator))
             OpenFileWindow(item);
     }
+
+    if (Item* shownFile = resolve(layout.shownFile))
+        OpenFileWindow(shownFile);
+    else
+        ShowFileWindow(nullptr);
 
     state.unloadedLayout = DocumentState::UnloadedLayout();
 }
@@ -359,7 +373,7 @@ static Document* FindMostRecentDocument(bool isLoaded)
 
     for (Document* document : sDocuments)
     {
-        if (document->isLoaded() != isLoaded)
+        if (document->isLoaded() != isLoaded || document->state().reloadFailed)
             continue;
 
         if (!recent || document->state().lastActive > recent->state().lastActive)
@@ -459,11 +473,12 @@ bool ActivateDocument(Document* document)
     if (!document)
         return false;
 
-    if (!document->isLoaded() && !ReloadDocument(*document))
+    if (!document->isLoaded())
     {
-        RemoveDocument(document);
-        RecordDocumentSession();
-        return false;
+        document->state().reloadFailed = !ReloadDocument(*document);
+
+        if (document->state().reloadFailed)
+            return false;
     }
 
     if (sActive != document)
@@ -582,7 +597,7 @@ static Document* FindUnloadCandidate()
     {
         const DocumentState& state = document->state();
 
-        if (document == sActive || !document->canUnload() || state.unsaved || sSoundPlayer.isPlayingFrom(document))
+        if (document == sActive || !document->canUnload() || state.unsaved || sSoundPlayer.isPlayingFrom(document) || DocumentHasChanges(*document))
             continue;
 
         if (!oldest || state.lastActive < oldest->state().lastActive)

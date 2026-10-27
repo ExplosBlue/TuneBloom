@@ -65,6 +65,14 @@ public:
         return 0;
     }
 
+    u32 GetSeekBlockSize() const
+    {
+        if (IsAvailable() && mHeader->HasSeekBlock())
+            return mHeader->GetSeekBlockSize();
+
+        return 0;
+    }
+
     u32 GetSampleDataOffset() const
     {
         if (IsAvailable())

@@ -37,13 +37,19 @@ static bool (*sPendingFileAction)() = nullptr;
 static bool sSaveInUseRemember = false;
 static bool sSaveInUseRetryFailed = false;
 
-static Document* sCloseRequest = nullptr;
-static bool sCloseRequestReopens = false;
+struct CloseRequest
+{
+    Document* document = nullptr;
+    bool reopens = false;
+};
+
+static std::vector<CloseRequest> sCloseQueue;
 static Document* sClosingDocument = nullptr;
 static bool sClosingDocumentReopens = false;
 
 static std::vector<Document*> sSaveQueue;
 static Document* sSavingDocument = nullptr;
+static Document* sSaveAsRequest = nullptr;
 static bool sExitAfterSaving = false;
 
 void RequestSaveFile()
@@ -61,14 +67,14 @@ void RequestOpenFile()
     sWantsOpenDialog = true;
 }
 
-void RequestOpenFile(const char* path)
+void RequestOpenFile(const char* path, openqueue::Origin origin)
 {
-    openqueue::Push(path);
+    openqueue::Push(path, openqueue::Mode::Pin, origin);
 }
 
 void RequestPreviewFile(const char* path)
 {
-    openqueue::Push(path, openqueue::Mode::Preview);
+    openqueue::Push(path, openqueue::Mode::Preview, openqueue::Origin::Browser);
 }
 
 void RequestCloseFile()
@@ -76,16 +82,36 @@ void RequestCloseFile()
     RequestCloseDocument(ActiveDocument());
 }
 
+static void QueueDocumentClose(Document* document, bool reopens)
+{
+    if (!document)
+        return;
+
+    const auto isSameDocument = [document](const CloseRequest& request) { return request.document == document; };
+
+    if (std::none_of(sCloseQueue.begin(), sCloseQueue.end(), isSameDocument))
+        sCloseQueue.push_back({ document, reopens });
+}
+
 void RequestCloseDocument(Document* document)
 {
-    sCloseRequest = document;
-    sCloseRequestReopens = false;
+    QueueDocumentClose(document, false);
 }
 
 void RequestReloadDocument(Document* document)
 {
-    sCloseRequest = document;
-    sCloseRequestReopens = true;
+    QueueDocumentClose(document, true);
+}
+
+void RequestSaveDocument(Document* document)
+{
+    if (document->state().unsaved && std::find(sSaveQueue.begin(), sSaveQueue.end(), document) == sSaveQueue.end())
+        sSaveQueue.push_back(document);
+}
+
+void RequestSaveDocumentAs(Document* document)
+{
+    sSaveAsRequest = document;
 }
 
 void RequestSaveAll()
@@ -93,10 +119,12 @@ void RequestSaveAll()
     sSaveQueue.clear();
 
     for (Document* document : GetOpenDocuments())
-    {
-        if (document->state().unsaved)
-            sSaveQueue.push_back(document);
-    }
+        RequestSaveDocument(document);
+}
+
+bool IsSaveQueueBusy()
+{
+    return !sSaveQueue.empty() || sSavingDocument || sWantsSaveDirect;
 }
 
 void RequestExitAfterSaveAll()
@@ -118,8 +146,11 @@ bool TryExit()
 
 void ForgetDocumentRequests(const Document* document)
 {
-    if (sCloseRequest == document)
-        sCloseRequest = nullptr;
+    const auto isDocument = [document](const CloseRequest& request) { return request.document == document; };
+    sCloseQueue.erase(std::remove_if(sCloseQueue.begin(), sCloseQueue.end(), isDocument), sCloseQueue.end());
+
+    if (sSaveAsRequest == document)
+        sSaveAsRequest = nullptr;
 
     if (sClosingDocument == document)
         sClosingDocument = nullptr;
@@ -222,29 +253,53 @@ static void CancelDocumentClose()
 {
     sClosingDocument = nullptr;
     sPendingFileAction = nullptr;
+    sCloseQueue.clear();
 }
 
 static void StartDocumentClose()
 {
-    Document* document = sCloseRequest;
-    sCloseRequest = nullptr;
+    while (!sCloseQueue.empty())
+    {
+        const CloseRequest request = sCloseQueue.front();
+        sCloseQueue.erase(sCloseQueue.begin());
 
-    if (!IsOpenDocument(document))
+        if (!IsOpenDocument(request.document))
+            continue;
+
+        sClosingDocument = request.document;
+        sClosingDocumentReopens = request.reopens;
+
+        if (!request.document->state().unsaved)
+        {
+            FinishDocumentClose();
+            continue;
+        }
+
+        ActivateDocument(request.document);
+
+        sFileAction = &FinishDocumentClose;
+        ImGui::OpenPopup("###Save");
+        return;
+    }
+}
+
+static void StartSaveAs()
+{
+    Document* document = sSaveAsRequest;
+
+    if (!document || IsDocumentSwitchLocked())
         return;
 
-    sClosingDocument = document;
-    sClosingDocumentReopens = sCloseRequestReopens;
-
-    if (!document->state().unsaved)
+    if (document != ActiveDocument())
     {
-        FinishDocumentClose();
+        if (!IsOpenDocument(document) || !ActivateDocument(document))
+            sSaveAsRequest = nullptr;
+
         return;
     }
 
-    ActivateDocument(document);
-
-    sFileAction = &FinishDocumentClose;
-    ImGui::OpenPopup("###Save");
+    sSaveAsRequest = nullptr;
+    SaveFileAs();
 }
 
 static void StartFileAction()
@@ -274,8 +329,7 @@ static void StartFileAction()
         return;
     }
 
-    if (sCloseRequest)
-        StartDocumentClose();
+    StartDocumentClose();
 }
 
 static void UpdateSaveAll()
@@ -670,6 +724,7 @@ static void DrawNewFileFormatDialog()
 void DrawFileFlow()
 {
     StartFileAction();
+    StartSaveAs();
     DrawSaveChangesDialog();
     UpdateSaveAll();
     StartDirectSave();

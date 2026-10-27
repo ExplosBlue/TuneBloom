@@ -8,7 +8,6 @@
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
 #include <ui/project/FileLists.h>
-#include <ui/browser/FilesPanel.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/StartPage.h>
 #include <ui/items/ItemList.h>
@@ -22,6 +21,7 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/settings/Preferences.h>
 #include <ui/project/ProjectViews.h>
+#include <ui/project/Sidebar.h>
 #include <ui/project/References.h>
 #include <ui/resource/ResourceViews.h>
 #include <ui/items/Selection.h>
@@ -58,6 +58,8 @@ void SetUITab(UIType type)
 
 void FocusInfoWindow()
 {
+    ShowFileWindow(nullptr);
+
     ImGuiWindow* w = ImGui::FindWindowByName("###InfoWindow");
     if (w && w->DockIsActive && w->Hidden)
     {
@@ -107,7 +109,6 @@ static void DockBuilder(ImGuiID dockspaceId, const ImVec2& dockspaceSize)
     ImGuiID dock1Bottom = ImGui::DockBuilderSplitNode(dock1, ImGuiDir_Down, 0.50f, nullptr, &dock1);
 
     ImGui::DockBuilderDockWindow("###ProjectWindow", dock1);
-    ImGui::DockBuilderDockWindow(cFilesWindowId, dock1);
     ImGui::DockBuilderDockWindow("###OutputMeterWindow", dock1Bottom);
     ImGui::DockBuilderDockWindow("###InfoWindow", mainDockId);
     ImGui::DockBuilderDockWindow("###SubInfoWindow", dockDownMain);
@@ -180,17 +181,19 @@ static void DrawSystemWindow()
 static void DrawInfoUI()
 {
     Document* document = ActiveDocument();
-    const bool notProjUI = document && GetUITab() != UIType::ProjectInfo;
+    const bool showsFile = GetShownFileWindow() != nullptr;
+    const bool notProjUI = document && (showsFile || GetUITab() != UIType::ProjectInfo);
 
     if (notProjUI)
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 
-    const bool windowOpen = ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_PEN " %s###InfoWindow", messages::project::cInfoWindowTitle).cstr(), nullptr, notProjUI ? 0 : ImGuiWindowFlags_NoScrollbar);
+    const ImGuiWindowFlags flags = showsFile ? ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse : notProjUI ? 0 : ImGuiWindowFlags_NoScrollbar;
+    const bool windowOpen = ImGui::Begin(sead::FormatFixedSafeString<64>(ICON_LC_PEN " %s###InfoWindow", messages::project::cInfoWindowTitle).cstr(), nullptr, flags);
 
     if (notProjUI)
         ImGui::PopStyleVar();
 
-    if (windowOpen)
+    if (windowOpen && !DrawShownFileWindow())
     {
         if (document)
             document->drawInfo(GetUITab());
@@ -490,14 +493,14 @@ void DrawUI()
 
     HandleFileShortcuts();
 
-    ImGuiID dockspaceId = DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_AutoHideTabBar);
+    UpdateFileWindows();
 
-    DrawProjectUI();
-    DrawFilesPanel();
+    DockSpaceOverViewport(nullptr, ImGuiDockNodeFlags_AutoHideTabBar);
+
+    DrawSidebarUI();
     DrawInfoUI();
     DrawSubInfoUI();
     DrawStreamRegionsWindow();
-    DrawFileWindows(dockspaceId);
     DrawPropertiesUI();
     DrawPlayerUI();
     DrawOutputMeterWindow();

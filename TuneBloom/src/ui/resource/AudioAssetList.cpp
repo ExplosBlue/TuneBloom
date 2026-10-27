@@ -144,6 +144,7 @@ static void ExportPendingWavs()
     ExportItemsToFiles(&sPendingWavExports, { cWavExtension, messages::filedialog::cFilterWave, messages::common::cAudioAsset, messages::exporting::cSelectWavFolder },
         [](AudioAsset* asset, const sead::SafeString& path)
         {
+            ActiveAudioResource().loadStreamFile(asset);
             return asset->writeWavFile(path);
         },
         &ShowWavExportResult, &ShowWavBatchExportResult);
@@ -159,11 +160,13 @@ static void ExportPendingFiles()
     const sead::FormatFixedSafeString<64> filterName(messages::filedialog::cFilterFileFormat, formatName, GetAudioAssetKindExtension(kind));
 
     ExportItemsToFiles(&sPendingFileExports, { GetAudioAssetKindExtension(kind), filterName.cstr(), messages::common::cAudioAsset, messages::exporting::cSelectFolder },
-        [](AudioAsset* asset, const sead::SafeString& path)
+        [kind](AudioAsset* asset, const sead::SafeString& path)
         {
+            ActiveAudioResource().loadStreamFile(asset);
+
             const AudioAssetFile& file = asset->getCompleteFile();
 
-            return file && fileio::WriteWholeFileAtomic(path.cstr(), file->data(), file->size());
+            return file && asset->getCompleteFileKind() == kind && fileio::WriteWholeFileAtomic(path.cstr(), file->data(), file->size());
         },
         [formatName](bool exported)
         {

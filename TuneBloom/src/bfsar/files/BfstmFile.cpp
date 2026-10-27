@@ -479,20 +479,30 @@ static void WriteInfoBlock(StreamWriteContext& context)
     writer.closeBlock();
 }
 
+static u32 GetSeekRowCount(const StreamWriteContext& context)
+{
+    u32 rowCount = context.channelNum > 0 ? static_cast<u32>(context.channelData[0].seekData.getSeekInfoBlocks()) : 0;
+
+    for (u32 ch = 1; ch < context.channelNum; ch++)
+        rowCount = std::min(rowCount, static_cast<u32>(context.channelData[ch].seekData.getSeekInfoBlocks()));
+
+    return std::max(rowCount, context.blockNum);
+}
+
 static void WriteSeekBlock(StreamWriteContext& context)
 {
     FileWriter& writer = context.writer;
 
     writer.openBlock(nw::snd::internal::ElementType_StreamSoundFile_SeekBlock, "SEEK");
 
-    for (u32 blockNo = 0; blockNo < context.blockNum; blockNo++)
+    for (u32 rowNo = 0; rowNo < GetSeekRowCount(context); rowNo++)
     {
         for (u32 ch = 0; ch < context.channelNum; ch++)
         {
             const StreamChannelData& channelData = context.channelData[ch];
 
-            s16 s1 = sead::Endian::fromHostS16(sead::Endian::eLittle, channelData.seekData.getSeekInfo(blockNo).yn1);
-            s16 s2 = sead::Endian::fromHostS16(sead::Endian::eLittle, channelData.seekData.getSeekInfo(blockNo).yn2);
+            s16 s1 = sead::Endian::fromHostS16(sead::Endian::eLittle, channelData.seekData.getSeekInfo(rowNo).yn1);
+            s16 s2 = sead::Endian::fromHostS16(sead::Endian::eLittle, channelData.seekData.getSeekInfo(rowNo).yn2);
 
             context.stream->writeMemBlock(&s1, sizeof(s16));
             context.stream->writeMemBlock(&s2, sizeof(s16));
@@ -671,6 +681,7 @@ private:
     bool checkTrackLoop_(const WaveFile& wave, u32 trackNo) const;
     void readTrackChannel_(WaveFile* wave, u32 trackNo, s8 globalChannelIndex);
     void readAdpcmChannelInfo_(WaveFile::Channel* channel, u32 trackNo, s8 globalChannelIndex);
+    u32 getSeekRowCount() const;
 
     void pushTrackWarning_(const char* format, u32 trackNo)
     {
@@ -854,19 +865,32 @@ void StreamWaveReader::readAdpcmChannelInfo_(WaveFile::Channel* channel, u32 tra
     else
         pushTrackWarning_(messages::stream::cTrackAdpcmUnreadableFormat, trackNo);
 
-    channel->mSeekData.mSeekInfo.allocBuffer(mStreamSoundInfo.blockCount);
+    const u32 rowCount = getSeekRowCount();
+
+    channel->mSeekData.mSeekInfo.allocBuffer(rowCount);
     channel->mSeekData.mOwner = true;
 
     const u8* seekStart = static_cast<const u8*>(mStrmFile) + mReader.GetSeekBlockOffset() + sizeof(nw::ut::BinaryBlockHeader);
 
     WaveFile::Channel::SeekInfo* seekInfo = channel->mSeekData.mSeekInfo.getBufferPtr();
-    for (u32 blockNo = 0; blockNo < mStreamSoundInfo.blockCount; blockNo++)
+    for (u32 rowNo = 0; rowNo < rowCount; rowNo++)
     {
-        const WaveFile::Channel::SeekInfo* blockSeek = reinterpret_cast<const WaveFile::Channel::SeekInfo*>(seekStart);
-        blockSeek += blockNo * mStreamSoundInfo.channelCount;
-        seekInfo[blockNo].yn1 = blockSeek[globalChannelIndex].yn1;
-        seekInfo[blockNo].yn2 = blockSeek[globalChannelIndex].yn2;
+        const WaveFile::Channel::SeekInfo* rowSeek = reinterpret_cast<const WaveFile::Channel::SeekInfo*>(seekStart);
+        rowSeek += rowNo * mStreamSoundInfo.channelCount;
+        seekInfo[rowNo].yn1 = rowSeek[globalChannelIndex].yn1;
+        seekInfo[rowNo].yn2 = rowSeek[globalChannelIndex].yn2;
     }
+}
+
+u32 StreamWaveReader::getSeekRowCount() const
+{
+    const u64 blockSize = mReader.GetSeekBlockSize();
+    const u64 rowSize = static_cast<u64>(mStreamSoundInfo.channelCount) * sizeof(WaveFile::Channel::SeekInfo);
+
+    if (blockSize < sizeof(nw::ut::BinaryBlockHeader) || mReader.GetSeekBlockOffset() + blockSize > mStrmFileSize)
+        return mStreamSoundInfo.blockCount;
+
+    return static_cast<u32>(std::max<u64>(mStreamSoundInfo.blockCount, (blockSize - sizeof(nw::ut::BinaryBlockHeader)) / rowSize));
 }
 
 void StreamWaveReader::readTrackChannel_(WaveFile* wave, u32 trackNo, s8 globalChannelIndex)

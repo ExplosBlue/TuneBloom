@@ -56,5 +56,12 @@ private:
 
 FileWindow* OpenFileWindow(Item* item);
 void CloseAllFileWindows();
-void DrawFileWindows(ImGuiID dockspaceId);
+void UpdateFileWindows();
+bool DrawShownFileWindow();
 bool IsFileWindowFocused();
+
+FileWindow* GetShownFileWindow();
+void ShowFileWindow(FileWindow* window);
+void RequestCloseFileWindow(FileWindow* window);
+const char* GetFileWindowIcon(const FileWindow& window);
+bool IsFileWindowDirty(const FileWindow& window);

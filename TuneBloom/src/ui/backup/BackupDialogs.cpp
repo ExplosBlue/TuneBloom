@@ -288,7 +288,7 @@ static void DrawRecoverRows(const Snapshot& snapshot)
         char size[32];
         FormatSize(snapshot.size, size, sizeof(size));
 
-        const sead::FormatFixedSafeString<96> backupText(messages::backup::cRecoverBackupFormat, date, size);
+        const sead::FormatFixedSafeString<96> backupText(messages::common::cPairFormat, date, size);
         const std::string folder = snapshot.originalPath.empty() ? std::string(messages::backup::cRecoverNoFolder)
                                                                  : fs::path(snapshot.originalPath).parent_path().string();
         const std::string shortFolder = CutPathStart(folder, cRecoverFolderMax);

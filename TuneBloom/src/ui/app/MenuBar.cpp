@@ -2,6 +2,7 @@
 
 #include <ui/app/About.h>
 #include <ui/backup/Backup.h>
+#include <ui/browser/FilesPanel.h>
 #include <ui/settings/Config.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/file/DocumentMgr.h>
@@ -424,8 +425,11 @@ static void DrawFileMenu()
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FILE " %s", messages::mainmenu::cNew).cstr(), shortcuts::Label(shortcuts::Action::NewProject)))
         RequestNewFile();
 
-    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER_OPEN " %s", messages::mainmenu::cOpen).cstr(), shortcuts::Label(shortcuts::Action::OpenProject)))
+    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER_OPEN " %s", messages::common::cOpen).cstr(), shortcuts::Label(shortcuts::Action::OpenProject)))
         RequestOpenFile();
+
+    if (MenuBarIconItem(ICON_LC_FOLDER_PLUS, messages::common::cOpenFolder))
+        RequestFilesPanelFolderDialog();
 
     DrawRecentFilesMenu();
 

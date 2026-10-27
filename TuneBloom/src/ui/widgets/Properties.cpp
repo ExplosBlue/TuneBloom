@@ -293,6 +293,7 @@ void RegisterPropertySettings()
 }
 
 static constexpr f32 cPropertySectionBandPadEm = 0.15f;
+static constexpr f32 cPropertySectionIconGapEm = 0.4f;
 static constexpr f32 cPropertySectionPadXEm    = 0.5f;
 static constexpr f32 cPropertySectionPadYEm    = 0.4f;
 
@@ -305,18 +306,49 @@ static void DrawSectionBand(const ImVec2& min, const ImVec2& max, ImU32 fill)
     draw->AddRect(min, bandMax, ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
 }
 
-void DrawSectionTitle(const char* title, f32 width)
+f32 CalcSectionTitleHeight()
+{
+    return ImGui::GetFrameHeight() + ImFloor(ImGui::GetFontSize() * cPropertySectionBandPadEm) * 2.0f;
+}
+
+bool DrawSectionTitle(const char* title, f32 width, const char* status, const char* action, const char* icon, u32 iconColor, f32 textInset)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 bandPad = ImFloor(ImGui::GetFontSize() * cPropertySectionBandPadEm);
+    const f32 inset = textInset >= 0.0f ? textInset : bandPad + style.FramePadding.x;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
-    const ImVec2 max(pos.x + width, pos.y + ImGui::GetFrameHeight() + bandPad * 2.0f);
+    const ImVec2 max(pos.x + width, pos.y + CalcSectionTitleHeight());
+    ImVec2 textPos(pos.x + inset, pos.y + bandPad + style.FramePadding.y);
+    const f32 actionWidth = action ? ImGui::CalcTextSize(action).x + style.FramePadding.x * 2.0f : 0.0f;
+    const f32 statusRight = action ? max.x - bandPad - actionWidth - style.ItemSpacing.x : max.x - inset;
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    bool pressed = false;
 
     DrawSectionBand(pos, max, ImGui::GetColorU32(ImGuiCol_FrameBg));
-    ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + bandPad + style.FramePadding.x, pos.y + bandPad + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), title);
+
+    if (icon)
+    {
+        draw->AddText(textPos, iconColor, icon);
+        textPos.x += ImGui::CalcTextSize(icon).x + ImFloor(ImGui::GetFontSize() * cPropertySectionIconGapEm);
+    }
+
+    draw->AddText(textPos, ImGui::GetColorU32(ImGuiCol_Text), title);
+
+    if (status)
+        draw->AddText(ImVec2(statusRight - ImGui::CalcTextSize(status).x, textPos.y), ImGui::GetColorU32(GetItemValueColor()), status);
+
+    if (action)
+    {
+        ImGui::SetCursorScreenPos(ImVec2(max.x - bandPad - actionWidth, pos.y + bandPad));
+        pressed = ImGui::Button(action);
+        ImGui::SetCursorScreenPos(pos);
+    }
 
     ImGui::Dummy(ImVec2(width, max.y - pos.y));
     ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y - 1.0f));
+
+    return pressed;
 }
 
 bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool defaultOpen, s32 columnNum, const char* detail, const char* value, const char* enableDetail)

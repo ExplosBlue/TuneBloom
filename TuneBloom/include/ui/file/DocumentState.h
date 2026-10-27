@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+class FileWindow;
+
 u64 NewEditGeneration();
 u32 NewDocumentSerial();
 
@@ -47,6 +49,7 @@ struct DocumentState
     {
         TabLocators tabs[cTabCount];
         std::vector<ItemLocator> fileWindows;
+        ItemLocator shownFile;
     };
 
     struct Backup
@@ -79,6 +82,7 @@ struct DocumentState
     TabFilter filters[cTabCount][cFilterPaneCount];
 
     ItemList fileWindows;
+    FileWindow* shownFileWindow = nullptr;
     Backup backup;
 
     PopupMgr::ItemErrors itemErrors;
@@ -86,6 +90,7 @@ struct DocumentState
     u32 serial = NewDocumentSerial();
     std::string canonicalPath;
     bool isPreview = false;
+    bool reloadFailed = false;
     u64 lastActive = 0;
     u64 memoryEstimate = 0;
     UnloadedLayout unloadedLayout;

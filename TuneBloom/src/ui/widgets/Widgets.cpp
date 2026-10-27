@@ -345,6 +345,61 @@ bool DrawTableRowSelectable(const char* id, bool selected, bool* outHovered)
     return rowPressed;
 }
 
+bool DrawRowHoverButton(const char* id, const char* icon, bool lit, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size)
+{
+    const ImVec2 hitPos = ImGui::GetCursorScreenPos();
+    const ImVec2 pos = hitPos + ImFloor((hitSize - ImVec2(size, size)) * 0.5f);
+
+    const bool pressed = ImGui::InvisibleButton(id, hitSize);
+    const bool hovered = ImGui::IsItemHovered();
+    const bool held = ImGui::IsItemActive();
+
+    ImGui::SetItemTooltip("%s", tooltip);
+
+    if (!visible && !hovered && !held)
+        return pressed;
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    const f32 hoverRatio = ImGui::GetHoverRatio(ImGui::GetItemID() + 1, hovered || held);
+
+    if (hoverRatio > 0.0f)
+        drawList->AddRectFilled(pos, pos + ImVec2(size, size), ImGui::GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered, hoverRatio), ImGui::GetStyle().FrameRounding);
+
+    const ImVec2 iconSize = ImGui::CalcTextSize(icon);
+    const ImGuiCol color = lit ? ImGuiCol_CheckMark : hovered || held ? ImGuiCol_Text : ImGuiCol_TextDisabled;
+
+    drawList->AddText(pos + ImFloor((ImVec2(size, size) - iconSize) * 0.5f), ImGui::GetColorU32(color), icon);
+
+    return pressed;
+}
+
+void DrawSpinner(const ImVec2& center, f32 radius, ImU32 color)
+{
+    constexpr f32 cTurnsPerSecond = 1.2f;
+    constexpr f32 cArcLength      = IM_PI * 1.4f;
+    constexpr s32 cSegments       = 16;
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const f32 start = static_cast<f32>(ImGui::GetTime()) * cTurnsPerSecond * IM_PI * 2.0f;
+    const f32 thickness = ImGui::GetIconStrokeThickness(ImGui::GetFontSize());
+
+    drawList->PathArcTo(center, radius, start, start + cArcLength, cSegments);
+    drawList->PathStroke(color, ImDrawFlags_None, thickness);
+}
+
+void DrawProgressBar(const ImVec2& min, const ImVec2& max, f32 fraction)
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const f32 rounding = (max.y - min.y) * 0.5f;
+    const f32 fillX = min.x + ImFloor((max.x - min.x) * ImSaturate(fraction));
+
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_FrameBg), rounding);
+
+    if (fillX > min.x + rounding * 2.0f)
+        drawList->AddRectFilled(min, ImVec2(fillX, max.y), ImGui::GetColorU32(ImGuiCol_PlotHistogram), rounding);
+}
+
 bool DrawRowOpenButton(u32 id, const char* tooltip, const char* disabledReason)
 {
     ImGui::BeginDisabled(disabledReason != nullptr);

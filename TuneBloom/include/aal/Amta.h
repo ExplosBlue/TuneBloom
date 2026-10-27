@@ -10,6 +10,7 @@
 namespace aal
 {
 
+inline constexpr u16 cAmtaVersion1 = 0x0100;
 inline constexpr u16 cAmtaVersion4 = 0x0400;
 inline constexpr u16 cAmtaVersion5 = 0x0500;
 

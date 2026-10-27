@@ -7,6 +7,7 @@
 #include <ui/resource/ResourceViews.h>
 
 #include <bfsar/io/FileIo.h>
+#include <bfsar/io/PackFile.h>
 #include <browser/FileProbe.h>
 
 #include <filesystem>
@@ -183,7 +184,10 @@ bool AudioResourceDocument::chooseSaveAsPath(sead::BufferedSafeString* outPath) 
         { compressedName.cstr(), compressedPattern.cstr() }
     };
 
-    if (!SaveFileDialog(outPath, nullptr, IM_ARRAYSIZE(filters), filters, format.extension, mResource.getFilePath().cstr()))
+    const fs::path documentPath(mResource.getFilePath().cstr());
+    const std::string defaultPath = (fs::path(packfile::GetDiskPath(documentPath.string())).parent_path() / documentPath.filename()).string();
+
+    if (!SaveFileDialog(outPath, nullptr, IM_ARRAYSIZE(filters), filters, format.extension, defaultPath.c_str()))
         return false;
 
     AddInnerExtension(outPath, format.extension, cZstdExtension);

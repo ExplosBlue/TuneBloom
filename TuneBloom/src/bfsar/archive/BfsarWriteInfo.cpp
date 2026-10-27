@@ -117,7 +117,9 @@ void Bfsar::writeStreamTrackInfoTable_(BfsarSaveContext& ctx, const Sound::Strea
                     }
 
                     ctx.writer.align(0x4);
-                    ctx.stream.writeU32(0); //! Unknown
+
+                    if (mFormat == ArchiveFormat::BFSAR)
+                        ctx.stream.writeU32(0); //! Unknown
                 }
             }
             ctx.writer.popOffsetBase();
@@ -259,7 +261,9 @@ void Bfsar::writeStreamSoundInfo_(BfsarSaveContext& ctx, const Sound* sound)
             }
 
             ctx.writer.align(0x4);
-            ctx.stream.writeU32(0); //! Unknown
+
+            if (mFormat == ArchiveFormat::BFSAR)
+                ctx.stream.writeU32(0); //! Unknown
 
             if (hasStreamSoundExtensionRef())
             {
@@ -845,6 +849,7 @@ void Bfsar::writeFileInfoSection_(BfsarSaveContext& ctx)
                             if (ctx.nullDataFileIds.count(file.id))
                                 ctx.writer.closeNullSizedReference(fileRefName);
 
+                            if (isFileAttachedGroupAvailable())
                             {
                                 static const std::vector<u32> sEmptyGroups;
 
@@ -862,13 +867,17 @@ void Bfsar::writeFileInfoSection_(BfsarSaveContext& ctx)
                                 }
                                 else if (file.origId < mFileAttachedGroups.size())
                                 {
-                                    const bool keepsTable = mFormat == ArchiveFormat::BCSAR || HasSameGroupIds(mFileAttachedGroups[file.origId], currentGroupIds);
+                                    const bool keepsTable = HasSameGroupIds(mFileAttachedGroups[file.origId], currentGroupIds);
 
                                     pIds = keepsTable ? &mFileAttachedGroups[file.origId] : &currentGroupIds;
                                 }
+                                else if (const u32 sameIndexFileId = GetSameIndexOrigFileId(ctx, file); sameIndexFileId < mFileAttachedGroups.size())
+                                {
+                                    pIds = &mFileAttachedGroups[sameIndexFileId];
+                                }
                                 else if (file.origId == nw::snd::SoundArchive::INVALID_ID && file.id < mFileAttachedGroups.size())
                                 {
-                                    pIds = &mFileAttachedGroups[file.id];
+                                    pIds = &currentGroupIds;
                                 }
 
                                 const std::vector<u32> &ids = *pIds;
@@ -911,14 +920,13 @@ void Bfsar::writeSoundArchivePlayerInfo_(BfsarSaveContext& ctx)
         ctx.stream.writeU16(mSoundArchivePlayerInfo.streamChannelMax);
         ctx.stream.writeU16(mSoundArchivePlayerInfo.waveSoundMax);
         ctx.stream.writeU16(mSoundArchivePlayerInfo.waveTrackMax);
-        if (mFormat == ArchiveFormat::BCSAR)
-            ctx.stream.writeU16(0); // Padding
-        else
-        {
-            ctx.stream.writeU8(isStreamPrefetchAvailable() ? mSoundArchivePlayerInfo.streamBufferTimes : 0);
-            ctx.stream.writeU8(0); // Padding
-        }
+
+        ctx.stream.writeU8(mSoundArchivePlayerInfo.streamBufferTimes);
+        ctx.stream.writeU8(0);
         ctx.stream.writeU32(mSoundArchivePlayerInfo.options);
+
+        if (hasPlayerInfoReserved())
+            ctx.stream.writeU32(0);
     }
     ctx.writer.popOffsetBase();
 }
@@ -936,6 +944,9 @@ void Bfsar::writeInfoBlock_(BfsarSaveContext& ctx)
     ctx.writer.openReference("FileInfoSection");
     ctx.writer.openReference("SoundArchivePlayerInfo");
 
+    if (isV3Bfsar())
+        ctx.writer.openReference("NameHashInfo");
+
     writeSoundInfoSection_(ctx);
     writeSoundSetInfoSection_(ctx);
     writeBankInfoSection_(ctx);
@@ -944,6 +955,12 @@ void Bfsar::writeInfoBlock_(BfsarSaveContext& ctx)
     writePlayerInfoSection_(ctx);
     writeFileInfoSection_(ctx);
     writeSoundArchivePlayerInfo_(ctx);
+
+    if (isV3Bfsar())
+    {
+        ctx.writer.closeReference("NameHashInfo", nw::snd::internal::ElementType_SoundArchiveFile_NameHashInfo);
+        ctx.stream.writeU32(mArchiveNameHash);
+    }
 
     ctx.writer.align(0x20);
     ctx.writer.closeBlock();

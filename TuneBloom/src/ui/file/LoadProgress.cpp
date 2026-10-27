@@ -4,6 +4,7 @@
 #include <ui/settings/UiColors.h>
 #include <core/TestHooks.h>
 #include <ui/widgets/WindowAnimation.h>
+#include <ui/widgets/Widgets.h>
 
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
@@ -118,15 +119,8 @@ void DrawRows(const char* icon, const char* title, const char* stageText, f32 fr
     {
         const f32 height = ImMax(ImFloor(em * cBarHeightEm), 4.0f);
         const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const ImVec2 max(pos.x + width, pos.y + height);
-        const f32 fillX = pos.x + ImFloor(width * ImSaturate(fraction));
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        drawList->AddRectFilled(pos, max, ImGui::GetColorU32(ImGuiCol_FrameBg), height * 0.5f);
-
-        if (fillX > pos.x + height)
-            drawList->AddRectFilled(pos, ImVec2(fillX, max.y), ImGui::GetColorU32(ImGuiCol_PlotHistogram), height * 0.5f);
-
+        DrawProgressBar(pos, ImVec2(pos.x + width, pos.y + height), fraction);
         ImGui::Dummy(ImVec2(width, height));
     }
 

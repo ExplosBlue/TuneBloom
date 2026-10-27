@@ -5,6 +5,8 @@
 #else
 #include <basis/seadTypes.h>
 
+class AudioResource;
+class Bfsar;
 struct GLFWwindow;
 struct ImDrawData;
 
@@ -87,7 +89,12 @@ inline void ApplyGroupFiles(const char*)
 {
 }
 
-inline bool ApplyGroupCommands()
+inline bool ApplyGroupCommands(Bfsar&)
+{
+    return true;
+}
+
+inline bool ApplyResourceCommands(AudioResource&)
 {
     return true;
 }

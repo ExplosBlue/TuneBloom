@@ -173,7 +173,7 @@ static bool IsStreamPathUsed(const sead::SafeString& path)
     {
         sead::FixedSafeString<512> dir;
 
-        if (!sead::Path::getDirectoryName(&dir, *archivePath))
+        if (!Bfsar::GetStreamFolder(*archivePath, &dir))
             continue;
 
         sead::FormatFixedSafeString<1024> candidate("%s/%s", dir.cstr(), path.cstr());

@@ -11,7 +11,7 @@
 #include <vector>
 
 static constexpr u32 cCacheMagic         = 0x49464254;
-static constexpr u32 cCacheVersion       = 1;
+static constexpr u32 cCacheVersion       = 4;
 static constexpr u32 cCacheStringMax     = 4096;
 static constexpr const char* cTempSuffix = ".tmp";
 
@@ -165,6 +165,7 @@ static void WriteProbe(ByteBuilder& out, const FileProbe& probe)
     out.appendU32(probe.sampleCount);
     out.appendU8(probe.isLoop);
     out.appendU8(probe.isPrefetch);
+    out.appendU8(probe.isPack);
     WriteContents(out, probe.contents);
 }
 
@@ -181,6 +182,7 @@ static void ReadProbe(CacheReader& in, FileProbe* out)
     out->sampleCount = in.readU32();
     out->isLoop = in.readU8() != 0;
     out->isPrefetch = in.readU8() != 0;
+    out->isPack = in.readU8() != 0;
     ReadContents(in, &out->contents);
 }
 

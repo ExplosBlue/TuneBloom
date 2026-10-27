@@ -127,7 +127,8 @@ static constexpr const char* cDialogIcons[] = {
     ICON_LC_FILE_QUESTION,
     ICON_LC_FILE_MUSIC,
     ICON_LC_FILE_AUDIO,
-    ICON_LC_FOLDERS
+    ICON_LC_FOLDERS,
+    ICON_LC_PACKAGE
 };
 
 static f32 sDialogMessageTextY = 0.0f;

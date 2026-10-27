@@ -13,7 +13,6 @@
 
 #include <prim/seadMemUtil.h>
 #include <filedevice/seadFileDeviceMgr.h>
-#include <filedevice/seadPath.h>
 #include <stream/seadFileDeviceStream.h>
 
 #include <opus.h>
@@ -130,7 +129,7 @@ namespace opusstream
             {
                 sead::FixedSafeString<512> dir;
 
-                if (!sead::Path::getDirectoryName(&dir, *archivePath))
+                if (!Bfsar::GetStreamFolder(*archivePath, &dir))
                     continue;
 
                 sead::FixedSafeString<512> path;

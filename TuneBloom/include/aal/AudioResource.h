@@ -1,6 +1,7 @@
 #pragma once
 
 #include <aal/AudioAsset.h>
+#include <core/Sarc.h>
 #include <core/SaveResult.h>
 #include <bfsar/files/WaveFile.h>
 
@@ -15,7 +16,8 @@ public:
     enum class Container
     {
         Bars,
-        Bwav
+        Bwav,
+        Sarc
     };
 
     static constexpr s32 cNameLengthMax = 128;
@@ -41,6 +43,7 @@ public:
     bool isCompressed() const;
     bool isBigEndian() const;
     u16 getVersion() const;
+    u32 getOtherFileCount() const;
 
     Item::List& getAssetList();
     const Item::List& getAssetList() const;
@@ -79,6 +82,9 @@ private:
     };
 
     bool openBars(std::vector<u8> bytes, const char** outError);
+    bool openSarc(std::vector<u8> bytes, const char** outError);
+    bool holdsStreams() const;
+    bool canEditAssetList() const;
     bool writesStreamFile(const AudioAsset& asset, bool isNewLocation) const;
     bool copiesStreamFile(const AudioAsset& asset, bool isNewLocation) const;
     bool canEditStreamAudio(const AudioAsset& asset, const char** outReason) const;
@@ -86,6 +92,8 @@ private:
     void probeStreamFile(AudioAsset* asset) const;
     void syncMetaNames();
     bool buildFile(std::vector<u8>* out, const char** outError) const;
+    bool buildBars(std::vector<u8>* out, const char** outError) const;
+    bool buildSarc(std::vector<u8>* out, const char** outError) const;
     bool buildSavedBytes(std::vector<u8>* out, const char** outError) const;
     bool stageStreamFiles(const sead::SafeString& previousPath, std::vector<StreamWrite>* out, const char** outError) const;
     bool commitStreamFiles(const std::vector<StreamWrite>& writes) const;
@@ -98,6 +106,7 @@ private:
     bool mIsBigEndian;
     u16 mVersion;
     std::vector<u8> mTrailing;
+    sarc::File mSarcFiles;
     sead::FixedSafeString<512> mFilePath;
     Item::List mAssets;
 };

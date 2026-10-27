@@ -577,7 +577,13 @@ const AudioAssetFile& AudioAsset::getCompleteFile() const
 
 AudioAssetKind AudioAsset::getCompleteFileKind() const
 {
-    return mStreamFile ? DetectAudioAssetKind(*mStreamFile) : mInfo.kind;
+    if (mStreamFile)
+        return DetectAudioAssetKind(*mStreamFile);
+
+    if (mInfo.kind == AudioAssetKind::StreamPrefetch && mStreamFileState == StreamFileState::Found)
+        return AudioAssetKind::Stream;
+
+    return mInfo.kind;
 }
 
 void AudioAsset::setFile(AudioAssetFile file)

@@ -367,7 +367,7 @@ static void DrawUseTiles(const StatGroup* groups, u64 totalSize, s32 isolated, f
         const u32 fileNum = static_cast<u32>(groups[i].blocks.size());
 
         FormatItemSize(&sizes[i], groups[i].size);
-        files[i].format(fileNum == 1 ? messages::item::cStatsFilesOneFormat : messages::item::cStatsFilesFormat, fileNum);
+        files[i].format(fileNum == 1 ? messages::item::cStatsFilesOneFormat : messages::common::cFileCountFormat, fileNum);
         shares[i].format(messages::item::cStatsShareFormat, CalcShare(groups[i].size, totalSize));
 
         const f32 nameWidth = chipWidth + ImGui::CalcTextSize(cUseNames[i]).x;

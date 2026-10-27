@@ -402,6 +402,11 @@ u32 MeasureAmta(const void* data, u64 size)
     return fileSize;
 }
 
+static bool IsCompleteAmta(const std::vector<u8>& meta)
+{
+    return !meta.empty() && MeasureAmta(meta.data(), meta.size()) == meta.size();
+}
+
 u16 GetAmtaVersion(const std::vector<u8>& meta)
 {
     if (!IsAmta(meta.data(), meta.size()))
@@ -412,7 +417,7 @@ u16 GetAmtaVersion(const std::vector<u8>& meta)
 
 bool ReadAmtaName(const std::vector<u8>& meta, std::string* outName)
 {
-    if (MeasureAmta(meta.data(), meta.size()) != meta.size())
+    if (!IsCompleteAmta(meta))
         return false;
 
     const ByteView view = MakeView(meta);
@@ -430,7 +435,7 @@ bool ReadAmtaName(const std::vector<u8>& meta, std::string* outName)
 
 bool RenameAmta(std::vector<u8>* meta, const std::string& name)
 {
-    if (MeasureAmta(meta->data(), meta->size()) != meta->size())
+    if (!IsCompleteAmta(*meta))
         return false;
 
     const u16 version = GetAmtaVersion(*meta);
@@ -443,7 +448,7 @@ bool RenameAmta(std::vector<u8>* meta, const std::string& name)
 
 bool UpdateAmtaWaveFields(std::vector<u8>* meta, const AmtaWaveFields& fields)
 {
-    if (MeasureAmta(meta->data(), meta->size()) != meta->size())
+    if (!IsCompleteAmta(*meta))
         return false;
 
     const ByteView view = MakeView(*meta);
@@ -452,7 +457,7 @@ bool UpdateAmtaWaveFields(std::vector<u8>* meta, const AmtaWaveFields& fields)
     if (version >= cAmtaVersion5)
         return UpdateAmta5WaveFields(meta, fields);
 
-    if (version != cAmtaVersion4)
+    if (version != cAmtaVersion4 && version != cAmtaVersion1)
         return true;
 
     u64 body = 0;
@@ -464,7 +469,10 @@ bool UpdateAmtaWaveFields(std::vector<u8>* meta, const AmtaWaveFields& fields)
     const u8 flags = static_cast<u8>(fields.isLoop ? view.readU8(body + cDataFlags) | cDataLoopFlag : view.readU8(body + cDataFlags) & ~cDataLoopFlag);
 
     ByteBuilder builder(std::move(*meta), view.isBigEndian());
-    builder.putU32(body + cDataStoredSamples, fields.storedSampleCount);
+
+    if (version == cAmtaVersion4)
+        builder.putU32(body + cDataStoredSamples, fields.storedSampleCount);
+
     builder.putU8(body + cDataChannelCount, static_cast<u8>(fields.channelCount));
     builder.putU8(body + cDataFlags, flags);
     builder.putU32(body + cDataSampleRate, fields.sampleRate);
@@ -477,7 +485,7 @@ bool UpdateAmtaWaveFields(std::vector<u8>* meta, const AmtaWaveFields& fields)
 
 bool HasAmtaLoudness(const std::vector<u8>& meta)
 {
-    if (MeasureAmta(meta.data(), meta.size()) != meta.size())
+    if (!IsCompleteAmta(meta))
         return false;
 
     const ByteView view = MakeView(meta);

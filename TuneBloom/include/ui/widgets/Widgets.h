@@ -35,6 +35,9 @@ f32 GetRowButtonSize();
 bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing);
 bool DrawRowOpenButton(u32 id, const char* tooltip, const char* disabledReason = nullptr);
 bool DrawTableRowSelectable(const char* id, bool selected, bool* outHovered);
+bool DrawRowHoverButton(const char* id, const char* icon, bool lit, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size);
+void DrawSpinner(const ImVec2& center, f32 radius, ImU32 color);
+void DrawProgressBar(const ImVec2& min, const ImVec2& max, f32 fraction);
 
 s32 GetItemWheelSteps();
 bool ComboScroll(const char *label, int *current_item, const char *const items[], int items_count, int popup_max_height_in_items = -1);

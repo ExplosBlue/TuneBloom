@@ -51,7 +51,7 @@ struct BfsarOpenContext
 
 struct BfsarGroupItemFiles
 {
-    const Group* group;
+    Group* group;
     u32 groupId;
     u32 itemIdx;
     u32 itemId;

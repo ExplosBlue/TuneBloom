@@ -3,6 +3,7 @@
 #include <bfsar/model/Bank.h>
 #include <bfsar/files/InnerFile.h>
 #include <bfsar/files/BankFile.h>
+#include <bfsar/archive/Bea.h>
 #include <bfsar/model/Group.h>
 #include <bfsar/model/Player.h>
 #include <core/SaveResult.h>
@@ -77,6 +78,9 @@ public:
 
     void setFormat(ArchiveFormat format)
     {
+        if (format != mFormat)
+            forgetReadFileVersions();
+
         mFormat = format;
     }
 
@@ -211,12 +215,21 @@ public:
 
     void setVersion(u32 version)
     {
+        if (version != mVersion)
+            forgetReadFileVersions();
+
         mVersion = version;
+    }
+
+    void forgetReadFileVersions()
+    {
+        mReadWaveFileVersion = 0;
+        mReadStreamFileVersion = 0;
     }
 
     // BFSAR:        version = (0 << 24) | (major << 16) | (minor << 8) | sub
     // BFSAR 3.0.0+: version = (major << 24) | (minor << 16) | (micro << 8) | sub
-    // BCSAR:        version = (major << 24) | (minor << 16) | (0 << 8) | sub
+    // BCSAR:        version = (major << 24) | (minor << 16) | (micro << 8) | sub
     bool packsMajorInHighByte() const
     {
         return mFormat == ArchiveFormat::BCSAR || nw::snd::internal::Util::IsHighByteMajorVersion(mVersion);
@@ -239,10 +252,7 @@ public:
 
     u32 getDecodedPatch() const
     {
-        if (mFormat != ArchiveFormat::BCSAR && nw::snd::internal::Util::IsHighByteMajorVersion(mVersion))
-            return (mVersion >> 8) & 0xFF;
-
-        return mVersion & 0xFF;
+        return packsMajorInHighByte() ? (mVersion >> 8) & 0xFF : mVersion & 0xFF;
     }
 
     bool isVersionOrLater(u32 major, u32 minor, u32 patch) const
@@ -256,15 +266,23 @@ public:
 
     bool isStreamTrackInfoAvailable() const
     {
+        if (mFormat == ArchiveFormat::BCSAR)
+            return isVersionOrLater(2, 3, 0);
+
         return isVersionOrLater(2, 0, 0);
     }
 
     bool isStreamSendAvailable() const
     {
         if (mFormat == ArchiveFormat::BCSAR)
-            return isVersionOrLater(2, 0, 0);
+            return isVersionOrLater(2, 3, 1);
 
         return isVersionOrLater(2, 1, 0);
+    }
+
+    bool isFileAttachedGroupAvailable() const
+    {
+        return mFormat == ArchiveFormat::BFSAR;
     }
 
     bool isFilterSupportedVersion() const
@@ -273,6 +291,11 @@ public:
             return isVersionOrLater(2, 3, 1);
 
         return isVersionOrLater(2, 1, 0);
+    }
+
+    bool hasPlayerInfoReserved() const
+    {
+        return mFormat == ArchiveFormat::BFSAR && !isV3Bfsar() && isVersionOrLater(2, 6, 0);
     }
 
     bool isStreamPrefetchAvailable() const
@@ -290,6 +313,9 @@ public:
 
     bool hasStreamSoundExtensionRef() const
     {
+        if (mFormat == ArchiveFormat::BCSAR)
+            return isStreamSendAvailable();
+
         return isStreamPrefetchAvailable() || mStreamSoundInfoSize >= cStreamSoundInfoSizeWithExtension;
     }
 
@@ -512,6 +538,7 @@ public:
     };
 
     bool hasArchiveDirectory() const;
+    static bool GetStreamFolder(const sead::SafeString& archivePath, sead::BufferedSafeString* outFolder);
     bool resolveStreamFilePath(const Sound& sound, sead::BufferedSafeString* out) const;
 
     StreamReloadResult reloadStreamSound(Sound* sound, const sead::SafeString* filePathOverride = nullptr);
@@ -605,6 +632,9 @@ public:
 
     u32 getVersionForBfwav() const
     {
+        if (mReadWaveFileVersion != 0)
+            return mReadWaveFileVersion;
+
         if (isV3Bfsar())
             return makeVersion(2, 0, 0);
 
@@ -638,6 +668,9 @@ public:
 
     u32 getVersionForBfstm() const
     {
+        if (mReadStreamFileVersion != 0)
+            return mReadStreamFileVersion;
+
         if (isV3Bfsar())
             return makeVersion(2, 0, 1);
 
@@ -709,8 +742,25 @@ public:
     }
 
 public:
-    void setCmpbinPreferZstd(bool v) { mCmpbinPreferZstd = v; }
-    bool getCmpbinPreferZstd() const { return mCmpbinPreferZstd; }
+    void setCmpbinPreferZstd(bool preferZstd)
+    {
+        mCmpbinPreferZstd = preferZstd;
+    }
+
+    bool getCmpbinPreferZstd() const
+    {
+        return mCmpbinPreferZstd;
+    }
+
+    void setBeaSource(bea::Source source)
+    {
+        mBeaSource = std::move(source);
+    }
+
+    const bea::Source& getBeaSource() const
+    {
+        return mBeaSource;
+    }
 
 private:
     enum class StreamFileOrder
@@ -844,6 +894,10 @@ private:
     void collectGroupFiles_(BfsarSaveContext& ctx);
     void collectEmbeddedFiles_(BfsarSaveContext& ctx);
     bool getOrigIncludeInBfsar_(const BfsarSaveContext& ctx, const File& file) const;
+    bool isFileBlockFile_(const BfsarSaveContext& ctx, const File& file) const;
+    bool keepsGroupFilePointer_(const File& file) const;
+    bool isOriginalHomeGroup_(const File& file, const File& groupFile) const;
+    u32 getGroupSharedWarcOrigFileId_(const Group* group) const;
     void collectStrings_(BfsarSaveContext& ctx);
     void writeStringBlock_(BfsarSaveContext& ctx);
     void writeSequenceSoundInfo_(BfsarSaveContext& ctx, const Sound* sound);
@@ -923,6 +977,7 @@ private:
     sead::HeapSafeString *mFilePath;
     sead::HeapSafeString *mLoadedArchivePath{nullptr};
     bool mCmpbinPreferZstd{false};
+    bea::Source mBeaSource;
 
     bool mHasPendingSaveFinalize{false};
     sead::FixedSafeString<560> mPendingSaveFinalizeStaged;
@@ -944,10 +999,14 @@ private:
     static constexpr u32 cStreamSoundInfoSizeWithExtension = 0x20;
     static constexpr u32 cStreamSoundInfoSizeWithPrefetch  = 0x24;
     u32 mStreamSoundInfoSize{0};
+    u32 mArchiveNameHash{0};
+    u32 mReadWaveFileVersion{0};
+    u32 mReadStreamFileVersion{0};
 
     std::vector<std::vector<u32>> mFileAttachedGroups;
     std::vector<bool> mFileOriginalIncludeInBfsar;
     std::vector<bool> mFileOriginalHasData;
+    std::vector<u32> mFileOriginalHomeGroup;
     std::vector<std::pair<const Item *, u32>> mItemOrigFileIds;
     StreamFileOrder mStreamFileOrder{StreamFileOrder::ByVersion};
 

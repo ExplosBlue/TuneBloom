@@ -6445,6 +6445,7 @@ static void ImGui::RenderWindowOuterBorders(ImGuiWindow* window)
 // TuneBloom: imgui_custom.cpp
 namespace ImGui { void RenderWindowShadow(ImGuiWindow* window); }
 namespace ImGui { void AddRectFilledSurface(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding, ImDrawFlags flags); }
+namespace ImGui { float GetHoverRatio(ImGuiID id, bool hovered); }
 
 // Draw background and borders
 // Draw and handle scrollbars
@@ -6566,9 +6567,17 @@ void ImGui::RenderWindowDecorations(ImGuiWindow* window, const ImRect& title_bar
             else if (held && IsMouseDragging(0))
                 StartMouseMovingWindowOrNode(window, node, true); // Undock from tab-bar triangle = same as window/collapse menu button
 
-            // FIXME-DOCK: Ideally we'd use ImGuiCol_TitleBgActive/ImGuiCol_TitleBg here, but neither is guaranteed to be visible enough at this sort of size..
-            ImU32 col = GetColorU32(((held && hovered) || (node->IsFocused && !hovered)) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
-            window->DrawList->AddTriangleFilled(p, p + ImVec2(unhide_sz_draw, 0.0f), p + ImVec2(0.0f, unhide_sz_draw), col);
+            // TuneBloom: corner triangle on hover
+            const float unhide_sz_near = ImTrunc(g.FontSize * 1.5f);
+            const bool near_corner = hovered || held || (g.HoveredWindow && g.HoveredWindow->RootWindow == window && IsMouseHoveringRect(p, p + ImVec2(unhide_sz_near, unhide_sz_near), false));
+            const float visible = GetHoverRatio(window->GetID("#UNHIDE_NEAR"), near_corner);
+            if (visible > 0.0f)
+            {
+                const float lit = GetHoverRatio(unhide_id, hovered || held);
+                ImVec4 col = ImLerp(GetStyleColorVec4(ImGuiCol_TextDisabled), GetStyleColorVec4(ImGuiCol_Text), lit);
+                col.w *= visible;
+                window->DrawList->AddTriangleFilled(p, p + ImVec2(unhide_sz_draw, 0.0f), p + ImVec2(0.0f, unhide_sz_draw), GetColorU32(col));
+            }
         }
 
         // Scrollbars
@@ -11908,6 +11917,15 @@ ImRect ImGui::GetPopupAllowedExtentRect(ImGuiWindow* window)
     }
     ImVec2 padding = g.Style.DisplaySafeAreaPadding;
     r_screen.Expand(ImVec2((r_screen.GetWidth() > padding.x * 2) ? -padding.x : 0.0f, (r_screen.GetHeight() > padding.y * 2) ? -padding.y : 0.0f));
+
+    // TuneBloom: tooltip in window
+    if ((window->Flags & ImGuiWindowFlags_Tooltip) && window->ViewportAllowPlatformMonitorExtend >= 0)
+    {
+        ImRect r_viewport = window->Viewport->GetMainRect();
+        r_viewport.Expand(ImVec2(-padding.x, -padding.y));
+        if (window->Size.x <= r_viewport.GetWidth() && window->Size.y <= r_viewport.GetHeight())
+            return r_viewport;
+    }
     return r_screen;
 }
 

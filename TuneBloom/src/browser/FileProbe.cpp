@@ -1,10 +1,14 @@
 #include <browser/FileProbe.h>
 
+#include <aal/BarsSarc.h>
+#include <bfsar/archive/Bea.h>
 #include <bfsar/archive/Cmpbin.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/ByteView.h>
+#include <core/Sarc.h>
 #include <snd/snd_Util.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -16,6 +20,8 @@ static constexpr u64 cCompressedReadMax    = 8 * 1024 * 1024;
 static constexpr u64 cCompressedReadGrowth = 4;
 static constexpr u64 cArchiveHeadMax       = 64 * 1024 * 1024;
 static constexpr size_t cPeekBytes         = 4096;
+static constexpr u64 cBeaPeekReadBytes     = 132 * 1024;
+static constexpr size_t cBeaProbeAssetMax  = 16;
 static constexpr u32 cMagicLength          = 4;
 
 static constexpr u32 cNwHeaderByteOrder  = 0x04;
@@ -49,6 +55,7 @@ static constexpr u32 cBwavNoLoop         = 0xFFFFFFFF;
 
 static constexpr const char* cBarsMagic = "BARS";
 static constexpr const char* cBwavMagic = "BWAV";
+static constexpr const char* cSarcFormatName = "SARC";
 
 static bool HasMagic(const void* data, u64 size, const char* magic)
 {
@@ -226,9 +233,32 @@ static bool PeekCompressed(const void* data, u64 size, u64 limit, std::vector<u8
     return cmpbin::IsCompressed(data, size) && cmpbin::Peek(data, size, limit, *out);
 }
 
+static bool ProbeSarc(const void* data, u64 size, FileProbe* out)
+{
+    sarc::Index index;
+
+    if (!sarc::ReadIndex(data, size, &index))
+        return false;
+
+    const bool isPack = aal::IsSoundPackIndex(index);
+    const u32 count = isPack ? aal::CountPackResources(index) : aal::CountBarsSarcAssets(index);
+
+    if (count == 0)
+        return false;
+
+    out->kind = BrowserFileKind::AudioResource;
+    CopyFormatName(isPack ? cSarcFormatName : GetResourceFormatInfo(ResourceFormat::Bars).displayName, out);
+    out->hasItemCount = true;
+    out->itemCount = count;
+    out->isPack = isPack;
+    snprintf(out->versionText, sizeof(out->versionText), "%u.%u", (index.version >> 8) & 0xFF, index.version & 0xFF);
+
+    return true;
+}
+
 static bool ProbeUncompressed(const void* data, u64 size, FileProbe* out)
 {
-    return ProbeNwFile(data, size, out) || ProbeBars(data, size, out) || ProbeBwav(data, size, out);
+    return ProbeNwFile(data, size, out) || ProbeBars(data, size, out) || ProbeBwav(data, size, out) || ProbeSarc(data, size, out);
 }
 
 bool ProbeFileBytes(const void* data, u64 size, FileProbe* out)
@@ -261,6 +291,81 @@ static void ReadPrefix(std::ifstream& stream, u64 fileSize, u64 limit, std::vect
     out->resize(static_cast<size_t>(stream.gcount()));
 }
 
+static void ReadRange(std::ifstream& stream, u64 offset, u64 size, std::vector<u8>* out)
+{
+    out->resize(static_cast<size_t>(size));
+
+    stream.clear();
+    stream.seekg(static_cast<std::streamoff>(offset));
+    stream.read(reinterpret_cast<char*>(out->data()), static_cast<std::streamsize>(out->size()));
+    out->resize(static_cast<size_t>(stream.gcount()));
+}
+
+static bool PeekBeaAsset(std::ifstream& stream, const bea::Asset& asset, u64 readLimit, u64 peekLimit, std::vector<u8>* out)
+{
+    std::vector<u8> frame;
+    ReadRange(stream, asset.dataOffset, std::min<u64>(asset.compressedSize, readLimit), &frame);
+
+    return cmpbin::PeekZstdFrame(frame.data(), frame.size(), peekLimit, *out);
+}
+
+static void ProbeBeaArchiveContents(std::ifstream& stream, const bea::Asset& asset, const std::vector<u8>& head, FileProbe* out)
+{
+    const u64 headSize = GetArchiveHeadSize(head.data(), head.size());
+
+    if (headSize == 0 || headSize > cArchiveHeadMax)
+        return;
+
+    std::vector<u8> inner;
+
+    for (u64 limit = cCompressedReadBytes; ; limit *= cCompressedReadGrowth)
+    {
+        if (PeekBeaAsset(stream, asset, limit, headSize, &inner) && inner.size() >= headSize)
+        {
+            ProbeArchiveContents(inner.data(), inner.size(), &out->contents);
+            return;
+        }
+
+        if (limit >= asset.compressedSize || limit >= cArchiveHeadMax)
+            return;
+    }
+}
+
+static bool ProbeBeaFile(std::ifstream& stream, u64 fileSize, const std::vector<u8>& header, ProbeDepth depth, FileProbe* out)
+{
+    const u64 metadataSize = bea::GetMetadataSize(header.data(), header.size());
+
+    if (metadataSize == 0 || metadataSize > cArchiveHeadMax)
+        return false;
+
+    std::vector<u8> metadata;
+    std::vector<bea::Asset> assets;
+    ReadPrefix(stream, fileSize, metadataSize, &metadata);
+
+    if (!bea::ReadAssetTable(metadata.data(), metadata.size(), fileSize, &assets))
+        return false;
+
+    std::vector<u8> head;
+
+    for (size_t i = 0; i < assets.size() && i < cBeaProbeAssetMax; i++)
+    {
+        if (!PeekBeaAsset(stream, assets[i], cBeaPeekReadBytes, cPeekBytes, &head) || !ProbeUncompressed(head.data(), head.size(), out) || out->kind != BrowserFileKind::SoundArchive)
+        {
+            *out = FileProbe();
+            continue;
+        }
+
+        out->isCompressed = true;
+
+        if (depth == ProbeDepth::Contents)
+            ProbeBeaArchiveContents(stream, assets[i], head, out);
+
+        return true;
+    }
+
+    return false;
+}
+
 static void ProbeArchiveFile(std::ifstream& stream, u64 fileSize, std::vector<u8>* bytes, FileProbe* out)
 {
     const u64 headSize = GetArchiveHeadSize(bytes->data(), bytes->size());
@@ -272,6 +377,19 @@ static void ProbeArchiveFile(std::ifstream& stream, u64 fileSize, std::vector<u8
         ReadPrefix(stream, fileSize, headSize, bytes);
 
     ProbeArchiveContents(bytes->data(), bytes->size(), &out->contents);
+}
+
+static bool ProbeSarcFile(std::ifstream& stream, u64 fileSize, std::vector<u8>* bytes, FileProbe* out)
+{
+    const u64 indexSize = sarc::GetIndexSize(bytes->data(), bytes->size());
+
+    if (indexSize == 0 || indexSize > cArchiveHeadMax)
+        return false;
+
+    if (indexSize > bytes->size())
+        ReadPrefix(stream, fileSize, indexSize, bytes);
+
+    return ProbeSarc(bytes->data(), bytes->size(), out);
 }
 
 static void ProbeCompressedArchiveFile(std::ifstream& stream, u64 fileSize, FileProbe* out)
@@ -292,7 +410,7 @@ static void ProbeCompressedArchiveFile(std::ifstream& stream, u64 fileSize, File
     ProbeArchiveContents(inner.data(), inner.size(), &out->contents);
 }
 
-bool ProbeFile(const std::filesystem::path& path, u64 fileSize, FileProbe* out)
+bool ProbeFile(const std::filesystem::path& path, u64 fileSize, ProbeDepth depth, FileProbe* out)
 {
     *out = FileProbe();
 
@@ -304,14 +422,21 @@ bool ProbeFile(const std::filesystem::path& path, u64 fileSize, FileProbe* out)
     std::vector<u8> bytes;
     ReadPrefix(stream, fileSize, cHeaderReadBytes, &bytes);
 
+    if (bea::IsBea(bytes.data(), bytes.size()))
+        return ProbeBeaFile(stream, fileSize, bytes, depth, out);
+
+    if (sarc::IsSarc(bytes.data(), bytes.size()))
+        return ProbeSarcFile(stream, fileSize, &bytes, out);
+
     const bool isCompressed = cmpbin::IsZstdFrame(bytes.data(), bytes.size()) || cmpbin::IsCompressed(bytes.data(), bytes.size());
+    const bool isContentsRead = depth == ProbeDepth::Contents;
 
     if (!isCompressed)
     {
         if (!ProbeFileBytes(bytes.data(), bytes.size(), out))
             return false;
 
-        if (out->kind == BrowserFileKind::SoundArchive)
+        if (isContentsRead && out->kind == BrowserFileKind::SoundArchive)
             ProbeArchiveFile(stream, fileSize, &bytes, out);
 
         return true;
@@ -323,7 +448,7 @@ bool ProbeFile(const std::filesystem::path& path, u64 fileSize, FileProbe* out)
 
         const bool isProbed = ProbeFileBytes(bytes.data(), bytes.size(), out);
 
-        if (isProbed && out->kind == BrowserFileKind::SoundArchive)
+        if (isProbed && isContentsRead && out->kind == BrowserFileKind::SoundArchive)
             ProbeCompressedArchiveFile(stream, fileSize, out);
 
         if (isProbed || bytes.size() >= fileSize || limit >= cCompressedReadMax)

@@ -79,6 +79,7 @@ public:
             //, mLoadFlag(LoadFlag::LoadAll)
             , mLoadItem(0) // All
             , mOriginalItemId(0)
+            , mDetachedLoadFlag(LoadFlag::LoadAll)
         {
             mItemType = ItemType::GroupItemInfo;
         }
@@ -159,6 +160,7 @@ public:
         ItemReference mItemRef;
         u32 mLoadItem;
         u32 mOriginalItemId;
+        u32 mDetachedLoadFlag;
 
         friend class Bfsar;
     };
@@ -248,6 +250,16 @@ public:
         return mOriginalExtraFiles;
     }
 
+    u32 getOriginalSharedWarcFileId() const
+    {
+        return mOriginalSharedWarcFileId;
+    }
+
+    void setOriginalSharedWarcFileId(u32 fileId)
+    {
+        mOriginalSharedWarcFileId = fileId;
+    }
+
 private:
     static constexpr u32 cNoFileId = 0xFFFFFFFF;
 
@@ -261,6 +273,7 @@ private:
     u32 mGroupInfoFileId;
     std::vector<u32> mOriginalFileOrder;
     std::vector<u32> mOriginalExtraFiles;
+    u32 mOriginalSharedWarcFileId = cNoFileId;
 
     friend class Bfsar;
 };

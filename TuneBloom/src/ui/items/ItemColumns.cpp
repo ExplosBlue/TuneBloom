@@ -638,6 +638,14 @@ void PushItemTablePadding()
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(ImFloor(ImGui::GetFontSize() * cItemCellPadXEm), ImGui::GetStyle().CellPadding.y));
 }
 
+void PushTableRowClipRect(const ImVec2& rowMin, const ImVec2& rowMax)
+{
+    ImRect clip(rowMin, rowMax);
+    clip.ClipWithFull(ImGui::GetCurrentTable()->InnerClipRect);
+
+    ImGui::PushClipRect(clip.Min, clip.Max, false);
+}
+
 ImVec4 GetItemValueColor()
 {
     return ImLerp(ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), ImGui::GetStyleColorVec4(ImGuiCol_Text), cItemValueBrightness);
@@ -748,14 +756,14 @@ void DrawItemCount(s32 shown, s32 total, const char* typeName, const char* note)
 static s32 CompareNames(const Item* a, const Item* b)
 {
     if (a->getItemType() != Item::ItemType::GroupItemInfo && a->getItemType() != Item::ItemType::BankFileInstrument)
-        return ImStricmp(a->getNameOrNull().cstr(), b->getNameOrNull().cstr());
+        return ImStricmp(b->getNameOrNull().cstr(), a->getNameOrNull().cstr());
 
     sead::FixedSafeString<256> nameA;
     sead::FixedSafeString<256> nameB;
     FormatItemListName(a, &nameA);
     FormatItemListName(b, &nameB);
 
-    return ImStricmp(nameA.cstr(), nameB.cstr());
+    return ImStricmp(nameB.cstr(), nameA.cstr());
 }
 
 bool SortItemRows(std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount)

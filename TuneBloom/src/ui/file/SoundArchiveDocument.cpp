@@ -17,6 +17,7 @@
 #include <bfsar/player/SoundPlayer.h>
 
 #include <filesystem>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -55,6 +56,11 @@ SoundArchiveDocument::~SoundArchiveDocument()
 
 bool SoundArchiveDocument::openArchive(File* file, const sead::SafeString& path, const sead::SafeString* metadataSource)
 {
+    sead::Endian::Types endian = sead::Endian::eBig;
+
+    if (Document::PeekEndian(*file, &endian))
+        sFileEndian = endian;
+
     u8* data = file->data;
     file->data = nullptr;
 
@@ -68,6 +74,9 @@ bool SoundArchiveDocument::openArchive(File* file, const sead::SafeString& path,
 
     if (file->wasCmpbin)
         mArchive->setCmpbinPreferZstd(file->prefersZstd);
+
+    if (file->container.isSet())
+        mArchive->setBeaSource(std::move(file->container));
 
     return true;
 }
@@ -377,18 +386,25 @@ bool SoundArchiveDocument::chooseSaveAsPath(sead::BufferedSafeString* outPath) c
     const sead::FormatFixedSafeString<128> filterName("%s (%s)", info->label, filterPattern.cstr());
     const sead::FormatFixedSafeString<32> cmpbinPattern("*.%s", cCmpbinExtension);
     const sead::FormatFixedSafeString<128> cmpbinName(messages::common::cCompressedFilterFormat, info->label, info->extension, cCmpbinExtension);
+    const sead::FormatFixedSafeString<32> beaPattern("*.%s", cBeaExtension);
+    const bool isFromBea = mArchive->getBeaSource().isSet();
 
-    FileFilter filters[] = {
-        { filterName.cstr(), filterPattern.cstr() },
-        { cmpbinName.cstr(), cmpbinPattern.cstr() }
-    };
+    std::vector<FileFilter> filters;
 
-    const u32 filterCount = mArchive->isV3Bfsar() ? IM_ARRAYSIZE(filters) : 1;
+    if (isFromBea)
+        filters.emplace_back(messages::archive::cBeaFilter, beaPattern.cstr());
+
+    filters.emplace_back(filterName.cstr(), filterPattern.cstr());
+
+    if (mArchive->isV3Bfsar())
+        filters.emplace_back(cmpbinName.cstr(), cmpbinPattern.cstr());
 
     sead::FixedSafeString<512> defaultPath;
     GetDefaultSavePath(*mArchive, *info, &defaultPath);
 
-    if (!SaveFileDialog(outPath, nullptr, filterCount, filters, info->extension, defaultPath.cstr()))
+    const char* defaultExtension = isFromBea ? cBeaExtension : info->extension;
+
+    if (!SaveFileDialog(outPath, nullptr, static_cast<u32>(filters.size()), filters.data(), defaultExtension, defaultPath.cstr()))
         return false;
 
     AddInnerExtension(outPath, info->extension, cCmpbinExtension);

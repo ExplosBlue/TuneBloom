@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bfsar/archive/Bea.h>
 #include <bfsar/archive/Bfsar.h>
 #include <core/SaveResult.h>
 #include <ui/app/Workspace.h>
@@ -38,6 +39,7 @@ public:
         u32 size = 0;
         bool wasCmpbin = false;
         bool prefersZstd = false;
+        bea::Source container;
     };
 
     struct ParseContext

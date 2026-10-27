@@ -167,7 +167,7 @@ static bool DrawStartRecent(const ImVec2& size, std::string* outPath)
 
         if (HasPinnedFiles())
         {
-            DrawSectionTitle(messages::recent::cPinnedTitle, width);
+            DrawSectionTitle(messages::common::cPinned, width);
             open |= DrawPinnedFilesTable(outPath);
             DrawStartGap(ImFloor(ImGui::GetFontSize() * cStartGapEm));
         }

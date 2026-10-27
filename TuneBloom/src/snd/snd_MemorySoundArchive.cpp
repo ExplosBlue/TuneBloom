@@ -157,11 +157,7 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
                         *outGroupId = INVALID_ID;
                     }
 
-                    u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
-                    if (mDataSize && rawFileOffset >= mDataSize)
-                        return nullptr;
-
-                    return sead::PtrUtil::addOffset(mData, rawFileOffset);
+                    return detail_GetInternalFileAddress(internalFileInfo);
                 }
 
                 counter++;
@@ -195,18 +191,8 @@ const void* MemorySoundArchive::detail_GetFileAddress(FileId fileId, u32* outFil
             else
             {
                 const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
-                if (groupFileInfo && groupFileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_NONE)
-                {
-                    const internal::SoundArchiveFile::InternalFileInfo* groupInternalFileInfo = groupFileInfo->GetInternalFileInfo();
-                    SEAD_ASSERT(groupInternalFileInfo);
-
-                    u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
-                    SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
-
-                    u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
-                    if (!mDataSize || rawFileOffset < mDataSize)
-                        groupFile = sead::PtrUtil::addOffset(mData, rawFileOffset);
-                }
+                if (groupFileInfo)
+                    groupFile = detail_GetInternalFileAddress(groupFileInfo->GetInternalFileInfo());
             }
 
             if (groupFile)
@@ -293,18 +279,8 @@ const void* MemorySoundArchive::detail_GetFileAddressGroup(FileId fileId, u32 gr
         else
         {
             const internal::SoundArchiveFile::FileInfo* groupFileInfo = detail_GetFileInfo(info->fileId);
-            if (groupFileInfo && groupFileInfo->GetFileLocationType() != nw::snd::internal::SoundArchiveFile::FILE_LOCATION_TYPE_NONE)
-            {
-                const internal::SoundArchiveFile::InternalFileInfo* groupInternalFileInfo = groupFileInfo->GetInternalFileInfo();
-                SEAD_ASSERT(groupInternalFileInfo);
-
-                u32 offsetFromFileBlockHead = groupInternalFileInfo->GetOffsetFromFileBlockHead();
-                SEAD_ASSERT(offsetFromFileBlockHead != 0xFFFFFFFF);
-
-                u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
-                if (!mDataSize || rawFileOffset < mDataSize)
-                    groupFile = sead::PtrUtil::addOffset(mData, rawFileOffset);
-            }
+            if (groupFileInfo)
+                groupFile = detail_GetInternalFileAddress(groupFileInfo->GetInternalFileInfo());
         }
 
         if (groupFile)
@@ -335,22 +311,25 @@ const void* MemorySoundArchive::detail_GetFileAddressSimple(FileId fileId) const
 {
     const internal::SoundArchiveFile::FileInfo* fileInfo = detail_GetFileInfo(fileId);
 
-    if (fileInfo)
-    {
-        const internal::SoundArchiveFile::InternalFileInfo* internalFileInfo = fileInfo->GetInternalFileInfo();
-        if (internalFileInfo)
-        {
-            u32 offsetFromFileBlockHead = internalFileInfo->GetOffsetFromFileBlockHead();
-            if (offsetFromFileBlockHead != 0xFFFFFFFF)
-            {
-                u32 rawFileOffset = offsetFromFileBlockHead + mHeader.GetFileBlockOffset();
-                if (!mDataSize || rawFileOffset < mDataSize)
-                    return sead::PtrUtil::addOffset(mData, rawFileOffset);
-            }
-        }
-    }
+    return fileInfo ? detail_GetInternalFileAddress(fileInfo->GetInternalFileInfo()) : nullptr;
+}
 
-    return nullptr;
+const void* MemorySoundArchive::detail_GetInternalFileAddress(const internal::SoundArchiveFile::InternalFileInfo* internalFileInfo) const
+{
+    if (!internalFileInfo)
+        return nullptr;
+
+    const u32 offsetFromFileBlockHead = internalFileInfo->GetOffsetFromFileBlockHead();
+
+    if (offsetFromFileBlockHead == internal::SoundArchiveFile::InternalFileInfo::INVALID_OFFSET)
+        return nullptr;
+
+    const u64 rawFileOffset = static_cast<u64>(offsetFromFileBlockHead) + mHeader.GetFileBlockOffset();
+
+    if (mDataSize && rawFileOffset + internalFileInfo->GetFileSize() > mDataSize)
+        return nullptr;
+
+    return sead::PtrUtil::addOffset(mData, static_cast<uintptr_t>(rawFileOffset));
 }
 
 } } // namespace nw::snd

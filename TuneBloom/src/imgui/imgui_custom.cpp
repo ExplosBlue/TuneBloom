@@ -193,11 +193,11 @@ void ImGui::SetHoverAnimation(bool enabled)
     GHoverAnimation = enabled;
 }
 
-float ImGui::GetHoverRatio(ImGuiID id, bool hovered)
+static float StepSlotRatio(ImGuiID id, bool on, float in_seconds, float out_seconds)
 {
     ImGuiContext& g = *GImGui;
     if (!GHoverAnimation || id == 0)
-        return hovered ? 1.0f : 0.0f;
+        return on ? 1.0f : 0.0f;
 
     HoverSlot* slot = NULL;
     HoverSlot* free_slot = NULL;
@@ -214,7 +214,7 @@ float ImGui::GetHoverRatio(ImGuiID id, bool hovered)
 
     if (slot == NULL)
     {
-        if (!hovered)
+        if (!on)
             return 0.0f;
         if (free_slot == NULL)
             return 1.0f;
@@ -231,18 +231,29 @@ float ImGui::GetHoverRatio(ImGuiID id, bool hovered)
 
     if (slot->frame != g.FrameCount)
     {
-        if (hovered)
-            slot->ratio = ImMin(slot->ratio + g.IO.DeltaTime / HOVER_FADE_IN_SECONDS, 1.0f);
+        if (on)
+            slot->ratio = ImMin(slot->ratio + g.IO.DeltaTime / in_seconds, 1.0f);
         else
-            slot->ratio = ImMax(slot->ratio - g.IO.DeltaTime / HOVER_FADE_OUT_SECONDS, 0.0f);
+            slot->ratio = ImMax(slot->ratio - g.IO.DeltaTime / out_seconds, 0.0f);
         slot->frame = g.FrameCount;
     }
 
     const float ratio = slot->ratio;
-    if (ratio <= 0.0f && !hovered)
+    if (ratio <= 0.0f && !on)
         slot->id = 0;
 
     return ratio;
+}
+
+float ImGui::GetHoverRatio(ImGuiID id, bool hovered)
+{
+    return StepSlotRatio(id, hovered, HOVER_FADE_IN_SECONDS, HOVER_FADE_OUT_SECONDS);
+}
+
+float ImGui::GetTransitionRatio(ImGuiID id, bool on, float in_seconds, float out_seconds)
+{
+    const float ratio = StepSlotRatio(id, on, in_seconds, out_seconds);
+    return ratio * ratio * (3.0f - 2.0f * ratio);
 }
 
 static ImU32 LerpHoverColor(ImVec4 idle, const ImVec4& hovered, float ratio)

@@ -284,9 +284,7 @@ void Group::ItemInfo::drawUI()
 u32 Group::ItemInfo::getLoadFlag() const
 {
     if (!mItemRef.isAttached())
-    {
-        return LoadFlag::LoadAll;
-    }
+        return mDetachedLoadFlag;
 
     switch (mItemRefType)
     {

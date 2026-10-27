@@ -22,6 +22,7 @@ namespace
 {
 
 constexpr u32 cByteOrderOffset  = offsetof(nw::ut::BinaryFileHeader, byteOrder);
+constexpr u32 cFileSizeOffset   = offsetof(nw::ut::BinaryFileHeader, fileSize);
 constexpr u32 cBlockCountOffset = offsetof(nw::ut::BinaryFileHeader, dataBlocks);
 constexpr u32 cBlockRefsOffset  = sizeof(nw::ut::BinaryFileHeader);
 constexpr u32 cBlockRefSize     = sizeof(Util::ReferenceWithSize);
@@ -38,7 +39,6 @@ struct ArchiveLayout
 {
     ByteRange file;
     const SoundArchiveFile::InfoBlockBody* info;
-    u32 fileBlockOffset;
     ArchiveLayoutVersion version;
 };
 
@@ -73,6 +73,17 @@ static u32 ReadU16(const u8* bytes, bool bigEndian)
 static u32 ReadU32(const u8* bytes, bool bigEndian)
 {
     return bigEndian ? (ReadU16(bytes, true) << 16 | ReadU16(bytes + 2, true)) : (ReadU16(bytes + 2, false) << 16 | ReadU16(bytes, false));
+}
+
+u32 ReadDeclaredFileSize(const void* data, u64 size)
+{
+    const u8* bytes = static_cast<const u8*>(data);
+    bool bigEndian = false;
+
+    if (!bytes || size < sizeof(nw::ut::BinaryFileHeader) || !ReadByteOrder(bytes, &bigEndian))
+        return 0;
+
+    return ReadU32(bytes + cFileSizeOffset, bigEndian);
 }
 
 static bool ContainsString(const ByteRange& file, const char* text)
@@ -278,23 +289,16 @@ static bool CheckInternalFileInfo(const ArchiveLayout& layout, const SoundArchiv
 {
     const ByteRange& file = layout.file;
 
+    if (!layout.version.fileAttachedGroups)
+        return file.contains(internalFile, offsetof(SoundArchiveFile::InternalFileInfo, toAttachedGroupIdTable));
+
     if (!file.containsStruct(internalFile))
         return false;
 
     const Util::Reference& toGroupTable = internalFile->toAttachedGroupIdTable;
 
-    if (toGroupTable.typeId == nw::snd::internal::ElementType_Category_Tables && toGroupTable.IsValidOffset() &&
-        !file.containsTable(internalFile->GetAttachedGroupTable(), sizeof(nw::ut::ResU32)))
-        return false;
-
-    const u32 offsetFromFileBlock = internalFile->GetOffsetFromFileBlockHead();
-
-    if (offsetFromFileBlock == SoundArchiveFile::InternalFileInfo::INVALID_OFFSET)
-        return true;
-
-    const u64 offset = static_cast<u64>(layout.fileBlockOffset) + offsetFromFileBlock;
-
-    return offset <= file.size() && internalFile->GetFileSize() <= file.size() - offset;
+    return toGroupTable.typeId != nw::snd::internal::ElementType_Category_Tables || !toGroupTable.IsValidOffset() ||
+           file.containsTable(internalFile->GetAttachedGroupTable(), sizeof(nw::ut::ResU32));
 }
 
 static bool CheckFileInfo(const ArchiveLayout& layout, const SoundArchiveFile::FileInfo* fileInfo)
@@ -355,7 +359,7 @@ static bool CheckStringTable(const ByteRange& file, const SoundArchiveFile::Stri
 bool CheckSoundArchiveLayout(const nw::snd::MemorySoundArchive& archive, u32 size, const ArchiveLayoutVersion& version)
 {
     const SoundArchiveFile::InfoBlockBody* info = archive.mInfoBlockBody;
-    const ArchiveLayout layout = { ByteRange(archive.mData, size), info, static_cast<u32>(archive.mHeader.GetFileBlockOffset()), version };
+    const ArchiveLayout layout = { ByteRange(archive.mData, size), info, version };
 
     if (!layout.file.containsStruct(info))
         return Fail(sead::FormatFixedSafeString<64>(messages::archive::cCorruptBlockFormat, "INFO"));
@@ -425,7 +429,7 @@ bool CheckInnerFileBlocks(const ByteRange& file)
     {
         const u32 offset = ReadU32(bytes + cBlockRefsOffset + i * cBlockRefSize + cRefOffsetOffset, bigEndian);
 
-        if (offset == 0)
+        if (offset == 0 || offset == cAbsentBlock)
             continue;
 
         if (offset > size || size - offset < cBlockHeaderSize)

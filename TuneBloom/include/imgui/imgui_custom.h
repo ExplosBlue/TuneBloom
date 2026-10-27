@@ -35,5 +35,6 @@ void SetHoverAnimation(bool enabled);
 float GetHoverRatio(ImGuiID id, bool hovered);
 ImU32 GetHoverColorU32(ImGuiID id, bool hovered, bool active, ImGuiCol idle_col, ImGuiCol hovered_col, ImGuiCol active_col, float alpha_mul = 1.0f);
 ImU32 GetHoverColorU32(ImGuiID id, bool hovered, ImU32 idle_col, ImU32 hovered_col);
+float GetTransitionRatio(ImGuiID id, bool on, float in_seconds, float out_seconds);
 
 } // namespace ImGui

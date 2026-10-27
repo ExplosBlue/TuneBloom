@@ -28,10 +28,12 @@
 #include "ui/file/SystemShell.h"
 #include "app/Utilll.h"
 #include "aal/Bars.h"
+#include "bfsar/archive/Bea.h"
 #include "bfsar/archive/BfsarLayoutCheck.h"
 #include "bfsar/archive/Cmpbin.h"
 #include "ui/file/File.h"
 #include "bfsar/io/FileIo.h"
+#include "bfsar/io/PackFile.h"
 
 #include <libs/portable-file-dialogs.h>
 
@@ -83,6 +85,9 @@ static bool isBfsarBcsar(const void* file)
 
 static bool ensureDir(const char* path)
 {
+    if (packfile::IsPackPath(path))
+        return true;
+
     const std::filesystem::path dir = std::filesystem::path(path).parent_path();
 
     if (dir.empty())
@@ -150,6 +155,9 @@ static void dumpItemIds(Bfsar& archive)
         exitConvert(0);
     }
 
+    if (!testhooks::ApplyResourceCommands(resource))
+        exitConvert(1);
+
     sead::FixedSafeString<256> validateError;
     const Item* invalid = nullptr;
 
@@ -179,6 +187,19 @@ static void dumpItemIds(Bfsar& archive)
         exitConvert(1);
     }
 
+    if (packfile::IsPackPath(inPath))
+    {
+        std::vector<u8> bytes;
+
+        if (!packfile::ReadFile(inPath, &bytes))
+        {
+            fprintf(stderr, "Failed to load '%s'\n", inPath);
+            exitConvert(1);
+        }
+
+        convertAudioResource(inPath, outPath, std::move(bytes), dumpIds);
+    }
+
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     if (!device)
     {
@@ -204,6 +225,26 @@ static void dumpItemIds(Bfsar& archive)
         convertAudioResource(inPath, outPath, std::move(bytes), dumpIds);
     }
 
+    bea::Source beaSource;
+
+    if (bea::IsBea(bfsarFile, loadArg.read_size))
+    {
+        std::vector<u8> archiveBytes;
+        const bea::ExtractResult extracted = bea::ExtractSoundArchive(std::vector<u8>(bfsarFile, bfsarFile + loadArg.read_size), &archiveBytes, &beaSource);
+
+        device->unload(bfsarFile);
+
+        if (extracted != bea::ExtractResult::Ok)
+        {
+            fprintf(stderr, "'%s': %s\n", inPath, extracted == bea::ExtractResult::NoSoundArchive ? messages::archive::cBeaNoSoundArchive : messages::archive::cBeaDamaged);
+            exitConvert(1);
+        }
+
+        bfsarFile = new u8[archiveBytes.size()];
+        std::memcpy(bfsarFile, archiveBytes.data(), archiveBytes.size());
+        loadArg.read_size = archiveBytes.size();
+    }
+
     if (loadArg.read_size < sizeof(nw::ut::BinaryFileHeader) || !isBfsarBcsar(bfsarFile) || !CheckSoundArchiveHeader(bfsarFile, static_cast<u32>(loadArg.read_size)))
     {
         fprintf(stderr, "'%s' is not a valid BFSAR/BCSAR file\n", inPath);
@@ -226,6 +267,8 @@ static void dumpItemIds(Bfsar& archive)
         exitConvert(1);
     }
 
+    archive.setBeaSource(std::move(beaSource));
+
     if (dumpIds)
     {
         dumpItemIds(archive);
@@ -238,7 +281,7 @@ static void dumpItemIds(Bfsar& archive)
         exitConvert(1);
     }
 
-    if (!testhooks::ApplyGroupCommands())
+    if (!testhooks::ApplyGroupCommands(archive))
         exitConvert(1);
 
     if (archive.saveAs(sead::FixedSafeString<512>(outPath)) != SaveResult::Saved)

@@ -1,6 +1,7 @@
 #include <ui/file/File.h>
 
 #include <ui/backup/Backup.h>
+#include <ui/browser/FilesPanel.h>
 #include <ui/settings/Config.h>
 #include <ui/file/DocumentMgr.h>
 #include <ui/file/DocumentState.h>
@@ -11,12 +12,15 @@
 #include <ui/Messages.h>
 #include <ui/file/OpenQueue.h>
 #include <ui/app/PopupMgr.h>
+#include <ui/project/Sidebar.h>
 #include <ui/file/RecentFiles.h>
 #include <core/TestHooks.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/app/Workspace.h>
 
 #include <bfsar/files/InnerFile.h>
+#include <bfsar/io/PackFile.h>
+#include <browser/FileProbe.h>
 #include <core/Debug.h>
 
 #include <filedevice/seadPath.h>
@@ -89,14 +93,35 @@ std::string GetDocumentName()
     return document ? document->displayName() : backup::GetArchiveName();
 }
 
-bool IsDocumentPath(const char* path)
+static bool IsDocumentFile(const char* path)
 {
-    if (!path)
+    std::error_code error;
+    const u64 fileSize = std::filesystem::file_size(path, error);
+
+    FileProbe probe;
+
+    if (error || !ProbeFile(path, fileSize, ProbeDepth::Kind, &probe))
         return false;
 
-    const char* extension = strrchr(path, '.');
+    return probe.kind == BrowserFileKind::SoundArchive || probe.kind == BrowserFileKind::AudioResource;
+}
 
-    return FindResourceFormatByPath(path) || HasFileExtension(path, strlen(path), cCmpbinExtension) || (extension && FindInnerFileFormatByExtension(extension, InnerFileKind::SoundArchive));
+bool OpenExternalPath(const char* path)
+{
+    std::error_code error;
+
+    if (std::filesystem::is_directory(path, error))
+    {
+        RequestFilesPanelRoot(path);
+        return true;
+    }
+
+    if (!IsDocumentFile(path))
+        return false;
+
+    openqueue::PushExternal(path);
+
+    return true;
 }
 
 bool IsValidDocumentName(const sead::SafeString& name)
@@ -125,6 +150,7 @@ bool NewFile(ArchiveFormat format, ArchivePlatform platform)
     LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", info->fmtName).cstr());
 
     SetUnsavedChanges(true);
+    ShowSidebarProject();
 
     SetUITab(UIType::ProjectInfo);
     return true;
@@ -150,9 +176,9 @@ bool OpenFile()
 
     const u32 filterCount = 3;
     FileFilter filters[filterCount] = {
-        { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bars *.bwav *.zs" },
-        { messages::archive::cOpenFilter, "*.bfsar *.bcsar *.cmpbin" },
-        { messages::resource::cOpenFilter, "*.bars *.bwav *.zs" }
+        { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bea *.bars *.bwav *.zs *.pack" },
+        { messages::archive::cOpenFilter, "*.bfsar *.bcsar *.cmpbin *.bea" },
+        { messages::resource::cOpenFilter, "*.bars *.bwav *.zs *.pack" }
     };
 
     if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
@@ -203,15 +229,13 @@ void RunStartupAction()
     if (documents.empty() && !settings.lastArchive.empty())
         documents.push_back(settings.lastArchive);
 
-    std::error_code error;
-
     for (const std::string& document : documents)
     {
-        if (std::filesystem::is_regular_file(document, error))
+        if (packfile::IsOnDisk(document))
             openqueue::Push(document.c_str());
     }
 
-    if (documents.size() > 1 && std::filesystem::is_regular_file(settings.lastArchive, error))
+    if (documents.size() > 1 && packfile::IsOnDisk(settings.lastArchive))
         openqueue::Push(settings.lastArchive.c_str());
 }
 
@@ -225,6 +249,7 @@ static bool FinishSave(SaveResult result, const char* error)
         return false;
     }
 
+    PinDocument(ActiveDocument());
     MarkArchiveInSync();
 
     if (result == SaveResult::Saved)
@@ -238,15 +263,17 @@ static bool FinishSave(SaveResult result, const char* error)
 
 static bool CheckDocumentFile(const Document::File& file)
 {
-    sead::Endian::Types endian = sead::Endian::eBig;
-
-    if (Document::PeekEndian(file, &endian))
-        PrepareParseEndian(endian);
-
     const char* error = nullptr;
 
     if (Document::Check(file, &error))
+    {
+        sead::Endian::Types endian = sead::Endian::eBig;
+
+        if (Document::PeekEndian(file, &endian))
+            PrepareParseEndian(endian);
+
         return true;
+    }
 
     if (error)
         PopupMgr::instance()->addPopup({ error, nullptr });
@@ -297,6 +324,12 @@ static bool LoadDocumentFile(const sead::SafeString& filePath, bool isPreview, D
     return true;
 }
 
+static void ShowOpenedDocument(const openqueue::Request& request)
+{
+    if (request.origin == openqueue::Origin::App && request.mode != openqueue::Mode::Reload)
+        ShowSidebarProject();
+}
+
 static void OpenRequestedFile(const openqueue::Request& request)
 {
     Document* openDocument = FindOpenDocument(request.path.c_str());
@@ -304,6 +337,7 @@ static void OpenRequestedFile(const openqueue::Request& request)
     if (openDocument && request.mode != openqueue::Mode::Reload)
     {
         ActivateDocument(openDocument);
+        ShowOpenedDocument(request);
 
         if (request.mode == openqueue::Mode::Pin)
             PinDocument(openDocument);
@@ -317,6 +351,12 @@ static void OpenRequestedFile(const openqueue::Request& request)
         return;
     }
 
+    if (packfile::IsSoundPackFile(request.path))
+    {
+        RequestFilesPanelRoot(std::filesystem::path(request.path).parent_path().string().c_str());
+        return;
+    }
+
     const sead::FixedSafeString<512> filePath(request.path.c_str());
 
     sead::FixedSafeString<512> fileName;
@@ -326,8 +366,11 @@ static void OpenRequestedFile(const openqueue::Request& request)
     const bool loaded = LoadDocumentFile(filePath, request.mode == openqueue::Mode::Preview, openDocument);
     loadprogress::End();
 
-    if (loaded)
-        OpenGroupFileLocate();
+    if (!loaded)
+        return;
+
+    ShowOpenedDocument(request);
+    OpenGroupFileLocate();
 }
 
 bool IsOpenPending()

@@ -2,6 +2,7 @@
 
 #include <core/Debug.h>
 
+#include <bfsar/archive/Bea.h>
 #include <bfsar/archive/BfsarLayoutCheck.h>
 #include <bfsar/archive/Cmpbin.h>
 #include <bfsar/io/FileIo.h>
@@ -138,6 +139,7 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
     LOG_STR(filePath.cstr());
 
     close();
+    PopupMgr::instance()->setCorruptInfo("");
 
     // Detect format from magic
     if (sead::MemUtil::compare(bfsarFile, "CSAR", 4) == 0)
@@ -252,16 +254,17 @@ SaveResult Bfsar::save()
     return saveArchiveFile_(*mFilePath) ? SaveResult::Saved : SaveResult::Failed;
 }
 
-static bool HasCmpbinExtension_(const sead::SafeString &path)
+static bool HasPathExtension(const sead::SafeString &path, const char *extension)
 {
-    const char *cExt = ".cmpbin";
-    const size_t pathLen = std::strlen(path.cstr());
-    const size_t extLen = std::strlen(cExt);
-
-    return pathLen >= extLen && std::memcmp(path.cstr() + pathLen - extLen, cExt, extLen) == 0;
+    return HasFileExtension(path.cstr(), static_cast<size_t>(path.calcLength()), extension);
 }
 
-static bool VerifyArchiveFile_(const sead::SafeString &path, const char *magic, sead::Endian::Types endian)
+static bool IsWrappedArchivePath(const sead::SafeString &path)
+{
+    return HasPathExtension(path, cCmpbinExtension) || HasPathExtension(path, cBeaExtension);
+}
+
+static bool VerifyArchiveFile_(const sead::SafeString &path, const char *magic)
 {
     FILE *f = fopen(path.cstr(), "rb");
 
@@ -278,64 +281,70 @@ static bool VerifyArchiveFile_(const sead::SafeString &path, const char *magic, 
     if (!headerRead || fileSize <= 0 || std::memcmp(header, magic, 4) != 0)
         return false;
 
-    const u8 *size = header + offsetof(nw::ut::BinaryFileHeader, fileSize);
-    u32 headerFileSize;
-
-    if (endian == sead::Endian::eBig)
-        headerFileSize = static_cast<u32>(size[0]) << 24 | static_cast<u32>(size[1]) << 16 | static_cast<u32>(size[2]) << 8 | static_cast<u32>(size[3]);
-    else
-        headerFileSize = static_cast<u32>(size[3]) << 24 | static_cast<u32>(size[2]) << 16 | static_cast<u32>(size[1]) << 8 | static_cast<u32>(size[0]);
-
-    return headerFileSize == static_cast<u32>(fileSize);
+    return ReadDeclaredFileSize(header, sizeof(header)) == static_cast<u32>(fileSize);
 }
 
-enum class CmpbinResult
+enum class WrapResult
 {
     Ok,
     ReadFailed,
     CompressFailed,
+    PackFailed,
     OpenFailed,
     WriteFailed
 };
 
-static CmpbinResult CompressToTempFile_(const sead::SafeString &sourcePath, bool preferZstd, const sead::SafeString &tempPath)
+static WrapResult PackArchive(const std::vector<u8> &raw, const sead::SafeString &destPath, bool preferZstd, const bea::Source &beaSource, std::vector<u8> *out)
+{
+    if (HasPathExtension(destPath, cBeaExtension))
+        return beaSource.isSet() && bea::ReplaceAsset(beaSource, raw.data(), raw.size(), out) ? WrapResult::Ok : WrapResult::PackFailed;
+
+    const cmpbin::Codec codec = preferZstd ? cmpbin::Codec::Zstd : cmpbin::Codec::Lz4Frame;
+
+    return cmpbin::Compress(raw.data(), raw.size(), codec, *out) && !out->empty() ? WrapResult::Ok : WrapResult::CompressFailed;
+}
+
+static WrapResult WrapToTempFile(const sead::SafeString &sourcePath, const sead::SafeString &destPath, bool preferZstd, const bea::Source &beaSource, const sead::SafeString &tempPath)
 {
     std::vector<u8> raw;
 
     if (!fileio::ReadWholeFile(sourcePath.cstr(), &raw))
-        return CmpbinResult::ReadFailed;
+        return WrapResult::ReadFailed;
 
-    std::vector<u8> compressed;
-    const cmpbin::Codec codec = preferZstd ? cmpbin::Codec::Zstd : cmpbin::Codec::Lz4Frame;
+    std::vector<u8> wrapped;
+    const WrapResult packed = PackArchive(raw, destPath, preferZstd, beaSource, &wrapped);
 
-    if (!cmpbin::Compress(raw.data(), raw.size(), codec, compressed) || compressed.empty())
-        return CmpbinResult::CompressFailed;
+    if (packed != WrapResult::Ok)
+        return packed;
 
-    const fileio::WriteResult written = fileio::WriteWholeFile(tempPath.cstr(), compressed.data(), compressed.size());
+    const fileio::WriteResult written = fileio::WriteWholeFile(tempPath.cstr(), wrapped.data(), wrapped.size());
 
     if (written == fileio::WriteResult::OpenFailed)
-        return CmpbinResult::OpenFailed;
+        return WrapResult::OpenFailed;
 
     if (written != fileio::WriteResult::Ok)
     {
         fileio::RemoveFile(tempPath.cstr());
-        return CmpbinResult::WriteFailed;
+        return WrapResult::WriteFailed;
     }
 
-    return CmpbinResult::Ok;
+    return WrapResult::Ok;
 }
 
-static const char* GetCmpbinErrorText_(CmpbinResult result)
+static const char* GetWrapErrorText(WrapResult result)
 {
     switch (result)
     {
-        case CmpbinResult::ReadFailed:
+        case WrapResult::ReadFailed:
             return messages::archive::cCmpbinTempReadFailed;
 
-        case CmpbinResult::CompressFailed:
+        case WrapResult::CompressFailed:
             return messages::archive::cCmpbinCompressFailed;
 
-        case CmpbinResult::OpenFailed:
+        case WrapResult::PackFailed:
+            return messages::archive::cBeaPackFailed;
+
+        case WrapResult::OpenFailed:
             return messages::archive::cCmpbinOpenFailed;
 
         default:
@@ -348,6 +357,12 @@ bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
     if (path.calcLength() > fileio::cPathLengthMax)
     {
         ReportArchiveError(mCliMode, {messages::archive::cSaveOpenFailed});
+        return false;
+    }
+
+    if (HasPathExtension(path, cBeaExtension) && !mBeaSource.isSet())
+    {
+        ReportArchiveError(mCliMode, {messages::archive::cBeaNoSource});
         return false;
     }
 
@@ -372,7 +387,7 @@ bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
         written = save_(handle, groupFileSaves, &skippedStreams) && handle.tryClose();
     }
 
-    if (!written || !VerifyArchiveFile_(tmpPath, getArchiveMagic(), mEndian))
+    if (!written || !VerifyArchiveFile_(tmpPath, getArchiveMagic()))
     {
         fileio::RemoveFile(tmpPath.cstr());
         removeStagedGroupFiles_(groupFileSaves);
@@ -387,18 +402,18 @@ bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
 
     sead::FixedSafeString<560> stagedPath = tmpPath;
 
-    if (HasCmpbinExtension_(path))
+    if (IsWrappedArchivePath(path))
     {
         stagedPath.format("%s.cmptmp", path.cstr());
 
-        const CmpbinResult compressed = CompressToTempFile_(tmpPath, mCmpbinPreferZstd, stagedPath);
+        const WrapResult wrapped = WrapToTempFile(tmpPath, path, mCmpbinPreferZstd, mBeaSource, stagedPath);
 
         fileio::RemoveFile(tmpPath.cstr());
 
-        if (compressed != CmpbinResult::Ok)
+        if (wrapped != WrapResult::Ok)
         {
             removeStagedGroupFiles_(groupFileSaves);
-            ReportArchiveError(mCliMode, {GetCmpbinErrorText_(compressed)});
+            ReportArchiveError(mCliMode, {GetWrapErrorText(wrapped)});
             return false;
         }
     }
@@ -587,15 +602,15 @@ Bfsar::BackupResult Bfsar::saveBackup(const sead::SafeString &path, std::vector<
             return BackupResult::WriteFailed;
     }
 
-    if (!VerifyArchiveFile_(path, getArchiveMagic(), mEndian))
+    if (!VerifyArchiveFile_(path, getArchiveMagic()))
         return BackupResult::WriteFailed;
 
-    if (HasCmpbinExtension_(path))
+    if (IsWrappedArchivePath(path))
     {
         sead::FixedSafeString<1100> tempPath;
         tempPath.format("%s.cmptmp", path.cstr());
 
-        if (CompressToTempFile_(path, mCmpbinPreferZstd, tempPath) != CmpbinResult::Ok)
+        if (WrapToTempFile(path, path, mCmpbinPreferZstd, mBeaSource, tempPath) != WrapResult::Ok)
             return BackupResult::WriteFailed;
 
         if (!fileio::RenameOver(tempPath.cstr(), path.cstr()))
@@ -909,10 +924,13 @@ void Bfsar::close_()
     mFileAttachedGroups.clear();
     mFileOriginalIncludeInBfsar.clear();
     mFileOriginalHasData.clear();
+    mFileOriginalHomeGroup.clear();
     mStreamFileOrder = StreamFileOrder::ByVersion;
     mLoadedGroupFilePaths.clear();
     mDeletedGroupFiles.clear();
     mStreamSoundInfoSize = 0;
+    mArchiveNameHash = 0;
+    forgetReadFileVersions();
 
     FreeLoadedFiles(mExternalGroupBuffers);
 }

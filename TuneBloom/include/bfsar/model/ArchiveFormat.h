@@ -128,6 +128,11 @@ inline u32 GetArchiveVersionByteCount(ArchiveFormat format)
     return format == ArchiveFormat::BCSAR ? 4 : 3;
 }
 
+inline u32 GetInnerFileDataAlignment(ArchiveFormat format, sead::Endian::Types endian)
+{
+    return format == ArchiveFormat::BFSAR && endian == sead::Endian::eLittle ? 0x40 : 0x20;
+}
+
 constexpr s32 cInnerFileMagicLength = 4;
 
 inline const InnerFileFormatInfo* FindInnerFileFormat(const void* signature, InnerFileKind kind)
@@ -230,6 +235,7 @@ inline constexpr ResourceFormatInfo cResourceFormatTable[] = {
 
 inline constexpr const char* cZstdExtension = "zs";
 inline constexpr const char* cCmpbinExtension = "cmpbin";
+inline constexpr const char* cBeaExtension = "bea";
 inline constexpr const char* cWavExtension = "wav";
 inline constexpr const char* cResourceStreamFolder = "Stream";
 
@@ -257,23 +263,4 @@ inline bool HasFileExtension(const char* path, size_t pathLength, const char* ex
 inline bool IsZstdPath(const char* path)
 {
     return path && HasFileExtension(path, strlen(path), cZstdExtension);
-}
-
-inline const ResourceFormatInfo* FindResourceFormatByPath(const char* path)
-{
-    if (!path)
-        return nullptr;
-
-    size_t length = strlen(path);
-
-    if (HasFileExtension(path, length, cZstdExtension))
-        length -= strlen(cZstdExtension) + 1;
-
-    for (const auto& info : cResourceFormatTable)
-    {
-        if (HasFileExtension(path, length, info.extension))
-            return &info;
-    }
-
-    return nullptr;
 }

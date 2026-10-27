@@ -8,7 +8,8 @@ f32 CalcPropertyLabelWidth();
 void PropertyRow(const char* label, const char* help = nullptr);
 bool PropertyToggleRow(const char* label, bool* enabled);
 
-void DrawSectionTitle(const char* title, f32 width);
+f32 CalcSectionTitleHeight();
+bool DrawSectionTitle(const char* title, f32 width, const char* status = nullptr, const char* action = nullptr, const char* icon = nullptr, u32 iconColor = 0, f32 textInset = -1.0f);
 bool BeginPropertySection(const char* title, bool* enabled = nullptr, bool* changed = nullptr, bool defaultOpen = true, s32 columnNum = 1, const char* detail = nullptr, const char* value = nullptr, const char* enableDetail = nullptr);
 void EndPropertySection();
 void RegisterPropertySettings();
@@ -25,6 +26,7 @@ void EndGroupBox();
 void GroupBoxRowLabel(const char* label, f32 labelWidth);
 void TintGroupBoxCell();
 void GroupBoxGap();
+
 
 bool DrawPageHeader(const char* icon, const char* title, const char* description, const char* action = nullptr);
 

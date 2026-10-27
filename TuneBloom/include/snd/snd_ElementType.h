@@ -57,6 +57,7 @@ enum ElementType
     ElementType_SoundArchiveFile_StreamSoundTrackInfo        = ElementType_Category_SoundArchiveFile_ItemInfos + 14,
     ElementType_SoundArchiveFile_SendInfo                    = ElementType_Category_SoundArchiveFile_ItemInfos + 15,
     ElementType_SoundArchiveFile_StreamSoundExtensionInfo    = ElementType_Category_SoundArchiveFile_ItemInfos + 16,
+    ElementType_SoundArchiveFile_NameHashInfo                = ElementType_Category_SoundArchiveFile_ItemInfos + 17,
 
     ElementType_Category_SoundArchiveFile_Parameters         = 0x2300,
 

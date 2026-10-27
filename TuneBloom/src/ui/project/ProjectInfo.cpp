@@ -1,5 +1,6 @@
 #include <ui/project/ProjectViews.h>
 
+#include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/widgets/Knob.h>
 #include <ui/Messages.h>
@@ -64,23 +65,46 @@ static void DrawProjectRow(const char* label, bool stackRows)
     ImGui::SetNextItemWidth(-FLT_MIN);
 }
 
+static u32 sVersionForEntry[IM_ARRAYSIZE(cFormatTable)] = {};
+static u32 sVersionDocument = 0;
+
+static void SyncEntryVersionsToDocument()
+{
+    if (sVersionDocument == ActiveDocumentState().serial)
+        return;
+
+    sVersionDocument = ActiveDocumentState().serial;
+
+    for (int i = 0; i < IM_ARRAYSIZE(cFormatTable); i++)
+        sVersionForEntry[i] = cFormatTable[i].defaultVersion;
+}
+
+static void SetArchiveVersion(Bfsar& archive, u32 version)
+{
+    archive.setVersion(version);
+
+    u8& bufferTimes = archive.getSoundArchivePlayerInfo().streamBufferTimes;
+
+    if (archive.isStreamPrefetchAvailable() && bufferTimes < cProjectBufferTimesMin)
+        bufferTimes = cProjectBufferTimesMin;
+}
+
 static void DrawProjectPlatformUI(f32 em)
 {
     Bfsar& archive = ActiveSoundArchive();
 
     static char sLabels[IM_ARRAYSIZE(cFormatTable)][64];
-    static u32 sVersionForEntry[IM_ARRAYSIZE(cFormatTable)] = {};
     const char *labels[IM_ARRAYSIZE(cFormatTable)];
 
     static const bool sInit = [&]
     {
         for (int i = 0; i < IM_ARRAYSIZE(cFormatTable); i++)
-        {
             snprintf(sLabels[i], sizeof(sLabels[i]), "%s (%s)", cFormatTable[i].fmtName, cFormatTable[i].systemName);
-            sVersionForEntry[i] = cFormatTable[i].defaultVersion;
-        }
+
         return true;
     }();
+
+    SyncEntryVersionsToDocument();
 
     for (int i = 0; i < IM_ARRAYSIZE(cFormatTable); i++)
         labels[i] = sLabels[i];
@@ -125,7 +149,7 @@ static void DrawProjectPlatformUI(f32 em)
         archive.setFormat(info.format);
         archive.setPlatform(info.platform);
         archive.setEndian(info.endian);
-        archive.setVersion(sVersionForEntry[selected]);
+        SetArchiveVersion(archive, sVersionForEntry[selected]);
 
         SetUnsavedChanges(true);
     }
@@ -150,7 +174,7 @@ static void DrawProjectFormatBox(f32 em, bool stackRows)
         DrawProjectRow(messages::common::cVersion, stackRows);
         if (DrawVersionUI(&version, archive.getFormat(), false))
         {
-            archive.setVersion(version);
+            SetArchiveVersion(archive, version);
             SetUnsavedChanges(true);
         }
     }

@@ -1,5 +1,7 @@
 #include <ui/file/RecentFiles.h>
 
+#include <bfsar/io/PackFile.h>
+
 #include <ui/settings/Config.h>
 #include <ui/settings/ConfigFile.h>
 #include <ui/widgets/ContextMenu.h>
@@ -151,8 +153,7 @@ static std::string NormalizePath(const char* path)
 
 static bool IsFileMissing(const std::string& path)
 {
-    std::error_code ec;
-    return !std::filesystem::is_regular_file(std::filesystem::path(path), ec);
+    return !packfile::IsOnDisk(path);
 }
 
 static void UpdateMissingPinnedFiles()
@@ -331,7 +332,7 @@ static RecentFileInfo ReadRecentFileInfo(const std::string& path)
     RecentFileInfo info = { path, pathtext::Folder(path), std::string(), 0, 0 };
 
     std::error_code ec;
-    const fs::path file(path);
+    const fs::path file(packfile::GetDiskPath(path));
     const fs::file_time_type writeTime = fs::last_write_time(file, ec);
 
     if (!ec)
@@ -340,11 +341,11 @@ static RecentFileInfo ReadRecentFileInfo(const std::string& path)
         info.time = static_cast<s64>(std::chrono::system_clock::to_time_t(systemTime));
     }
 
-    const std::uintmax_t bytes = fs::file_size(file, ec);
+    u64 bytes = 0;
 
-    if (!ec)
+    if (packfile::GetFileSize(path, &bytes))
     {
-        info.bytes = static_cast<u64>(bytes);
+        info.bytes = bytes;
 
         sead::FixedSafeString<32> size;
         FormatItemSize(&size, info.bytes);
@@ -453,35 +454,6 @@ static void ToggleRecentSort(RecentSort sort)
 static f32 CalcRecentRowHeight()
 {
     return ImGui::GetFontSize() + ImGui::GetStyle().ItemSpacing.y;
-}
-
-static bool DrawRecentRowButton(const char* id, const char* icon, bool lit, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size)
-{
-    const ImVec2 hitPos = ImGui::GetCursorScreenPos();
-    const ImVec2 pos = hitPos + ImFloor((hitSize - ImVec2(size, size)) * 0.5f);
-
-    const bool pressed = ImGui::InvisibleButton(id, hitSize);
-    const bool hovered = ImGui::IsItemHovered();
-    const bool held = ImGui::IsItemActive();
-
-    ImGui::SetItemTooltip("%s", tooltip);
-
-    if (!visible && !hovered && !held)
-        return pressed;
-
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    const f32 hoverRatio = ImGui::GetHoverRatio(ImGui::GetItemID() + 1, hovered || held);
-
-    if (hoverRatio > 0.0f)
-        drawList->AddRectFilled(pos, pos + ImVec2(size, size), ImGui::GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered, hoverRatio), ImGui::GetStyle().FrameRounding);
-
-    const ImVec2 iconSize = ImGui::CalcTextSize(icon);
-    const ImGuiCol color = lit ? ImGuiCol_CheckMark : hovered || held ? ImGuiCol_Text : ImGuiCol_TextDisabled;
-
-    drawList->AddText(pos + ImFloor((ImVec2(size, size) - iconSize) * 0.5f), ImGui::GetColorU32(color), icon);
-
-    return pressed;
 }
 
 static bool IsRecentRowHeld()
@@ -631,12 +603,12 @@ static RecentAction DrawRecentRow(const std::string& path, bool pinned, bool mis
     if (!pinned)
     {
         ImGui::SetCursorScreenPos(ImVec2(buttonsLeft, min.y));
-        if (DrawRecentRowButton("##remove", ICON_LC_X, false, rowHovered, messages::recent::cRemove, ImVec2(buttonSize, buttonSize), buttonSize))
+        if (DrawRowHoverButton("##remove", ICON_LC_X, false, rowHovered, messages::recent::cRemove, ImVec2(buttonSize, buttonSize), buttonSize))
             action = RecentAction::Remove;
     }
 
     ImGui::SetCursorScreenPos(ImVec2(buttonsLeft + buttonSize, min.y));
-    if (DrawRecentRowButton("##pin", ICON_LC_PIN, pinned, pinned || rowHovered, pinned ? messages::recent::cUnpin : messages::recent::cPin, ImVec2(buttonSize, buttonSize), buttonSize))
+    if (DrawRowHoverButton("##pin", ICON_LC_PIN, pinned, pinned || rowHovered, pinned ? messages::recent::cUnpin : messages::recent::cPin, ImVec2(buttonSize, buttonSize), buttonSize))
         action = RecentAction::TogglePin;
 
     const RecentAction menuAction = DrawRecentRowMenu(path, pinned, missing);
@@ -808,7 +780,7 @@ bool DrawRecentFilesList(std::string* outPath)
     };
 
     if (!pinned.empty())
-        ImGui::SeparatorText(messages::recent::cPinnedTitle);
+        ImGui::SeparatorText(messages::common::cPinned);
 
     for (const std::string& path : pinned)
         drawRow(path, true);
@@ -888,7 +860,7 @@ static void DrawRecentTablePin(bool pinned, bool rowHovered, RecentAction* actio
 
     BeginItemActionCell();
 
-    if (DrawRecentRowButton("##pin", ICON_LC_PIN, pinned, pinned || rowHovered, pinned ? messages::recent::cUnpin : messages::recent::cPin, GetItemActionCellSize(), GetRowButtonSize()))
+    if (DrawRowHoverButton("##pin", ICON_LC_PIN, pinned, pinned || rowHovered, pinned ? messages::recent::cUnpin : messages::recent::cPin, GetItemActionCellSize(), GetRowButtonSize()))
         *action = RecentAction::TogglePin;
 
     EndItemActionCell();

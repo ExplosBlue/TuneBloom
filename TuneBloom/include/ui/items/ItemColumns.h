@@ -77,6 +77,7 @@ void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* 
 bool IsItemNotLoaded(const Item* item);
 ImVec4 GetItemValueColor();
 void PushItemTablePadding();
+void PushTableRowClipRect(const ImVec2& rowMin, const ImVec2& rowMax);
 void DrawItemCount(s32 shown, s32 total, const char* typeName, const char* note = nullptr);
 bool SortItemRows(std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount);
 

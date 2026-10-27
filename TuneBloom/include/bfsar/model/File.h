@@ -41,5 +41,6 @@ struct File
     bool includeInBfsar;
     bool external;
     bool isPrefetch = false;
+    bool isSharedOutput = false;
     std::string externalPath;
 };

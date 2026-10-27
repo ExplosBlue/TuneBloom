@@ -184,6 +184,7 @@ public:
     const void* detail_GetFileAddress(FileId fileId, u32* outFileSize = nullptr, u32 variationId = 0, u32* outGroupFileId = nullptr, u32* outGroupId = nullptr) const;
     const void* detail_GetFileAddressGroup(FileId fileId, u32 groupId) const;
     const void* detail_GetFileAddressSimple(FileId fileId) const;
+    const void* detail_GetInternalFileAddress(const internal::SoundArchiveFile::InternalFileInfo* internalFileInfo) const;
 
     internal::SoundArchiveFile::FileHeader mHeader;
     const internal::SoundArchiveFile::StringBlockBody* mStringBlockBody;

@@ -3,6 +3,8 @@
 #include <core/TestHooks.h>
 #include <ui/file/PathText.h>
 
+#include <bfsar/io/PackFile.h>
+
 #include <basis/seadTypes.h>
 
 #if defined(SEAD_PLATFORM_WINDOWS)
@@ -15,10 +17,12 @@
 #include <iterator>
 #include <system_error>
 
-void ShowInFileManager(const std::string& path)
+void ShowInFileManager(const std::string& documentPath)
 {
     if (testhooks::IsEnabled())
         return;
+
+    const std::string path = packfile::GetDiskPath(documentPath);
 
 #if defined(SEAD_PLATFORM_WINDOWS)
     if (path.find('"') != std::string::npos)

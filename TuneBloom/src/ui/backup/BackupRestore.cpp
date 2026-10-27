@@ -6,6 +6,7 @@
 #include <ui/file/File.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
+#include <ui/project/Sidebar.h>
 #include <ui/file/RecentFiles.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/app/Workspace.h>
@@ -13,12 +14,8 @@
 namespace backup
 {
 
-static std::string sRestorePointDir;
-
 bool SaveRestorePoint(const Snapshot& target)
 {
-    sRestorePointDir.clear();
-
     if (!IsDocumentOpen() || !HasUnsavedChanges() || !IsActive())
         return true;
 
@@ -26,23 +23,23 @@ bool SaveRestorePoint(const Snapshot& target)
 
     Bfsar::BackupResult result;
 
-    return WriteSnapshot(Kind::Restore, &result, &sRestorePointDir);
+    return WriteSnapshot(Kind::Restore, &result);
 }
 
-static void OfferRestorePoint()
+static std::string GetSnapshotUntitledKey(const Snapshot& snapshot)
 {
-    const std::string dir = sRestorePointDir;
-    sRestorePointDir.clear();
+    return fs::path(snapshot.dir).parent_path().filename().string();
+}
 
-    Recovery recovery;
+static Document* FindUntitledDocument(const std::string& key)
+{
+    for (Document* document : GetOpenDocuments())
+    {
+        if (document->filePath().isEmpty() && document->state().backup.untitledKey == key)
+            return document;
+    }
 
-    if (dir.empty() || !ReadInfoFile(dir, &recovery.snapshot))
-        return;
-
-    WriteMarker(dir);
-
-    recovery.markerPath = GetMarkerPath().string();
-    AddRecovery(std::move(recovery));
+    return nullptr;
 }
 
 static void FinishRestore(const Snapshot& snapshot, UIType tab)
@@ -52,7 +49,7 @@ static void FinishRestore(const Snapshot& snapshot, UIType tab)
     PinSnapshot(snapshot.dir);
 
     if (snapshot.originalPath.empty())
-        SetUntitledKey(fs::path(snapshot.dir).parent_path().filename().string());
+        SetUntitledKey(GetSnapshotUntitledKey(snapshot));
 
     SetUnsavedChanges(true);
 
@@ -75,11 +72,6 @@ static bool ReadSnapshotFile(const std::string& path, Document::File* outFile)
 
 static bool CheckSnapshotFile(const Document::File& file, bool untitled)
 {
-    sead::Endian::Types endian = sead::Endian::eBig;
-
-    if (Document::PeekEndian(file, &endian))
-        PrepareParseEndian(endian);
-
     const char* error = nullptr;
 
     if (!Document::Check(file, &error))
@@ -95,6 +87,11 @@ static bool CheckSnapshotFile(const Document::File& file, bool untitled)
         PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
         return false;
     }
+
+    sead::Endian::Types endian = sead::Endian::eBig;
+
+    if (Document::PeekEndian(file, &endian))
+        PrepareParseEndian(endian);
 
     return true;
 }
@@ -115,7 +112,7 @@ bool RestoreSnapshot(const Snapshot& snapshot)
     const std::string openPath = untitled ? archivePath : snapshot.originalPath;
     const sead::FixedSafeString<1100> metadataSource(archivePath.c_str());
 
-    Document* replaced = untitled ? nullptr : FindOpenDocument(snapshot.originalPath.c_str());
+    Document* replaced = untitled ? FindUntitledDocument(GetSnapshotUntitledKey(snapshot)) : FindOpenDocument(snapshot.originalPath.c_str());
     Document* document = nullptr;
 
     {
@@ -126,7 +123,6 @@ bool RestoreSnapshot(const Snapshot& snapshot)
     if (!document)
     {
         PopupMgr::instance()->discardProcessedErrors();
-        OfferRestorePoint();
         return false;
     }
 
@@ -137,14 +133,13 @@ bool RestoreSnapshot(const Snapshot& snapshot)
     else
         AddDocument(document, false);
 
-    sRestorePointDir.clear();
-
     document->restoreSidecars(snapshot);
     document->applyRestoredSnapshot(snapshot, untitled);
 
     if (!untitled)
         AddRecentFile(openPath.c_str());
 
+    ShowSidebarProject();
     FinishRestore(snapshot, document->defaultTab());
 
     return true;

@@ -222,6 +222,7 @@ public:
     void closeBlock();
     void nullBlock(u16 typeId);
     void align(u32 alignment);
+    void alignInFile(u32 alignment);
 
     void openReference(const sead::SafeString& name);
     void closeReference(const sead::SafeString& name, u16 typeId);

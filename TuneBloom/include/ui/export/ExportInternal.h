@@ -10,7 +10,7 @@
 class WaveFile;
 
 inline constexpr f32 cExportDialogWidthEm = 27.0f;
-inline constexpr f32 cExportLabelWidthEm  = 7.5f;
+inline constexpr f32 cExportLabelWidthEm  = 5.5f;
 
 void SanitizeFilenameInPlace(sead::BufferedSafeString *s);
 void ResolveExportBaseName(const Item *item, const char *fallbackLabel, sead::BufferedSafeString *out);

@@ -13,7 +13,6 @@ bool MenuBarIconItem(const char* icon, const char* label, const char* shortcut =
 
 bool BeginSubMenu(const char* label);
 
-void SetMenuBarFontSize();
 void SetMenuBarTooltip(const char* tooltip);
 
 f32 CalcMenuBarIconButtonWidth(const char* icon);

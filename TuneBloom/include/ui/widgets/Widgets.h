@@ -36,6 +36,8 @@ bool DrawGlyphButton(const char* id, TransportGlyph glyph, const ImVec2& itemSiz
 bool TransportButton(TransportGlyph glyph, const char* id, const ImVec2& size = ImVec2(0.0f, 0.0f));
 bool PlayToggleButton(TransportGlyph glyph, const char* id, const ImVec2& size, bool playing);
 bool ToggleButton(const char* label, bool on, const ImVec2& size = ImVec2(0.0f, 0.0f));
+f32 CalcTextButtonWidth(const char* label);
+bool TextButton(const char* label);
 f32 CalcTextActionWidth(const char* label);
 bool DrawTextAction(const char* id, const char* label, f32 height, f32 textOffsetY, bool* outHovered = nullptr);
 bool IsItemEditCommitted(bool changed);
@@ -49,6 +51,7 @@ void DrawSpinner(const ImVec2& center, f32 radius, ImU32 color);
 void DrawProgressBar(const ImVec2& min, const ImVec2& max, f32 fraction);
 
 s32 GetItemWheelSteps();
+f32 CalcFitComboWidth(const char* const* items, s32 itemNum);
 bool ComboScroll(const char *label, int *current_item, const char *const items[], int items_count, int popup_max_height_in_items = -1);
 bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], s32 itemNum, const char* detail = nullptr);
 bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], const char* const reasons[], s32 itemNum, const char* detail = nullptr);

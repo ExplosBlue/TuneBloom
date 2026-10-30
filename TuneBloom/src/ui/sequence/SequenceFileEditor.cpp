@@ -442,7 +442,7 @@ void SequenceFile::calcToolbarState_(SeqToolbarState& bar) const
     bar.startX = ImGui::GetCursorPosX();
     bar.avail = ImGui::GetContentRegionAvail().x;
 
-    bar.compileWidth = ImGui::CalcTextSize(bar.compileLabel.cstr(), nullptr, true).x + style.FramePadding.x * 2.0f;
+    bar.compileWidth = CalcTextButtonWidth(bar.compileLabel.cstr());
     bar.banksWidth = ImMin(CalcToolMenuButtonWidth(ICON_LC_PIANO, bar.bankName.cstr()), CalcToolMenuButtonWidth(ICON_LC_PIANO, nullptr) + bar.em * cToolNameMaxEm);
     bar.followWidth = CalcToolMenuButtonWidth(ICON_LC_LOCATE_FIXED, bar.followName.cstr());
 
@@ -468,7 +468,7 @@ void SequenceFile::drawTransportTools_(const SeqToolbarState& bar)
 
     // Compile
     ImGui::BeginDisabled(!bar.canCompile);
-    if (bar.showNames ? ImGui::Button(bar.compileLabel.cstr()) : DrawIconButton("##Compile", ICON_LC_HAMMER, bar.buttonSize, bar.frame, bar.em, false))
+    if (bar.showNames ? TextButton(bar.compileLabel.cstr()) : DrawIconButton("##Compile", ICON_LC_HAMMER, bar.buttonSize, bar.frame, bar.em, false))
         compile_();
     ImGui::EndDisabled();
 

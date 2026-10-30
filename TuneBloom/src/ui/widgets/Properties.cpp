@@ -18,7 +18,7 @@ static constexpr f32 cGroupBoxGapEm     = 0.5f;
 static constexpr f32 cPageHeaderGapEm   = 0.5f;
 static constexpr f32 cChoiceGapEm       = 1.0f;
 
-static constexpr f32 cPropertyLabelWidthEm = 7.2f;
+static constexpr f32 cPropertyLabelWidthEm = 6.4f;
 
 PageColumn BeginPageColumn(f32 widthEm)
 {
@@ -49,7 +49,7 @@ bool DrawPageHeader(const char* icon, const char* title, const char* description
     const f32 em = ImGui::GetFontSize();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const f32 width = ImGui::GetContentRegionAvail().x;
-    const f32 actionWidth = action ? ImGui::CalcTextSize(action).x + style.FramePadding.x * 2.0f : 0.0f;
+    const f32 actionWidth = action ? CalcTextButtonWidth(action) : 0.0f;
 
     bool pressed = false;
 
@@ -73,7 +73,7 @@ bool DrawPageHeader(const char* icon, const char* title, const char* description
         const ImVec2 next = ImGui::GetCursorScreenPos();
 
         ImGui::SetCursorScreenPos(ImVec2(pos.x + width - actionWidth, pos.y));
-        pressed = ImGui::Button(action);
+        pressed = TextButton(action);
         ImGui::SetCursorScreenPos(next);
     }
 
@@ -122,7 +122,7 @@ void GroupBoxGap()
     ImGui::Dummy(ImVec2(0.0f, ImFloor(ImGui::GetFontSize() * cGroupBoxGapEm) - ImGui::GetStyle().ItemSpacing.y));
 }
 
-bool BeginGroupBox(const char* title, const char* action, bool* pressed)
+bool BeginGroupBox(const char* title, const char* action, bool* pressed, f32 actionMinWidth)
 {
     if (!BeginTintedBoxTable(title))
         return false;
@@ -130,7 +130,7 @@ bool BeginGroupBox(const char* title, const char* action, bool* pressed)
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const f32 width = ImGui::GetContentRegionAvail().x;
-    const f32 actionWidth = action ? ImGui::CalcTextSize(action).x + style.FramePadding.x * 2.0f : 0.0f;
+    const f32 actionWidth = action ? ImMax(actionMinWidth, CalcTextButtonWidth(action)) : 0.0f;
 
     RegionHeader(title, action ? actionWidth + style.ItemSpacing.x : 0.0f);
 
@@ -138,7 +138,7 @@ bool BeginGroupBox(const char* title, const char* action, bool* pressed)
     {
         ImGui::SameLine();
         ImGui::SetCursorScreenPos(ImVec2(pos.x + width - actionWidth, pos.y));
-        *pressed = ImGui::Button(action);
+        *pressed = ImGui::Button(action, ImVec2(actionWidth, 0.0f));
     }
 
     return true;

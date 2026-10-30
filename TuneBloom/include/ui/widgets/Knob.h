@@ -32,12 +32,11 @@ bool DragField(const char* label, ImGuiDataType dataType, void* value, f32 speed
 bool DrawPitchKnobs(f32* pitch, const ImVec2& knobSize);
 sead::FixedSafeString<8> FormatPanText(u8 pan, u8 center);
 
-void RegionHeader(const char* title, f32 reservedWidth = 0.0f);
+void RegionHeader(const char* title, f32 reservedWidth = 0.0f, f32 height = 0.0f);
 void CenterRegionKnobs(f32 rowWidth);
 f32 CalcRegionStripHeight();
 f32 CalcKnobGap();
 f32 CalcKnobWidth(const char* const* labels, s32 labelNum);
-f32 CalcKnobFitWidth(const char* const* labels, s32 labelNum);
 f32 CalcKnobRowWidth(const char* const* labels, s32 labelNum);
 
 f32 CalcAdshrEditorWidth(bool stacked);

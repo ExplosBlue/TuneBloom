@@ -101,9 +101,9 @@ void WaveImportPanel::drawWaveformBox(FrameContext& ctx)
     const f32 em = ImGui::GetFontSize();
     const f32 buttonSize = ImGui::GetFrameHeight();
     const f32 groupGap = ImFloor(em * cToolGroupGapEm);
-    const f32 fitAllWidth = ImGui::CalcTextSize(messages::import::cWaveFitAll).x + style.FramePadding.x * 2.0f;
-    const f32 fitLoopWidth = ImGui::CalcTextSize(messages::import::cWaveFitLoop).x + style.FramePadding.x * 2.0f;
-    const f32 curveWidth = ImGui::CalcTextSize(messages::common::cCurve).x + style.FramePadding.x * 2.0f;
+    const f32 fitAllWidth = CalcTextButtonWidth(messages::import::cWaveFitAll);
+    const f32 fitLoopWidth = CalcTextButtonWidth(messages::import::cWaveFitLoop);
+    const f32 curveWidth = CalcTextButtonWidth(messages::common::cCurve);
     const f32 toolsWidth = buttonSize * 3.0f + style.ItemSpacing.x * 3.0f + groupGap * 2.0f + curveWidth + fitAllWidth + fitLoopWidth;
 
     if (!BeginGroupBoxWithTools(messages::wavefile::cWaveform, toolsWidth))
@@ -129,7 +129,7 @@ void WaveImportPanel::drawWaveformTools(FrameContext& ctx, f32 groupGap)
     ImGui::SameLine(0.0f, groupGap);
     ImGui::BeginDisabled(!ctx.cropEditable);
 
-    if (ToggleButton(messages::common::cCurve, curveOn))
+    if (ToggleButton(messages::common::cCurve, curveOn, ImVec2(CalcTextButtonWidth(messages::common::cCurve), 0.0f)))
     {
         mSettings.curveEnabled = !mSettings.curveEnabled;
 
@@ -144,13 +144,13 @@ void WaveImportPanel::drawWaveformTools(FrameContext& ctx, f32 groupGap)
     ImGui::EndDisabled();
 
     ImGui::SameLine(0.0f, groupGap);
-    if (ImGui::Button(messages::import::cWaveFitAll))
+    if (TextButton(messages::import::cWaveFitAll))
         ImGui::LoopWaveformFitAll(mWaveformState, ctx.totalSamples);
 
     ImGui::BeginDisabled(!ctx.showLoop);
 
     ImGui::SameLine();
-    if (ImGui::Button(messages::import::cWaveFitLoop))
+    if (TextButton(messages::import::cWaveFitLoop))
         ImGui::LoopWaveformZoomToLoop(mWaveformState, ctx.loopStart, ctx.loopEnd, ctx.totalSamples);
 
     ImGui::EndDisabled();

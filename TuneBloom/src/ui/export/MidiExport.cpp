@@ -434,7 +434,9 @@ static void DrawMidiListBox(const char* title, const MidiListColumns& columns, s
 
     bool pressed = false;
 
-    if (!BeginGroupBox(title, allEnabled ? messages::common::cNone : messages::common::cAll, &pressed))
+    const f32 toggleWidth = ImMax(CalcTextButtonWidth(messages::common::cAll), CalcTextButtonWidth(messages::common::cNone));
+
+    if (!BeginGroupBox(title, allEnabled ? messages::common::cNone : messages::common::cAll, &pressed, toggleWidth))
         return;
 
     if (pressed)

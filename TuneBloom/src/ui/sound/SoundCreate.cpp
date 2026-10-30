@@ -444,7 +444,7 @@ static void DrawStreamMainImportDialog()
 
 static void DrawStreamImportSource(const char* browseLabel)
 {
-    if (ImGui::Button(browseLabel))
+    if (TextButton(browseLabel))
         PickStreamImportFiles();
 
     const u32 fileCount = GetStreamCreateFileCount() + 1;
@@ -464,7 +464,7 @@ static void DrawStreamExistingSource(const char* browseLabel)
 
     ImGui::BeginDisabled(!hasArchiveDir);
 
-    if (ImGui::Button(browseLabel) && PickStreamFilePath(&sStreamPath, nullptr))
+    if (TextButton(browseLabel) && PickStreamFilePath(&sStreamPath, nullptr))
         SuggestNameFromPath(sStreamPath);
 
     ImGui::EndDisabled();

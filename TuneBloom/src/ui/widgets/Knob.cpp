@@ -42,17 +42,18 @@ bool IsRegionPanelFill()
     return sRegionPanelFill;
 }
 
-void RegionHeader(const char* title, f32 reservedWidth)
+void RegionHeader(const char* title, f32 reservedWidth, f32 height)
 {
     const ImVec2 pos = ImGui::GetCursorScreenPos();
-    const f32 frameHeight = ImGui::GetFrameHeight();
+    const f32 rowHeight = height > 0.0f ? height : ImGui::GetFrameHeight();
     const f32 right = pos.x + ImGui::GetContentRegionAvail().x - reservedWidth;
     const f32 textRight = sead::Mathf::max(pos.x, sead::Mathf::min(pos.x + ImGui::CalcTextSize(title).x, right));
     const f32 left = textRight + ImGui::GetStyle().ItemSpacing.x;
-    const f32 y = ImFloor(pos.y + frameHeight * 0.5f);
+    const f32 y = ImFloor(pos.y + rowHeight * 0.5f);
+    const f32 textY = ImFloor(pos.y + (rowHeight - ImGui::GetFontSize()) * 0.5f);
 
-    ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), ImVec2(pos.x, pos.y + ImGui::GetStyle().FramePadding.y), ImVec2(textRight, pos.y + frameHeight), textRight, textRight, title, nullptr, nullptr);
-    ImGui::Dummy(ImVec2(textRight - pos.x, frameHeight));
+    ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), ImVec2(pos.x, textY), ImVec2(textRight, pos.y + rowHeight), textRight, textRight, title, nullptr, nullptr);
+    ImGui::Dummy(ImVec2(textRight - pos.x, rowHeight));
 
     if (left < right)
         ImGui::GetWindowDrawList()->AddLine(ImVec2(left, y), ImVec2(right, y), ImGui::GetColorU32(ImGuiCol_Separator));
@@ -84,15 +85,6 @@ f32 CalcKnobWidth(const char* const* labels, s32 labelNum)
     f32 width = CalcRegionStripHeight() - ImGui::GetFontSize();
     for (s32 i = 0; i < labelNum; i++)
         width = std::max(width, ImGui::CalcTextSize(labels[i]).x);
-
-    return width;
-}
-
-f32 CalcKnobFitWidth(const char* const* labels, s32 labelNum)
-{
-    f32 width = CalcRegionStripHeight() - ImGui::GetFontSize();
-    for (s32 i = 0; i < labelNum; i++)
-        width = std::max(width, ImFloor(ImGui::CalcTextSize(labels[i]).x * cKnobLabelMinScale));
 
     return width;
 }

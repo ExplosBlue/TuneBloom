@@ -61,11 +61,11 @@ struct SampleRate
 
 }
 
-static constexpr f32 cWindowWidthEm  = 42.0f;
+static constexpr f32 cWindowWidthEm  = 38.0f;
 static constexpr f32 cWindowHeightEm = 29.0f;
-static constexpr f32 cNavWidthEm     = 10.0f;
+static constexpr f32 cNavWidthEm     = 8.0f;
 static constexpr f32 cRowGapEm       = 0.4f;
-static constexpr f32 cLabelWidthEm   = 10.0f;
+static constexpr f32 cLabelWidthEm   = 8.0f;
 static constexpr f32 cRowButtonEm    = 6.5f;
 static constexpr f32 cHueHandleEm    = 0.5f;
 static constexpr f32 cCardHeightEm   = 4.2f;
@@ -75,7 +75,7 @@ static constexpr f32 cMidiNotesHeightEm = 7.0f;
 static constexpr f32 cUIScales[]        = { 1.0f, 1.25f, 1.5f };
 
 static constexpr uicolors::Themed<f32> cSliderFillAlpha = { 0.55f, 0.22f };
-static constexpr f32 cSliderValueWidthEm = 4.5f;
+static constexpr f32 cSliderValueWidthEm = 3.0f;
 static constexpr uicolors::Themed<ImVec4> cHuePreviewTone = { uicolors::cAccentDefault, uicolors::light::cCheckMark };
 
 static constexpr size_t cFolderTextMax = 22;

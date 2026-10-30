@@ -27,7 +27,7 @@ static constexpr f32 cRestoreRowPadEm  = 0.3f;
 static constexpr f32 cRowHoverAlpha    = 0.5f;
 static constexpr f32 cHeadGapEm        = 0.5f;
 static constexpr f32 cFooterGapEm      = 0.6f;
-static constexpr f32 cRecoverLabelEm   = 5.0f;
+static constexpr f32 cRecoverLabelEm   = 4.0f;
 static constexpr f32 cRecoverRowGapEm  = 0.3f;
 
 static bool sWantsRestoreDialog = false;

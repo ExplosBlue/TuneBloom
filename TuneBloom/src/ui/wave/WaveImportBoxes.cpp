@@ -700,7 +700,7 @@ void WaveImportPanel::drawLoopTools(FrameContext& ctx)
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(ImGui::GetFontSize() * cTitleGapEm));
 
-    if (ImGui::Button(messages::import::cWaveSuggestLoop))
+    if (TextButton(messages::import::cWaveSuggestLoop))
     {
         const std::vector<float> kept(mSettings.mono.begin() + ctx.cropStart, mSettings.mono.begin() + ctx.cropEnd);
         LoopAnalysis::SuggestResult suggestion = LoopAnalysis::suggestLoop(kept, mSettings.workingSampleRate);
@@ -716,7 +716,7 @@ void WaveImportPanel::drawLoopTools(FrameContext& ctx)
     ImGui::SetItemTooltip("%s", messages::import::cWaveSuggestLoopTip);
 
     ImGui::SameLine();
-    if (ImGui::Button(messages::import::cWaveSnapLoop))
+    if (TextButton(messages::import::cWaveSnapLoop))
     {
         const u32 base = std::min(ctx.cropStart, ctx.loopStart);
         LoopAnalysis::FrameSnapResult snap = LoopAnalysis::snapFramePeriod(ctx.loopStart - base, ctx.loopEnd - base, mSettings.period, ctx.cropEnd - base);

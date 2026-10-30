@@ -6,7 +6,6 @@
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_internal.h"
 
-#include <filedevice/seadFileDeviceMgr.h>
 #include <framework/glfw/seadGameFrameworkGlfwGL.h>
 #include <framework/seadProcessMeter.h>
 #include <heap/seadExpHeap.h>
@@ -15,7 +14,6 @@
 #include <platform/OwnedWindow.h>
 #include <platform/WindowFrame.h>
 
-#include <ui/widgets/Dialogs.h>
 #include <ui/browser/FilesPanel.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/player/OutputMeter.h>
@@ -24,18 +22,13 @@
 #include <ui/settings/ColorUtil.h>
 #include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
+#include <ui/widgets/AppFonts.h>
 #include <ui/widgets/WindowAnimation.h>
 #include <ui/widgets/Widgets.h>
-
-#include "libs/IconsLucide.h"
 
 SEAD_TASK_SINGLETON_DISPOSER_IMPL(ImGuiTask);
 
 static void SetupImGuiStyle();
-
-static constexpr f32 cIconFontSizes[] = { 20.0f, 16.0f, 22.0f };
-static constexpr f32 cIconSizeEm      = 0.9f;
-static constexpr f32 cIconOffsetEm    = 0.2f;
 
 static void* ImGuiAllocFunc(size_t size, void* userPtr)
 {
@@ -209,52 +202,7 @@ void ImGuiTask::prepare()
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowMenuButtonPosition = ImGuiDir_Right;
 
-    {
-        sead::FileDevice::LoadArg arg;
-        arg.path = "main://fonts/SpaceMono-Regular.ttf";
-
-        u8* font = sead::FileDeviceMgr::instance()->load(arg);
-
-        ImFontConfig config;
-        config.FontDataOwnedByAtlas = false;
-
-        io.Fonts->AddFontFromMemoryTTF(font, arg.read_size, ScaleSize(32.0f), &config);
-
-        sead::FileDevice::LoadArg iconsArg;
-        iconsArg.path = "main://fonts/" FONT_ICON_FILE_NAME_LC;
-
-        u8* iconsFont = sead::FileDeviceMgr::instance()->load(iconsArg);
-
-        static const ImWchar iconsRanges[] = { ICON_MIN_LC, ICON_MAX_LC, 0 };
-
-        for (f32 baseSize : cIconFontSizes)
-        {
-            const f32 fontSize = ScaleSize(baseSize);
-
-            ImFont* sizedFont = io.Fonts->AddFontFromMemoryTTF(font, arg.read_size, fontSize, &config);
-
-            if (!io.FontDefault)
-                io.FontDefault = sizedFont;
-
-            ImFontConfig iconsConfig;
-            iconsConfig.FontDataOwnedByAtlas = false;
-            iconsConfig.MergeMode = true;
-            iconsConfig.PixelSnapH = true;
-            iconsConfig.OversampleH = 1;
-            iconsConfig.GlyphOffset.y = static_cast<f32>(static_cast<s32>(fontSize * cIconOffsetEm + 0.5f));
-
-            io.Fonts->AddFontFromMemoryTTF(iconsFont, iconsArg.read_size, fontSize * cIconSizeEm, &iconsConfig, iconsRanges);
-        }
-
-        io.Fonts->AddFontFromMemoryTTF(font, arg.read_size, ScaleSize(cSmallFontSize), &config);
-
-        ImFontConfig dialogIconConfig;
-        dialogIconConfig.FontDataOwnedByAtlas = false;
-        dialogIconConfig.PixelSnapH = true;
-        dialogIconConfig.OversampleH = 1;
-
-        io.Fonts->AddFontFromMemoryTTF(iconsFont, iconsArg.read_size, ScaleSize(cDialogIconFontSize), &dialogIconConfig, GetDialogIconRanges());
-    }
+    LoadAppFonts();
 
     sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
     SEAD_ASSERT(fw);

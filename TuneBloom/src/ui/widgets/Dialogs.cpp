@@ -63,13 +63,10 @@ f32 CalcDialogFooterHeight()
 
 static f32 CalcDialogButtonWidth(std::initializer_list<const char*> labels)
 {
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 em = ImGui::GetFontSize();
-
-    f32 width = ImFloor(em * cDialogButtonWidthEm);
+    f32 width = ImFloor(ImGui::GetFontSize() * cDialogButtonWidthEm);
 
     for (const char* label : labels)
-        width = ImMax(width, ImFloor(ImGui::CalcTextSize(label, nullptr, true).x + style.FramePadding.x * 2.0f + em));
+        width = ImMax(width, CalcTextButtonWidth(label));
 
     return width;
 }

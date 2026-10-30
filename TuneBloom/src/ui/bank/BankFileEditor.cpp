@@ -197,13 +197,7 @@ static f32 CalcInterpolationLabelWidth()
 
 static f32 CalcInterpolationFieldWidth()
 {
-    const ImGuiStyle& style = ImGui::GetStyle();
-
-    f32 textWidth = 0.0f;
-    for (const char* type : messages::bank::cInterpolationTypes)
-        textWidth = std::max(textWidth, ImGui::CalcTextSize(type).x);
-
-    return CalcInterpolationLabelWidth() + textWidth + style.FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+    return CalcInterpolationLabelWidth() + CalcFitComboWidth(messages::bank::cInterpolationTypes, IM_ARRAYSIZE(messages::bank::cInterpolationTypes));
 }
 
 static f32 CalcSampleInlineGap()

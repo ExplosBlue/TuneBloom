@@ -40,17 +40,8 @@ static constexpr f32 cTitleBarPadYEm     = 0.35f;
 static constexpr f32 cMenuBarPillInsetEm = 0.25f;
 static constexpr f32 cMenuBarHoverAlpha  = 0.6f;
 static constexpr f32 cMenuBarTextRaiseEm = 0.05f;
-static constexpr f32 cMenuBarTextScale   = 0.9f;
 
 static f32 sMenuBarPadY = 0.0f;
-
-void SetMenuBarFontSize()
-{
-    ImGuiContext& g = *GImGui;
-
-    g.FontSize = ImFloor(g.FontBaseSize * cMenuBarTextScale);
-    g.DrawListSharedData.FontSize = g.FontSize;
-}
 
 ImDrawList* BeginMenuHighlight()
 {
@@ -146,8 +137,6 @@ bool MenuBarIconButton(const char* id, const char* icon, f32 right, f32 top, f32
 
 static void PushMenuBarTextColor(const char* label)
 {
-    SetMenuBarFontSize();
-
     const ImGuiID id = ImGui::GetID(label);
     const bool lit = GImGui->HoveredIdPreviousFrame == id || ImGui::IsPopupOpen(label);
 
@@ -178,7 +167,6 @@ static bool BeginBarMenu(const char* label)
 void SetMenuBarTooltip(const char* tooltip)
 {
     ImGui::SetItemTooltip("%s", tooltip);
-    SetMenuBarFontSize();
 }
 
 static void EndBarMenu()
@@ -578,9 +566,9 @@ static f32 DrawMenuBarTools(f32 right, f32 top, f32 bottom, f32 textY)
     return DrawSaveStatusChip(bellLeft - ImGui::GetStyle().ItemInnerSpacing.x, textY);
 }
 
-static void DrawBarMenu(const char* icon, const char* label, void (*drawMenu)())
+static void DrawBarMenu(const char* label, void (*drawMenu)())
 {
-    if (!BeginBarMenu(sead::FormatFixedSafeString<64>("%s %s", icon, label).cstr()))
+    if (!BeginBarMenu(label))
         return;
 
     drawMenu();
@@ -591,17 +579,17 @@ static void DrawBarMenus()
 {
     CloseHoverMenuOnLeave();
 
-    DrawBarMenu(ICON_LC_FILE_TEXT, messages::common::cFile, &DrawFileMenu);
+    DrawBarMenu(messages::common::cFile, &DrawFileMenu);
 
     if (!IsSlimMenuBar())
     {
-        DrawBarMenu(ICON_LC_SQUARE_PEN, messages::mainmenu::cEdit, &DrawEditMenu);
-        DrawBarMenu(ICON_LC_PANELS_TOP_LEFT, messages::mainmenu::cView, &DrawViewMenu);
+        DrawBarMenu(messages::mainmenu::cEdit, &DrawEditMenu);
+        DrawBarMenu(messages::mainmenu::cView, &DrawViewMenu);
     }
 
     bool preferencesClicked = false;
 
-    if (BeginHoverBarMenu(sead::FormatFixedSafeString<64>(ICON_LC_SETTINGS_2 " %s", messages::mainmenu::cPreferences).cstr(), &preferencesClicked))
+    if (BeginHoverBarMenu(messages::mainmenu::cPreferences, &preferencesClicked))
     {
         DrawPreferencesMenu();
         EndBarMenu();
@@ -610,7 +598,7 @@ static void DrawBarMenus()
     if (preferencesClicked)
         OpenPreferencesWindow(PreferencesPage::File);
 
-    DrawBarMenu(ICON_LC_CIRCLE_HELP, messages::common::cHelp, &DrawHelpMenu);
+    DrawBarMenu(messages::common::cHelp, &DrawHelpMenu);
 }
 
 static void DrawMenuBarItems(f32 em)
@@ -619,23 +607,18 @@ static void DrawMenuBarItems(f32 em)
     const ImVec2 barMax = barMin + ImGui::GetWindowSize();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(barMin.x, barMax.y - 1.0f), ImVec2(barMax.x, barMax.y - 1.0f), ImGui::GetColorU32(ImGuiCol_Border));
 
-    const f32 textOffsetY = ImFloor((em - ImFloor(em * cMenuBarTextScale)) * 0.5f) - ImFloor(em * cMenuBarTextRaiseEm);
+    const f32 textOffsetY = -ImFloor(em * cMenuBarTextRaiseEm);
     ImGui::SetCursorPos(ImGui::GetCursorPos() + ImVec2(ImFloor(ImGui::GetStyle().ItemSpacing.x * 0.5f), textOffsetY));
 
     const bool hasTitleBar = HasCustomTitleBar();
     const f32 lineBottom = barMax.y - 1.0f;
 
     if (hasTitleBar)
-    {
-        SetMenuBarFontSize();
         ImGui::SetCursorScreenPos(ImVec2(DrawTitleBarIcon(barMin.x, barMin.y, lineBottom), ImGui::GetCursorScreenPos().y));
-    }
 
     const f32 menuLeft = ImGui::GetCursorScreenPos().x;
     DrawBarMenus();
     const f32 menuRight = ImGui::GetCursorScreenPos().x;
-
-    SetMenuBarFontSize();
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 pillRangeY = CalcMenuBarPillRangeY();

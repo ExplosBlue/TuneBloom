@@ -45,7 +45,8 @@ mkdir -p "$(dirname "$executable")" "$resources"
 install_executable "$@"
 cp "$script_dir/Info.plist" "$info_plist"
 cp -R "$content_dir" "$resources/content"
-cp "$repo_root/LICENSE.txt" "$repo_root/THIRD_PARTY_LICENSES.txt" "$resources/"
+cp "$repo_root/LICENSE.txt" "$resources/"
+cp -R "$repo_root/third_party" "$resources/third_party"
 
 if [ -n "${BUNDLE_VERSION:-}" ]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$info_plist"

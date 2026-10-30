@@ -585,10 +585,7 @@ static f32 DrawReplaceButton(const PlayableFile& file, f32 right, f32 top, f32 b
     }
 
     if (isTrackMenu)
-    {
         DrawReplaceTrackMenu(file);
-        SetMenuBarFontSize();
-    }
 
     return CalcMenuBarIconButtonWidth(ICON_LC_ARROW_DOWN_UP);
 }

@@ -34,6 +34,8 @@ static constexpr f32 cIconButtonBorderHoverMix = 0.8f;
 static constexpr f32 cVersionFieldEm           = 2.0f;
 static constexpr f32 cVersionDotGap            = 6.0f;
 static constexpr f32 cDetailTooltipWrapEm      = 32.0f;
+static constexpr f32 cTextButtonPadEm          = 1.0f;
+static constexpr f32 cFitComboExtraEm          = 0.5f;
 static constexpr f32 cInsertLineAlpha          = 0.86f;
 static constexpr f32 cInsertLineHeight         = 3.0f;
 
@@ -284,6 +286,26 @@ bool DrawIconButton(const char* id, const char* icon, const ImVec2& itemSize, f3
     ImGui::GetWindowDrawList()->AddText(font, iconSize, ImVec2(ImFloor(frame.min.x + (frameSize - textSize.x) * 0.5f), ImFloor(frame.min.y + (frameSize - textSize.y) * 0.5f)), frame.iconColor, icon);
 
     return frame.pressed;
+}
+
+f32 CalcFitComboWidth(const char* const* items, s32 itemNum)
+{
+    f32 textWidth = 0.0f;
+
+    for (s32 i = 0; i < itemNum; i++)
+        textWidth = ImMax(textWidth, ImGui::CalcTextSize(items[i]).x);
+
+    return ImFloor(textWidth + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFontSize() * cFitComboExtraEm);
+}
+
+f32 CalcTextButtonWidth(const char* label)
+{
+    return ImFloor(ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFontSize() * cTextButtonPadEm);
+}
+
+bool TextButton(const char* label)
+{
+    return ImGui::Button(label, ImVec2(CalcTextButtonWidth(label), 0.0f));
 }
 
 f32 CalcTextActionWidth(const char* label)

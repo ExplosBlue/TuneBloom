@@ -217,7 +217,7 @@ static void DrawRow(LocateRow* row)
 
     ImGui::TableSetColumnIndex(3);
 
-    if (ImGui::Button(messages::group::cLocateBrowse))
+    if (TextButton(messages::group::cLocateBrowse))
         BrowseRowFile(row);
 }
 
@@ -234,8 +234,7 @@ static void DrawList()
         SearchFolder();
 
     const char* const titles[] = { "##State", messages::common::cGroup, messages::common::cFile, "##Browse" };
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 browseWidth = ImGui::CalcTextSize(messages::group::cLocateBrowse).x + style.FramePadding.x * 2.0f;
+    const f32 browseWidth = CalcTextButtonWidth(messages::group::cLocateBrowse);
     const s32 rowNum = ImClamp(static_cast<s32>(sRows.size()), cListRowMin, cListRowMax);
 
     if (BeginDialogList("##GroupFiles", IM_ARRAYSIZE(titles), rowNum))

@@ -34,14 +34,14 @@ static constexpr f32 cFadeInSeconds       = 0.12f;
 static constexpr f32 cFadeOutSeconds      = 0.10f;
 static constexpr f32 cMoveHalfLife        = 0.04f;
 
-static constexpr f32 cToastWidthEm     = 24.0f;
+static constexpr f32 cToastWidthEm     = 19.0f;
 static constexpr f32 cToastMarginEm    = 0.8f;
 static constexpr f32 cToastGapEm       = 0.4f;
 static constexpr f32 cToastPadXEm      = 0.7f;
 static constexpr f32 cToastPadYEm      = 0.6f;
 static constexpr f32 cToastSlideEm     = 0.4f;
 static constexpr f32 cIconGapEm        = 0.5f;
-static constexpr f32 cListWidthEm      = 24.0f;
+static constexpr f32 cListWidthEm      = 19.0f;
 static constexpr f32 cListMaxHeightEm  = 20.0f;
 static constexpr f32 cListGapEm        = 0.3f;
 static constexpr f32 cListRowGapEm     = 0.6f;
@@ -430,16 +430,17 @@ static void DrawList()
     {
         AnimateWindow(WindowAnimation::Menu);
 
-        const f32 clearWidth = ImGui::CalcTextSize(messages::common::cClear).x + style.FramePadding.x * 2.0f;
+        const f32 clearWidth = CalcTextActionWidth(messages::common::cClear);
+        const f32 clearX = ImGui::GetWindowContentRegionMax().x - clearWidth + style.FramePadding.x;
 
-        RegionHeader(messages::notify::cTitle, clearWidth + style.ItemSpacing.x);
+        RegionHeader(messages::notify::cTitle, clearWidth - style.FramePadding.x + style.ItemSpacing.x, em);
 
         ImGui::SameLine();
-        ImGui::SetCursorPosX(ImGui::GetWindowContentRegionMax().x - clearWidth);
+        ImGui::SetCursorPosX(clearX);
 
         ImGui::BeginDisabled(sEntryNum == 0);
 
-        if (ImGui::Button(messages::common::cClear))
+        if (DrawTextAction("##Clear", messages::common::cClear, em, 0.0f))
             sEntryNum = 0;
 
         ImGui::EndDisabled();

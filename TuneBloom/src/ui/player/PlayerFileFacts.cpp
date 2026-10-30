@@ -129,7 +129,6 @@ static void DrawFileDetailsPopup(const FileFacts& facts)
     ImGui::PopStyleVar();
 
     EndMenuPanel();
-    SetMenuBarFontSize();
 }
 
 f32 DrawFileDetailsButton(const Document& document, f32 right, f32 top, f32 bottom)

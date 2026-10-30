@@ -80,7 +80,8 @@ jobs:
         run: |
           New-Item -ItemType Directory package | Out-Null
           Copy-Item -Recurse workdir/* package/
-          Copy-Item THIRD_PARTY_LICENSES.txt, TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom.exe package/
+          Copy-Item -Recurse third_party package/
+          Copy-Item TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom.exe package/
           Compress-Archive -Path package/* -DestinationPath TuneBloom-windows.zip
 
       - name: Package
@@ -88,7 +89,8 @@ jobs:
         run: |
           mkdir package
           cp -r workdir/. package/
-          cp THIRD_PARTY_LICENSES.txt TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom package/
+          cp -R third_party package/
+          cp TuneBloom/bin/TuneBloom-GLFW_x86_64-Develop/out/TuneBloom package/
           tar -czf TuneBloom-linux.tar.gz -C package .
 
       - name: Package

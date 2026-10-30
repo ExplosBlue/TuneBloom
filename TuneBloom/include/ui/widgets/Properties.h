@@ -26,7 +26,7 @@ void EndPropertyBox();
 bool DrawPanelHeader(const char* title, bool* enabled, const char* detail);
 bool DrawPanelHeaderCombo(const char* title, const char* id, s32* current, const char* const items[], const char* const details[], s32 itemNum, const char* detail = nullptr, bool rowsBelow = true);
 
-bool BeginGroupBox(const char* title, const char* action = nullptr, bool* pressed = nullptr);
+bool BeginGroupBox(const char* title, const char* action = nullptr, bool* pressed = nullptr, f32 actionMinWidth = 0.0f);
 bool BeginGroupBoxWithTools(const char* title, f32 toolsWidth);
 bool BeginGroupBoxWithStatus(const char* title, const char* status);
 f32 CalcGroupBoxWidth(f32 contentWidth);

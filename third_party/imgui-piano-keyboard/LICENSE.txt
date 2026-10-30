@@ -1,0 +1,3 @@
+The MIT License (MIT)
+by https://github.com/frowrik
+Piano keyboard for ImGui v1.1

@@ -3267,6 +3267,7 @@ ImFont::ImFont()
     DirtyLookupTables = false;
     Scale = 1.0f;
     Ascent = Descent = 0.0f;
+    IconGapAdvanceX = 0.0f; // TuneBloom: icon gap
     MetricsTotalSurface = 0;
     memset(Used4kPagesMap, 0, sizeof(Used4kPagesMap));
 }
@@ -3502,6 +3503,12 @@ static inline const char* CalcWordWrapNextLineStartA(const char* text, const cha
     return text;
 }
 
+// TuneBloom: icon gap
+static inline float CalcAdvanceAfter(const ImFont* font, unsigned int prev_c, unsigned int c, float advance)
+{
+    return (c == ' ' && font->IconGapAdvanceX > 0.0f && prev_c >= 0xE000 && prev_c <= 0xF8FF) ? font->IconGapAdvanceX : advance;
+}
+
 // Simple word-wrapping for English, not full-featured. Please submit failing cases!
 // This will return the next location to wrap from. If no wrapping if necessary, this will fast-forward to e.g. text_end.
 // FIXME: Much possible improvements (don't cut things like "word !", "word!!!" but cut within "word,,,,", more sensible support for punctuations, support for Unicode punctuations, etc.)
@@ -3528,6 +3535,7 @@ const char* ImFont::CalcWordWrapPositionA(float scale, const char* text, const c
     bool inside_word = true;
 
     const char* s = text;
+    unsigned int prev_c = 0; // TuneBloom: icon gap
     IM_ASSERT(text_end != NULL);
     while (s < text_end)
     {
@@ -3537,6 +3545,9 @@ const char* ImFont::CalcWordWrapPositionA(float scale, const char* text, const c
             next_s = s + 1;
         else
             next_s = s + ImTextCharFromUtf8(&c, s, text_end);
+
+        const unsigned int char_prev = prev_c; // TuneBloom: icon gap
+        prev_c = c;
 
         if (c < 32)
         {
@@ -3554,7 +3565,7 @@ const char* ImFont::CalcWordWrapPositionA(float scale, const char* text, const c
             }
         }
 
-        const float char_width = ((int)c < IndexAdvanceX.Size ? IndexAdvanceX.Data[c] : FallbackAdvanceX);
+        const float char_width = CalcAdvanceAfter(this, char_prev, c, ((int)c < IndexAdvanceX.Size ? IndexAdvanceX.Data[c] : FallbackAdvanceX)); // TuneBloom: icon gap
         if (ImCharIsBlankW(c))
         {
             if (inside_word)
@@ -3618,6 +3629,7 @@ ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, cons
     const char* word_wrap_eol = NULL;
 
     const char* s = text_begin;
+    unsigned int prev_c = 0; // TuneBloom: icon gap
     while (s < text_end)
     {
         if (word_wrap_enabled)
@@ -3646,6 +3658,9 @@ ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, cons
         else
             s += ImTextCharFromUtf8(&c, s, text_end);
 
+        const unsigned int char_prev = prev_c; // TuneBloom: icon gap
+        prev_c = c;
+
         if (c < 32)
         {
             if (c == '\n')
@@ -3659,7 +3674,7 @@ ImVec2 ImFont::CalcTextSizeA(float size, float max_width, float wrap_width, cons
                 continue;
         }
 
-        const float char_width = ((int)c < IndexAdvanceX.Size ? IndexAdvanceX.Data[c] : FallbackAdvanceX) * scale;
+        const float char_width = CalcAdvanceAfter(this, char_prev, c, ((int)c < IndexAdvanceX.Size ? IndexAdvanceX.Data[c] : FallbackAdvanceX)) * scale; // TuneBloom: icon gap
         if (line_width + char_width >= max_width)
         {
             s = prev_s;
@@ -3762,6 +3777,7 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
 
     const ImU32 col_untinted = col | ~IM_COL32_A_MASK;
     const char* word_wrap_eol = NULL;
+    unsigned int prev_c = 0; // TuneBloom: icon gap
 
     while (s < text_end)
     {
@@ -3802,11 +3818,14 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, Im
                 continue;
         }
 
+        const unsigned int char_prev = prev_c; // TuneBloom: icon gap
+        prev_c = c;
+
         const ImFontGlyph* glyph = FindGlyph((ImWchar)c);
         if (glyph == NULL)
             continue;
 
-        float char_width = glyph->AdvanceX * scale;
+        float char_width = CalcAdvanceAfter(this, char_prev, c, glyph->AdvanceX) * scale; // TuneBloom: icon gap
         if (glyph->Visible)
         {
             // We don't do a second finer clipping test on the Y axis as we've already skipped anything before clip_rect.y and exit once we pass clip_rect.w

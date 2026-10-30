@@ -11,10 +11,15 @@ targetdir "bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/out"
 objdir "bin/%{prj.name}-%{cfg.platform}-%{cfg.buildcfg}/int"
 debugdir "../workdir"
 
-local thirdPartyLicense = path.getabsolute(path.join(_SCRIPT_DIR, "../THIRD_PARTY_LICENSES.txt"))
-postbuildcommands {
-    '{COPYFILE} "' .. thirdPartyLicense .. '" "%{cfg.targetdir}"',
-}
+local thirdPartyDir = path.getabsolute(path.join(_SCRIPT_DIR, "../third_party"))
+
+filter "system:windows"
+postbuildcommands { '{COPYDIR} "' .. thirdPartyDir .. '" "%{cfg.targetdir}/third_party"' }
+
+filter "system:not windows"
+postbuildcommands { '{COPYDIR} "' .. thirdPartyDir .. '" "%{cfg.targetdir}"' }
+
+filter {}
 
 includedirs {
     path.join(_SCRIPT_DIR, "include"),
@@ -28,6 +33,11 @@ includedirs {
     path.join(_SCRIPT_DIR, "vendor/lz4/lib"),
     path.join(_SCRIPT_DIR, "vendor/zstd/lib"),
     path.join(_SCRIPT_DIR, "vendor/opus/include"),
+    path.join(_SCRIPT_DIR, "vendor/freetype/include"),
+}
+
+defines {
+    "IMGUI_ENABLE_FREETYPE",
 }
 
 files {
@@ -43,6 +53,7 @@ links {
     "lz4",
     "zstd",
     "opus",
+    "freetype",
 }
 
 filter "action:gmake*"
@@ -157,4 +168,5 @@ include "vendor/sead"
 include "vendor/lz4-build"
 include "vendor/zstd-build"
 include "vendor/opus-build"
+include "vendor/freetype-build"
 group ""

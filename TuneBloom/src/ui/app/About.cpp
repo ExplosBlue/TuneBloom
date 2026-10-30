@@ -8,6 +8,7 @@
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>
+#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
@@ -90,9 +91,8 @@ static void DrawAboutLink(const char* text, const char* url)
 static void DrawAboutButton(const char* icon, const char* label, const char* url)
 {
     const sead::FormatFixedSafeString<64> text("%s %s", icon, label);
-    const f32 width = ImFloor(ImGui::CalcTextSize(text.cstr()).x + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFontSize());
 
-    if (ImGui::Button(text.cstr(), ImVec2(width, 0.0f)))
+    if (TextButton(text.cstr()))
         OpenURL(url);
 
     ImGui::SetItemTooltip("%s", url);

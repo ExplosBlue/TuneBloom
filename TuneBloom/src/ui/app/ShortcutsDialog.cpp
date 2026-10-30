@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <cstring>
 
-static constexpr f32 cColumnWidthEm = 19.0f;
+static constexpr f32 cColumnWidthEm = 15.0f;
 static constexpr f32 cColumnGapEm   = 0.8f;
 static constexpr f32 cRowGapEm      = 0.1f;
 static constexpr f32 cKeyPadXEm     = 0.45f;

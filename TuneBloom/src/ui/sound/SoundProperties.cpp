@@ -6,7 +6,6 @@
 #include <ui/settings/UiColors.h>
 
 static constexpr f32 cSoundNumberFieldEm     = 3.0f;
-static constexpr f32 cSoundComboExtraEm      = 0.5f;
 static constexpr f32 cSoundUserParamMinEm    = 5.5f;
 static constexpr f32 cSoundTypeTitleGapEm    = 0.3f;
 static constexpr f32 cSoundDecayKnobSpeed    = 0.005f;
@@ -92,14 +91,6 @@ bool BeginSoundSection(const char* title, bool* enabled, bool* changed, const ch
     return BeginPropertySection(title, enabled, changed, true, 1, detail, nullptr, messages::sound::cPanelEnableDetail);
 }
 
-static f32 CalcSoundComboWidth(const char* const* items, s32 itemNum)
-{
-    f32 width = 0.0f;
-    for (s32 i = 0; i < itemNum; i++)
-        width = sead::Mathf::max(width, ImGui::CalcTextSize(items[i]).x);
-
-    return width + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f + ImFloor(ImGui::GetFontSize() * cSoundComboExtraEm);
-}
 
 static bool DrawSoundCheckSlot(const char* label, bool* value, f32 slotWidth, f32 slotHeight)
 {
@@ -116,7 +107,7 @@ static bool DrawSoundCheckSlot(const char* label, bool* value, f32 slotWidth, f3
 
 static bool DrawSoundSideCombo(const char* label, const char* detail, s32* value, const char* const* items, const char* const* details, s32 itemNum, f32 knobHeight)
 {
-    const f32 width = CalcSoundComboWidth(items, itemNum);
+    const f32 width = CalcFitComboWidth(items, itemNum);
     bool changed = false;
 
     DrawSoundSideField(label, detail, width, knobHeight, [&]
@@ -199,7 +190,7 @@ static void DrawSound3DSection(Sound* sound)
 
     RegionHeader(messages::sound::c3DApplyTitle);
     {
-        f32 slotWidth = 0.0f;
+        f32 slotWidth = CalcKnobWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs));
         for (const Flag& flag : sFlags)
             slotWidth = sead::Mathf::max(slotWidth, ImGui::CalcTextSize(flag.label).x);
 
@@ -227,7 +218,7 @@ static void DrawSound3DSection(Sound* sound)
     {
         f32 decayRatio = sound3DInfo.getDecayRatio();
         SetNextKnobReset(cSoundDecayRatioDefault);
-        if (KnobF32(cSoundDecayKnobs[0], &decayRatio, 0.0f, 1.0f, "%.2f", cSoundDecayKnobSpeed, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
+        if (KnobF32(cSoundDecayKnobs[0], &decayRatio, 0.0f, 1.0f, "%.2f", cSoundDecayKnobSpeed, ImVec2(CalcKnobWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
         {
             sound3DInfo.setDecayRatio(decayRatio);
             SetUnsavedChanges(true);
@@ -240,7 +231,7 @@ static void DrawSound3DSection(Sound* sound)
 
         u8 dopplerFactor = sound3DInfo.getDopplerFactor();
         SetNextKnobReset(0.0);
-        if (KnobU8(cSoundDopplerKnobs[0], &dopplerFactor, 0, cSoundDopplerMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
+        if (KnobU8(cSoundDopplerKnobs[0], &dopplerFactor, 0, cSoundDopplerMax, ImVec2(CalcKnobWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
         {
             sound3DInfo.setDopplerFactor(dopplerFactor);
             SetUnsavedChanges(true);
@@ -280,7 +271,7 @@ static void DrawPlayerPrioritySection(Sound* sound)
 
     u8 playerPriority = sound->getPlayerPriority();
     SetNextKnobReset(cSoundPriorityDefault);
-    if (KnobU8(sead::FormatFixedSafeString<32>("%s###PlayerPriority", messages::common::cPriority).cstr(),&playerPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
+    if (KnobU8(sead::FormatFixedSafeString<32>("%s###PlayerPriority", messages::common::cPriority).cstr(),&playerPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
     {
         sound->setPlayerPriority(playerPriority);
         SetUnsavedChanges(true);
@@ -328,7 +319,7 @@ static void DrawChannelPrioritySection(SoundInfo& soundInfo)
 
     u8 channelPriority = soundInfo.getChannelPriority();
     SetNextKnobReset(cSoundPriorityDefault);
-    if (KnobU8(sead::FormatFixedSafeString<32>("%s###ChannelPriority", messages::common::cPriority).cstr(),&channelPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
+    if (KnobU8(sead::FormatFixedSafeString<32>("%s###ChannelPriority", messages::common::cPriority).cstr(),&channelPriority, 0, cSoundPriorityMax, ImVec2(CalcKnobWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
     {
         soundInfo.setChannelPriority(channelPriority);
         SetUnsavedChanges(true);
@@ -376,7 +367,7 @@ static void DrawSoundTypeUI(Sound* sound)
     };
 
     const f32 em = ImGui::GetFontSize();
-    const f32 comboWidth = CalcSoundComboWidth(sSoundTypes, IM_ARRAYSIZE(sSoundTypes));
+    const f32 comboWidth = CalcFitComboWidth(sSoundTypes, IM_ARRAYSIZE(sSoundTypes));
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(ImFloor(em * cSoundPanelPadXEm), ImFloor(em * cSoundPanelPadYEm)));
 
@@ -483,7 +474,7 @@ static void DrawSoundOtherSection(Sound* sound)
 
     ImGui::BeginDisabled(!remoteFilterUsed);
     SetNextKnobReset(0.0);
-    if (KnobU8(cSoundRemoteKnobs[0], &remoteFilter, cPanMin, cPanMax, ImVec2(CalcKnobFitWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
+    if (KnobU8(cSoundRemoteKnobs[0], &remoteFilter, cPanMin, cPanMax, ImVec2(CalcKnobWidth(cSoundSectionKnobs, IM_ARRAYSIZE(cSoundSectionKnobs)), stripHeight)))
     {
         sound->setRemoteFilter(remoteFilter);
         SetUnsavedChanges(true);

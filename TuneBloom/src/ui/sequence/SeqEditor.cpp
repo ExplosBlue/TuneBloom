@@ -7,6 +7,7 @@
 #include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
+#include <ui/widgets/AppFonts.h>
 #include <ui/widgets/Widgets.h>
 
 #include <imgui/imgui.h>
@@ -188,7 +189,7 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
             replaceExtra.icon = ICON_LC_CORNER_DOWN_RIGHT;
             replaceExtra.enterPressed = &replaceEnter;
 
-            const f32 replaceButtonsWidth = ImGui::CalcTextSize(messages::common::cReplace).x + ImGui::CalcTextSize(messages::common::cAll).x + style.FramePadding.x * 4.0f + gap * 3.0f;
+            const f32 replaceButtonsWidth = CalcTextButtonWidth(messages::common::cReplace) + CalcTextButtonWidth(messages::common::cAll) + gap * 3.0f;
             const f32 replaceWidth = ImMin(fieldWidth, ImGui::GetContentRegionAvail().x - button - replaceButtonsWidth);
 
             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + button);
@@ -198,12 +199,12 @@ static void DrawFindBar(TextEditor& editor, const ImVec2& editorMin, const ImVec
 
             ImGui::BeginDisabled(matchNum == 0);
 
-            if (ImGui::Button(messages::common::cReplace) || (replaceEnter && matchNum > 0))
+            if (TextButton(messages::common::cReplace) || (replaceEnter && matchNum > 0))
                 editor.ReplaceCurrent(sReplaceBuffer);
 
             ImGui::SameLine(0.0f, gap);
 
-            if (ImGui::Button(messages::common::cAll))
+            if (TextButton(messages::common::cAll))
                 editor.ReplaceAll(sReplaceBuffer);
 
             ImGui::EndDisabled();
@@ -591,7 +592,9 @@ void DrawSeqEditor(TextEditor& editor)
     const bool paneFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows);
     const ImVec2 editorMin = ImGui::GetCursorScreenPos();
 
+    ImGui::PushFont(GetCodeFont());
     editor.Render("SeqText", ImVec2(0.0f, -(statusHeight + statusGap)));
+    ImGui::PopFont();
 
     const ImVec2 editorMax = ImGui::GetItemRectMax();
 

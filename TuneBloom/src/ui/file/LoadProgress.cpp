@@ -1,6 +1,6 @@
 #include <ui/file/LoadProgress.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/UiColors.h>
 #include <core/TestHooks.h>
 #include <ui/widgets/WindowAnimation.h>

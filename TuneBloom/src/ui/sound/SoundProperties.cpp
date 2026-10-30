@@ -1,6 +1,6 @@
 #include <ui/sound/SoundProperties.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/sound/SoundPanels.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>

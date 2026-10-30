@@ -1,6 +1,6 @@
 #include <ui/stream/StreamTracks.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/OutputMeter.h>
 #include <ui/sound/SoundPanels.h>
 #include <ui/app/UI.h>

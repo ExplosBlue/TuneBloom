@@ -8,7 +8,6 @@
 namespace aal
 {
 
-inline constexpr char cBarsListFileExtension[] = "barslist";
 inline constexpr u16 cBarsListVersion          = 0x0001;
 
 struct BarsList

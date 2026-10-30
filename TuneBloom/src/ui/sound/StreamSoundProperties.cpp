@@ -1,7 +1,7 @@
 #include <ui/sound/SoundProperties.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/UI.h>
 #include <ui/stream/OpusBitrate.h>
 
@@ -46,7 +46,7 @@ bool PickStreamFilePath(sead::BufferedSafeString* outPath, Item* owner)
 
     if (!Bfsar::GetStreamFolder(archive.getFilePath(), &archiveDir) && !Bfsar::GetStreamFolder(archive.getLoadedArchivePath(), &archiveDir))
     {
-        PopupMgr::instance()->addPopup({messages::stream::cReloadNoArchiveFolder, owner});
+        MessageLog::instance()->addPopup({messages::stream::cReloadNoArchiveFolder, owner});
         return false;
     }
 
@@ -56,7 +56,7 @@ bool PickStreamFilePath(sead::BufferedSafeString* outPath, Item* owner)
     if (error || relativePath.empty())
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cReplaceOutsideArchiveFolderFormat, pickedPath.cstr());
-        PopupMgr::instance()->addPopup({msg, owner});
+        MessageLog::instance()->addPopup({msg, owner});
         return false;
     }
 
@@ -65,7 +65,7 @@ bool PickStreamFilePath(sead::BufferedSafeString* outPath, Item* owner)
     if (newPath.rfind("..", 0) == 0)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cReplaceOutsideArchiveFolderFormat, newPath.c_str());
-        PopupMgr::instance()->addPopup({msg, owner});
+        MessageLog::instance()->addPopup({msg, owner});
     }
 
     outPath->copy(newPath.c_str());

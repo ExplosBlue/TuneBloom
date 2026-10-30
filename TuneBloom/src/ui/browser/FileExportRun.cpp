@@ -5,10 +5,10 @@
 #include <ui/export/ExportInternal.h>
 #include <ui/file/FileDialogs.h>
 #include <ui/widgets/Widgets.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <aal/AudioResource.h>
-#include <browser/FileIndex.h>
+#include <scan/FileIndex.h>
 #include <bfsar/files/LooseStreamFile.h>
 #include <bfsar/files/WaveFile.h>
 #include <bfsar/io/FileIo.h>

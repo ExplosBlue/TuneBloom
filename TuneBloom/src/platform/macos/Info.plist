@@ -30,7 +30,7 @@
     <array>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Sound Archive (BFSAR)</string>
+            <string>BFSAR Sound Archive</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -44,7 +44,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Sound Archive (BCSAR)</string>
+            <string>BCSAR Sound Archive</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -58,7 +58,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Compressed File (cmpbin)</string>
+            <string>CMPBIN Compressed File</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -72,7 +72,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Audio Resource (BARS)</string>
+            <string>BARS Audio Resource</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -86,7 +86,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Wave (BWAV)</string>
+            <string>BWAV Sound</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -100,7 +100,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Stream (BFSTM)</string>
+            <string>BFSTM Stream</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -114,7 +114,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Stream (BCSTM)</string>
+            <string>BCSTM Stream</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -128,7 +128,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Wave (BFWAV)</string>
+            <string>BFWAV Sound</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -142,7 +142,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Nintendo Wave (BCWAV)</string>
+            <string>BCWAV Sound</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -156,7 +156,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Compressed File (zs)</string>
+            <string>ZS Compressed File</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -170,7 +170,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Sound Archive in BEA (bea)</string>
+            <string>BEA Archive</string>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
             <key>LSHandlerRank</key>
@@ -184,7 +184,7 @@
         </dict>
         <dict>
             <key>CFBundleTypeName</key>
-            <string>Sound Pack (pack)</string>
+            <string>PACK Archive</string>
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>LSHandlerRank</key>

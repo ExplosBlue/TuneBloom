@@ -4,9 +4,9 @@
 
 #include <bfsar/archive/BfsarOpenContext.h>
 
-#include <ui/file/LoadProgress.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/ModelEvents.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <snd/snd_BankFileReader.h>
 #include <snd/snd_WaveArchiveFileReader.h>
@@ -56,19 +56,19 @@ template <typename File>
 static void ReadInnerFileItem(Bfsar* archive, File* item, const ByteRange& file, bool isLayoutValid)
 {
     item->setArchive(archive);
-    PopupMgr::instance()->setCurrentProcessItem(item);
+    MessageLog::instance()->setCurrentProcessItem(item);
 
     if (!isLayoutValid || !item->read(file.data()))
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cInnerFileUnreadable);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cInnerFileUnreadable);
 }
 
 void Bfsar::readSequenceFiles_(BfsarOpenContext& ctx)
 {
-    loadprogress::BeginStage(loadprogress::Stage::SequenceFiles);
+    modelevents::BeginLoadStage(modelevents::LoadStage::SequenceFiles);
 
     for (u32 i = 0; i < ctx.soundArchive.detail_GetFileCount(); i++)
     {
-        loadprogress::Step();
+        modelevents::StepLoad();
 
         const ByteRange seqFile = FindArchiveFile(ctx, i);
 
@@ -101,7 +101,7 @@ static bool OpenWaveArchiveFile(const BfsarOpenContext& ctx, u32 fileId, nw::snd
 
     if (IsInnerFileKind(file, InnerFileKind::WaveArchive) && !CheckWaveArchiveLayout(file))
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cWaveArchiveFileDamaged);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cWaveArchiveFileDamaged);
         return false;
     }
 
@@ -124,9 +124,9 @@ void Bfsar::hashWaveArchiveFiles_(BfsarOpenContext& ctx)
     ctx.waveIdMapSet.resize(warcNum);
     ctx.warcWaveHashes.resize(warcNum);
 
-    loadprogress::BeginStage(loadprogress::Stage::WaveFiles);
+    modelevents::BeginLoadStage(modelevents::LoadStage::WaveFiles);
 
-    PopupMgr::instance()->setCurrentProcessItem(nullptr);
+    MessageLog::instance()->setCurrentProcessItem(nullptr);
 
     std::vector<WaveHashJob> jobs;
 
@@ -162,7 +162,7 @@ Item* Bfsar::addGenWaveArchive_(BfsarOpenContext& ctx, u32 index, const SoundArc
     warc->mId = index;
     warc->mItemType = Item::ItemType::WaveArchive;
 
-    PopupMgr::instance()->setCurrentProcessItem(warc);
+    MessageLog::instance()->setCurrentProcessItem(warc);
     mGenWaveArchiveList.pushBack(warc);
 
     warc->mEnableName = true;
@@ -171,7 +171,7 @@ Item* Bfsar::addGenWaveArchive_(BfsarOpenContext& ctx, u32 index, const SoundArc
     readItemName_(ctx, warc, warcInfo.GetStringId(), isGenerated ? "@AutoGen_WARC_%u" : "WARC_%u");
 
     if (warcInfo.isLoadIndividual && warcInfo.optionParameter.GetTrueCount(nw::snd::internal::WAVE_ARCHIVE_INFO_WAVE_COUNT) == 0)
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cWaveArchiveNoWaveCount);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cWaveArchiveNoWaveCount);
 
     return warc;
 }
@@ -243,14 +243,14 @@ bool Bfsar::readWaveArchiveFiles_(BfsarOpenContext& ctx)
 
     for (u32 i = 0; i < warcNum; i++)
     {
-        loadprogress::Step();
+        modelevents::StepLoad();
 
         const u32 waveArchiveId = ctx.soundArchive.GetWaveArchiveIdFromIndex(i);
         const SoundArchiveFile::WaveArchiveInfo* warcInfo = ctx.soundArchive.GetWaveArchiveInfo(waveArchiveId);
 
         if (!warcInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidWaveArchiveInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidWaveArchiveInfo);
             return false;
         }
 
@@ -275,7 +275,7 @@ bool Bfsar::readWaveArchives_(BfsarOpenContext& ctx)
 
         if (!warcInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidWaveArchiveInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidWaveArchiveInfo);
             return false;
         }
 
@@ -284,7 +284,7 @@ bool Bfsar::readWaveArchives_(BfsarOpenContext& ctx)
 
         WaveArchive* warc = new(ctx.heap) WaveArchive();
         warc->mId = i;
-        PopupMgr::instance()->setCurrentProcessItem(warc);
+        MessageLog::instance()->setCurrentProcessItem(warc);
 
         warc->mEnableName = true;
         readItemName_(ctx, warc, warcInfo->GetStringId(), "WARC_%u");
@@ -569,7 +569,7 @@ static void PatchFileWaveIds(BfsarOpenContext& ctx, u32 fileId, WaveIdTableFinde
 
 bool Bfsar::patchBankFileWaveIds_(BfsarOpenContext& ctx)
 {
-    PopupMgr::instance()->setCurrentProcessItem(nullptr);
+    MessageLog::instance()->setCurrentProcessItem(nullptr);
 
     for (u32 i = 0; i < ctx.soundArchive.GetBankCount(); i++)
     {
@@ -577,7 +577,7 @@ bool Bfsar::patchBankFileWaveIds_(BfsarOpenContext& ctx)
 
         if (!bankInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidBankInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidBankInfo);
             return false;
         }
 
@@ -589,7 +589,7 @@ bool Bfsar::patchBankFileWaveIds_(BfsarOpenContext& ctx)
 
 bool Bfsar::patchWaveSoundFileWaveIds_(BfsarOpenContext& ctx)
 {
-    PopupMgr::instance()->setCurrentProcessItem(nullptr);
+    MessageLog::instance()->setCurrentProcessItem(nullptr);
 
     for (u32 i = 0; i < ctx.soundArchive.GetSoundGroupCount(); i++)
     {
@@ -597,7 +597,7 @@ bool Bfsar::patchWaveSoundFileWaveIds_(BfsarOpenContext& ctx)
 
         if (!soundSetInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidSoundGroupInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidSoundGroupInfo);
             return false;
         }
 
@@ -646,11 +646,11 @@ void Bfsar::readBankFiles_(BfsarOpenContext& ctx)
 
     std::unordered_multimap<std::string, BankFileEntry> readBankFiles;
 
-    loadprogress::BeginStage(loadprogress::Stage::BankFiles);
+    modelevents::BeginLoadStage(modelevents::LoadStage::BankFiles);
 
     for (u32 i = 0; i < ctx.soundArchive.detail_GetFileCount(); i++)
     {
-        loadprogress::Step();
+        modelevents::StepLoad();
 
         if (!bankFileIndices.contains(i))
             continue;

@@ -1,15 +1,16 @@
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 
 #include <aal/BarsList.h>
 #include <aal/BarsSarc.h>
 #include <bfsar/archive/Bea.h>
 #include <bfsar/archive/Cmpbin.h>
 #include <bfsar/files/WaveFile.h>
+#include <bfsar/io/PackFile.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/ByteView.h>
 #include <core/NwFile.h>
 #include <core/Sarc.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -247,8 +248,8 @@ static bool ProbeSarc(const void* data, u64 size, FileProbe* out)
     if (!sarc::ReadIndex(data, size, &index))
         return false;
 
-    const bool isPack = aal::IsSoundPackIndex(index);
-    const u32 count = isPack ? aal::CountPackResources(index) : aal::CountBarsSarcAssets(index);
+    const bool isPack = packfile::IsSoundPackIndex(index);
+    const u32 count = isPack ? packfile::CountPackResources(index) : aal::CountBarsSarcAssets(index);
 
     if (count == 0)
         return false;

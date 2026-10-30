@@ -2,7 +2,7 @@
 
 #include <bfsar/files/BankFile.h>
 #include <ui/file/File.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/file/UnsavedChanges.h>
 

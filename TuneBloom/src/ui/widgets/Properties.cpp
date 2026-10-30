@@ -3,7 +3,7 @@
 #include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/PanelLayout.h>
 #include <ui/widgets/Widgets.h>
 

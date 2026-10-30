@@ -2,7 +2,7 @@
 
 #include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/file/SystemShell.h>
 #include <ui/settings/Theme.h>

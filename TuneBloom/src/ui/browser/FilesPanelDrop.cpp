@@ -3,7 +3,7 @@
 #include <ui/browser/FilesPanel.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Widgets.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>

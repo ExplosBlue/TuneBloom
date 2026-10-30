@@ -8,10 +8,10 @@
 #include <ui/file/FileFlow.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/LoadProgress.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerFrame.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/file/RecentFiles.h>
 #include <core/TestHooks.h>
 #include <ui/file/UnsavedChanges.h>
@@ -320,7 +320,7 @@ static void UnloadDocument(Document& document)
 {
     CaptureUnloadedLayout(document);
 
-    PopupMgr::instance()->forgetAllItems();
+    MessageLog::instance()->forgetAllItems();
     ReleasePlayback(document);
 
     DocumentState& state = document.state();
@@ -329,7 +329,7 @@ static void UnloadDocument(Document& document)
         selection = SelectionState();
 
     state.scrollItem = nullptr;
-    state.itemErrors = PopupMgr::ItemErrors();
+    state.itemErrors = MessageLog::ItemErrors();
     state.savedItems.clear();
     state.memoryEstimate = 0;
 
@@ -349,14 +349,14 @@ static bool ReloadDocument(Document& document)
         reloaded = document.reload();
     }
 
-    PopupMgr::instance()->discardProcessedErrors();
+    MessageLog::instance()->discardProcessedErrors();
     loadprogress::End();
 
     if (!reloaded)
         return false;
 
     DocumentState& state = document.state();
-    state.editGeneration = NewEditGeneration();
+    state.editGeneration = modelevents::NewEditGeneration();
     state.memoryEstimate = document.estimateMemory();
 
     RestoreUnloadedLayout(document);
@@ -395,10 +395,10 @@ static void RemoveDocument(Document* document)
     if (document == sActive)
     {
         CancelPendingExportsAndImports();
-        PopupMgr::instance()->closeFile();
+        MessageLog::instance()->closeFile();
     }
 
-    PopupMgr::instance()->forgetAllItems();
+    MessageLog::instance()->forgetAllItems();
     ForgetDocumentRequests(document);
     ForgetPlayerFrameDocument(document);
     ReleasePlayback(*document);

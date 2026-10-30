@@ -8,7 +8,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/project/References.h>

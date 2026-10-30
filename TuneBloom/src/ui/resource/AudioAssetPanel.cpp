@@ -7,9 +7,9 @@
 #include <ui/widgets/Knob.h>
 #include <ui/wave/LoopWaveformEditor.h>
 #include <ui/wave/WaveformBox.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/widgets/Properties.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveFormatUI.h>
@@ -166,7 +166,7 @@ void AudioAssetPanel::commitLoop(FrameContext& ctx, bool isLoop, u32 loopStartFr
     if (!ActiveAudioResource().setLoop(ctx.asset, isLoop, loopStartFrame, &error))
     {
         mLoopStartFrame = ctx.info->loopStartFrame;
-        PopupMgr::instance()->addPopup({ error, ctx.asset });
+        MessageLog::instance()->addPopup({ error, ctx.asset });
         return;
     }
 

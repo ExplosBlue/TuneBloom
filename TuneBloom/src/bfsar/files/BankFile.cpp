@@ -2,12 +2,14 @@
 
 #include <core/Debug.h>
 
+#include <bfsar/archive/Bfsar.h>
 #include <bfsar/io/FileWriter.h>
 #include <bfsar/io/WaveIdTableWriter.h>
+#include <bfsar/model/WaveArchive.h>
+#include <bfsar/player/SoundPlayer.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
-#include <ui/app/UI.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <algorithm>
 #include <unordered_map>
@@ -22,7 +24,7 @@ static constexpr s32 cInstrumentCountMax = 32767;
 static void PushInstrumentError(const char* format, u32 instrumentId)
 {
     sead::FormatFixedSafeString<256> msg(format, instrumentId);
-    PopupMgr::instance()->pushCurrentItemError(msg);
+    MessageLog::instance()->pushCurrentItemError(msg);
 }
 
 static std::vector<u8> CollectIndexChunkBorders(const nw::snd::internal::IndexChunk& indexChunk, const char* errorFormat, u32 instrumentId)
@@ -453,69 +455,6 @@ s16 FindNextAvailableProgramNo(const Item::List &instrumentList, const BankFile:
     return prog;
 }
 
-struct SharedProgramNoCache
-{
-    const sead::TList<Item*>* instrumentList;
-    std::vector<s16> sharedProgramNos;
-};
-
-static std::vector<SharedProgramNoCache> sSharedProgramNoCaches;
-static s32 sSharedProgramNoCacheFrame = -1;
-
-static std::vector<s16> CollectSharedProgramNos(const sead::TList<Item*>& instrumentList)
-{
-    std::vector<s16> programNos;
-    programNos.reserve(instrumentList.size());
-
-    for (const Item* item : instrumentList)
-        programNos.push_back(static_cast<const BankFile::Instrument*>(item)->getProgramNo());
-
-    std::sort(programNos.begin(), programNos.end());
-
-    std::vector<s16> sharedProgramNos;
-
-    for (size_t i = 1; i < programNos.size(); i++)
-    {
-        if (programNos[i] == programNos[i - 1] && (sharedProgramNos.empty() || sharedProgramNos.back() != programNos[i]))
-            sharedProgramNos.push_back(programNos[i]);
-    }
-
-    return sharedProgramNos;
-}
-
-static const std::vector<s16>& FindSharedProgramNos(const sead::TList<Item*>& instrumentList)
-{
-    const s32 frame = ImGui::GetFrameCount();
-
-    if (sSharedProgramNoCacheFrame != frame)
-    {
-        sSharedProgramNoCaches.clear();
-        sSharedProgramNoCacheFrame = frame;
-    }
-
-    for (const SharedProgramNoCache& cache : sSharedProgramNoCaches)
-    {
-        if (cache.instrumentList == &instrumentList)
-            return cache.sharedProgramNos;
-    }
-
-    sSharedProgramNoCaches.push_back({ &instrumentList, CollectSharedProgramNos(instrumentList) });
-
-    return sSharedProgramNoCaches.back().sharedProgramNos;
-}
-
-bool IsProgramNoShared(const BankFile::Instrument* instrument)
-{
-    const sead::TList<Item*>* instrumentList = instrument->list();
-
-    if (!instrumentList)
-        return false;
-
-    const std::vector<s16>& sharedProgramNos = FindSharedProgramNos(*instrumentList);
-
-    return std::binary_search(sharedProgramNos.begin(), sharedProgramNos.end(), instrument->getProgramNo());
-}
-
 bool BankFile::doRead(const void* fileAddr)
 {
     LOG_FUNC();
@@ -531,7 +470,7 @@ bool BankFile::doRead(const void* fileAddr)
     if (reader.GetInstrumentCount() < 0 || reader.GetInstrumentCount() > cInstrumentCountMax)
     {
         sead::FormatFixedSafeString<256> msg(messages::bank::cInstrumentCountInvalidFormat, reader.GetInstrumentCount());
-        PopupMgr::instance()->pushCurrentItemError(msg);
+        MessageLog::instance()->pushCurrentItemError(msg);
         return false;
     }
 

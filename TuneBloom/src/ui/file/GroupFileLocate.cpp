@@ -6,7 +6,7 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/file/FileFlow.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>

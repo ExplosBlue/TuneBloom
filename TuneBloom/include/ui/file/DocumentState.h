@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
+#include <bfsar/model/ModelEvents.h>
 #include <ui/file/Document.h>
 #include <ui/items/Selection.h>
 
@@ -10,7 +11,6 @@
 
 class FileWindow;
 
-u64 NewEditGeneration();
 u32 NewDocumentSerial();
 
 struct DocumentState
@@ -73,7 +73,7 @@ struct DocumentState
     };
 
     bool unsaved = false;
-    u64 editGeneration = NewEditGeneration();
+    u64 editGeneration = modelevents::NewEditGeneration();
     std::vector<SavedItem> savedItems;
 
     UIType tab = UIType::ProjectInfo;
@@ -85,7 +85,7 @@ struct DocumentState
     FileWindow* shownFileWindow = nullptr;
     Backup backup;
 
-    PopupMgr::ItemErrors itemErrors;
+    MessageLog::ItemErrors itemErrors;
 
     u32 serial = NewDocumentSerial();
     std::string canonicalPath;

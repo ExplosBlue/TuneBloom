@@ -9,7 +9,7 @@
 #include <ui/file/FileDrag.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/app/MenuBar.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/PathText.h>
 #include <core/TestHooks.h>
 #include <ui/file/SystemShell.h>

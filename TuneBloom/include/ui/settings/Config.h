@@ -1,5 +1,7 @@
 #pragma once
 
+#include <bfsar/archive/SaveSettings.h>
+
 #include <basis/seadTypes.h>
 
 #include <string>
@@ -77,9 +79,6 @@ struct StartupSettings
 
 extern f32 gMasterVolume;
 
-extern bool sSaveMetadataDefault;
-extern bool sForceSaveWhenInUse;
-extern bool sDeleteUnusedGroupFiles;
 
 extern bool sAutoBackupEnabled;
 extern s32 sAutoBackupIntervalMinutes;

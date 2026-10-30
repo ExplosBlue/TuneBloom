@@ -3,7 +3,7 @@
 #include <ui/app/Workspace.h>
 #include <ui/file/Document.h>
 #include <ui/file/UnsavedChanges.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/widgets/Properties.h>
 #include <ui/widgets/Widgets.h>

@@ -2,7 +2,7 @@
 
 #include <ui/file/File.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/Workspace.h>
 #include <ui/widgets/Widgets.h>

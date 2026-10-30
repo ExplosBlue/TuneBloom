@@ -4,7 +4,7 @@
 #include <ui/player/PlayerViews.h>
 #include <ui/wave/LooseWaveInfo.h>
 
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 
 Document* LooseWaveDocument::Open(File* file, const sead::SafeString& path)
 {

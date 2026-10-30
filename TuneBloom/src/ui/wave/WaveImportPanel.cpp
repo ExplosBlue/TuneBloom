@@ -1,7 +1,7 @@
 #include <ui/wave/WaveImportPanel.h>
 
 #include <ui/widgets/Dialogs.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/wave/WaveImportPanelInternal.h>
 

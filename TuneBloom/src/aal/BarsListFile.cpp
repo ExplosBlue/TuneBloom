@@ -5,7 +5,7 @@
 #include <bfsar/io/PackFile.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/FileName.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <cstring>
 #include <filesystem>
@@ -54,7 +54,7 @@ static void AddLooseBars(const fs::path& root, const fs::path& base, FoundBarsMa
 
         const std::string name = GetDiskName(path);
 
-        if (!filename::HasExactExtension(name, aal::cBarsFileExtension) || !it->is_regular_file(entryError))
+        if (!filename::HasExactExtension(name, cBarsExtension) || !it->is_regular_file(entryError))
             continue;
 
         found->emplace(name, FoundBars { path, MakeLocation(it->path().parent_path(), base), it->file_size(entryError) });
@@ -78,7 +78,7 @@ static void AddPackBars(const fs::path& folder, const fs::path& base, FoundBarsM
         {
             const std::string name = fs::path(resource.name).filename().string();
 
-            if (filename::HasExactExtension(name, aal::cBarsFileExtension))
+            if (filename::HasExactExtension(name, cBarsExtension))
                 found->emplace(name, FoundBars { packfile::MakePath(packPath, resource.name), MakeLocation(it->path(), base), resource.size });
         }
     }
@@ -163,7 +163,7 @@ bool BarsListFile::IsValidEntryName(const sead::SafeString& name)
 {
     const std::string text = name.cstr();
 
-    if (!filename::HasExactExtension(text, aal::cBarsFileExtension) || text.front() == ' ')
+    if (!filename::HasExactExtension(text, cBarsExtension) || text.front() == ' ')
         return false;
 
     for (const char c : text)

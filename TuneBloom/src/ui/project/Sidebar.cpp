@@ -5,7 +5,7 @@
 #include <ui/file/DocumentMgr.h>
 #include <ui/file/FileDrag.h>
 #include <ui/project/ProjectViews.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>

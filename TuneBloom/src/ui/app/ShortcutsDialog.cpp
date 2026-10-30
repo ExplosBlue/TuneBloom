@@ -3,7 +3,7 @@
 #include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/app/Shortcuts.h>
 

@@ -1,7 +1,7 @@
 #include <ui/sound/SoundProperties.h>
 
 #include <ui/widgets/ContextMenu.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/UI.h>
 
 void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)

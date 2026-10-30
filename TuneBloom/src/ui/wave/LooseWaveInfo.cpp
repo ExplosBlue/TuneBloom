@@ -2,7 +2,7 @@
 
 #include <ui/file/LooseFileInfo.h>
 #include <ui/project/FileLists.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/widgets/TabRowTools.h>
 

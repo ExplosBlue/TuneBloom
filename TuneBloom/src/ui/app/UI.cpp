@@ -17,12 +17,12 @@
 #include <ui/project/ItemViews.h>
 #include <ui/widgets/Knob.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/OutputMeter.h>
 #include <ui/player/PlayerFrame.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/settings/Preferences.h>
 #include <ui/project/ProjectViews.h>
 #include <ui/project/Sidebar.h>

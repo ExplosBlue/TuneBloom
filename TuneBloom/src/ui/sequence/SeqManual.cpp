@@ -1,6 +1,6 @@
 #include <ui/sequence/SeqManual.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>

@@ -1,6 +1,6 @@
 #include <ui/wave/WaveFormatUI.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Widgets.h>
 
 #include <aal/Bwav.h>

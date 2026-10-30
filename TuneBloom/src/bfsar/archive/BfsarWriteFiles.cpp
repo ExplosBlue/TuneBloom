@@ -6,7 +6,7 @@
 #include <bfsar/files/BfwarFile.h>
 #include <bfsar/files/BfwsdFile.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <algorithm>
 

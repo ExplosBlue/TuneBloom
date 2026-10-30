@@ -1,6 +1,6 @@
 #include <ui/settings/FileAssociationDialog.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/FileAssociation.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Dialogs.h>

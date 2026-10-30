@@ -1,6 +1,6 @@
 #include <ui/file/LooseFileInfo.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 
 #include <bfsar/files/WaveFile.h>

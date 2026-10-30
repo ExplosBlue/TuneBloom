@@ -4,7 +4,7 @@
 #include <ui/export/ExportInternal.h>
 #include <ui/file/FileDialogs.h>
 #include <ui/file/LoadProgress.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/file/SystemShell.h>
 #include <ui/widgets/Widgets.h>

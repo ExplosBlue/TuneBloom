@@ -8,7 +8,7 @@
 #include <ui/file/FileFlow.h>
 #include <ui/file/FileWindow.h>
 #include <ui/browser/FilesPanel.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/PathText.h>
 #include <ui/file/SystemShell.h>
 #include <ui/items/Selection.h>

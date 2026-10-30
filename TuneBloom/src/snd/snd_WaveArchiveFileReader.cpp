@@ -4,8 +4,8 @@
 #include <prim/seadMemUtil.h>
 
 #include <bfsar/model/ArchiveFormat.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #define NW_SND_DEBUG_PRINT_ENABLE
 
@@ -32,7 +32,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
 {
     if (pWaveArchiveFile == nullptr)
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::reader::cNoFile);
+        MessageLog::instance()->pushCurrentItemError(messages::reader::cNoFile);
         return;
     }
 
@@ -42,7 +42,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::WaveArchive);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotWaveArchiveFile);
+            MessageLog::instance()->pushCurrentItemError(messages::reader::cNotWaveArchiveFile);
             return;
         }
 
@@ -52,7 +52,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
             if (major < 1)
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -61,7 +61,7 @@ void WaveArchiveFileReader::Initialize(const void* pWaveArchiveFile, bool isIndi
             if (!Util::IsHighByteMajorVersion((u32)header->version) && (u32)header->version != 0x00010000)
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }

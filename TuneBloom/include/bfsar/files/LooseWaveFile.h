@@ -3,6 +3,15 @@
 #include <bfsar/files/WaveFile.h>
 #include <core/SaveResult.h>
 
+#include <vector>
+
+WaveFile* ReadFwavFile(const void* data, size_t size);
+
+inline WaveFile* ReadFwavFile(const std::vector<u8>& file)
+{
+    return ReadFwavFile(file.data(), file.size());
+}
+
 class LooseWaveFile
 {
 public:

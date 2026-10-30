@@ -2,12 +2,12 @@
 
 #include <ui/backup/BackupInternal.h>
 #include <ui/file/LooseFileInfo.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/resource/ResourceViews.h>
 
 #include <bfsar/io/FileIo.h>
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 
 #include <filesystem>
 
@@ -30,7 +30,7 @@ Document* AudioResourceDocument::Open(File* file, const sead::SafeString& path)
     if (document->resource().open(std::move(bytes), path, &error))
         return document;
 
-    PopupMgr::instance()->addPopup({ error, nullptr });
+    MessageLog::instance()->addPopup({ error, nullptr });
 
     delete document;
     return nullptr;
@@ -217,7 +217,7 @@ bool AudioResourceDocument::prepareSave()
     if (mResource.validate(&error, &item))
         return true;
 
-    PopupMgr::instance()->addPopup({ error, const_cast<Item*>(item) });
+    MessageLog::instance()->addPopup({ error, const_cast<Item*>(item) });
     return false;
 }
 
@@ -287,6 +287,6 @@ void AudioResourceDocument::restoreSidecars(const backup::Snapshot& snapshot)
             continue;
 
         const sead::FormatFixedSafeString<1024> message(messages::backup::cRestoreStreamFormat, stream.path.c_str());
-        PopupMgr::instance()->addPopup({ message, nullptr });
+        MessageLog::instance()->addPopup({ message, nullptr });
     }
 }

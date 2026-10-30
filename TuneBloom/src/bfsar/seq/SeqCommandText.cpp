@@ -3,7 +3,7 @@
 #include <bfsar/files/InnerFile.h>
 #include <bfsar/seq/SeqCommand.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <core/Debug.h>
 

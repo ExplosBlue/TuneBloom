@@ -1,7 +1,7 @@
 #include <ui/sound/SoundProperties.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/UI.h>
 
 #include <imgui/imgui_custom.h>
@@ -85,7 +85,7 @@ static void OpenSequenceAtLabel(SequenceFile* seqFile, Sound::SequenceSoundInfo&
 {
     if (seqFile->getLabelOffset(startLabel) == SequenceFile::cInvaldOffset)
     {
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<128>(messages::sound::cStartLabelNotFoundFormat, startLabel.cstr()).cstr(), nullptr });
+        MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<128>(messages::sound::cStartLabelNotFoundFormat, startLabel.cstr()).cstr(), nullptr });
         return;
     }
 

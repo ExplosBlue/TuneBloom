@@ -1,6 +1,6 @@
 #include <ui/widgets/RangeCell.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/UiColors.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/widgets/Knob.h>

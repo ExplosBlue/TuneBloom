@@ -1,6 +1,7 @@
 #include <bfsar/archive/GroupFilePaths.h>
 
-#include <ui/settings/ConfigFile.h>
+#include <bfsar/model/ModelEvents.h>
+#include <core/Json.h>
 
 #include <libs/md5.h>
 
@@ -65,7 +66,7 @@ static Entry& SetSessionEntry(const std::string& key, const std::string& path)
 static void Store(const std::string& key, const std::string& path)
 {
     json::Value section;
-    LoadConfigSection(cStateFile, cConfigSection, &section);
+    modelevents::LoadState(cConfigSection, &section);
 
     const std::string* stored = section.findString(key.c_str());
 
@@ -73,7 +74,7 @@ static void Store(const std::string& key, const std::string& path)
         return;
 
     section.setString(key.c_str(), path.c_str());
-    SaveConfigSection(cStateFile, cConfigSection, section);
+    modelevents::SaveState(cConfigSection, section);
 }
 
 void Select(const sead::SafeString& archivePath, const sead::SafeString& groupName, const std::string& path, bool keep)
@@ -106,7 +107,7 @@ std::string Find(const sead::SafeString& archivePath, const sead::SafeString& gr
 
     json::Value section;
 
-    if (!LoadConfigSection(cStateFile, cConfigSection, &section))
+    if (!modelevents::LoadState(cConfigSection, &section))
         return std::string();
 
     const std::string* stored = section.findString(key.c_str());

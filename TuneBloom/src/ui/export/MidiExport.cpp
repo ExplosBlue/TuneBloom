@@ -5,8 +5,8 @@
 #include <ui/export/ExportInternal.h>
 #include <ui/file/FileDialogs.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/widgets/Properties.h>
 #include <ui/project/References.h>
 #include <ui/widgets/Widgets.h>
@@ -361,7 +361,7 @@ static void ExportMidiSoundsToFolder()
     }
 
     if (failureCount > 0)
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cMidisExportFailedOneFormat : messages::exporting::cMidisExportFailedFormat, failureCount), nullptr });
+        MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cMidisExportFailedOneFormat : messages::exporting::cMidisExportFailedFormat, failureCount), nullptr });
 
     ShowExportedFiles(dirPath);
 }
@@ -378,7 +378,7 @@ static void ExportMidiSoundToFile(const MidiSoundEntry& entry)
     if (ExportMidiSound(entry, MakeSoundFilter(entry), path))
         ShowExportedFiles(path);
     else
-        PopupMgr::instance()->addPopup({ messages::exporting::cMidiExportFailed, nullptr });
+        MessageLog::instance()->addPopup({ messages::exporting::cMidiExportFailed, nullptr });
 }
 
 void ExportPendingMidi()

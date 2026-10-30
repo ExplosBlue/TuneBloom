@@ -1,7 +1,7 @@
 #include <ui/resource/BarsListViews.h>
 
 #include <aal/BarsListFile.h>
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 #include <ui/browser/FilesPanel.h>
 #include <ui/file/BarsListDocument.h>
 #include <ui/file/FileDrag.h>
@@ -17,17 +17,16 @@
 #include <ui/widgets/ListFilter.h>
 #include <ui/widgets/Properties.h>
 #include <ui/widgets/Widgets.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <bfsar/model/ArchiveFormat.h>
+#include <core/FileName.h>
 #include <libs/IconsLucide.h>
 
 #include <imgui/imgui.h>
 
 #include <filesystem>
 #include <string>
-
-static constexpr char cBarsExtension[] = ".bars";
 
 const FoundBars* FindEntryBars(const Item* item)
 {
@@ -83,7 +82,7 @@ static std::string GetDroppedBarsName(const std::string& path)
     if (IsZstdPath(name.string().c_str()))
         name = name.stem();
 
-    return name.extension() == cBarsExtension ? name.string() : std::string();
+    return filename::HasExactExtension(name.string(), cBarsExtension) ? name.string() : std::string();
 }
 
 static bool DropBarsFiles(const FileDrag& drag, bool isDropped)
@@ -117,7 +116,7 @@ LooseFileFormat GetBarsListFormat(const BarsListFile& file)
 {
     LooseFileFormat format;
     format.name = messages::barslist::cFormatName;
-    format.extension = aal::cBarsListFileExtension;
+    format.extension = cBarsListExtension;
     format.version.format("%u", file.getSavedList().version);
     format.endian = file.getSavedList().isBigEndian ? sead::Endian::eBig : sead::Endian::eLittle;
 

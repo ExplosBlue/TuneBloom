@@ -1,7 +1,7 @@
 #include <bfsar/player/SoundPlayer.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <snd/BankR.h>
 #include <snd/ChannelMgr.h>
@@ -60,7 +60,7 @@ bool SoundPlayer::playBankNotePoly(u8 key, u8 velocity, const BankFile::Velocity
 
     if (waveFile->getChannels().isEmpty())
     {
-        PopupMgr::instance()->addPopup({messages::playback::cWaveFileNoChannels, nullptr});
+        MessageLog::instance()->addPopup({messages::playback::cWaveFileNoChannels, nullptr});
         return false;
     }
 

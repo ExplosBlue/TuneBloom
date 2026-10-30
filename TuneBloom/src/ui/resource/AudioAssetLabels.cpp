@@ -2,9 +2,9 @@
 
 #include <aal/AudioAsset.h>
 #include <aal/AudioResource.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/file/Document.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/items/ItemSelector.h>
@@ -221,7 +221,7 @@ static void CommitLabels(AssetLabelView* view, AudioAsset* asset)
 
     if (!ActiveAudioResource().setLabels(asset, view->labels, &error))
     {
-        PopupMgr::instance()->addPopup({ error, asset });
+        MessageLog::instance()->addPopup({ error, asset });
         return;
     }
 

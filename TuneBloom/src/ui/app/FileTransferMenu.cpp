@@ -5,7 +5,7 @@
 #include <ui/file/File.h>
 #include <ui/project/ItemViews.h>
 #include <ui/app/MenuBar.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/items/Selection.h>
 #include <ui/sound/SoundViews.h>
 

@@ -1,9 +1,9 @@
-#include <browser/FileIndex.h>
+#include <scan/FileIndex.h>
 
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
 #include <bfsar/model/ArchiveFormat.h>
-#include <browser/FileIndexCache.h>
+#include <scan/FileIndexCache.h>
 #include <core/ParallelFor.h>
 
 #include <algorithm>

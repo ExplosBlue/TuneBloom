@@ -1,8 +1,8 @@
 #include <ui/file/LooseFileDocument.h>
 
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/backup/Backup.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <filesystem>
 
@@ -70,7 +70,7 @@ Document* LooseFileDocument::OpenAs(LooseFileDocument* document, File* file, con
         return document;
     }
 
-    PopupMgr::instance()->addPopup({ error, nullptr });
+    MessageLog::instance()->addPopup({ error, nullptr });
 
     delete document;
     return nullptr;

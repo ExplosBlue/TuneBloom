@@ -5,7 +5,7 @@
 #include <ui/file/Document.h>
 #include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/UnsavedChanges.h>
 
 #include <bfsar/model/ArchiveFormat.h>

@@ -5,14 +5,14 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/project/FileLists.h>
 #include <ui/project/ItemViews.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/project/ProjectViews.h>
 #include <ui/sound/SoundViews.h>
 
 #include <core/Debug.h>
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 #include <bfsar/model/Sound.h>
 #include <bfsar/player/SoundPlayer.h>
 
@@ -66,8 +66,8 @@ bool SoundArchiveDocument::openArchive(File* file, const sead::SafeString& path,
 
     if (!mArchive->open(data, file->size, path, nullptr, metadataSource))
     {
-        const sead::FormatFixedSafeString<1024> message(messages::archive::cCorruptFormat, GetInnerFileDisplayName(mArchive->getFormat(), InnerFileKind::SoundArchive), PopupMgr::instance()->getCorruptInfo().cstr());
-        PopupMgr::instance()->addPopup({ message, nullptr });
+        const sead::FormatFixedSafeString<1024> message(messages::archive::cCorruptFormat, GetInnerFileDisplayName(mArchive->getFormat(), InnerFileKind::SoundArchive), MessageLog::instance()->getCorruptInfo().cstr());
+        MessageLog::instance()->addPopup({ message, nullptr });
 
         return false;
     }
@@ -317,14 +317,14 @@ bool SoundArchiveDocument::reload()
     if (const char* error = Load(mUnloadedPath, &file))
     {
         Free(&file);
-        PopupMgr::instance()->addPopup({ error, nullptr });
+        MessageLog::instance()->addPopup({ error, nullptr });
         return false;
     }
 
     if (file.kind != Kind::SoundArchive)
     {
         Free(&file);
-        PopupMgr::instance()->addPopup({ messages::archive::cNotArchive, nullptr });
+        MessageLog::instance()->addPopup({ messages::archive::cNotArchive, nullptr });
         return false;
     }
 
@@ -490,7 +490,7 @@ void SoundArchiveDocument::restoreSidecars(const backup::Snapshot& snapshot)
             continue;
 
         const sead::FormatFixedSafeString<1024> message(messages::backup::cRestoreStreamFormat, stream.path.c_str());
-        PopupMgr::instance()->addPopup({ message, nullptr });
+        MessageLog::instance()->addPopup({ message, nullptr });
     }
 }
 

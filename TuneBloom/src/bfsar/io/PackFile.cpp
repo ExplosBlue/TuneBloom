@@ -1,8 +1,9 @@
 #include <bfsar/io/PackFile.h>
 
-#include <aal/BarsSarc.h>
 #include <bfsar/archive/Cmpbin.h>
 #include <bfsar/io/FileIo.h>
+#include <bfsar/model/ArchiveFormat.h>
+#include <core/FileName.h>
 #include <core/Sarc.h>
 
 #include <algorithm>
@@ -102,6 +103,40 @@ static bool ReadIndex(const std::string& path, sarc::Index* out)
     return sarc::ReadIndex(header.data(), header.size(), out);
 }
 
+static bool IsSoundArchiveName(const std::string& name)
+{
+    for (ArchiveFormat format : { ArchiveFormat::BFSAR, ArchiveFormat::BCSAR })
+    {
+        if (filename::HasExactExtension(name, GetInnerFileExtension(format, InnerFileKind::SoundArchive)))
+            return true;
+    }
+
+    return false;
+}
+
+bool IsPackResourceName(const std::string& name)
+{
+    return filename::HasExactExtension(name, cBarsExtension) || filename::HasExactExtension(name, cBarsListExtension) || IsSoundArchiveName(name);
+}
+
+u32 CountPackResources(const sarc::Index& index)
+{
+    u32 count = 0;
+
+    for (const sarc::IndexEntry& entry : index.entries)
+    {
+        if (entry.hasName && IsPackResourceName(entry.name))
+            count++;
+    }
+
+    return count;
+}
+
+bool IsSoundPackIndex(const sarc::Index& index)
+{
+    return CountPackResources(index) > 0;
+}
+
 bool Split(const std::string& path, std::string* outPackPath, std::string* outInnerName)
 {
     std::error_code error;
@@ -199,7 +234,7 @@ bool IsSoundPackFile(const std::string& path)
 {
     sarc::Index index;
 
-    return ReadIndex(path, &index) && aal::IsSoundPackIndex(index);
+    return ReadIndex(path, &index) && IsSoundPackIndex(index);
 }
 
 bool ListResources(const std::string& packPath, std::vector<Resource>* out)
@@ -213,7 +248,7 @@ bool ListResources(const std::string& packPath, std::vector<Resource>* out)
 
     for (const sarc::IndexEntry& entry : index.entries)
     {
-        if (entry.hasName && aal::IsPackResourceName(entry.name))
+        if (entry.hasName && IsPackResourceName(entry.name))
             out->push_back({ entry.name, entry.offset, entry.size });
     }
 

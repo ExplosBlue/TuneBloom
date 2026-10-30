@@ -1,7 +1,7 @@
 #include <ui/stream/StreamTracks.h>
 
 #include <ui/widgets/ContextMenu.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/sound/SoundPanels.h>
 #include <ui/stream/StreamTrackImport.h>

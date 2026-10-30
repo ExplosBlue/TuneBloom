@@ -4,9 +4,9 @@
 #include <ui/file/File.h>
 #include <ui/file/FileDialogs.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/widgets/Properties.h>
 #include <ui/stream/StreamRegions.h>
 #include <ui/settings/UiColors.h>
@@ -560,7 +560,7 @@ bool StreamTrackImport::commit(const std::vector<TrackPlan>& plans, const Import
     if (!createWaves(plans, target, &waves, &failedName))
     {
         sead::FormatFixedSafeString<1024> msg(messages::import::cTrackImportFailedFormat, failedName.cstr());
-        PopupMgr::instance()->addPopup({msg, targetSource.sound});
+        MessageLog::instance()->addPopup({msg, targetSource.sound});
 
         return false;
     }
@@ -613,7 +613,7 @@ void StreamTrackImport::request(const StreamSource& source)
 
     if (!source.stream->getTrackList().isEmpty() && !FindMainWave(*source.stream))
     {
-        PopupMgr::instance()->addPopup({messages::stream::cFileNotLoaded, source.sound});
+        MessageLog::instance()->addPopup({messages::stream::cFileNotLoaded, source.sound});
         return;
     }
 
@@ -733,7 +733,7 @@ void StreamTrackImport::appendPaths(const std::vector<std::string>& paths, Item*
         if (fileCount == cMaxFiles)
         {
             sead::FormatFixedSafeString<128> msg(messages::import::cTrackImportTooManyFilesFormat, cMaxFiles);
-            PopupMgr::instance()->addPopup({msg, owner});
+            MessageLog::instance()->addPopup({msg, owner});
             break;
         }
 

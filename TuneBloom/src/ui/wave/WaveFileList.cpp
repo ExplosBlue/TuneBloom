@@ -9,10 +9,10 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
 #include <ui/stream/OpusBitrate.h>
 #include <ui/stream/StreamRegions.h>
@@ -70,7 +70,7 @@ static void ImportNativeWaveFile(const sead::SafeString& path, const sead::SafeS
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
     if (!device)
     {
-        PopupMgr::instance()->addPopup({messages::import::cNativeDeviceUnavailable, nullptr});
+        MessageLog::instance()->addPopup({messages::import::cNativeDeviceUnavailable, nullptr});
         return;
     }
 
@@ -86,7 +86,7 @@ static void ImportNativeWaveFile(const sead::SafeString& path, const sead::SafeS
 
     if (!fileData)
     {
-        PopupMgr::instance()->addPopup({messages::import::cWaveLoadFailed, nullptr});
+        MessageLog::instance()->addPopup({messages::import::cWaveLoadFailed, nullptr});
         return;
     }
 
@@ -101,7 +101,7 @@ static void ImportNativeWaveFile(const sead::SafeString& path, const sead::SafeS
     {
         delete newWave;
         device->unload(fileData);
-        PopupMgr::instance()->addPopup({messages::import::cWaveReadFailed, nullptr});
+        MessageLog::instance()->addPopup({messages::import::cWaveReadFailed, nullptr});
         return;
     }
 
@@ -287,7 +287,7 @@ void RequestWaveFileReimport(WaveFile* wave)
     DecodedPcm pcm = decodeWaveFileForEditing(*wave);
     if (!pcm.isValid())
     {
-        PopupMgr::instance()->addPopup({messages::import::cReimportDecodeFailed, wave});
+        MessageLog::instance()->addPopup({messages::import::cReimportDecodeFailed, wave});
         return;
     }
 
@@ -300,7 +300,7 @@ void RequestWaveFileReimport(WaveFile* wave)
 
     if (written.empty())
     {
-        PopupMgr::instance()->addPopup({messages::import::cReimportWriteFailed, wave});
+        MessageLog::instance()->addPopup({messages::import::cReimportWriteFailed, wave});
         return;
     }
 
@@ -658,7 +658,7 @@ void DrawWavRegionDropImport()
             else
             {
                 delete wave;
-                PopupMgr::instance()->addPopup({ messages::import::cWaveImportFailed });
+                MessageLog::instance()->addPopup({ messages::import::cWaveImportFailed });
             }
         }
 
@@ -677,6 +677,6 @@ void DrawWavRegionDropImport()
     else if (!sDroppedWavPath.isEmpty() && !sWavDropTargetVel)
     {
         sDroppedWavPath.clear();
-        PopupMgr::instance()->addPopup({ messages::import::cWaveDropNeedsRegion });
+        MessageLog::instance()->addPopup({ messages::import::cWaveDropNeedsRegion });
     }
 }

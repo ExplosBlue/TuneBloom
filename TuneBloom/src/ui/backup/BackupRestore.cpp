@@ -4,8 +4,8 @@
 #include <ui/file/DocumentMgr.h>
 #include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/project/Sidebar.h>
 #include <ui/file/RecentFiles.h>
 #include <ui/file/UnsavedChanges.h>
@@ -66,7 +66,7 @@ static bool ReadSnapshotFile(const std::string& path, Document::File* outFile)
     if (!Document::Load(sead::FixedSafeString<1100>(path.c_str()), outFile) && Document::IsCompleteFile(outFile->data, outFile->size))
         return true;
 
-    PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
+    MessageLog::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
     return false;
 }
 
@@ -74,7 +74,7 @@ static bool CheckSnapshotFile(const Document::File& file, bool untitled)
 {
     if (untitled && file.kind != Document::Kind::SoundArchive)
     {
-        PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
+        MessageLog::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
         return false;
     }
 
@@ -107,11 +107,11 @@ bool RestoreSnapshot(const Snapshot& snapshot)
 
     if (!document)
     {
-        PopupMgr::instance()->discardProcessedErrors();
+        MessageLog::instance()->discardProcessedErrors();
         return false;
     }
 
-    PopupMgr::instance()->moveProcessedErrors(&document->state().itemErrors);
+    MessageLog::instance()->moveProcessedErrors(&document->state().itemErrors);
 
     if (replaced)
         ReplaceDocument(replaced, document);

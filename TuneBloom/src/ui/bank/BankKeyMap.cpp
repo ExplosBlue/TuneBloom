@@ -2,7 +2,7 @@
 
 #include <ui/widgets/ContextMenu.h>
 #include <ui/file/FileDrag.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/bank/PianoRollPalette.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>

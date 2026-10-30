@@ -1,10 +1,10 @@
 #include <ui/file/BarsListDocument.h>
 
 #include <ui/file/LooseFileInfo.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/resource/BarsListViews.h>
 
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 
 #include <filesystem>
 

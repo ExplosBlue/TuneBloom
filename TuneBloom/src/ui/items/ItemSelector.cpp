@@ -5,7 +5,7 @@
 #include <ui/file/File.h>
 #include <ui/items/ItemBrowser.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <core/TestHooks.h>
 #include <ui/items/Selection.h>
 #include <ui/widgets/Widgets.h>

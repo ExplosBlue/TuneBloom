@@ -4,10 +4,10 @@
 #include <bfsar/files/BfwsdFile.h>
 #include <bfsar/files/OpusStream.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
-#include <ui/file/UnsavedChanges.h>
+#include <bfsar/model/ModelEvents.h>
 
 #include <snd/ChannelMgr.h>
 #include <snd/MultiVoiceMgr.h>
@@ -20,6 +20,8 @@
 
 static constexpr std::chrono::milliseconds cSeqRescanInterval(250);
 static constexpr s32 cSeqRescanCostFactor = 10;
+
+SoundPlayer sSoundPlayer;
 
 static const Bfsar& GetSoundArchive(const Sound& sound)
 {
@@ -403,7 +405,7 @@ bool SoundPlayer::playSeqSound_(const Sound* sound)
 
     if (GetSequenceSoundPlaybackError(*sound, &playbackError))
     {
-        PopupMgr::instance()->addPopup({ playbackError, nullptr });
+        MessageLog::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
 
@@ -510,7 +512,7 @@ bool SoundPlayer::playStream_(const StreamSource& source)
 
     if (GetStreamPlaybackError(source, &playbackError))
     {
-        PopupMgr::instance()->addPopup({ playbackError, nullptr });
+        MessageLog::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
 
@@ -544,7 +546,7 @@ bool SoundPlayer::playStream_(const StreamSource& source)
 
         if (!trackInfo.getWaveFileRef().isAttached())
         {
-            PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::playback::cTrackNoWaveFileFormat, i).cstr(), nullptr });
+            MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::playback::cTrackNoWaveFileFormat, i).cstr(), nullptr });
             return false;
         }
 
@@ -552,7 +554,7 @@ bool SoundPlayer::playStream_(const StreamSource& source)
 
         if (waveFile.getChannels().isEmpty())
         {
-            PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::playback::cTrackNoChannelsFormat, i).cstr(), nullptr });
+            MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::playback::cTrackNoChannelsFormat, i).cstr(), nullptr });
             return false;
         }
 
@@ -568,13 +570,13 @@ bool SoundPlayer::playStream_(const StreamSource& source)
         {
             if (mainEncoding != waveFile.getEncoding())
             {
-                PopupMgr::instance()->addPopup({ messages::stream::cTracksSameEncoding, nullptr });
+                MessageLog::instance()->addPopup({ messages::stream::cTracksSameEncoding, nullptr });
                 return false;
             }
 
             if (mainSampleRate != waveFile.getSampleRate())
             {
-                PopupMgr::instance()->addPopup({ messages::stream::cTracksSameSampleRate, nullptr });
+                MessageLog::instance()->addPopup({ messages::stream::cTracksSameSampleRate, nullptr });
                 return false;
             }
         }
@@ -635,7 +637,7 @@ bool SoundPlayer::playWaveSound_(const Sound* sound, u32 startOffsetSample)
 
     if (GetWaveSoundPlaybackError(*sound, &playbackError))
     {
-        PopupMgr::instance()->addPopup({ playbackError, nullptr });
+        MessageLog::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
 
@@ -657,14 +659,14 @@ bool SoundPlayer::playSeqFile(const SequenceFile& seqFile, const sead::SafeStrin
 
     if (!seqFile.isValid())
     {
-        PopupMgr::instance()->addPopup({ messages::sequence::cNotCompiled, nullptr });
+        MessageLog::instance()->addPopup({ messages::sequence::cNotCompiled, nullptr });
         return false;
     }
 
     u32 startOffset = seqFile.getLabelOffset(startLabel);
     if (startOffset == SequenceFile::cInvaldOffset)
     {
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<128>(messages::sound::cStartLabelNotFoundFormat,startLabel.cstr()).cstr(), nullptr });
+        MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<128>(messages::sound::cStartLabelNotFoundFormat,startLabel.cstr()).cstr(), nullptr });
         return false;
     }
 
@@ -778,7 +780,7 @@ const SeqTimeline& SoundPlayer::findSeqTimeline_(const SequenceFile& seqFile, co
             setup.trackVars[trackNo][i] = mTrackVars[trackNo][i].enable ? mTrackVars[trackNo][i].value : static_cast<s16>(SequenceSoundPlayer::cVariableDefaultValue);
     }
 
-    const u64 editGeneration = GetEditGeneration();
+    const u64 editGeneration = modelevents::GetLatestEditGeneration();
     const std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
     SeqTimelineEntry* entry = nullptr;
@@ -821,7 +823,7 @@ bool SoundPlayer::playWaveFile(const WaveFile& wave, s32 channel, const Sound* s
 
     if (GetWaveFilePlaybackError(wave, &playbackError))
     {
-        PopupMgr::instance()->addPopup({ playbackError, nullptr });
+        MessageLog::instance()->addPopup({ playbackError, nullptr });
         return false;
     }
 

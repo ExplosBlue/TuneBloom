@@ -6,7 +6,7 @@
 
 #include <ui/file/Document.h>
 #include <ui/file/DocumentState.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/project/References.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/widgets/RowSelection.h>
@@ -226,7 +226,7 @@ void ForgetRemovedItems(const std::vector<Item*>& removedItems)
     for (Item* item : removed)
     {
         EndRowRenameOf(item);
-        PopupMgr::instance()->forgetItem(item);
+        MessageLog::instance()->forgetItem(item);
     }
 }
 

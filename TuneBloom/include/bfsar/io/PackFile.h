@@ -5,6 +5,11 @@
 #include <string>
 #include <vector>
 
+namespace sarc
+{
+struct Index;
+}
+
 namespace packfile
 {
 
@@ -25,6 +30,9 @@ std::string GetFolderOnDisk(const std::string& path);
 std::string MakePath(const std::string& packPath, const std::string& innerName);
 bool GetFileSize(const std::string& path, u64* outSize);
 
+bool IsPackResourceName(const std::string& name);
+u32 CountPackResources(const sarc::Index& index);
+bool IsSoundPackIndex(const sarc::Index& index);
 bool IsSoundPackFile(const std::string& path);
 bool ListResources(const std::string& packPath, std::vector<Resource>* out);
 

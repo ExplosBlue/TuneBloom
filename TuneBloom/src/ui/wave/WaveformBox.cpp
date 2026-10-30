@@ -1,6 +1,6 @@
 #include <ui/wave/WaveformBox.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/widgets/Knob.h>
 #include <ui/widgets/Widgets.h>

@@ -7,15 +7,16 @@
 #include <bfsar/files/BfstmFile.h>
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/FileWriter.h>
+#include <bfsar/archive/Bfsar.h>
+#include <bfsar/player/SoundPlayer.h>
 
 #include <snd/DisposeCallbackMgr.h>
 #include <snd/SoundThread.h>
 
 #include <snd/snd_WaveFileReader.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
-#include <ui/app/UI.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <stream/seadFileDeviceStream.h>
@@ -214,7 +215,7 @@ bool WaveFile::readChannel_(const nw::snd::internal::WaveFileReader& reader, con
     if (samplesOffset < 0 || static_cast<u32>(samplesOffset) >= mOriginalDataSize)
     {
         sead::FormatFixedSafeString<256> msg(messages::wavefile::cSampleOffsetInvalidFormat, channelIndex);
-        PopupMgr::instance()->pushCurrentItemError(msg);
+        MessageLog::instance()->pushCurrentItemError(msg);
         return false;
     }
 
@@ -256,7 +257,7 @@ bool WaveFile::doRead(const void* fileAddr)
 
     if (reader.mInfoBlockBody->encoding > static_cast<u8>(Encoding::DspAdpcm))
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::wavefile::cInvalidEncoding);
+        MessageLog::instance()->pushCurrentItemError(messages::wavefile::cInvalidEncoding);
         return false;
     }
 
@@ -275,7 +276,7 @@ bool WaveFile::doRead(const void* fileAddr)
 
     if (waveInfo.channelCount < 1)
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::wavefile::cNeedsChannel);
+        MessageLog::instance()->pushCurrentItemError(messages::wavefile::cNeedsChannel);
         return false;
     }
 
@@ -283,7 +284,7 @@ bool WaveFile::doRead(const void* fileAddr)
     const u32 dataBlockSize = reader.mHeader->GetDataBlock()->header.size;
     if (dataBlockSize < cDataBlockHeaderSize || static_cast<u64>(dataBlockOffset) + dataBlockSize > reader.mHeader->header.fileSize)
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::wavefile::cDataBlockDamaged);
+        MessageLog::instance()->pushCurrentItemError(messages::wavefile::cDataBlockDamaged);
         return false;
     }
 
@@ -305,7 +306,7 @@ bool WaveFile::doRead(const void* fileAddr)
     if (mLoopStartFrame >= mLoopEndFrame)
     {
         sead::FormatFixedSafeString<1024> msg(messages::wavefile::cLoopInvalidFormat);
-        PopupMgr::instance()->pushCurrentItemError(msg);
+        MessageLog::instance()->pushCurrentItemError(msg);
     }
 
     mSampleCount = mLoopEndFrame;

@@ -2,7 +2,7 @@
 
 #include <ui/items/ItemColumns.h>
 #include <ui/app/MenuBar.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>
 

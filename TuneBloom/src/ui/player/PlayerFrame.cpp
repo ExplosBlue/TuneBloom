@@ -9,7 +9,7 @@
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/project/FileLists.h>
 #include <ui/resource/ResourceViews.h>

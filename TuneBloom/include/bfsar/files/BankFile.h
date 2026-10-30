@@ -592,7 +592,6 @@ void ForEachVelocityRegion(const BankFile::Instrument& instrument, Func&& func)
 }
 
 s16 FindNextAvailableProgramNo(const Item::List& instrumentList, const BankFile::Instrument* skipInstrument = nullptr);
-bool IsProgramNoShared(const BankFile::Instrument* instrument);
 void CopyVelocityRegion(BankFile::VelocityRegion* dst, const BankFile::VelocityRegion* src);
 void PollMidiInput();
 void DeselectVelocity();

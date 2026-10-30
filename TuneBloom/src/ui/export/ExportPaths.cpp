@@ -1,6 +1,6 @@
 #include <ui/export/ExportInternal.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <bfsar/model/Sound.h>
 

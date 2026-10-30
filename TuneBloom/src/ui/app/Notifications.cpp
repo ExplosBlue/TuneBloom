@@ -3,7 +3,7 @@
 #include <ui/widgets/ContextMenu.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/TimeUtil.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>

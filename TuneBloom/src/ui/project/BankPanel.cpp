@@ -8,26 +8,13 @@
 #include <ui/items/ItemSelector.h>
 #include <ui/widgets/Knob.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
 
 // Banks
-
-const Item* Bank::validate(sead::BufferedSafeString& error) const
-{
-    if (!Item::validateName(error))
-    {
-        return this;
-    }
-
-    if (!Item::validateWaveArchive(getWaveArchiveType(), getWaveArchiveRef(), error))
-        return this;
-
-    return nullptr;
-}
 
 static constexpr s32 cBankFileModeCreateNew = 0;
 static constexpr s32 cBankFileModeSelectExisting = 1;

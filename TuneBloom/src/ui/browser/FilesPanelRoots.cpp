@@ -11,7 +11,7 @@
 #include <ui/settings/Theme.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/widgets/Widgets.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <bfsar/io/FileIo.h>
 #include <bfsar/model/ArchiveFormat.h>

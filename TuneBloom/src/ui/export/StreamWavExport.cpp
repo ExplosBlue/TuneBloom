@@ -1,7 +1,7 @@
 #include <ui/export/ExportInternal.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <bfsar/model/Sound.h>
 #include <bfsar/audio/WavWriter.h>
@@ -232,7 +232,7 @@ bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool mu
     {
         if (!WritePcm16Wav(path, { sampleRate, allChannels, loop, regions }))
         {
-            PopupMgr::instance()->addPopup({ messages::exporting::cMultiChannelWriteFailed, nullptr });
+            MessageLog::instance()->addPopup({ messages::exporting::cMultiChannelWriteFailed, nullptr });
             return false;
         }
     }
@@ -259,7 +259,7 @@ bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool mu
         }
         if (anyFailed)
         {
-            PopupMgr::instance()->addPopup({ messages::exporting::cTrackWavsWriteFailed, nullptr });
+            MessageLog::instance()->addPopup({ messages::exporting::cTrackWavsWriteFailed, nullptr });
             return false;
         }
     }

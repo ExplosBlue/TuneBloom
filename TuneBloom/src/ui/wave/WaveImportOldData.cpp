@@ -2,7 +2,7 @@
 
 #include <aal/Amta.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/widgets/Widgets.h>
 

@@ -3,7 +3,7 @@
 #include <ui/widgets/ContextMenu.h>
 #include <ui/file/DocumentState.h>
 #include <ui/items/ItemList.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/settings/UiColors.h>
 #include <ui/app/Workspace.h>

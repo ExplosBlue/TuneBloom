@@ -2,7 +2,6 @@
 #include <core/Debug.h>
 
 #include <bfsar/files/WaveFile.h>
-#include <ui/app/UI.h>
 
 #include <snd/snd_WaveArchiveFile.h>
 

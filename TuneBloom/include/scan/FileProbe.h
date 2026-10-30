@@ -1,7 +1,7 @@
 #pragma once
 
 #include <basis/seadTypes.h>
-#include <browser/ArchiveProbe.h>
+#include <scan/ArchiveProbe.h>
 
 #include <filesystem>
 #include <vector>

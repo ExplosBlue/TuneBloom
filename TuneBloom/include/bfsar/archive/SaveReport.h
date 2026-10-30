@@ -1,5 +1,5 @@
 #pragma once
 
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 
-void ReportArchiveError(bool toStderr, const PopupMgr::PopupInfo& info);
+void ReportArchiveError(bool toStderr, const MessageLog::PopupInfo& info);

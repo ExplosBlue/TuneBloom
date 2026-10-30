@@ -6,7 +6,7 @@
 #include <ui/file/File.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/GroupFileLocate.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <core/TestHooks.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
@@ -42,7 +42,7 @@ static constexpr const char* cIgnoredWarningsKey = "warnings";
 struct ListEntry
 {
     Item* item;
-    const std::vector<PopupMgr::ItemMessage>* messages;
+    const std::vector<MessageLog::ItemMessage>* messages;
     bool hasError;
 };
 
@@ -78,7 +78,7 @@ static void DrawSeverityCount(const char* icon, size_t count, const ImVec4& colo
     ImGui::PopStyleColor();
 }
 
-static void DrawMessage(const PopupMgr::ItemMessage& message)
+static void DrawMessage(const MessageLog::ItemMessage& message)
 {
     if (!message.detail.empty())
         HelpMarker(message.detail.c_str());
@@ -90,18 +90,18 @@ static void DrawMessage(const PopupMgr::ItemMessage& message)
     ImGui::TextWrapped("%s", message.text.c_str());
 }
 
-static void DrawMessageGroup(const std::vector<PopupMgr::ItemMessage>& messages, PopupMgr::Severity severity)
+static void DrawMessageGroup(const std::vector<MessageLog::ItemMessage>& messages, MessageLog::Severity severity)
 {
     bool drewHeader = false;
 
-    for (const PopupMgr::ItemMessage& message : messages)
+    for (const MessageLog::ItemMessage& message : messages)
     {
         if (message.severity != severity)
             continue;
 
         if (!drewHeader)
         {
-            const bool isError = severity == PopupMgr::Severity::Error;
+            const bool isError = severity == MessageLog::Severity::Error;
 
             ImGui::PushStyleColor(ImGuiCol_Text, isError ? uicolors::Marker() : uicolors::Warning());
             ImGui::SeparatorText(sead::FormatFixedSafeString<32>("%s %s", isError ? ICON_LC_ALERT_OCTAGON : ICON_LC_ALERT_TRIANGLE, isError ? messages::popup::cGroupErrors : messages::popup::cGroupWarnings).cstr());
@@ -123,22 +123,22 @@ static void DrawMessageGroup(const std::vector<PopupMgr::ItemMessage>& messages,
     }
 }
 
-static bool HasError(const std::vector<PopupMgr::ItemMessage>& messages)
+static bool HasError(const std::vector<MessageLog::ItemMessage>& messages)
 {
-    for (const PopupMgr::ItemMessage& message : messages)
+    for (const MessageLog::ItemMessage& message : messages)
     {
-        if (message.severity == PopupMgr::Severity::Error)
+        if (message.severity == MessageLog::Severity::Error)
             return true;
     }
 
     return false;
 }
 
-static bool HasWarning(const std::vector<PopupMgr::ItemMessage>& messages)
+static bool HasWarning(const std::vector<MessageLog::ItemMessage>& messages)
 {
-    for (const PopupMgr::ItemMessage& message : messages)
+    for (const MessageLog::ItemMessage& message : messages)
     {
-        if (message.severity == PopupMgr::Severity::Warning)
+        if (message.severity == MessageLog::Severity::Warning)
             return true;
     }
 
@@ -156,7 +156,7 @@ static std::string GetArchiveKey()
     return path;
 }
 
-static std::string GetWarningKey(const Item* item, const PopupMgr::ItemMessage& message)
+static std::string GetWarningKey(const Item* item, const MessageLog::ItemMessage& message)
 {
     std::string key = std::to_string(static_cast<s32>(item->getItemType()));
     key += '\t';
@@ -174,43 +174,10 @@ static std::string GetWarningKey(const Item* item, const PopupMgr::ItemMessage& 
 }
 
 PopupMgr::PopupMgr()
-    : mPopups()
-    , mPopupOpen(false)
-    , mCorruptInfo()
-    , mCurrentProcessItem(nullptr)
-    , mErrorContext(ErrorContext::Opening)
-    , mProcessedErrors()
+    : mPopupOpen(false)
     , mIgnoredWarnings()
 {
     loadIgnoredWarnings();
-}
-
-void PopupMgr::addPopup(const PopupInfo& info)
-{
-    mPopups.pushBack(info);
-}
-
-void PopupMgr::forgetAllItems()
-{
-    for (s32 i = 0; i < mPopups.size(); i++)
-    {
-        mPopups(i).item = nullptr;
-        mPopups(i).super = nullptr;
-    }
-}
-
-void PopupMgr::forgetItem(const Item* item)
-{
-    for (s32 i = 0; i < mPopups.size(); i++)
-    {
-        PopupInfo& info = mPopups(i);
-
-        if (info.item == item)
-            info.item = nullptr;
-
-        if (info.super == item)
-            info.super = nullptr;
-    }
 }
 
 static constexpr const char* cMessagePopupId = "###PopupMgr";
@@ -227,13 +194,17 @@ void PopupMgr::update()
         mPopupOpen = false;
 
     updateErrors();
+    updateMessage();
+}
 
-    if (mPopups.size() == 0)
-    {
+void PopupMgr::updateMessage()
+{
+    MessageLog* log = MessageLog::instance();
+
+    if (!log->hasPopup())
         return;
-    }
 
-    const PopupInfo& info = mPopups.front();
+    const MessageLog::PopupInfo info = log->frontPopup();
 
     if (!mPopupOpen)
     {
@@ -265,8 +236,7 @@ void PopupMgr::update()
 
             if (DialogButton(messages::dialog::cOk))
             {
-                PopupInfo dummy;
-                mPopups.popFront(&dummy);
+                log->popPopup();
 
                 mPopupOpen = false;
 
@@ -277,8 +247,7 @@ void PopupMgr::update()
             {
                 if (DialogButton(goToLabel.cstr()))
                 {
-                    PopupInfo dummy;
-                    mPopups.popFront(&dummy);
+                    log->popPopup();
 
                     mPopupOpen = false;
 
@@ -313,32 +282,6 @@ void PopupMgr::update()
             ImGui::EndPopup();
         }
     }
-}
-
-void PopupMgr::pushCurrentItemError(const sead::SafeString& error, const char* detail)
-{
-    pushCurrentItemMessage(error, detail, Severity::Error);
-}
-
-void PopupMgr::pushCurrentItemWarning(const sead::SafeString& warning, const char* detail)
-{
-    pushCurrentItemMessage(warning, detail, Severity::Warning);
-}
-
-void PopupMgr::pushCurrentItemMessage(const sead::SafeString& text, const char* detail, Severity severity)
-{
-    if (!mCurrentProcessItem)
-    {
-        return;
-    }
-
-    const char* str = text.cstr();
-    if (text.isEmpty())
-    {
-        str = messages::common::cUnknown;
-    }
-
-    mProcessedErrors[mCurrentProcessItem].push_back({str, detail ? detail : "", severity});
 }
 
 template <typename ErrorMap>
@@ -493,34 +436,12 @@ static void ClearGeneratedWaveArchives()
         archive->clearGenWaveArchiveList();
 }
 
-void PopupMgr::moveProcessedErrors(ItemErrors* target)
-{
-    if (mProcessedErrors.empty())
-        return;
-
-    target->context = mErrorContext;
-
-    for (auto& entry : mProcessedErrors)
-    {
-        std::vector<ItemMessage>& itemMessages = target->items[entry.first];
-        itemMessages.insert(itemMessages.end(), entry.second.begin(), entry.second.end());
-    }
-
-    discardProcessedErrors();
-}
-
-void PopupMgr::discardProcessedErrors()
-{
-    mProcessedErrors.clear();
-    mErrorContext = ErrorContext::Opening;
-}
-
 void PopupMgr::updateErrors()
 {
     if (IsDocumentOpen())
-        moveProcessedErrors(&ActiveDocumentState().itemErrors);
+        MessageLog::instance()->moveProcessedErrors(&ActiveDocumentState().itemErrors);
 
-    ItemErrors& errors = ActiveDocumentState().itemErrors;
+    MessageLog::ItemErrors& errors = ActiveDocumentState().itemErrors;
 
     if (errors.items.empty())
     {
@@ -533,7 +454,7 @@ void PopupMgr::updateErrors()
         if (IsGroupFileLocatePending())
             return;
 
-        if (errors.context == ErrorContext::Opening)
+        if (errors.context == MessageLog::ErrorContext::Opening)
             removeIgnoredWarnings(&errors);
 
         if (errors.items.empty())
@@ -553,7 +474,7 @@ void PopupMgr::updateErrors()
 
     const size_t warningCount = entries.size() - errorCount;
 
-    const bool isSaving = errors.context == ErrorContext::Saving;
+    const bool isSaving = errors.context == MessageLog::ErrorContext::Saving;
     const bool hasErrors = errorCount != 0;
     const bool canIgnore = !isSaving && hasWarnings && !GetDocumentPath().isEmpty();
 
@@ -605,10 +526,10 @@ void PopupMgr::updateErrors()
     {
         ImGui::BeginChild("ItemView", ImVec2(0.0f, paneHeight), ImGuiChildFlags_Border);
 
-        const std::vector<ItemMessage>& itemMessages = *entries[sSelected].messages;
+        const std::vector<MessageLog::ItemMessage>& itemMessages = *entries[sSelected].messages;
 
-        DrawMessageGroup(itemMessages, Severity::Error);
-        DrawMessageGroup(itemMessages, Severity::Warning);
+        DrawMessageGroup(itemMessages, MessageLog::Severity::Error);
+        DrawMessageGroup(itemMessages, MessageLog::Severity::Warning);
 
         ImGui::EndChild();
     }
@@ -640,20 +561,14 @@ void PopupMgr::updateErrors()
         if (canIgnore && sIgnore)
             ignoreProcessedWarnings(errors);
 
-        mCurrentProcessItem = nullptr;
-        errors = ItemErrors();
+        MessageLog::instance()->setCurrentProcessItem(nullptr);
+        errors = MessageLog::ItemErrors();
         mPopupOpen = false;
         sSelected = 0;
         ImGui::CloseCurrentPopup();
     }
 
     ImGui::EndPopup();
-}
-
-void PopupMgr::closeFile()
-{
-    mCurrentProcessItem = nullptr;
-    discardProcessedErrors();
 }
 
 void PopupMgr::loadIgnoredWarnings()
@@ -706,7 +621,7 @@ void PopupMgr::clearIgnoredWarnings()
     saveIgnoredWarnings();
 }
 
-void PopupMgr::removeIgnoredWarnings(ItemErrors* errors)
+void PopupMgr::removeIgnoredWarnings(MessageLog::ItemErrors* errors)
 {
     const auto ignored = mIgnoredWarnings.find(GetArchiveKey());
     if (ignored == mIgnoredWarnings.end())
@@ -715,11 +630,11 @@ void PopupMgr::removeIgnoredWarnings(ItemErrors* errors)
     for (auto it = errors->items.begin(); it != errors->items.end();)
     {
         const Item* item = it->first;
-        std::vector<ItemMessage>& itemMessages = it->second;
+        std::vector<MessageLog::ItemMessage>& itemMessages = it->second;
 
-        itemMessages.erase(std::remove_if(itemMessages.begin(), itemMessages.end(), [&](const ItemMessage& message)
+        itemMessages.erase(std::remove_if(itemMessages.begin(), itemMessages.end(), [&](const MessageLog::ItemMessage& message)
         {
-            return message.severity == Severity::Warning && ignored->second.count(GetWarningKey(item, message)) != 0;
+            return message.severity == MessageLog::Severity::Warning && ignored->second.count(GetWarningKey(item, message)) != 0;
         }), itemMessages.end());
 
         if (itemMessages.empty())
@@ -729,7 +644,7 @@ void PopupMgr::removeIgnoredWarnings(ItemErrors* errors)
     }
 }
 
-void PopupMgr::ignoreProcessedWarnings(const ItemErrors& errors)
+void PopupMgr::ignoreProcessedWarnings(const MessageLog::ItemErrors& errors)
 {
     const std::string archive = GetArchiveKey();
     if (archive.empty())
@@ -739,9 +654,9 @@ void PopupMgr::ignoreProcessedWarnings(const ItemErrors& errors)
 
     for (const auto& entry : errors.items)
     {
-        for (const ItemMessage& message : entry.second)
+        for (const MessageLog::ItemMessage& message : entry.second)
         {
-            if (message.severity == Severity::Warning)
+            if (message.severity == MessageLog::Severity::Warning)
                 ignored.insert(GetWarningKey(entry.first, message));
         }
     }

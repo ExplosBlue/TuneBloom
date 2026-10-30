@@ -5,7 +5,7 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/file/GroupFileLocate.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/widgets/Properties.h>
 #include <ui/file/SystemShell.h>

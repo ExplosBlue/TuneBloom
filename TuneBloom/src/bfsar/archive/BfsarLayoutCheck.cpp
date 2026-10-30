@@ -1,7 +1,7 @@
 #include <bfsar/archive/BfsarLayoutCheck.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <snd/snd_BankFile.h>
 #include <snd/snd_ElementType.h>
@@ -47,7 +47,7 @@ struct ArchiveLayout
 
 static bool Fail(const sead::SafeString& text)
 {
-    PopupMgr::instance()->setCorruptInfo(text);
+    MessageLog::instance()->setCorruptInfo(text);
     return false;
 }
 

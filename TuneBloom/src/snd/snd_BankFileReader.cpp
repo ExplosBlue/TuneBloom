@@ -3,8 +3,8 @@
 #include <basis/seadWarning.h>
 #include <prim/seadMemUtil.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
@@ -36,7 +36,7 @@ void BankFileReader::Initialize(const void* bankFile)
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Bank);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotBankFile);
+            MessageLog::instance()->pushCurrentItemError(messages::reader::cNotBankFile);
             return;
         }
 
@@ -48,7 +48,7 @@ void BankFileReader::Initialize(const void* bankFile)
             if (major < 1)
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -57,7 +57,7 @@ void BankFileReader::Initialize(const void* bankFile)
             if (!Util::IsHighByteMajorVersion((u32)header->version) && (u32)header->version != 0x00010000)
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -68,7 +68,7 @@ void BankFileReader::Initialize(const void* bankFile)
     const BankFile::InfoBlock* infoBlock = mHeader->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, bankFmt, "INFO").cstr());
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, bankFmt, "INFO").cstr());
         return;
     }
 

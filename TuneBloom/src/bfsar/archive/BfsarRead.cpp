@@ -9,9 +9,9 @@
 #include <bfsar/files/OpusStream.h>
 #include <bfsar/io/PackFile.h>
 
-#include <ui/file/LoadProgress.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/ModelEvents.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 
@@ -242,10 +242,10 @@ void Bfsar::readPlayerSettings_(const BfsarOpenContext& ctx)
 
 void Bfsar::setLoadStageCounts_(const BfsarOpenContext& ctx)
 {
-    loadprogress::SetStageCount(loadprogress::Stage::Groups, ctx.soundArchive.GetGroupCount());
-    loadprogress::SetStageCount(loadprogress::Stage::SequenceFiles, ctx.soundArchive.detail_GetFileCount());
-    loadprogress::SetStageCount(loadprogress::Stage::WaveFiles, ctx.soundArchive.GetWaveArchiveCount());
-    loadprogress::SetStageCount(loadprogress::Stage::BankFiles, ctx.soundArchive.detail_GetFileCount());
+    modelevents::SetLoadStageCount(modelevents::LoadStage::Groups, ctx.soundArchive.GetGroupCount());
+    modelevents::SetLoadStageCount(modelevents::LoadStage::SequenceFiles, ctx.soundArchive.detail_GetFileCount());
+    modelevents::SetLoadStageCount(modelevents::LoadStage::WaveFiles, ctx.soundArchive.GetWaveArchiveCount());
+    modelevents::SetLoadStageCount(modelevents::LoadStage::BankFiles, ctx.soundArchive.detail_GetFileCount());
 
     u32 streamSoundCount = 0;
 
@@ -257,9 +257,9 @@ void Bfsar::setLoadStageCounts_(const BfsarOpenContext& ctx)
             streamSoundCount++;
     }
 
-    loadprogress::SetStageCount(loadprogress::Stage::Sounds, streamSoundCount);
-    loadprogress::SetStageCount(loadprogress::Stage::SoundSets, ctx.soundArchive.GetSoundGroupCount());
-    loadprogress::SetStageCount(loadprogress::Stage::GroupFiles, ctx.soundArchive.GetGroupCount());
+    modelevents::SetLoadStageCount(modelevents::LoadStage::Sounds, streamSoundCount);
+    modelevents::SetLoadStageCount(modelevents::LoadStage::SoundSets, ctx.soundArchive.GetSoundGroupCount());
+    modelevents::SetLoadStageCount(modelevents::LoadStage::GroupFiles, ctx.soundArchive.GetGroupCount());
 }
 
 void Bfsar::readItemName_(const BfsarOpenContext& ctx, Item* item, u32 stringId, const char* defaultNameFormat)
@@ -275,7 +275,7 @@ void Bfsar::readItemName_(const BfsarOpenContext& ctx, Item* item, u32 stringId,
     if (!name)
     {
         item->mName.format(defaultNameFormat, item->mId);
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cNameNotInStringTable);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cNameNotInStringTable);
         return;
     }
 
@@ -285,7 +285,7 @@ void Bfsar::readItemName_(const BfsarOpenContext& ctx, Item* item, u32 stringId,
     item->mName.cutOffCopy(name, static_cast<s32>(std::min<size_t>(length, lengthMax)));
 
     if (length > static_cast<size_t>(lengthMax))
-        PopupMgr::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::archive::cNameCutFormat, lengthMax));
+        MessageLog::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::archive::cNameCutFormat, lengthMax));
 }
 
 WaveArchiveType Bfsar::readWaveArchiveRef_(const Util::Table<nw::ut::ResU32>& warcIdTable, ItemReference* waveArchiveRef)
@@ -306,13 +306,13 @@ bool Bfsar::readPlayers_(BfsarOpenContext& ctx)
 
         if (!playerInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidPlayerInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidPlayerInfo);
             return false;
         }
 
         Player* player = new(ctx.heap) Player();
         player->mId = i;
-        PopupMgr::instance()->setCurrentProcessItem(player);
+        MessageLog::instance()->setCurrentProcessItem(player);
 
         player->mEnableName = playerInfo->optionParameter.GetTrueCount(nw::snd::internal::PLAYER_INFO_STRING_ID) != 0;
         readItemName_(ctx, player, playerInfo->GetStringId(), "PLAYER_%u");
@@ -348,7 +348,7 @@ void Bfsar::attachBankFile_(BfsarOpenContext& ctx, Bank* bank, u32 fileIdx)
     }
 
     if (fileIdx >= ctx.soundArchive.detail_GetFileCount() || FindArchiveFile(ctx, fileIdx).size() != 0)
-        PopupMgr::instance()->pushCurrentItemError(messages::bank::cFileLoadFailed);
+        MessageLog::instance()->pushCurrentItemError(messages::bank::cFileLoadFailed);
 }
 
 bool Bfsar::readBanks_(BfsarOpenContext& ctx)
@@ -359,13 +359,13 @@ bool Bfsar::readBanks_(BfsarOpenContext& ctx)
 
         if (!bankInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidBankInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidBankInfo);
             return false;
         }
 
         Bank* bank = new(ctx.heap) Bank();
         bank->mId = i;
-        PopupMgr::instance()->setCurrentProcessItem(bank);
+        MessageLog::instance()->setCurrentProcessItem(bank);
 
         bank->mEnableName = bankInfo->optionParameter.GetTrueCount(nw::snd::internal::BANK_INFO_STRING_ID) != 0;
         readItemName_(ctx, bank, bankInfo->GetStringId(), "BANK_%u");
@@ -392,7 +392,7 @@ void Bfsar::readSequenceSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const So
     {
         if (i >= nw::snd::SoundArchive::SEQ_BANK_MAX)
         {
-            PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBankReferenceInvalidFormat, i));
+            MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBankReferenceInvalidFormat, i));
             break;
         }
 
@@ -402,7 +402,7 @@ void Bfsar::readSequenceSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const So
         sequence.mBankRefs[i]->attach(getItem(bankIdTable.item[i], getBankList()));
 
         if (!sequence.mBankRefs[i]->isAttached())
-            PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBankReferenceInvalidFormat, i));
+            MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBankReferenceInvalidFormat, i));
     }
 
     const auto it = ctx.seqFileIdxMap.find(Util::GetItemIndex(soundInfo.fileId));
@@ -411,7 +411,7 @@ void Bfsar::readSequenceSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const So
     sequence.mSequenceFileRef.attach(seqFile);
 
     if (!sequence.mSequenceFileRef.isAttached())
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cSequenceFileLoadFailed);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cSequenceFileLoadFailed);
     else if (seqFile->mName == "Sequence")
         FormatCut(&seqFile->mName, "GUESS_%s", sound->mName.cstr());
 
@@ -427,7 +427,7 @@ void Bfsar::readSequenceSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const So
         if (label.size() <= static_cast<size_t>(labelMax))
             sequence.mStartLabel.copy(label.c_str());
         else
-            PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<128>(messages::archive::cStartLabelTooLongFormat, labelMax));
+            MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<128>(messages::archive::cStartLabelTooLongFormat, labelMax));
 
         LOG_FMT("Sound %s: startOffset=%u allocTrackFlags=0x%x label='%s'", sound->mName.cstr(), startOffset, allocTrackFlags, label.c_str());
     }
@@ -452,7 +452,7 @@ void Bfsar::readStreamTrackInfo_(Sound::StreamSoundInfo::Track* track, const Sou
 
     if (channelCount > nw::snd::WAVE_CHANNEL_MAX)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cTrackReadErrorFormat, track->mId));
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cTrackReadErrorFormat, track->mId));
         channelCount = 0;
     }
 
@@ -495,7 +495,7 @@ void Bfsar::readStreamTrackInfoTable_(BfsarOpenContext& ctx, Sound* sound, const
         if (trackInfo)
             readStreamTrackInfo_(track, *trackInfo);
         else
-            PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cTrackReadErrorFormat, i));
+            MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cTrackReadErrorFormat, i));
 
         sound->mStreamSoundInfo.mTrackList.pushBack(track);
     }
@@ -511,7 +511,7 @@ void Bfsar::readStreamFilePath_(const BfsarOpenContext& ctx, Sound* sound, u32 f
         path.copy(externalInfo->filePath);
 
     if (path.isEmpty())
-        PopupMgr::instance()->pushCurrentItemError(messages::stream::cNoPath);
+        MessageLog::instance()->pushCurrentItemError(messages::stream::cNoPath);
 }
 
 bool Bfsar::findStreamFilePath_(const Sound* sound, sead::BufferedSafeString* outPath) const
@@ -521,7 +521,7 @@ bool Bfsar::findStreamFilePath_(const Sound* sound, sead::BufferedSafeString* ou
 
     if (!Bfsar::GetStreamFolder(getFilePath(), &archiveDir))
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<1024>(messages::archive::cPathDirectoryInvalidFormat, getFilePath().cstr()));
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<1024>(messages::archive::cPathDirectoryInvalidFormat, getFilePath().cstr()));
         return false;
     }
 
@@ -558,7 +558,7 @@ bool Bfsar::readStreamFileTracks_(BfsarOpenContext& ctx, Sound* sound, const Byt
     if (!reader.IsAvailable())
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cFileUnreadableFormat, stream.mPath.cstr());
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         return false;
     }
 
@@ -604,7 +604,7 @@ void Bfsar::readStreamSoundParams_(BfsarOpenContext& ctx, Sound* sound, const So
     stream.mLoopEndFrame = extension->loopEndFrame;
 
     if (stream.mStreamType == Sound::StreamSoundInfo::StreamType::Adts)
-        PopupMgr::instance()->pushCurrentItemWarning(messages::stream::cAdtsUnsupported);
+        MessageLog::instance()->pushCurrentItemWarning(messages::stream::cAdtsUnsupported);
 }
 
 void Bfsar::readStreamFileWaves_(BfsarOpenContext& ctx, Sound* sound, const ByteRange& strmFile)
@@ -652,7 +652,7 @@ void Bfsar::readStreamPrefetch_(BfsarOpenContext& ctx, Sound* sound, const Sound
     if (!file.data() || !BfstpFile::CheckLayout(file.data(), file.size()))
     {
         sound->mStreamSoundInfo.mHasPrefetch = isStreamPrefetchBuildable();
-        PopupMgr::instance()->pushCurrentItemWarning(isStreamPrefetchBuildable() ? messages::stream::cPrefetchRemade : messages::stream::cPrefetchUnreadable);
+        MessageLog::instance()->pushCurrentItemWarning(isStreamPrefetchBuildable() ? messages::stream::cPrefetchRemade : messages::stream::cPrefetchUnreadable);
         return;
     }
 
@@ -682,12 +682,12 @@ void Bfsar::readStreamSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const Soun
     if (hasArchiveDir && fileState == StreamFileState::NotLoaded)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cFileMissingFormat, stream.mPath.cstr(), GetInnerFileExtension(mFormat, InnerFileKind::SoundArchive));
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cFileMissingDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cFileMissingDetail);
     }
     else if (fileState == StreamFileState::Incomplete)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cFileIncompleteFormat, stream.mPath.cstr());
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cFileMissingDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cFileMissingDetail);
     }
     else if (fileState == StreamFileState::Complete)
     {
@@ -711,7 +711,7 @@ void Bfsar::readStreamSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const Soun
         readStreamFileWaves_(ctx, sound, strmFile.bytes);
 
     if (fileState != StreamFileState::NotLoaded && fileState != StreamFileState::Incomplete && stream.mTrackList.isEmpty())
-        PopupMgr::instance()->pushCurrentItemWarning(messages::stream::cNoTracks);
+        MessageLog::instance()->pushCurrentItemWarning(messages::stream::cNoTracks);
 
     if (!stream.mPath.isEmpty())
         ctx.streamSounds.insert({ stream.mPath.cstr(), sound });
@@ -723,13 +723,13 @@ void Bfsar::attachWaveSoundWave_(Sound* sound, const nw::snd::internal::WaveSoun
 
     if (!reader.ReadNoteInfo(&noteInfo, index, 0))
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cWaveFileLoadFailed);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cWaveFileLoadFailed);
         return;
     }
 
     if (noteInfo.waveArchiveId != 0)
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cWaveFileLinkFailed);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cWaveFileLinkFailed);
         return;
     }
 
@@ -738,7 +738,7 @@ void Bfsar::attachWaveSoundWave_(Sound* sound, const nw::snd::internal::WaveSoun
     sound->mWaveSoundInfo.mWaveFileRef.attach(waveFile);
 
     if (!sound->mWaveSoundInfo.mWaveFileRef.isAttached())
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cWaveFileLoadFailed);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cWaveFileLoadFailed);
     else if (waveFile->mName == "Wave")
         FormatCut(&waveFile->mName, "GUESS_%s", sound->mName.cstr());
 }
@@ -843,7 +843,7 @@ void Bfsar::readWaveSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const SoundA
     if (!wsdFile.data())
     {
         if (mFormat != ArchiveFormat::BCSAR)
-            PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cWaveSoundDataLoadFailedFormat, wsdFormatName));
+            MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cWaveSoundDataLoadFailedFormat, wsdFormatName));
 
         return;
     }
@@ -852,7 +852,7 @@ void Bfsar::readWaveSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const SoundA
 
     if (!reader.IsAvailable() || !CheckWaveSoundEntry(wsdFile, *reader.mInfoBlockBody, waveSoundInfo.index))
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cWaveSoundDataInvalidFormat, wsdFormatName));
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cWaveSoundDataInvalidFormat, wsdFormatName));
         return;
     }
 
@@ -891,7 +891,7 @@ void Bfsar::readSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const SoundArchi
         sound->mUnresolvedPlayerId = Util::GetItemIndex(soundInfo.playerId);
 
     if (!sound->mPlayerRef.isAttached() && !getPlayerList().isEmpty())
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cInvalidPlayerReference);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cInvalidPlayerReference);
 
     sound->mVolume = soundInfo.volume;
     sound->mRemoteFilter = soundInfo.remoteFilter;
@@ -949,7 +949,7 @@ void Bfsar::readSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const SoundArchi
 
 bool Bfsar::readSounds_(BfsarOpenContext& ctx)
 {
-    loadprogress::BeginStage(loadprogress::Stage::Sounds);
+    modelevents::BeginLoadStage(modelevents::LoadStage::Sounds);
 
     ctx.loopInfoBatch.emplace();
 
@@ -959,18 +959,18 @@ bool Bfsar::readSounds_(BfsarOpenContext& ctx)
 
         if (!soundInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidSoundInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidSoundInfo);
             return false;
         }
 
         if (soundInfo->GetSoundType() == nw::snd::SoundArchive::SOUND_TYPE_STRM)
-            loadprogress::Step();
+            modelevents::StepLoad();
         else
-            loadprogress::Update();
+            modelevents::UpdateLoad();
 
         Sound* sound = new(ctx.heap) Sound();
         sound->mId = i;
-        PopupMgr::instance()->setCurrentProcessItem(sound);
+        MessageLog::instance()->setCurrentProcessItem(sound);
 
         readSoundInfo_(ctx, sound, *soundInfo);
 
@@ -1027,17 +1027,17 @@ void Bfsar::guessBankWaveFileNames_()
 
 bool Bfsar::readSoundSets_(BfsarOpenContext& ctx)
 {
-    loadprogress::BeginStage(loadprogress::Stage::SoundSets);
+    modelevents::BeginLoadStage(modelevents::LoadStage::SoundSets);
 
     for (u32 i = 0; i < ctx.soundArchive.GetSoundGroupCount(); i++)
     {
-        loadprogress::Step();
+        modelevents::StepLoad();
 
         const SoundArchiveFile::SoundGroupInfo* soundSetInfo = ctx.soundArchive.detail_GetSoundGroupInfo(ctx.soundArchive.GetSoundGroupIdFromIndex(i));
 
         if (!soundSetInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidSoundGroupInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidSoundGroupInfo);
             return false;
         }
 
@@ -1045,7 +1045,7 @@ bool Bfsar::readSoundSets_(BfsarOpenContext& ctx)
 
         SoundSet* soundSet = new(ctx.heap) SoundSet();
         soundSet->mId = i;
-        PopupMgr::instance()->setCurrentProcessItem(soundSet);
+        MessageLog::instance()->setCurrentProcessItem(soundSet);
 
         soundSet->mEnableName = soundSetInfo->optionParameter.GetTrueCount(nw::snd::internal::SOUND_GROUP_INFO_STRING_ID) != 0;
         readItemName_(ctx, soundSet, soundSetInfo->GetStringId(), waveSoundSetInfo ? "WSDSET_%u" : "SEQSET_%u");

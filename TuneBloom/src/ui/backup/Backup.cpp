@@ -5,9 +5,9 @@
 #include <ui/file/DocumentMgr.h>
 #include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <core/TestHooks.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
@@ -236,14 +236,14 @@ bool CreateBackup()
     {
         if (result == Bfsar::BackupResult::Invalid)
         {
-            PopupMgr::instance()->addPopup({messages::backup::cManualInvalidDetail, nullptr});
+            MessageLog::instance()->addPopup({messages::backup::cManualInvalidDetail, nullptr});
             return false;
         }
 
         const std::string folder = CutPathStart(GetRootDir().string(), cNoticePathMax);
 
         sead::FormatFixedSafeString<1024> msg(messages::backup::cManualFailedFormat, folder.c_str());
-        PopupMgr::instance()->addPopup({msg, nullptr});
+        MessageLog::instance()->addPopup({msg, nullptr});
 
         return false;
     }

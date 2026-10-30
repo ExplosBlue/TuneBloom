@@ -1,8 +1,8 @@
 #include <ui/file/FileWindow.h>
 
 #include <ui/file/DocumentState.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/Shortcuts.h>
 
 #include <bfsar/files/BankFile.h>
@@ -109,7 +109,7 @@ void RequestCloseFileWindow(FileWindow* window)
 {
     if (IsFileWindowDirty(*window))
     {
-        PopupMgr::instance()->addPopup({ messages::sequence::cCompileFirst });
+        MessageLog::instance()->addPopup({ messages::sequence::cCompileFirst });
         return;
     }
 

@@ -7,9 +7,9 @@
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
 
-#include <ui/file/LoadProgress.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/ModelEvents.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
@@ -156,7 +156,7 @@ static GroupFileIndex IndexGroupFiles(const std::filesystem::path& folder, s32 d
         if (++entryCount > cGroupSearchEntryMax)
             break;
 
-        loadprogress::Update();
+        modelevents::UpdateLoad();
 
         if (it.depth() >= depthMax)
             it.disable_recursion_pending();
@@ -504,7 +504,7 @@ ByteRange Bfsar::takeGroupFileOfArchive_(const BfsarOpenContext& ctx, const Grou
         return file;
 
     FreeFileBytes(file);
-    PopupMgr::instance()->pushCurrentItemError(messages::archive::cGroupFileOfOtherArchive);
+    MessageLog::instance()->pushCurrentItemError(messages::archive::cGroupFileOfOtherArchive);
 
     if (mCliMode)
         fprintf(stderr, "The group file of '%s' is not of this archive\n", group.mName.cstr());
@@ -581,7 +581,7 @@ void Bfsar::resolveGroupFile_(BfsarOpenContext& ctx, Group* group, SoundArchiveF
 
     if (hasGroupMagic && !CheckGroupFileLayout(file))
     {
-        PopupMgr::instance()->pushCurrentItemError(messages::archive::cGroupFileDamaged);
+        MessageLog::instance()->pushCurrentItemError(messages::archive::cGroupFileDamaged);
         groupInfo->fileId = nw::snd::SoundArchive::INVALID_ID;
 
         return;
@@ -595,23 +595,23 @@ void Bfsar::resolveGroupFile_(BfsarOpenContext& ctx, Group* group, SoundArchiveF
 
 bool Bfsar::readGroups_(BfsarOpenContext& ctx)
 {
-    loadprogress::BeginStage(loadprogress::Stage::Groups);
+    modelevents::BeginLoadStage(modelevents::LoadStage::Groups);
 
     for (u32 i = 0; i < ctx.soundArchive.GetGroupCount(); i++)
     {
-        loadprogress::Step();
+        modelevents::StepLoad();
 
         SoundArchiveFile::GroupInfo* groupInfo = const_cast<SoundArchiveFile::GroupInfo*>(ctx.soundArchive.GetGroupInfo(ctx.soundArchive.GetGroupIdFromIndex(i)));
 
         if (!groupInfo)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidGroupInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidGroupInfo);
             return false;
         }
 
         Group* group = new(ctx.heap) Group();
         group->mId = i;
-        PopupMgr::instance()->setCurrentProcessItem(group);
+        MessageLog::instance()->setCurrentProcessItem(group);
 
         group->mEnableName = groupInfo->optionParameter.GetTrueCount(nw::snd::internal::GROUP_INFO_STRING_ID) != 0;
         readItemName_(ctx, group, groupInfo->GetStringId(), "GROUP_%u");
@@ -667,7 +667,7 @@ void Bfsar::addGroupItem_(BfsarOpenContext& ctx, const GroupFileReader& reader, 
         if (itemInfo->mItemRef.isAttached())
             itemInfo->setLoadItems(itemInfoEx.loadFlag);
         else
-            PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cGroupItemInvalidFormat, itemIdx));
+            MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cGroupItemInvalidFormat, itemIdx));
     }
 
     group->mItemInfoList.pushBack(itemInfo);
@@ -764,7 +764,7 @@ void Bfsar::addGroupSoundFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles
     if (soundInfo->GetSoundType() != nw::snd::SoundArchive::SOUND_TYPE_SEQ)
     {
         if (isGroupItem && soundInfo->GetSoundType() == nw::snd::SoundArchive::SOUND_TYPE_INVALID)
-            PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cGroupItemInvalidFormat, item.itemIdx));
+            MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cGroupItemInvalidFormat, item.itemIdx));
 
         return;
     }
@@ -1048,11 +1048,11 @@ void Bfsar::readGroupFile_(BfsarOpenContext& ctx, Group* group, u32 groupId, con
 
 bool Bfsar::readGroupItems_(BfsarOpenContext& ctx)
 {
-    loadprogress::BeginStage(loadprogress::Stage::GroupFiles);
+    modelevents::BeginLoadStage(modelevents::LoadStage::GroupFiles);
 
     for (u32 i = 0; i < ctx.soundArchive.GetGroupCount(); i++)
     {
-        loadprogress::Step();
+        modelevents::StepLoad();
 
         const u32 groupId = ctx.soundArchive.GetGroupIdFromIndex(i);
         const SoundArchiveFile::GroupInfo* groupInfo = ctx.soundArchive.GetGroupInfo(groupId);
@@ -1060,11 +1060,11 @@ bool Bfsar::readGroupItems_(BfsarOpenContext& ctx)
 
         if (!groupInfo || !group)
         {
-            PopupMgr::instance()->setCorruptInfo(messages::archive::cInvalidGroupInfo);
+            MessageLog::instance()->setCorruptInfo(messages::archive::cInvalidGroupInfo);
             return false;
         }
 
-        PopupMgr::instance()->setCurrentProcessItem(group);
+        MessageLog::instance()->setCurrentProcessItem(group);
 
         if (groupInfo->fileId != nw::snd::SoundArchive::INVALID_ID)
             readGroupFile_(ctx, group, groupId, groupInfo);

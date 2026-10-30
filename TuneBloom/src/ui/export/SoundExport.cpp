@@ -5,7 +5,7 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Properties.h>
 #include <ui/project/References.h>

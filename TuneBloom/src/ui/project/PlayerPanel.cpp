@@ -1,13 +1,5 @@
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/UI.h>
-
-const Item* Player::validate(sead::BufferedSafeString& error) const
-{
-    if (!Item::validateName(error))
-        return this;
-
-    return nullptr;
-}
 
 static void PlayerCreatePropertiesCallback(bool clear, Item* item, bool* validate)
 {

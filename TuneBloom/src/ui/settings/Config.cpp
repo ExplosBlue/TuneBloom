@@ -41,16 +41,9 @@ static constexpr f32 cLegacyScrollSmoothingScale = 2.0f;
 
 static constexpr ImGuiHoveredFlags cTooltipHoverFlags = ImGuiHoveredFlags_Stationary | ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_AllowWhenDisabled;
 
-static constexpr bool cSaveMetadataDefault   = true;
-static constexpr bool cForceSaveInUseDefault = false;
-static constexpr bool cDeleteUnusedGroupFilesDefault = false;
 static constexpr bool cAutoBackupDefault     = true;
 
 f32 gMasterVolume = 1.0f;
-
-bool sSaveMetadataDefault = cSaveMetadataDefault;
-bool sForceSaveWhenInUse = cForceSaveInUseDefault;
-bool sDeleteUnusedGroupFiles = cDeleteUnusedGroupFilesDefault;
 
 bool sAutoBackupEnabled = cAutoBackupDefault;
 s32 sAutoBackupIntervalMinutes = cBackupIntervalDefault;

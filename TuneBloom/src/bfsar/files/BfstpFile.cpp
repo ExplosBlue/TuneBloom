@@ -1,6 +1,6 @@
 #include <bfsar/files/BfstpFile.h>
 
-#include <aal/Bfstm.h>
+#include <bfsar/files/Bfstm.h>
 
 #include <core/ByteBuilder.h>
 #include <bfsar/io/FileIo.h>
@@ -63,7 +63,7 @@ struct PrefetchShape
 
 struct PrefetchSource
 {
-    aal::Bfstm stream;
+    bfstm::Bfstm stream;
     u64 sampleSize = 0;
     u64 neededSize = 0;
 };
@@ -79,20 +79,20 @@ static void WriteBlockRef(ByteBuilder* builder, u32 index, u16 typeId, u32 offse
     builder->putU32(ref + cBlockRefBlockSize, size);
 }
 
-static bool CanCopyInfo(const aal::Bfstm& stream)
+static bool CanCopyInfo(const bfstm::Bfstm& stream)
 {
     return stream.infoBlockSize % cBlockAlignment == 0 && stream.streamInfoStart + cInfoSizeMin <= stream.infoBlockStart + stream.infoBlockSize;
 }
 
 static bool ReadPrefetchSource(const void* strmFile, u64 strmFileSize, u32 blocksPerChannel, PrefetchSource* out)
 {
-    if (!aal::ReadBfstmHead(strmFile, strmFileSize, &out->stream, &out->neededSize))
+    if (!bfstm::ReadBfstmHead(strmFile, strmFileSize, &out->stream, &out->neededSize))
         return false;
 
     if (out->neededSize > strmFileSize)
         return true;
 
-    const aal::Bfstm& stream = out->stream;
+    const bfstm::Bfstm& stream = out->stream;
     const u64 channelCount = stream.channels.size();
     const u64 prefetchSize = static_cast<u64>(blocksPerChannel) * stream.oneBlockBytes * channelCount;
 
@@ -120,7 +120,7 @@ static bool BuildWithShape(std::vector<u8>* out, const void* strmFile, u64 strmF
     if (!ReadPrefetchSource(strmFile, strmFileSize, shape.blocksPerChannel, &source) || source.neededSize > strmFileSize)
         return false;
 
-    const aal::Bfstm& stream = source.stream;
+    const bfstm::Bfstm& stream = source.stream;
     const u32 infoOffset = cFileHeaderSize;
     const u32 infoSize = stream.infoBlockSize;
     const u32 pdatOffset = infoOffset + infoSize;
@@ -193,16 +193,16 @@ bool BfstpFile::BuildFromStreamFile(std::vector<u8>* out, const char* strmFilePa
 
 bool BfstpFile::CheckLayout(const void* data, u64 size)
 {
-    aal::Bfstm prefetch;
+    bfstm::Bfstm prefetch;
 
-    return aal::ReadBfstpInfo(data, size, &prefetch);
+    return bfstm::ReadBfstpInfo(data, size, &prefetch);
 }
 
 static bool ReadPrefetchShape(const void* data, u64 size, PrefetchShape* out)
 {
-    aal::Bfstm prefetch;
+    bfstm::Bfstm prefetch;
 
-    if (!aal::ReadBfstpInfo(data, size, &prefetch) || prefetch.blockCount == 0)
+    if (!bfstm::ReadBfstpInfo(data, size, &prefetch) || prefetch.blockCount == 0)
         return false;
 
     const u64 channelCount = prefetch.channels.size();

@@ -6,9 +6,9 @@
 #include <core/Debug.h>
 #include <core/Json.h>
 
-#include <ui/Messages.h>
-#include <ui/app/Notifications.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/ModelEvents.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <cctype>
 #include <cstdio>
@@ -547,7 +547,7 @@ bool Bfsar::saveMetadata_(const sead::SafeString& archivePath, bool report)
     LOG_FMT("Metadata file not written: %s", path.cstr());
 
     if (report)
-        notify::Add(notify::Kind::Error, messages::archive::cMetadataWriteFailedTitle, messages::archive::cMetadataWriteFailedText);
+        modelevents::ErrorNotice(messages::archive::cMetadataWriteFailedTitle, messages::archive::cMetadataWriteFailedText);
 
     return false;
 }
@@ -597,7 +597,7 @@ bool Bfsar::loadMetadata_(const sead::SafeString& archivePath)
         LOG_FMT("Metadata file not valid: %s", path.cstr());
 
         sead::FormatFixedSafeString<1024> msg(messages::archive::cMetadataUnreadableFormat, path.cstr());
-        PopupMgr::instance()->addPopup({ msg });
+        MessageLog::instance()->addPopup({ msg });
 
         return true;
     }

@@ -17,7 +17,7 @@
 
 #include "snd/SequenceSoundPlayer.h"
 
-#include "ui/Messages.h"
+#include <messages/Messages.h>
 
 #include <heap/seadHeapMgr.h>
 #include <thread/seadThreadUtil.h>

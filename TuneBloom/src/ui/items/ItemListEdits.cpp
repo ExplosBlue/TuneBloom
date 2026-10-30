@@ -2,8 +2,8 @@
 
 #include <ui/widgets/Dialogs.h>
 #include <ui/file/File.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/sound/SoundViews.h>
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/file/UnsavedChanges.h>
@@ -414,7 +414,7 @@ static void DuplicateSelectedAssets(ItemListContext& ctx)
     }
 
     if (firstError)
-        PopupMgr::instance()->addPopup({ firstError, nullptr });
+        MessageLog::instance()->addPopup({ firstError, nullptr });
 
     if (copies.empty())
         return;

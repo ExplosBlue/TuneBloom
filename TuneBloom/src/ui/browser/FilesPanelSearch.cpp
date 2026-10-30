@@ -3,7 +3,7 @@
 #include <ui/widgets/ListFilter.h>
 #include <ui/file/PathText.h>
 #include <ui/app/Shortcuts.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <imgui/imgui_internal.h>
 

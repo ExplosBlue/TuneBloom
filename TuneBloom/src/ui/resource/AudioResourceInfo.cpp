@@ -4,7 +4,7 @@
 #include <ui/file/LooseFileInfo.h>
 #include <ui/widgets/Dialogs.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/widgets/Widgets.h>
 

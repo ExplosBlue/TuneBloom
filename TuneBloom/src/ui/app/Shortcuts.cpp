@@ -1,7 +1,7 @@
 #include <ui/app/Shortcuts.h>
 
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <imgui/imgui_internal.h>
 

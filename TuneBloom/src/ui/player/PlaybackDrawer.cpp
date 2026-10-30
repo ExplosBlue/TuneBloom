@@ -2,7 +2,7 @@
 
 #include <bfsar/seq/SeqParseUtil.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/stream/StreamTracks.h>
 #include <ui/settings/Theme.h>

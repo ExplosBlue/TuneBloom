@@ -3,7 +3,7 @@
 #include <aal/Amta.h>
 #include <aal/Bars.h>
 #include <aal/BarsSarc.h>
-#include <aal/Bfstm.h>
+#include <bfsar/files/Bfstm.h>
 #include <aal/Bwav.h>
 #include <bfsar/archive/Cmpbin.h>
 #include <bfsar/files/BfstpFile.h>
@@ -11,7 +11,7 @@
 #include <bfsar/io/PackFile.h>
 #include <bfsar/io/TitleFolder.h>
 #include <core/FileName.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <algorithm>
 #include <cstring>
@@ -44,10 +44,10 @@ static bool DoesStreamMatchPrefetch(const aal::Bwav& stream, const aal::Bwav& pr
 
 static StreamFileState CheckBfstmStreamFile(const AudioAsset& asset, const std::vector<u8>& bytes)
 {
-    aal::Bfstm stream;
+    bfstm::Bfstm stream;
     const char* error = nullptr;
 
-    if (!aal::ReadBfstm(bytes.data(), bytes.size(), &stream, &error))
+    if (!bfstm::ReadBfstm(bytes.data(), bytes.size(), &stream, &error))
         return StreamFileState::Damaged;
 
     const std::vector<u8>& current = *asset.getFile();
@@ -70,12 +70,12 @@ static StreamFileState CheckBwavStreamFile(const AudioAsset& asset, const std::v
 
 static StreamFileState CheckStreamFileAlone(const AudioAsset& asset, const std::vector<u8>& bytes)
 {
-    aal::Bfstm bfstm;
+    bfstm::Bfstm bfstm;
     aal::Bwav bwav;
     const char* error = nullptr;
 
     if (asset.getStreamFileKind() == AudioAssetKind::Stream)
-        return aal::ReadBfstm(bytes.data(), bytes.size(), &bfstm, &error) ? StreamFileState::Loaded : StreamFileState::Damaged;
+        return bfstm::ReadBfstm(bytes.data(), bytes.size(), &bfstm, &error) ? StreamFileState::Loaded : StreamFileState::Damaged;
 
     return aal::ReadBwav(bytes.data(), bytes.size(), &bwav, &error) && aal::IsBwavComplete(bwav) ? StreamFileState::Loaded : StreamFileState::Damaged;
 }

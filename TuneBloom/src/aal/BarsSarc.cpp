@@ -1,7 +1,6 @@
 #include <aal/BarsSarc.h>
 
 #include <aal/AudioAsset.h>
-#include <aal/BarsList.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/FileName.h>
 
@@ -32,22 +31,15 @@ static bool IsBarsSarcName(const std::string& name)
     return GetStemLength(name) > 0;
 }
 
-static u32 CountEntryNames(const sarc::Index& index, bool (*matches)(const std::string&))
+static bool HasBarsSarcName(const sarc::Index& index)
 {
-    u32 count = 0;
-
     for (const sarc::IndexEntry& entry : index.entries)
     {
-        if (entry.hasName && matches(entry.name))
-            count++;
+        if (entry.hasName && IsBarsSarcName(entry.name))
+            return true;
     }
 
-    return count;
-}
-
-static bool HasEntryName(const sarc::Index& index, bool (*matches)(const std::string&))
-{
-    return CountEntryNames(index, matches) > 0;
+    return false;
 }
 
 u32 CountBarsSarcAssets(const sarc::Index& index)
@@ -65,37 +57,11 @@ u32 CountBarsSarcAssets(const sarc::Index& index)
     return static_cast<u32>(stems.size());
 }
 
-u32 CountPackResources(const sarc::Index& index)
-{
-    return CountEntryNames(index, IsPackResourceName);
-}
-
 bool IsBarsSarc(const void* data, u64 size)
 {
     sarc::Index index;
 
-    return sarc::ReadIndex(data, size, &index) && (index.entries.empty() || HasEntryName(index, IsBarsSarcName));
-}
-
-bool IsSoundPackIndex(const sarc::Index& index)
-{
-    return HasEntryName(index, IsPackResourceName);
-}
-
-static bool IsSoundArchiveName(const std::string& name)
-{
-    for (ArchiveFormat format : { ArchiveFormat::BFSAR, ArchiveFormat::BCSAR })
-    {
-        if (filename::HasExactExtension(name, GetInnerFileExtension(format, InnerFileKind::SoundArchive)))
-            return true;
-    }
-
-    return false;
-}
-
-bool IsPackResourceName(const std::string& name)
-{
-    return filename::HasExactExtension(name, cBarsFileExtension) || filename::HasExactExtension(name, cBarsListFileExtension) || IsSoundArchiveName(name);
+    return sarc::ReadIndex(data, size, &index) && (index.entries.empty() || HasBarsSarcName(index));
 }
 
 }

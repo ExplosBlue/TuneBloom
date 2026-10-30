@@ -7,7 +7,7 @@
 #include <ui/file/LooseStreamDocument.h>
 #include <ui/file/LooseWaveDocument.h>
 #include <ui/file/UnsavedChanges.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/project/FileLists.h>
 #include <ui/resource/ResourceViews.h>
 #include <ui/stream/StreamTrackImport.h>

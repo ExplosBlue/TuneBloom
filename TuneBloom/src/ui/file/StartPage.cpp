@@ -3,7 +3,7 @@
 #include <ui/file/FileFlow.h>
 #include <ui/file/RecentFiles.h>
 #include <ui/widgets/Properties.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <imgui/imgui_internal.h>
 

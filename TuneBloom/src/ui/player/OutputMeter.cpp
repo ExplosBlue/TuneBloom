@@ -1,7 +1,7 @@
 #include <ui/player/OutputMeter.h>
 
 #include <ui/widgets/ContextMenu.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/UiColors.h>
 
 #include <snd/HardwareMgr.h>

@@ -6,7 +6,7 @@
 #include <ui/stream/StreamTracks.h>
 #include <ui/stream/LooseStreamInfo.h>
 
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 
 Document* LooseStreamDocument::Open(File* file, const sead::SafeString& path)
 {

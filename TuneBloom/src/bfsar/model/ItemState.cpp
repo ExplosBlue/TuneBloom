@@ -1,7 +1,7 @@
 #include <bfsar/model/StateHash.h>
 
 #include <bfsar/archive/Bfsar.h>
-#include <ui/file/UnsavedChanges.h>
+#include <bfsar/model/ModelEvents.h>
 
 void Item::captureBaseline()
 {
@@ -9,7 +9,7 @@ void Item::captureBaseline()
     mHasBaseline = true;
 
     mCachedSignature = mBaselineSignature;
-    mCachedSignatureGeneration = GetEditGeneration();
+    mCachedSignatureGeneration = modelevents::GetLatestEditGeneration();
 }
 
 bool Item::isModifiedSinceBaseline() const
@@ -20,7 +20,7 @@ bool Item::isModifiedSinceBaseline() const
     if (!mHasBaseline)
         return true;
 
-    const u64 generation = GetEditGeneration();
+    const u64 generation = modelevents::GetLatestEditGeneration();
 
     if (mCachedSignatureGeneration != generation)
     {

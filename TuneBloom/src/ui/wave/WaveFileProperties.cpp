@@ -7,7 +7,7 @@
 #include <ui/widgets/Knob.h>
 #include <ui/wave/LoopWaveformEditor.h>
 #include <ui/wave/WaveformBox.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Properties.h>
 #include <ui/stream/StreamRegions.h>

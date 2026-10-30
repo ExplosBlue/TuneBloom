@@ -2,8 +2,6 @@
 
 #include <bfsar/player/SoundPlayer.h>
 
-extern SoundPlayer sSoundPlayer;
-
 f32 GetMasterVolumeDb();
 void SetMasterVolumeDb(f32 db);
 f32 GetMasterVolumePosition();

@@ -22,8 +22,9 @@
 #include <snd/SoundThread.h>
 #include <snd/ut/ut_BinaryFileFormat.h>
 
-#include "ui/Messages.h"
-#include "ui/app/PopupMgr.h"
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
+#include <ui/app/ModelEventHandlers.h>
 #include "core/TestHooks.h"
 #include "ui/file/SystemShell.h"
 #include "app/Utilll.h"
@@ -448,7 +449,8 @@ int main(int argc, char* argv[])
 
         sead::CurrentHeapSetter heapSetter(sead::HeapMgr::getUnboundHeap());
 
-        PopupMgr::createInstance(nullptr);
+        MessageLog::createInstance(nullptr);
+        InstallModelEventHandlers();
 
         snd::internal::driver::SoundThread::createInstance(nullptr);
         snd::internal::driver::DisposeCallbackMgr::createInstance(nullptr);

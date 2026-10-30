@@ -5,8 +5,8 @@
 #include <ui/export/ExportInternal.h>
 #include <ui/file/File.h>
 #include <ui/file/FileDialogs.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
 
@@ -461,7 +461,7 @@ static void ReportFailedBundledWaves(u32 failedWaveCount)
 
     sead::FormatFixedSafeString<64> message(failedWaveCount == 1 ? messages::import::cBundledWavesFailedOneFormat : messages::import::cBundledWavesFailedFormat, failedWaveCount);
 
-    PopupMgr::instance()->addPopup({message, nullptr});
+    MessageLog::instance()->addPopup({message, nullptr});
 }
 
 static WaveFile* FindWaveFileByName(const char* name)
@@ -720,7 +720,7 @@ static BundleLoadResult LoadBundleFile(const BundleFileType& type, BundleReader*
     if (!error)
         return BundleLoadResult::Loaded;
 
-    PopupMgr::instance()->addPopup({error, nullptr});
+    MessageLog::instance()->addPopup({error, nullptr});
     device->unload(fileData);
 
     return BundleLoadResult::Failed;
@@ -746,7 +746,7 @@ bool BeginInstrumentImport()
 
     if (reader.oob)
     {
-        PopupMgr::instance()->addPopup({messages::import::cInstrumentBundleCorrupt, nullptr});
+        MessageLog::instance()->addPopup({messages::import::cInstrumentBundleCorrupt, nullptr});
         UnloadBundleFile(reader.data);
         return false;
     }
@@ -815,7 +815,7 @@ static void CommitInstrumentImport()
 
     if (reader.oob)
     {
-        PopupMgr::instance()->addPopup({messages::import::cInstrumentBundleCorrupt, nullptr});
+        MessageLog::instance()->addPopup({messages::import::cInstrumentBundleCorrupt, nullptr});
         delete instr;
         return;
     }
@@ -902,7 +902,7 @@ bool BeginBankBundleImport()
 
     if (reader.oob)
     {
-        PopupMgr::instance()->addPopup({messages::import::cBankBundleCorrupt, nullptr});
+        MessageLog::instance()->addPopup({messages::import::cBankBundleCorrupt, nullptr});
         UnloadBundleFile(reader.data);
         return false;
     }
@@ -989,7 +989,7 @@ bool DrawBankBundleImportDialog()
     {
         if (const char* error = CommitBankBundleImport())
         {
-            PopupMgr::instance()->addPopup({error, nullptr});
+            MessageLog::instance()->addPopup({error, nullptr});
             failed = true;
         }
 

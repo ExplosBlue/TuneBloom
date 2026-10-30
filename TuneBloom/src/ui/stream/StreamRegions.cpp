@@ -5,7 +5,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/items/ItemSelector.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/RangeCell.h>
 #include <ui/widgets/RowRename.h>

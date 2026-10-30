@@ -4,8 +4,8 @@
 
 #include <math/seadMathCalcCommon.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
@@ -33,7 +33,7 @@ void StreamSoundFileReader::Initialize(const void* streamSoundFile)
     const StreamSoundFile::InfoBlock* infoBlock = header->GetInfoBlock();
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::stream::cFileNoInfoBlockFormat, streamFmt), messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::stream::cFileNoInfoBlockFormat, streamFmt), messages::stream::cAudioUnreadableDetail);
         return;
     }
 
@@ -45,13 +45,13 @@ void StreamSoundFileReader::Initialize(const void* streamSoundFile)
     mInfoBlockBody = &infoBlock->body;
     if (mInfoBlockBody->GetStreamSoundInfo()->oneBlockBytes % 32 != 0)
     {
-        PopupMgr::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::stream::cFileBlocksMisalignedFormat, streamFmt), messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::stream::cFileBlocksMisalignedFormat, streamFmt), messages::stream::cAudioUnreadableDetail);
         return;
     }
 
     if (mInfoBlockBody->GetStreamSoundInfo()->lastBlockPaddedBytes % 32 != 0)
     {
-        PopupMgr::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::stream::cFileBlocksMisalignedFormat, streamFmt), messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(sead::FormatFixedSafeString<64>(messages::stream::cFileBlocksMisalignedFormat, streamFmt), messages::stream::cAudioUnreadableDetail);
         return;
     }
 
@@ -86,7 +86,7 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
     const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Stream);
     if (!fileFormat)
     {
-        PopupMgr::instance()->pushCurrentItemWarning(messages::stream::cFileNotStream, messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(messages::stream::cFileNotStream, messages::stream::cAudioUnreadableDetail);
         return false;
     }
 
@@ -96,7 +96,7 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
         if (major < 1 || major > 4)
         {
             sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
-            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+            MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             return false;
         }
     }
@@ -105,7 +105,7 @@ bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const
         if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version < 0x00070000))
         {
             sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat, fileFormat->displayName, (u32)header->version);
-            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+            MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
             return false;
         }
     }

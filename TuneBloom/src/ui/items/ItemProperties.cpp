@@ -2,60 +2,13 @@
 
 #include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemListInternal.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/app/Shortcuts.h>
 
 #include <bfsar/archive/Bfsar.h>
 
 #include <libs/IconsLucide.h>
-
-const Item* Item::validate(sead::BufferedSafeString& error) const
-{
-    error = messages::cNotImplemented;
-    return this;
-}
-
-bool Item::validateName(sead::BufferedSafeString& error) const
-{
-    if (!Bfsar::validName(getName()))
-    {
-        error = messages::item::cNameInvalidDetail;
-        return false;
-    }
-
-    const Bfsar* archive = getArchive();
-
-    if (archive && !archive->validateName(getName(), this))
-    {
-        error = messages::item::cNameDuplicated;
-        return false;
-    }
-
-    return true;
-}
-
-bool Item::validateWaveArchive(WaveArchiveType type, const ItemReference& ref, sead::BufferedSafeString& error)
-{
-    switch (type)
-    {
-        case WaveArchiveType::AutomaticShared:
-        case WaveArchiveType::AutomaticIndividual:
-            return true;
-
-        case WaveArchiveType::Explicit:
-            if (ref.isAttached())
-                return true;
-
-            break;
-
-        default:
-            break;
-    }
-
-    error = messages::validation::cInvalidWaveArchive;
-    return false;
-}
 
 void WarningPopup(const char* name, const char* content)
 {

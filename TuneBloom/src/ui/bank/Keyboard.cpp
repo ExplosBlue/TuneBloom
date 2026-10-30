@@ -17,7 +17,7 @@ bool TestPianoBoardFunct(void* UserData, int Msg, int Key, float Vel) {
 #include <ui/bank/PianoKeyboard.h>
 
 #include <ui/bank/KeyboardPalette.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>

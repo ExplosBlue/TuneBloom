@@ -1,7 +1,7 @@
 #include <ui/stream/StreamPanelFold.h>
 
 #include <ui/widgets/DockNode.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/TabRowTools.h>
 
 #include <libs/IconsLucide.h>

@@ -3,7 +3,7 @@
 #include <ui/app/Shortcuts.h>
 #include <ui/file/LooseFileInfo.h>
 #include <ui/items/Selection.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/sound/SoundViews.h>
 #include <ui/stream/OpusBitrate.h>
 #include <ui/stream/StreamRegions.h>

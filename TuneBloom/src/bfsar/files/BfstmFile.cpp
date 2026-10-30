@@ -1,18 +1,20 @@
 #include <bfsar/files/BfstmFile.h>
 
-#include <aal/Bfstm.h>
+#include <bfsar/files/Bfstm.h>
 
 #include <core/Debug.h>
 #include <core/ParallelFor.h>
 
+#include <bfsar/archive/Bfsar.h>
 #include <bfsar/files/WaveFile.h>
 #include <bfsar/io/FileWriter.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
-#include <ui/app/UI.h>
+#include <messages/Messages.h>
+#include <bfsar/model/ModelEvents.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <snd/snd_StreamSoundFileReader.h>
+#include <snd/snd_WaveFileReader.h>
 #include <snd/StreamSoundPlayer.h>
 
 #include <stream/seadFileDeviceStream.h>
@@ -780,7 +782,7 @@ private:
     void pushTrackWarning_(const char* format, u32 trackNo)
     {
         sead::FormatFixedSafeString<1024> msg(format, trackNo);
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
 
         mReadAllTracks = false;
     }
@@ -793,7 +795,7 @@ private:
     u32 mStrmFileSize;
 
     nw::snd::internal::StreamSoundFileReader mReader;
-    aal::Bfstm mStream;
+    bfstm::Bfstm mStream;
     WaveFile::Encoding mEncoding = WaveFile::Encoding::DspAdpcm;
     u32 mChannelSize = 0;
 
@@ -813,7 +815,7 @@ bool StreamWaveReader::readStreamSoundInfo_()
         return false;
     }
 
-    if (!aal::ReadBfstmLayout(mStrmFile, mStrmFileSize, &mStream))
+    if (!bfstm::ReadBfstmLayout(mStrmFile, mStrmFileSize, &mStream))
     {
         LOG("ReadStreamWaves: stream file is damaged");
         return false;
@@ -846,7 +848,7 @@ void StreamWaveReader::readChannelBuffers_()
     for (u32 i = 0; i < mStream.channels.size(); i++)
     {
         mChannelBuffers[i] = new u8[mChannelSize];
-        aal::CopyBfstmChannel(mStream, mStrmFile, i, mChannelBuffers[i]);
+        bfstm::CopyBfstmChannel(mStream, mStrmFile, i, mChannelBuffers[i]);
     }
 }
 
@@ -871,7 +873,7 @@ WaveFile* StreamWaveReader::createTrackWave_(u32 trackNo, u32 trackCount)
 void StreamWaveReader::readFileLayout_(WaveFile* wave)
 {
     if (ReadStreamFileLayout(&wave->mStreamFileLayout, mReader, mStrmFileSize) == StreamRegionReadResult::Invalid)
-        PopupMgr::instance()->pushCurrentItemWarning(messages::stream::cRegionsUnreadable);
+        MessageLog::instance()->pushCurrentItemWarning(messages::stream::cRegionsUnreadable);
 
     LOG_U32("regionCount", static_cast<u32>(wave->mStreamFileLayout.regions.size()));
 }
@@ -883,30 +885,30 @@ bool StreamWaveReader::checkTrackLoop_(const WaveFile& wave, u32 trackNo) const
     if (wave.mLoopStartFrame >= wave.mLoopEndFrame)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopInvalidFormat, trackNo);
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         isLoopValid = false;
     }
 
     if (wave.getLoopStartFrame(true) != mStream.loopStartFrame)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopStartMismatchFormat, trackNo);
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         isLoopValid = false;
     }
 
     if (wave.getLoopEndFrame(true) != mStream.frameCount)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopEndMismatchFormat, trackNo);
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         isLoopValid = false;
     }
 
     return isLoopValid;
 }
 
-static void MakeAdpcmParams(const aal::BfstmChannel& source, nw::snd::DspAdpcmParam* param, nw::snd::internal::DspAdpcmLoopParam* loopParam)
+static void MakeAdpcmParams(const bfstm::BfstmChannel& source, nw::snd::DspAdpcmParam* param, nw::snd::internal::DspAdpcmLoopParam* loopParam)
 {
-    for (u32 i = 0; i < aal::cBfstmCoefficientCount; i++)
+    for (u32 i = 0; i < bfstm::cBfstmCoefficientCount; i++)
         param->coef[i / 2][i % 2] = static_cast<u16>(source.coefficients[i]);
 
     param->predScale = source.predScale;
@@ -1028,7 +1030,7 @@ static bool AttachSharedStreamWaves(Sound* sound, const Sound* srcSound)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cSharedTrackCountFormat,
                                               sound->getFormattedName().cstr(), srcSound->getFormattedName().cstr(), tracks.size(), srcTracks.size());
-        PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+        MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         return false;
     }
 
@@ -1102,7 +1104,7 @@ bool ReadStreamFileTracks(nw::snd::internal::StreamSoundFileReader& reader, Soun
         else
         {
             sead::FormatFixedSafeString<128> msg(messages::stream::cTrackUnreadableFormat, trackNo);
-            PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
+            MessageLog::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
 
             readAllTracks = false;
         }
@@ -1155,7 +1157,7 @@ void ApplyStreamTrackLayout(Sound::StreamSoundInfo& soundInfo, u32 trackCount, u
         removedTracks.push_back(last);
     }
 
-    ForgetRemovedItems(removedTracks);
+    modelevents::ItemsRemoved(removedTracks);
 
     for (Item* track : removedTracks)
         delete track;

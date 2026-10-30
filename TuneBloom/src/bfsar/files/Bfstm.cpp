@@ -1,10 +1,10 @@
-#include <aal/Bfstm.h>
+#include <bfsar/files/Bfstm.h>
 
 #include <bfsar/files/BfstmFile.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/ByteView.h>
 #include <core/NwFile.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <libs/dsp/dsp.h>
 
@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <cstring>
 
-namespace aal
+namespace bfstm
 {
 
 static constexpr u32 cHeaderSize             = 0x40;

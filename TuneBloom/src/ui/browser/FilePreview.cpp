@@ -1,8 +1,8 @@
 #include <ui/browser/FilePreview.h>
 
 #include <aal/AudioAsset.h>
-#include <browser/FileProbe.h>
-#include <ui/Messages.h>
+#include <scan/FileProbe.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/PlayerViews.h>
 #include <bfsar/player/SoundPlayer.h>

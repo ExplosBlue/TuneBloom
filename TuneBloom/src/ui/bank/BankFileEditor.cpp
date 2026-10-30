@@ -4,9 +4,9 @@
 
 #include <ui/widgets/ContextMenu.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/bank/PianoRollPalette.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/settings/Preferences.h>
 #include <ui/sound/SoundProperties.h>
 #include <ui/app/UI.h>
@@ -53,6 +53,69 @@ static constexpr u8 cRegionVolumeDefault = 127;
 
 static const char* cRegionPitchKnobs[]  = { messages::param::cCoarse, messages::param::cFine };
 static const char* cRegionOutputKnobs[] = { messages::common::cVolume, messages::common::cPan };
+
+struct SharedProgramNoCache
+{
+    const sead::TList<Item*>* instrumentList;
+    std::vector<s16> sharedProgramNos;
+};
+
+static std::vector<SharedProgramNoCache> sSharedProgramNoCaches;
+static s32 sSharedProgramNoCacheFrame = -1;
+
+static std::vector<s16> CollectSharedProgramNos(const sead::TList<Item*>& instrumentList)
+{
+    std::vector<s16> programNos;
+    programNos.reserve(instrumentList.size());
+
+    for (const Item* item : instrumentList)
+        programNos.push_back(static_cast<const BankFile::Instrument*>(item)->getProgramNo());
+
+    std::sort(programNos.begin(), programNos.end());
+
+    std::vector<s16> sharedProgramNos;
+
+    for (size_t i = 1; i < programNos.size(); i++)
+    {
+        if (programNos[i] == programNos[i - 1] && (sharedProgramNos.empty() || sharedProgramNos.back() != programNos[i]))
+            sharedProgramNos.push_back(programNos[i]);
+    }
+
+    return sharedProgramNos;
+}
+
+static const std::vector<s16>& FindSharedProgramNos(const sead::TList<Item*>& instrumentList)
+{
+    const s32 frame = ImGui::GetFrameCount();
+
+    if (sSharedProgramNoCacheFrame != frame)
+    {
+        sSharedProgramNoCaches.clear();
+        sSharedProgramNoCacheFrame = frame;
+    }
+
+    for (const SharedProgramNoCache& cache : sSharedProgramNoCaches)
+    {
+        if (cache.instrumentList == &instrumentList)
+            return cache.sharedProgramNos;
+    }
+
+    sSharedProgramNoCaches.push_back({ &instrumentList, CollectSharedProgramNos(instrumentList) });
+
+    return sSharedProgramNoCaches.back().sharedProgramNos;
+}
+
+bool IsProgramNoShared(const BankFile::Instrument* instrument)
+{
+    const sead::TList<Item*>* instrumentList = instrument->list();
+
+    if (!instrumentList)
+        return false;
+
+    const std::vector<s16>& sharedProgramNos = FindSharedProgramNos(*instrumentList);
+
+    return std::binary_search(sharedProgramNos.begin(), sharedProgramNos.end(), instrument->getProgramNo());
+}
 
 static sead::FixedSafeString<24> FormatKeyName(s32 key)
 {

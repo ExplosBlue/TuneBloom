@@ -1,6 +1,6 @@
 #pragma once
 
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 
 #include <vector>
 

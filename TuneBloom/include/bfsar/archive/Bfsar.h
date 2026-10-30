@@ -15,7 +15,7 @@
 #include <bfsar/files/StreamWaveOwner.h>
 #include <bfsar/files/WaveFile.h>
 
-#include <ui/MessageType.h>
+#include <messages/MessageType.h>
 
 #include <filedevice/seadFileDevice.h>
 #include <prim/seadSafeString.h>

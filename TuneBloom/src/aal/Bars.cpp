@@ -5,7 +5,7 @@
 #include <core/ByteBuilder.h>
 #include <core/ByteView.h>
 #include <core/NwFile.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <codec/seadHashCRC32.h>
 

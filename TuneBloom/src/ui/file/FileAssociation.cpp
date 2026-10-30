@@ -1,7 +1,7 @@
 #include <ui/file/FileAssociation.h>
 
 #include <bfsar/model/ArchiveFormat.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/SystemShell.h>
 #include <core/TestHooks.h>
 

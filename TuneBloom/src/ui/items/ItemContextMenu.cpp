@@ -1,7 +1,7 @@
 #include <ui/items/ItemListInternal.h>
 
 #include <ui/widgets/ContextMenu.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <libs/IconsLucide.h>
 

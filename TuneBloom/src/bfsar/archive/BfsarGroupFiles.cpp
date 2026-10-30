@@ -8,8 +8,8 @@
 #include <bfsar/archive/GroupFilePaths.h>
 #include <bfsar/archive/SaveReport.h>
 
-#include <ui/settings/Config.h>
-#include <ui/Messages.h>
+#include <bfsar/archive/SaveSettings.h>
+#include <messages/Messages.h>
 #include <core/TestHooks.h>
 
 #include <algorithm>

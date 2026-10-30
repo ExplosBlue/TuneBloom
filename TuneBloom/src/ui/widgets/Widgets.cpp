@@ -2,7 +2,7 @@
 
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>

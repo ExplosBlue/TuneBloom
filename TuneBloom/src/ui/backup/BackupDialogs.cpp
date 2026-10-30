@@ -3,7 +3,7 @@
 #include <ui/widgets/Dialogs.h>
 #include <ui/file/File.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/SystemShell.h>
 #include <ui/widgets/TimeUtil.h>
 #include <ui/settings/UiColors.h>

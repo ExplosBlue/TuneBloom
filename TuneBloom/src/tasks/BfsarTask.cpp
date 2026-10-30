@@ -20,9 +20,10 @@
 #include "ui/file/LoadProgress.h"
 #include "ui/player/OutputMeter.h"
 #include "ui/player/PlayerFrame.h"
-#include "ui/Messages.h"
+#include <messages/Messages.h>
 #include "ui/app/Notifications.h"
-#include "ui/app/PopupMgr.h"
+#include <ui/app/ModelEventHandlers.h>
+#include <ui/app/PopupMgr.h>
 
 #include <app/Utilll.h>
 #include <core/TestHooks.h>
@@ -159,9 +160,11 @@ void BfsarTask::prepare()
             }
         }
 
-        PopupMgr::instance()->addPopup({ messages::app::cDropUnsupported });
+        MessageLog::instance()->addPopup({ messages::app::cDropUnsupported });
     });
 
+    MessageLog::createInstance(nullptr);
+    InstallModelEventHandlers();
     PopupMgr::createInstance(nullptr);
 
     s32 width = 0;

@@ -135,10 +135,4 @@ u32 GetAudioAssetOpusBitrate(const AudioAsset& asset);
 aal::AmtaSourceAudio GetAudioAssetLength(const AudioAsset& asset);
 bool IsAudioAssetLoop(const AudioAsset& asset);
 bool IsReadableFwav(const std::vector<u8>& file);
-WaveFile* ReadFwavFile(const void* data, size_t size);
-
-inline WaveFile* ReadFwavFile(const std::vector<u8>& file)
-{
-    return ReadFwavFile(file.data(), file.size());
-}
 bool DecodeAudioFile(const AudioAssetFile& file, DecodedPcm* out);

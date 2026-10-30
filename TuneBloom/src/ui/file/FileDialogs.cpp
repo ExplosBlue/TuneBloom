@@ -1,6 +1,6 @@
 #include <ui/file/FileDialogs.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <core/TestHooks.h>
 
 #include <core/Debug.h>

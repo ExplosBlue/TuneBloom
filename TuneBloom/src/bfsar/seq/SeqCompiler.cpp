@@ -1,11 +1,12 @@
 #include <bfsar/files/SequenceFile.h>
 
+#include <bfsar/archive/Bfsar.h>
 #include <bfsar/seq/SeqCommand.h>
 #include <bfsar/seq/SeqParseUtil.h>
 #include <bfsar/model/Sound.h>
 
-#include <ui/Messages.h>
-#include <ui/app/UI.h>
+#include <bfsar/model/ModelEvents.h>
+#include <messages/Messages.h>
 
 #include <core/Debug.h>
 
@@ -451,7 +452,7 @@ void SequenceFile::syncRenamedLabels_()
                 continue;
 
             info.getStartLabel() = newLabel.c_str();
-            SetUnsavedChanges(true);
+            modelevents::ArchiveChanged();
         }
     }
 }

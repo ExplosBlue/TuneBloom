@@ -1,6 +1,6 @@
 #pragma once
 
-#include <browser/FileIndex.h>
+#include <scan/FileIndex.h>
 #include <ui/browser/FilePreview.h>
 #include <ui/browser/FileExportRun.h>
 #include <ui/file/FileDrag.h>

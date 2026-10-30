@@ -1,4 +1,4 @@
-#include <browser/ArchiveProbe.h>
+#include <scan/ArchiveProbe.h>
 
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/ByteView.h>

@@ -5,8 +5,8 @@
 #include <bfsar/files/BfstmFile.h>
 #include <bfsar/archive/SaveReport.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <algorithm>
 #include <cctype>

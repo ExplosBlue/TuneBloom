@@ -2,7 +2,7 @@
 
 #include <snd/SoundThread.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
 

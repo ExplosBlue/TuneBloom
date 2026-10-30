@@ -12,7 +12,7 @@
 #include <ui/app/FileTransferMenu.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/OutputMeter.h>
 #include <ui/player/PlayerFrame.h>

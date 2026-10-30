@@ -1,6 +1,6 @@
 #include <ui/wave/WaveImportPanelInternal.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Properties.h>
 #include <ui/wave/WaveFormatUI.h>

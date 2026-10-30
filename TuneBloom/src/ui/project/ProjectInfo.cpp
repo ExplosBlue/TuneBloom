@@ -3,7 +3,7 @@
 #include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/PanelLayout.h>
 #include <ui/widgets/Properties.h>
 #include <ui/file/UnsavedChanges.h>

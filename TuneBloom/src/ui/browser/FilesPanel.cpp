@@ -9,7 +9,7 @@
 #include <ui/browser/FilesPanelInternal.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/RowSelection.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/settings/Theme.h>

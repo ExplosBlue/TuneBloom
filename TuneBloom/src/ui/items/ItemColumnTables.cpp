@@ -1,6 +1,6 @@
 #include <ui/items/ItemColumns.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/resource/BarsListViews.h>
 #include <ui/widgets/Widgets.h>
 

@@ -1,10 +1,10 @@
 #include <ui/sound/SoundViews.h>
 
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/file/File.h>
 #include <ui/items/ItemSelector.h>
 #include <ui/widgets/Knob.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/items/Selection.h>
 #include <ui/settings/UiColors.h>
@@ -12,74 +12,6 @@
 #include <ui/widgets/Widgets.h>
 
 #include <bfsar/model/SoundSetMembership.h>
-
-const Item* SoundSet::validate(sead::BufferedSafeString& error) const
-{
-    if (!Item::validateName(error))
-    {
-        return this;
-    }
-
-    switch (getSoundSetType())
-    {
-        case SoundSetType::Wave:
-            if (!Item::validateWaveArchive(getWaveArchiveType(), getWaveArchiveRef(), error))
-                return this;
-
-            break;
-
-        case SoundSetType::Seq:
-            break;
-
-        default:
-            error = messages::validation::cInvalidSoundType;
-            return this;
-    }
-
-    if (getIsEmpty())
-    {
-        return nullptr;
-    }
-
-    if (getEndId() < getStartId())
-    {
-        error = messages::soundset::cErrorInvalidRange;
-        return this;
-    }
-
-    const Bfsar* archive = getArchive();
-    const u32 soundCount = archive ? static_cast<u32>(archive->getSoundList().size()) : 0;
-
-    if (getStartId() >= soundCount)
-    {
-        error = messages::soundset::cErrorStartExceedsCount;
-        return this;
-    }
-
-    if (getEndId() >= soundCount)
-    {
-        error = messages::soundset::cErrorEndExceedsCount;
-        return this;
-    }
-
-    const Item::List& soundList = archive->getSoundList();
-
-    for (const Item::ListNode* itemNode = archive->getItem(getStartId(), soundList); itemNode && itemNode->val()->getId() <= getEndId(); itemNode = soundList.next(itemNode))
-    {
-        SEAD_ASSERT(itemNode->val()->getItemType() == Item::ItemType::Sound);
-        const Sound* sound = static_cast<const Sound*>(itemNode->val());
-
-        if (sound->mOwnerSet)
-        {
-            error.format(messages::soundset::cErrorSoundInOtherSetFormat,sound->getFormattedName().cstr(), sound->mOwnerSet->getFormattedName().cstr());
-            return this;
-        }
-
-        sound->mOwnerSet = this;
-    }
-
-    return nullptr;
-}
 
 // Chain-edit helpers
 
@@ -243,7 +175,7 @@ static void ReportSoundListRefusal(const SoundSetEditResult& result)
             return;
     }
 
-    PopupMgr::instance()->addPopup({ text, item });
+    MessageLog::instance()->addPopup({ text, item });
 }
 
 static bool ApplySoundListEdit(Bfsar& archive, const SoundSetEditResult& result)

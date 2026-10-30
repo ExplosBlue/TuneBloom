@@ -5,8 +5,8 @@
 
 #include <snd/snd_SequenceSoundFileReader.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 static constexpr u32 cExtendedModMinVersion = 0x00020000;
 
@@ -66,7 +66,7 @@ const char* MmlCommandModType::cTypes[MmlCommandModType::cTypeNum] = {
 
 static void InvalidateSeqFile()
 {
-    Item* item = PopupMgr::instance()->getCurrentProcessItem_();
+    Item* item = MessageLog::instance()->getCurrentProcessItem_();
     if (item && item->getItemType() == Item::ItemType::SequenceFile)
     {
         SequenceFile* seqFile = static_cast<SequenceFile*>(item);
@@ -79,7 +79,7 @@ static void CheckMultiModVersion(u32 cmd, u32 cmdex, u32 seqVersion)
     if (seqVersion < cExtendedModMinVersion)
     {
         sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandExVersionFormat, cmd, cmdex);
-        PopupMgr::instance()->pushCurrentItemError(msg);
+        MessageLog::instance()->pushCurrentItemError(msg);
         InvalidateSeqFile();
     }
 }
@@ -239,7 +239,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                 case MmlCommand::MML_MOD_PHASE:
                     if (seqVersion < cExtendedModMinVersion)
                     {
-                        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_phase"));
+                        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_phase"));
                         InvalidateSeqFile();
                     }
                     cmdInst = new MmlCommandModPhase(arg1, conditional);
@@ -247,7 +247,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                 case MmlCommand::MML_MOD_CURVE:
                     if (seqVersion < cExtendedModMinVersion)
                     {
-                        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_curve"));
+                        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::sequence::cDataCommandVersionFormat, "mod_curve"));
                         InvalidateSeqFile();
                     }
                     cmdInst = new MmlCommandModCurve(arg1, conditional);
@@ -359,7 +359,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
         case 0x90: // Extra
         {
             sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandMissingFormat,cmd);
-            PopupMgr::instance()->pushCurrentItemError(msg);
+            MessageLog::instance()->pushCurrentItemError(msg);
             InvalidateSeqFile();
             break;
         }
@@ -480,7 +480,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
                         {
                             delete arg1;
                             sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandExMissingFormat,cmd, cmdex);
-                            PopupMgr::instance()->pushCurrentItemError(msg);
+                            MessageLog::instance()->pushCurrentItemError(msg);
                             InvalidateSeqFile();
                             break;
                         }
@@ -632,7 +632,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
         {
             // Having a prefix command here is invalid.
             sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandInvalidFormat,cmd);
-            PopupMgr::instance()->pushCurrentItemError(msg);
+            MessageLog::instance()->pushCurrentItemError(msg);
             InvalidateSeqFile();
         }
         }
@@ -649,7 +649,7 @@ MmlCommandBase* nw__snd__internal__driver__MmlParser__Parse(const u8*& trackData
             if (ret != 0)
             {
                 sead::FormatFixedSafeString<128> msg(messages::sequence::cDataCommandMismatchFormat,cmd);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 InvalidateSeqFile();
 
                 delete cmdInst;

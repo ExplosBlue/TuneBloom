@@ -1,4 +1,4 @@
-#include <browser/FileIndexCache.h>
+#include <scan/FileIndexCache.h>
 
 #include <core/ByteBuilder.h>
 #include <core/ByteView.h>

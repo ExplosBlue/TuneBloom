@@ -1,8 +1,8 @@
 #include <ui/bank/BankFileEditor.h>
 
 #include <ui/settings/Config.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/UI.h>
 
 #include <midi/MidiInput.h>
@@ -66,7 +66,7 @@ bool KeyboardFunc(void* UserData, s32 Msg, s32 Key, f32 Vel)
             const BankFile::VelocityRegion* velocityRegion = keyRegion->getVelocityRegion(vel);
             if (!velocityRegion)
             {
-                PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::bank::cNoVelocityRegionFormat, vel) });
+                MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::bank::cNoVelocityRegionFormat, vel) });
                 return false;
             }
 

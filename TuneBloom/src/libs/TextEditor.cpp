@@ -8,7 +8,7 @@
 
 #include "libs/TextEditor.h"
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 #include "imgui.h" // for imGui::GetCurrentWindow()

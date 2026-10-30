@@ -8,8 +8,8 @@
 
 #include <snd/SoundThread.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <stream/seadFileDeviceStream.h>
@@ -324,7 +324,7 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out, bool acceptAnyPcm)
     if (!handle.getDevice())
     {
         sead::FormatFixedSafeString<512> msg(messages::wavefile::cWavOpenFailedFormat,out->path.cstr());
-        PopupMgr::instance()->addPopup({ msg });
+        MessageLog::instance()->addPopup({ msg });
         return false;
     }
 
@@ -339,7 +339,7 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out, bool acceptAnyPcm)
     if (ReadRiffInfo(context))
         return true;
 
-    PopupMgr::instance()->addPopup({ context.error });
+    MessageLog::instance()->addPopup({ context.error });
     return false;
 }
 
@@ -585,7 +585,7 @@ bool ReadWavRegions(WavRegions* out, const sead::SafeString& path)
     if (!handle.getDevice())
     {
         sead::FormatFixedSafeString<512> msg(messages::wavefile::cWavOpenFailedFormat, info.path.cstr());
-        PopupMgr::instance()->addPopup({ msg });
+        MessageLog::instance()->addPopup({ msg });
         return false;
     }
 
@@ -599,7 +599,7 @@ bool ReadWavRegions(WavRegions* out, const sead::SafeString& path)
 
     if (!ReadRiffHeader(context) || !FindRiffFmtChunk(context, &fmtChunkSize) || !ReadRiffFmtChunk(context, fmtChunkSize))
     {
-        PopupMgr::instance()->addPopup({ context.error });
+        MessageLog::instance()->addPopup({ context.error });
         return false;
     }
 
@@ -608,7 +608,7 @@ bool ReadWavRegions(WavRegions* out, const sead::SafeString& path)
         RiffChunkHeader chunk;
         if (!ReadRiffChunkHeader(context, &chunk))
         {
-            PopupMgr::instance()->addPopup({ context.error });
+            MessageLog::instance()->addPopup({ context.error });
             return false;
         }
 
@@ -639,7 +639,7 @@ bool ReadWavRegions(WavRegions* out, const sead::SafeString& path)
         return true;
 
     sead::FormatFixedSafeString<512> msg(messages::stream::cRegionImportInvalidFormat, info.path.cstr());
-    PopupMgr::instance()->addPopup({ msg });
+    MessageLog::instance()->addPopup({ msg });
 
     return false;
 }
@@ -773,7 +773,7 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
 
     if (!info.isValid)
     {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavInvalidInfo });
+        MessageLog::instance()->addPopup({ messages::wavefile::cWavInvalidInfo });
         return false;
     }
 
@@ -786,7 +786,7 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
     if (!handle.getDevice())
     {
         sead::FormatFixedSafeString<512> msg(messages::wavefile::cWavOpenFailedFormat,info.path.cstr());
-        PopupMgr::instance()->addPopup({ msg });
+        MessageLog::instance()->addPopup({ msg });
         return false;
     }
 

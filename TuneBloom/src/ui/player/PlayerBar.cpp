@@ -4,7 +4,7 @@
 #include <ui/resource/ResourceViews.h>
 #include <ui/widgets/DockNode.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/OutputMeter.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/stream/StreamPanelFold.h>
@@ -22,8 +22,6 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
-
-SoundPlayer sSoundPlayer;
 
 constexpr f32   cSeekTrackHeight      = 6.0f;
 constexpr f32   cSeekHandleRadius     = 5.0f;

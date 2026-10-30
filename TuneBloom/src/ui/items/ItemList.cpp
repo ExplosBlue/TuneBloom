@@ -5,7 +5,7 @@
 #include <ui/file/FileWindow.h>
 #include <ui/items/ItemSelector.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/app/Shortcuts.h>

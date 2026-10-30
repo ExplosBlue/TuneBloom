@@ -2,7 +2,7 @@
 
 #include <ui/file/File.h>
 #include <ui/wave/LoopWaveformInternal.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/Theme.h>
 #include <ui/widgets/RangeCell.h>
 

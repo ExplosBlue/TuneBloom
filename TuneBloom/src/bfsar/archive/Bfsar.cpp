@@ -8,12 +8,12 @@
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
 #include <bfsar/archive/SaveReport.h>
+#include <bfsar/archive/SaveSettings.h>
 
-#include <ui/file/LoadProgress.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/ModelEvents.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <core/TestHooks.h>
-#include <ui/app/UI.h>
 
 #include <snd/SoundThread.h>
 
@@ -25,6 +25,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+bool sSaveMetadataDefault = cSaveMetadataDefault;
+bool sForceSaveWhenInUse = cForceSaveInUseDefault;
+bool sDeleteUnusedGroupFiles = cDeleteUnusedGroupFilesDefault;
 
 static void FreeLoadedFiles(std::vector<u8*>& buffers)
 {
@@ -148,7 +152,7 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
     LOG_STR(filePath.cstr());
 
     close();
-    PopupMgr::instance()->setCorruptInfo("");
+    MessageLog::instance()->setCorruptInfo("");
 
     // Detect format from magic
     if (sead::MemUtil::compare(bfsarFile, "CSAR", 4) == 0)
@@ -196,14 +200,14 @@ bool Bfsar::open(u8* bfsarFile, u32 bfsarSize, const sead::SafeString& filePath,
 
     if (success)
     {
-        loadprogress::BeginStage(loadprogress::Stage::Names);
+        modelevents::BeginLoadStage(modelevents::LoadStage::Names);
 
         const sead::SafeString& namesSource = metadataSource ? *metadataSource : filePath;
 
         mSaveMetadata = loadMetadata_(namesSource) || sSaveMetadataDefault;
     }
 
-    PopupMgr::instance()->setCurrentProcessItem(nullptr);
+    MessageLog::instance()->setCurrentProcessItem(nullptr);
 
     mOpen = true;
 
@@ -225,9 +229,9 @@ static bool ForceOverwriteFile_(const sead::SafeString &stagedPath, const sead::
     return true;
 }
 
-void ReportArchiveError(bool toStderr, const PopupMgr::PopupInfo& info)
+void ReportArchiveError(bool toStderr, const MessageLog::PopupInfo& info)
 {
-    PopupMgr::instance()->addPopup(info);
+    MessageLog::instance()->addPopup(info);
 
     if (!toStderr)
         return;

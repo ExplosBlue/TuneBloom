@@ -10,8 +10,8 @@
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
 
-#include <ui/Messages.h>
-#include <ui/items/Selection.h>
+#include <messages/Messages.h>
+#include <bfsar/model/ModelEvents.h>
 
 #include <snd/snd_StreamSoundFileReader.h>
 #include <snd/StreamSoundPlayer.h>
@@ -224,7 +224,7 @@ void LooseStreamFile::setChannelCount(u32 channelCount)
         removedWaves.push_back(GetTrackWave(mStream, trackNo));
 
     ApplyStreamTrackLayout(mStream, trackCount, channelCount);
-    ForgetRemovedItems(removedWaves);
+    modelevents::ItemsRemoved(removedWaves);
 
     for (Item* wave : removedWaves)
         delete wave;

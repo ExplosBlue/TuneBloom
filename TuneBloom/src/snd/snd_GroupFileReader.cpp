@@ -2,8 +2,8 @@
 
 #include <prim/seadMemUtil.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
@@ -24,7 +24,7 @@ GroupFileReader::GroupFileReader(const void* groupFile)
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Group);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotGroupFile);
+            MessageLog::instance()->pushCurrentItemError(messages::reader::cNotGroupFile);
             return;
         }
 
@@ -37,7 +37,7 @@ GroupFileReader::GroupFileReader(const void* groupFile)
             if (major != 1)
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -46,7 +46,7 @@ GroupFileReader::GroupFileReader(const void* groupFile)
             if (!Util::IsHighByteMajorVersion((u32)header->version) && (u32)header->version != 0x00010000)
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -60,13 +60,13 @@ GroupFileReader::GroupFileReader(const void* groupFile)
 
     if (!infoBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, grpFmt, "INFO").cstr());
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, grpFmt, "INFO").cstr());
         return;
     }
 
     if (!fileBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, grpFmt, "FILE").cstr());
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, grpFmt, "FILE").cstr());
         return;
     }
 

@@ -7,8 +7,8 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/file/LooseStreamDocument.h>
 #include <ui/file/LooseWaveDocument.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/file/SoundArchiveDocument.h>
 
 #include <aal/AudioResource.h>
@@ -38,13 +38,7 @@ static constexpr u32 cBfsarLegacyVersionMin = 0x00010000;
 static constexpr u32 cBfsarLegacyVersionEnd = 0x00030000;
 static constexpr u32 cBfsarV3Version        = 0x03000000;
 
-static u64 sLastEditGeneration = 0;
 static u32 sLastDocumentSerial = 0;
-
-u64 NewEditGeneration()
-{
-    return ++sLastEditGeneration;
-}
 
 u32 NewDocumentSerial()
 {
@@ -65,7 +59,7 @@ static bool CheckSoundArchiveFile(const u8* file, u32 size)
 
     if ((!isFsar && !isCsar) || !HasByteOrderMark(byteOrderMark))
     {
-        PopupMgr::instance()->addPopup({ messages::archive::cNotArchive, nullptr });
+        MessageLog::instance()->addPopup({ messages::archive::cNotArchive, nullptr });
         return false;
     }
 
@@ -80,7 +74,7 @@ static bool CheckSoundArchiveFile(const u8* file, u32 size)
     if (inLegacyRange || version == cBfsarV3Version)
         return true;
 
-    PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::archive::cBfsarVersionUnsupportedFormat, version), nullptr });
+    MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::archive::cBfsarVersionUnsupportedFormat, version), nullptr });
     return false;
 }
 
@@ -239,7 +233,7 @@ bool Document::CheckBeforeOpen(const File& file, const char* failMessage)
     if (!Check(file, &error))
     {
         if (error)
-            PopupMgr::instance()->addPopup({ failMessage ? failMessage : error, nullptr });
+            MessageLog::instance()->addPopup({ failMessage ? failMessage : error, nullptr });
 
         return false;
     }

@@ -7,7 +7,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/app/Workspace.h>

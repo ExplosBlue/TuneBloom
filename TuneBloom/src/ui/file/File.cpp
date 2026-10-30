@@ -9,9 +9,9 @@
 #include <ui/file/FileFlow.h>
 #include <ui/file/GroupFileLocate.h>
 #include <ui/file/LoadProgress.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/OpenQueue.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/player/PlayerFrame.h>
 #include <ui/project/Sidebar.h>
 #include <ui/file/RecentFiles.h>
@@ -23,7 +23,7 @@
 #include <bfsar/files/InnerFile.h>
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
-#include <browser/FileProbe.h>
+#include <scan/FileProbe.h>
 #include <core/Debug.h>
 
 #include <filedevice/seadPath.h>
@@ -285,7 +285,7 @@ static bool FinishSave(Document* document, SaveResult result, const char* error)
     if (result == SaveResult::Failed)
     {
         if (error)
-            PopupMgr::instance()->addPopup({ error, nullptr });
+            MessageLog::instance()->addPopup({ error, nullptr });
 
         return false;
     }
@@ -296,7 +296,7 @@ static bool FinishSave(Document* document, SaveResult result, const char* error)
     {
         SetUnsavedChanges(true);
         RecordDocumentPath();
-        PopupMgr::instance()->addPopup({ error, nullptr });
+        MessageLog::instance()->addPopup({ error, nullptr });
 
         return false;
     }
@@ -314,7 +314,7 @@ static bool LoadDocumentFile(const sead::SafeString& filePath, bool isPreview, D
     if (const char* error = Document::Load(filePath, &file))
     {
         Document::Free(&file);
-        PopupMgr::instance()->addPopup({ error, nullptr });
+        MessageLog::instance()->addPopup({ error, nullptr });
         return false;
     }
 
@@ -333,11 +333,11 @@ static bool LoadDocumentFile(const sead::SafeString& filePath, bool isPreview, D
 
     if (!document)
     {
-        PopupMgr::instance()->discardProcessedErrors();
+        MessageLog::instance()->discardProcessedErrors();
         return false;
     }
 
-    PopupMgr::instance()->moveProcessedErrors(&document->state().itemErrors);
+    MessageLog::instance()->moveProcessedErrors(&document->state().itemErrors);
 
     if (replaced)
         ReplaceDocument(replaced, document);
@@ -393,7 +393,7 @@ static void OpenRequestedFile(const openqueue::Request& queuedRequest)
 
     if (request.path.size() > static_cast<size_t>(fileio::cPathLengthMax))
     {
-        PopupMgr::instance()->addPopup({ messages::archive::cOpenFailed, nullptr });
+        MessageLog::instance()->addPopup({ messages::archive::cOpenFailed, nullptr });
         return;
     }
 
@@ -494,7 +494,7 @@ bool SaveFileAs(Document* document)
 
     if (openDocument && openDocument != document)
     {
-        PopupMgr::instance()->addPopup({ messages::saving::cOpenInOtherTab, nullptr });
+        MessageLog::instance()->addPopup({ messages::saving::cOpenInOtherTab, nullptr });
         return false;
     }
 
@@ -522,7 +522,7 @@ bool CheckBlockCorrupt(const char* fileName, const char* blockName, const void* 
 {
     if (sead::MemUtil::compare(block, blockName, 4) != 0)
     {
-        PopupMgr::instance()->setCorruptInfo(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat,fileName, blockName));
+        MessageLog::instance()->setCorruptInfo(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat,fileName, blockName));
         return false;
     }
 
@@ -533,7 +533,7 @@ bool CheckBlockCorruptError(const char* fileName, const char* blockName, const v
 {
     if (sead::MemUtil::compare(block, blockName, 4) != 0)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat,fileName, blockName));
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat,fileName, blockName));
         return false;
     }
 

@@ -8,7 +8,7 @@
 #include <snd/SoundThread.h>
 
 #include <ui/widgets/ContextMenu.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/sequence/SeqEditor.h>
 #include <ui/sequence/SeqManual.h>
 #include <ui/app/UI.h>

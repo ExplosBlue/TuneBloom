@@ -7,8 +7,8 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/project/FileLists.h>
 #include <ui/items/ItemList.h>
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
@@ -84,13 +84,13 @@ void ShowExportResult(const char* message)
 void ShowWavExportResult(bool exported)
 {
     if (!exported)
-        PopupMgr::instance()->addPopup({ messages::exporting::cWavWriteFailed, nullptr });
+        MessageLog::instance()->addPopup({ messages::exporting::cWavWriteFailed, nullptr });
 }
 
 void ShowWavBatchExportResult(s32, s32 failureCount)
 {
     if (failureCount > 0)
-        PopupMgr::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cWavsWriteFailedOneFormat : messages::exporting::cWavsWriteFailedFormat, failureCount), nullptr });
+        MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<64>(failureCount == 1 ? messages::exporting::cWavsWriteFailedOneFormat : messages::exporting::cWavsWriteFailedFormat, failureCount), nullptr });
 }
 
 void ShowBatchExportResult(s32 total, s32 failureCount, const char* formatName)

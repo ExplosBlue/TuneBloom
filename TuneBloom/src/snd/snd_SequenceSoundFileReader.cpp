@@ -2,8 +2,8 @@
 
 #include <format>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/app/UI.h>
 
 namespace nw { namespace snd { namespace internal {
@@ -25,7 +25,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
         const InnerFileFormatInfo* fileFormat = FindInnerFileFormat(header->signature, InnerFileKind::Sequence);
         if (!fileFormat)
         {
-            PopupMgr::instance()->pushCurrentItemError(messages::reader::cNotSequenceFile);
+            MessageLog::instance()->pushCurrentItemError(messages::reader::cNotSequenceFile);
             return;
         }
 
@@ -37,7 +37,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
             if (major < 1 || major > 2)
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -46,7 +46,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
             if (!Util::IsHighByteMajorVersion((u32)header->version) && !(0x00010000 <= (u32)header->version && (u32)header->version < 0x00030000))
             {
                 sead::FormatFixedSafeString<64> msg(messages::reader::cVersionUnsupportedFormat,fileFormat->displayName, (u32)header->version);
-                PopupMgr::instance()->pushCurrentItemError(msg);
+                MessageLog::instance()->pushCurrentItemError(msg);
                 return;
             }
         }
@@ -57,7 +57,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::DataBlock* dataBlock = header->GetDataBlock();
     if (!dataBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, seqFmt, "DATA").cstr());
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, seqFmt, "DATA").cstr());
         return;
     }
 
@@ -69,7 +69,7 @@ SequenceSoundFileReader::SequenceSoundFileReader(const void* sequenceFile)
     const SequenceSoundFile::LabelBlock* labelBlock = header->GetLabelBlock();
     if (!labelBlock)
     {
-        PopupMgr::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, seqFmt, "LABL").cstr());
+        MessageLog::instance()->pushCurrentItemError(sead::FormatFixedSafeString<64>(messages::archive::cBlockNotFoundFormat, seqFmt, "LABL").cstr());
         return;
     }
 

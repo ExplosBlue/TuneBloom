@@ -1,7 +1,7 @@
 #include <ui/wave/LoopWaveformInternal.h>
 
 #include <ui/widgets/ContextMenu.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/settings/UiColors.h>
 

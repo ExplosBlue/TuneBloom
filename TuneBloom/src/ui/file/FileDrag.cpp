@@ -2,7 +2,7 @@
 
 #include <ui/file/FileFlow.h>
 #include <ui/file/OpenQueue.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <bfsar/model/ArchiveFormat.h>
 

@@ -1,23 +1,13 @@
 #pragma once
 
+#include <bfsar/model/ModelEvents.h>
+
 #include <basis/seadTypes.h>
 
 namespace loadprogress
 {
 
-enum class Stage
-{
-    ReadFile,
-    Groups,
-    SequenceFiles,
-    WaveFiles,
-    BankFiles,
-    Sounds,
-    SoundSets,
-    GroupFiles,
-    Names,
-    Num
-};
+using Stage = modelevents::LoadStage;
 
 void Begin(const char* fileName);
 void End();

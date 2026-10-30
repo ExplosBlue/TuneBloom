@@ -5,7 +5,7 @@
 #include <ui/file/FileDialogs.h>
 #include <ui/items/ItemList.h>
 #include <ui/items/ItemSelector.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/settings/UiColors.h>

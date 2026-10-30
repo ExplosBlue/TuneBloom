@@ -10,9 +10,9 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/ListFilter.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveFormatUI.h>
@@ -178,7 +178,7 @@ static AudioAsset* CommitAudioImport(AssetAudioImport* import, AudioAsset* asset
         fileio::RemoveFile(tempPath.c_str());
 
     if (!result)
-        PopupMgr::instance()->addPopup({ error, popupItem });
+        MessageLog::instance()->addPopup({ error, popupItem });
 
     return result;
 }
@@ -214,7 +214,7 @@ static void ImportAssetFile(AudioAsset* asset)
 
     if (!fileio::ReadWholeFile(path.cstr(), &bytes))
     {
-        PopupMgr::instance()->addPopup({ messages::resource::cImportReadFailed, asset });
+        MessageLog::instance()->addPopup({ messages::resource::cImportReadFailed, asset });
         return;
     }
 
@@ -222,7 +222,7 @@ static void ImportAssetFile(AudioAsset* asset)
 
     if (!ActiveAudioResource().replaceFile(asset, std::move(bytes), &error))
     {
-        PopupMgr::instance()->addPopup({ error, asset });
+        MessageLog::instance()->addPopup({ error, asset });
         return;
     }
 
@@ -318,7 +318,7 @@ void PlayAudioAsset(AudioAsset* asset)
     if (!asset->getPlaybackError(&playbackError))
         playbackError.copy(messages::resource::cAudioDamaged);
 
-    PopupMgr::instance()->addPopup({ playbackError, asset });
+    MessageLog::instance()->addPopup({ playbackError, asset });
 }
 
 static void AudioAssetRowActionFunc(Item* item)

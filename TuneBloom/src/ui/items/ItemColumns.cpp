@@ -1,8 +1,9 @@
 #include <ui/items/ItemColumns.h>
 
+#include <ui/bank/BankFileEditor.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/items/ItemColumnSettings.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 

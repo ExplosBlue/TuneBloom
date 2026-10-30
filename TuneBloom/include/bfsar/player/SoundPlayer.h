@@ -416,3 +416,5 @@ private:
     bool mSeqCaptureRegistered = false;
     SeqExportState mSeqExport;
 };
+
+extern SoundPlayer sSoundPlayer;

@@ -4,7 +4,7 @@
 
 #include <vector>
 
-namespace aal
+namespace bfstm
 {
 
 inline constexpr u32 cBfstmCoefficientCount = 16;

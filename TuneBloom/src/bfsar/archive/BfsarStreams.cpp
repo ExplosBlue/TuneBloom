@@ -7,12 +7,13 @@
 #include <bfsar/files/BfstpFile.h>
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
+#include <bfsar/player/SoundPlayer.h>
 #include <bfsar/files/OpusStream.h>
 #include <bfsar/archive/SaveReport.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
-#include <ui/app/UI.h>
+#include <messages/Messages.h>
+#include <bfsar/model/ModelEvents.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
@@ -119,7 +120,7 @@ void Bfsar::detachStreamWaves(Sound* sound)
             orphans.push_back(wave);
     }
 
-    ForgetRemovedItems(std::vector<Item*>(orphans.begin(), orphans.end()));
+    modelevents::ItemsRemoved(std::vector<Item*>(orphans.begin(), orphans.end()));
     removeUnusedWaveFiles(orphans);
 }
 
@@ -256,13 +257,13 @@ static void DiscardStagedSound(Bfsar& archive, Sound* staged)
             stagedWaves.push_back(static_cast<WaveFile*>(track.getWaveFileRef().getItem()));
     }
 
-    ForgetRemovedItems({staged});
+    modelevents::ItemsRemoved({staged});
     delete staged;
 
     std::sort(stagedWaves.begin(), stagedWaves.end());
     stagedWaves.erase(std::unique(stagedWaves.begin(), stagedWaves.end()), stagedWaves.end());
 
-    ForgetRemovedItems(std::vector<Item*>(stagedWaves.begin(), stagedWaves.end()));
+    modelevents::ItemsRemoved(std::vector<Item*>(stagedWaves.begin(), stagedWaves.end()));
     archive.removeUnusedWaveFiles(stagedWaves);
 }
 
@@ -312,7 +313,7 @@ static void ReportStreamReloadError(StreamReloadContext& ctx, const sead::SafeSt
 {
     ctx.unloadFile();
 
-    PopupMgr::instance()->addPopup({text, ctx.sound});
+    MessageLog::instance()->addPopup({text, ctx.sound});
 }
 
 bool Bfsar::loadStreamFileForReload_(StreamReloadContext& ctx)
@@ -552,7 +553,7 @@ void Bfsar::commitStreamReload_(StreamReloadContext& ctx, StreamReloadResult* re
     MoveStreamWaves(&stagedInfo, &strmSoundInfo);
     strmSoundInfo.copyOpusChannelBitrateFrom(stagedInfo);
 
-    ForgetRemovedItems({staged});
+    modelevents::ItemsRemoved({staged});
     delete staged;
 
     if (strmSoundInfo.getStreamType() != ctx.streamType)
@@ -698,15 +699,15 @@ static void ReportSkippedStreams(const std::vector<Bfsar::SkippedStream> &skippe
     if (skipped.empty())
         return;
 
-    PopupMgr::instance()->setErrorContext(PopupMgr::ErrorContext::Saving);
+    MessageLog::instance()->setErrorContext(MessageLog::ErrorContext::Saving);
 
     for (const Bfsar::SkippedStream &stream : skipped)
     {
-        PopupMgr::instance()->setCurrentProcessItem(const_cast<Sound *>(stream.sound));
-        PopupMgr::instance()->pushCurrentItemWarning(stream.message);
+        MessageLog::instance()->setCurrentProcessItem(const_cast<Sound *>(stream.sound));
+        MessageLog::instance()->pushCurrentItemWarning(stream.message);
     }
 
-    PopupMgr::instance()->setCurrentProcessItem(nullptr);
+    MessageLog::instance()->setCurrentProcessItem(nullptr);
 }
 
 void Bfsar::planNonStreamBinarySave(const Sound *sound, const sead::SafeString &archiveDir, const sead::SafeString &sourceDir, bool inPlace, std::unordered_set<std::string> &seen, std::vector<StreamSaveJob> &out, std::vector<SkippedStream> &outSkipped) const

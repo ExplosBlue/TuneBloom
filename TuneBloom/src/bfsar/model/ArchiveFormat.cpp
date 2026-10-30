@@ -1,6 +1,6 @@
 #include <bfsar/model/ArchiveFormat.h>
 
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 constexpr ArchiveFormatInfo cFormatTable[cFormatTableSize] = {
     {

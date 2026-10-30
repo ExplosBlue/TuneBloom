@@ -2,10 +2,10 @@
 
 #include <ui/widgets/Dialogs.h>
 #include <ui/file/FileDialogs.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/file/UnsavedChanges.h>
 
 #include <bfsar/model/Sound.h>
@@ -283,7 +283,7 @@ void RequestStreamRegionImport(WaveFile* wave)
     if (import.regions.empty())
     {
         sead::FormatFixedSafeString<512> msg(messages::stream::cRegionImportNoneFormat, import.fileName.cstr());
-        PopupMgr::instance()->addPopup({ msg });
+        MessageLog::instance()->addPopup({ msg });
         import.wave = nullptr;
         return;
     }

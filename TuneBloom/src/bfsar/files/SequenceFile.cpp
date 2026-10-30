@@ -1,5 +1,7 @@
 #include <bfsar/files/SequenceFile.h>
 
+#include <bfsar/archive/Bfsar.h>
+#include <bfsar/player/SoundPlayer.h>
 #include <bfsar/seq/SeqDecompile.h>
 #include <bfsar/io/FileIo.h>
 
@@ -7,8 +9,7 @@
 #include <snd/DisposeCallbackMgr.h>
 #include <snd/MmlParser.h>
 
-#include <ui/Messages.h>
-#include <ui/app/UI.h>
+#include <messages/Messages.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
 

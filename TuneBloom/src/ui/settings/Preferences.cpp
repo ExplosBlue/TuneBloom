@@ -8,7 +8,7 @@
 #include <ui/file/FileAssociation.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/app/MenuBar.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/player/OutputMeter.h>
 #include <ui/widgets/PanelLayout.h>
 #include <ui/app/PopupMgr.h>
@@ -345,6 +345,18 @@ static bool DrawAmountSliderRow(const char* label, const char* id, f32* value, f
 
     if (ImGui::IsItemDeactivatedAfterEdit())
         *done = true;
+
+    return changed;
+}
+
+static bool DrawPercentSliderRow(const char* label, const char* id, f32* amount, f32 min, f32 max, f32 reset, bool* done)
+{
+    f32 percent = ImFloor(*amount * cPercentScale + 0.5f);
+    const char* format = percent > 0.0f ? messages::common::cPercentFloatFormat : messages::common::cOff;
+    const bool changed = DrawAmountSliderRow(label, id, &percent, min * cPercentScale, max * cPercentScale, reset * cPercentScale, nullptr, done, format);
+
+    if (changed)
+        *amount = percent / cPercentScale;
 
     return changed;
 }
@@ -979,7 +991,38 @@ static void DrawColorRows(bool* changed, bool* done)
     *changed |= DrawAmountSliderRow(messages::preferences::cSaturationLabel, "##Saturation", &adjust.saturation, cSaturationMin, cSaturationMax, defaults.saturation, nullptr, done);
     *changed |= DrawAmountSliderRow(messages::preferences::cBrightnessLabel, "##Brightness", &adjust.brightness, cBrightnessMin, cBrightnessMax, defaults.brightness, nullptr, done);
     *changed |= DrawAmountSliderRow(messages::preferences::cContrastLabel, "##Contrast", &adjust.contrast, cContrastMin, cContrastMax, defaults.contrast, nullptr, done);
+}
+
+static void ResetColors()
+{
+    const ThemeAdjust defaults;
+    ThemeAdjust& adjust = GetThemeAdjust();
+
+    gAccentColor = uicolors::cAccentDefault;
+    adjust.saturation = defaults.saturation;
+    adjust.brightness = defaults.brightness;
+    adjust.contrast = defaults.contrast;
+}
+
+static void DrawShadowOpacityRow()
+{
+    InterfaceSettings& settings = GetInterfaceSettings();
+    bool released = false;
+
+    if (DrawPercentSliderRow(messages::preferences::cShadowOpacityLabel, "##ShadowOpacity", &settings.shadowOpacity, cShadowOpacityMin, cShadowOpacityMax, cShadowOpacityDefault, &released))
+        ApplyInterfaceConfig();
+
+    if (released)
+        SaveInterfaceConfig();
+}
+
+static void DrawShadingRows(bool* changed, bool* done)
+{
+    const ThemeAdjust defaults;
+    ThemeAdjust& adjust = GetThemeAdjust();
+
     *changed |= DrawAmountSliderRow(messages::preferences::cGradientLabel, "##Gradient", &adjust.gradient, cGradientMin, cGradientMax, defaults.gradient, messages::preferences::cGradientDetail, done);
+    DrawShadowOpacityRow();
 }
 
 static void DrawAppearancePage()
@@ -1003,10 +1046,15 @@ static void DrawAppearancePage()
         EndGroupBox();
     }
 
+    if (BeginGroupBox(messages::preferences::cBoxShading))
+    {
+        DrawShadingRows(&changed, &done);
+        EndGroupBox();
+    }
+
     if (reset)
     {
-        gAccentColor = uicolors::cAccentDefault;
-        GetThemeAdjust() = ThemeAdjust();
+        ResetColors();
 
         changed = true;
         done = true;
@@ -1019,18 +1067,6 @@ static void DrawAppearancePage()
         SaveThemeConfig();
 }
 
-static bool DrawPercentSliderRow(const char* label, const char* id, f32* amount, f32 min, f32 max, f32 reset, bool* done)
-{
-    f32 percent = ImFloor(*amount * cPercentScale + 0.5f);
-    const char* format = percent > 0.0f ? messages::common::cPercentFloatFormat : messages::common::cOff;
-    const bool changed = DrawAmountSliderRow(label, id, &percent, min * cPercentScale, max * cPercentScale, reset * cPercentScale, nullptr, done, format);
-
-    if (changed)
-        *amount = percent / cPercentScale;
-
-    return changed;
-}
-
 static bool DrawScrollSmoothingRow(f32* amount, bool* done)
 {
     return DrawPercentSliderRow(messages::preferences::cScrollSmoothingLabel, "##ScrollSmoothing", amount, cScrollSmoothingMin, cScrollSmoothingMax, cScrollSmoothingDefault, done);
@@ -1041,11 +1077,6 @@ static bool DrawTooltipDelayRow(f32* seconds, bool* done)
     const char* format = *seconds > 0.0f ? messages::common::cSecondsFormat : messages::preferences::cTooltipDelayInstant;
 
     return DrawAmountSliderRow(messages::preferences::cTooltipDelayLabel, "##TooltipDelay", seconds, cTooltipDelayMin, cTooltipDelayMax, cTooltipDelayDefault, nullptr, done, format);
-}
-
-static bool DrawShadowOpacityRow(f32* opacity, bool* done)
-{
-    return DrawPercentSliderRow(messages::preferences::cShadowOpacityLabel, "##ShadowOpacity", opacity, cShadowOpacityMin, cShadowOpacityMax, cShadowOpacityDefault, done);
 }
 
 static bool DrawTimeFormatRow(bool* twelveHour)
@@ -1106,22 +1137,21 @@ static void DrawInterfacePage()
 
     DrawPageHeader(ICON_LC_APP_WINDOW, messages::preferences::cPageInterface, nullptr);
 
-    if (BeginGroupBox(messages::preferences::cBoxMotion))
-    {
-        selected |= DrawCheckRow(messages::preferences::cAnimationsLabel, "##Animations", &settings.animations, messages::preferences::cAnimationsDetail);
-        dragged |= DrawScrollSmoothingRow(&settings.scrollSmoothing, &released);
-        dragged |= DrawAmountSliderRow(messages::preferences::cScrollSpeedLabel, "##ScrollSpeed", &settings.scrollSpeed, cScrollSpeedMin, cScrollSpeedMax, cScrollSpeedDefault, nullptr, &released);
-        EndGroupBox();
-    }
-
     const bool restart = settings.uiScale != GetUIScale();
 
     if (restart ? BeginGroupBoxWithStatus(messages::preferences::cBoxDisplay, messages::preferences::cUIScaleRestart) : BeginGroupBox(messages::preferences::cBoxDisplay))
     {
         selected |= DrawUIScaleRow(&settings.uiScale);
-        dragged |= DrawShadowOpacityRow(&settings.shadowOpacity, &released);
-        dragged |= DrawTooltipDelayRow(&settings.tooltipDelay, &released);
         selected |= DrawTimeFormatRow(&settings.twelveHourClock);
+        dragged |= DrawTooltipDelayRow(&settings.tooltipDelay, &released);
+        EndGroupBox();
+    }
+
+    if (BeginGroupBox(messages::preferences::cBoxMotion))
+    {
+        selected |= DrawCheckRow(messages::preferences::cAnimationsLabel, "##Animations", &settings.animations, messages::preferences::cAnimationsDetail);
+        dragged |= DrawScrollSmoothingRow(&settings.scrollSmoothing, &released);
+        dragged |= DrawAmountSliderRow(messages::preferences::cScrollSpeedLabel, "##ScrollSpeed", &settings.scrollSpeed, cScrollSpeedMin, cScrollSpeedMax, cScrollSpeedDefault, nullptr, &released);
         EndGroupBox();
     }
 
@@ -1162,16 +1192,6 @@ static void DrawAdvancedPage()
 {
     DrawPageHeader(ICON_LC_CPU, messages::preferences::cPageAdvanced, nullptr);
 
-    if (BeginGroupBox(messages::preferences::cBoxDebug))
-    {
-        bool shown = IsSystemWindowShown();
-
-        if (DrawCheckRow(messages::mainmenu::cSystemWindow, "##SystemWindow", &shown))
-            SetSystemWindowShown(shown);
-
-        EndGroupBox();
-    }
-
     bool reset = false;
 
     if (BeginGroupBox(messages::preferences::cBoxSettings, messages::preferences::cResetAll, &reset))
@@ -1189,6 +1209,16 @@ static void DrawAdvancedPage()
     if (fileassoc::IsSupported() && BeginGroupBox(messages::common::cSystem))
     {
         chooseTypes = DrawAssociationRow();
+        EndGroupBox();
+    }
+
+    if (BeginGroupBox(messages::preferences::cBoxDebug))
+    {
+        bool shown = IsSystemWindowShown();
+
+        if (DrawCheckRow(messages::mainmenu::cSystemWindow, "##SystemWindow", &shown))
+            SetSystemWindowShown(shown);
+
         EndGroupBox();
     }
 

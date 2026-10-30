@@ -11,8 +11,8 @@
 #include <midi/ExportCommon.h>
 #include <midi/SeqMidiExporter.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <algorithm>
 #include <cmath>
@@ -963,7 +963,7 @@ static CachedSampleIndices FindOrAddSamples(ExportModelBuilder& builder, const B
     if (!pcm.isValid())
     {
         builder.sampleCache[wave] = CachedSampleIndices();
-        PopupMgr::instance()->addPopup({messages::exporting::cWaveDecodeFailed, nullptr});
+        MessageLog::instance()->addPopup({messages::exporting::cWaveDecodeFailed, nullptr});
         return CachedSampleIndices();
     }
 

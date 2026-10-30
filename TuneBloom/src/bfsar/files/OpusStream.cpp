@@ -8,9 +8,8 @@
 #include <bfsar/files/WaveFile.h>
 #include <bfsar/audio/WaveFileEditDecode.h>
 
-#include <ui/Messages.h>
-#include <ui/app/PopupMgr.h>
-#include <ui/app/UI.h>
+#include <messages/Messages.h>
+#include <bfsar/model/MessageLog.h>
 
 #include <prim/seadMemUtil.h>
 #include <filedevice/seadFileDeviceMgr.h>
@@ -248,7 +247,7 @@ namespace opusstream
                 if (globalChannelIndex < 0 || static_cast<u32>(globalChannelIndex) >= channelBuffers.size())
                 {
                     sead::FormatFixedSafeString<1024> msg(messages::playback::cTrackNoChannelsFormat, trackNo);
-                    PopupMgr::instance()->addPopup({msg, popupItem});
+                    MessageLog::instance()->addPopup({msg, popupItem});
                     continue;
                 }
 
@@ -283,7 +282,7 @@ namespace opusstream
 
         if (tracks.isEmpty())
         {
-            PopupMgr::instance()->addPopup({messages::stream::cNeedsTrack, nullptr});
+            MessageLog::instance()->addPopup({messages::stream::cNeedsTrack, nullptr});
             return false;
         }
 
@@ -306,7 +305,7 @@ namespace opusstream
         if (!fileData)
         {
             sead::FormatFixedSafeString<1024> msg(messages::stream::cFileMissingFormat, strmSoundInfo.getPath().cstr(), GetInnerFileExtension(archive.getFormat(), InnerFileKind::SoundArchive));
-            PopupMgr::instance()->addPopup({msg, sound});
+            MessageLog::instance()->addPopup({msg, sound});
 
             return false;
         }
@@ -326,7 +325,7 @@ namespace opusstream
         if (!decoded)
         {
             sead::FormatFixedSafeString<1024> msg("'%s': %s", strmSoundInfo.getPath().cstr(), error ? error : messages::opus::cDecodeFailed);
-            PopupMgr::instance()->addPopup({msg, sound});
+            MessageLog::instance()->addPopup({msg, sound});
             return false;
         }
 
@@ -395,7 +394,7 @@ namespace opusstream
         auto fail = [&](const char *msg)
         {
             sead::FormatFixedSafeString<1024> popupMsg(messages::opus::cEncodeFailedFormat, msg);
-            PopupMgr::instance()->addPopup({popupMsg, popupItem});
+            MessageLog::instance()->addPopup({popupMsg, popupItem});
             return false;
         };
 

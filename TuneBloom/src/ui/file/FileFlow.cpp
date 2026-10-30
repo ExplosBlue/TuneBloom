@@ -12,10 +12,10 @@
 #include <ui/file/GroupFileLocate.h>
 #include <ui/file/NewFileDialog.h>
 #include <ui/resource/ResourceViews.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/file/OpenQueue.h>
 #include <ui/player/PlayerViews.h>
-#include <ui/app/PopupMgr.h>
+#include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/settings/UiColors.h>
@@ -530,7 +530,7 @@ static void DrawMetadataUpgradeDialog()
             if (!archive->upgradeMetadata())
             {
                 sead::FormatFixedSafeString<1024> msg(messages::archive::cMetadataUpgradeFailedFormat, sead::FormatFixedSafeString<1100>("%s.metadata.json", archive->getFilePath().cstr()).cstr());
-                PopupMgr::instance()->addPopup({msg});
+                MessageLog::instance()->addPopup({msg});
             }
 
             archive->dismissMetadataUpgrade();
@@ -599,7 +599,7 @@ static void DrawSaveInUseDialog()
             }
             else
             {
-                PopupMgr::instance()->addPopup({messages::saving::cInUseWriteFailed});
+                MessageLog::instance()->addPopup({messages::saving::cInUseWriteFailed});
             }
         }
 

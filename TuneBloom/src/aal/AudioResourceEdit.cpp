@@ -2,15 +2,16 @@
 
 #include <aal/Amta.h>
 #include <aal/Bars.h>
-#include <aal/Bfstm.h>
+#include <bfsar/files/Bfstm.h>
 #include <aal/Bwav.h>
 #include <bfsar/audio/AudioProcessing.h>
 #include <bfsar/audio/DecodedPcm.h>
 #include <bfsar/files/BfstpFile.h>
 #include <bfsar/files/LooseStreamFile.h>
+#include <bfsar/files/LooseWaveFile.h>
 #include <bfsar/io/FileIo.h>
 #include <core/ByteView.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 
 #include <algorithm>
 #include <memory>
@@ -763,9 +764,9 @@ bool AudioResource::replaceFile(AudioAsset* asset, std::vector<u8> file, const c
 
     if (kind == AudioAssetKind::Stream)
     {
-        aal::Bfstm stream;
+        bfstm::Bfstm stream;
 
-        if (!aal::ReadBfstm(file.data(), file.size(), &stream, outError) || !SetBfstmStreamAudio(asset, std::move(file), outError))
+        if (!bfstm::ReadBfstm(file.data(), file.size(), &stream, outError) || !SetBfstmStreamAudio(asset, std::move(file), outError))
             return false;
 
         UpdateMetaFromInfo(asset);

@@ -9,7 +9,7 @@
 #include <ui/file/FileFlow.h>
 #include <ui/browser/FilesPanel.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/Messages.h>
+#include <messages/Messages.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/settings/UiColors.h>
@@ -710,7 +710,7 @@ void SetUnsavedChanges(bool dirty)
 
     if (dirty)
     {
-        state.editGeneration = NewEditGeneration();
+        state.editGeneration = modelevents::NewEditGeneration();
         PinDocument(document);
     }
 

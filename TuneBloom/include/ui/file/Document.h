@@ -14,6 +14,7 @@
 class AudioAsset;
 class AudioResource;
 struct DocumentState;
+struct FileFacts;
 
 struct PlayableFile
 {
@@ -45,7 +46,8 @@ public:
         AudioResource,
         StreamFile,
         WaveFile,
-        BarsList
+        BarsList,
+        WavFile
     };
 
     struct File
@@ -128,13 +130,24 @@ public:
         return false;
     }
 
+    virtual bool isPlayerOnly() const
+    {
+        return false;
+    }
+
+    virtual bool isChangeCheckComplete() const
+    {
+        return false;
+    }
+
     virtual PlayableFile playableFile()
     {
         return {};
     }
 
-    virtual void formatFileFacts(sead::BufferedSafeString*) const
+    virtual bool getFileFacts(FileFacts*) const
     {
+        return false;
     }
 
     virtual bool isValidName(const sead::SafeString& name) const = 0;

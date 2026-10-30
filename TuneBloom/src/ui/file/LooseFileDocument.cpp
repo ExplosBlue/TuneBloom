@@ -42,6 +42,11 @@ void LooseFileDocument::captureItemBaselines()
 {
 }
 
+bool LooseFileDocument::isChangeCheckComplete() const
+{
+    return !mLoadedPath.isEmpty();
+}
+
 Document::ParseContext LooseFileDocument::parseContext() const
 {
     ParseContext context = CurrentParseContext();

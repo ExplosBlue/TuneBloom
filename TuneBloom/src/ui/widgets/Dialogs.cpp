@@ -13,7 +13,8 @@
 
 #include <cstring>
 
-static constexpr f32 cDialogRowGapEm = 0.4f;
+static constexpr f32 cDialogRowGapEm   = 0.4f;
+static constexpr f32 cDialogGroupGapEm = 0.8f;
 
 static ImVec2 sDetachedDialogArea;
 
@@ -171,10 +172,136 @@ void DialogRowGap()
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(ImGui::GetFontSize() * cDialogRowGapEm));
 }
 
+void DialogGroupGap()
+{
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(ImGui::GetFontSize() * cDialogGroupGapEm));
+}
+
 void DialogRow(const char* label, const char* help)
 {
     DialogRowGap();
     PropertyRow(label, help);
+}
+
+static constexpr f32 cNavRowGapEm   = 0.5f;
+static constexpr f32 cNavPagePadXEm = 1.0f;
+static constexpr f32 cNavPagePadYEm = 0.8f;
+static constexpr f32 cNavBarWidthEm = 0.15f;
+static constexpr f32 cNavTintAlpha  = 0.25f;
+
+static f32 sNavPageHeight = 0.0f;
+
+bool BeginNavDialog(const char* id, const ImVec2& size, f32 navWidth)
+{
+    const f32 em = ImGui::GetFontSize();
+    const ImVec2 padding(ImFloor(em * cNavPagePadXEm), ImFloor(em * cNavPagePadYEm));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, padding);
+
+    if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV, size))
+    {
+        ImGui::PopStyleVar();
+        return false;
+    }
+
+    sNavPageHeight = size.y - padding.y * 2.0f;
+
+    ImGui::TableSetupColumn("##Nav", ImGuiTableColumnFlags_WidthFixed, navWidth);
+    ImGui::TableSetupColumn("##Page", ImGuiTableColumnFlags_WidthStretch);
+
+    ImGui::TableNextColumn();
+    ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_FrameBg, cNavTintAlpha));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
+
+    ImGui::PushItemFlag(ImGuiItemFlags_SelectableDontClosePopup, true);
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImFloor(em * cNavRowGapEm)));
+
+    return true;
+}
+
+bool DrawNavRow(const char* icon, const char* name, bool selected, const char* value, bool dim, bool title, f32 indent)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 iconWidth = ImGui::CalcTextSize(ICON_LC_INFO " ").x;
+
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const f32 width = ImGui::GetContentRegionAvail().x;
+
+    const bool pressed = ImGui::Selectable("##Row", selected, ImGuiSelectableFlags_SpanAvailWidth);
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec4 nameColor = ImGui::GetStyleColorVec4(dim ? ImGuiCol_TextDisabled : ImGuiCol_Text);
+
+    f32 left = pos.x + style.FramePadding.x + indent;
+    f32 right = pos.x + width - style.FramePadding.x;
+
+    if (value)
+    {
+        const f32 textWidth = ImGui::CalcTextSize(value).x;
+        const ImVec4 valueColor = dim ? nameColor : GetItemValueColor();
+
+        drawList->AddText(ImVec2(right - textWidth, pos.y), ImGui::ColorConvertFloat4ToU32(valueColor), value);
+        right -= textWidth + style.ItemSpacing.x;
+    }
+
+    drawList->AddText(ImVec2(left, pos.y), ImGui::ColorConvertFloat4ToU32(nameColor), icon);
+    left += iconWidth;
+
+    ImGui::PushStyleColor(ImGuiCol_Text, nameColor);
+    ImGui::RenderTextEllipsis(drawList, ImVec2(left, pos.y), ImVec2(right, pos.y + ImGui::GetFontSize()), right, right, name, nullptr, nullptr);
+    ImGui::PopStyleColor();
+
+    if (title)
+    {
+        const f32 lineLeft = left + ImGui::CalcTextSize(name).x + style.ItemSpacing.x;
+        const f32 lineY = ImFloor(pos.y + ImGui::GetFontSize() * 0.5f);
+
+        if (lineLeft < right)
+            drawList->AddLine(ImVec2(lineLeft, lineY), ImVec2(right, lineY), ImGui::GetColorU32(ImGuiCol_Separator));
+    }
+
+    return pressed;
+}
+
+bool DialogNavRow(const char* icon, const char* name, bool selected)
+{
+    const bool pressed = DrawNavRow(icon, name, selected);
+
+    if (selected)
+    {
+        const ImVec2 rowMin = ImGui::GetItemRectMin();
+        const ImVec2 rowMax = ImGui::GetItemRectMax();
+
+        ImGui::GetWindowDrawList()->AddRectFilled(rowMin, ImVec2(rowMin.x + ImFloor(ImGui::GetFontSize() * cNavBarWidthEm), rowMax.y), ImGui::GetColorU32(ImGuiCol_CheckMark));
+    }
+
+    return pressed;
+}
+
+bool BeginNavDialogPage(s32 pageId)
+{
+    ImGui::PopStyleVar();
+    ImGui::PopItemFlag();
+
+    ImGui::TableNextColumn();
+    ImGui::PushID(pageId);
+
+    if (!ImGui::BeginChild("##Page", ImVec2(0.0f, sNavPageHeight), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground))
+        return false;
+
+    ImGuiWindow* page = ImGui::GetCurrentWindow();
+    page->WorkRect.Max.x -= 1.0f;
+    page->ContentRegionRect.Max.x -= 1.0f;
+
+    return true;
+}
+
+void EndNavDialog()
+{
+    ImGui::EndChild();
+    ImGui::PopID();
+    ImGui::EndTable();
+    ImGui::PopStyleVar();
 }
 
 static constexpr f32 cDialogIconGapEm = 0.8f;
@@ -209,23 +336,12 @@ const ImWchar* GetDialogIconRanges()
     return ranges;
 }
 
-static ImFont* GetDialogIconFont(f32 fontSize)
-{
-    for (ImFont* font : ImGui::GetIO().Fonts->Fonts)
-    {
-        if (font->FontSize == fontSize)
-            return font;
-    }
-
-    return ImGui::GetFont();
-}
-
 void BeginDialogMessage(const char* icon, ImGuiCol color)
 {
     const f32 spacing = ImGui::GetStyle().ItemSpacing.y;
     const f32 fontSize = ScaleSize(cDialogIconFontSize);
 
-    ImFont* font = GetDialogIconFont(fontSize);
+    ImFont* font = FindFontOfSize(fontSize);
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const char* iconEnd = strchr(icon, ' ');
     const ImVec2 iconSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, icon, iconEnd);

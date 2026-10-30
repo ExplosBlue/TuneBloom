@@ -986,6 +986,7 @@ struct ImGui_ImplGlfw_ViewportData
 {
     GLFWwindow* Window;
     bool        WindowOwned;
+    bool        KeepWindow; // TuneBloom: close fade
     int         IgnoreWindowPosEventFrame;
     int         IgnoreWindowSizeEventFrame;
 #ifdef _WIN32
@@ -1102,12 +1103,24 @@ static void ImGui_ImplGlfw_DestroyWindow(ImGuiViewport* viewport)
                 if (bd->KeyOwnerWindows[i] == vd->Window)
                     ImGui_ImplGlfw_KeyCallback(vd->Window, i, 0, GLFW_RELEASE, 0); // Later params are only used for main viewport, on which this function is never called.
 
-            glfwDestroyWindow(vd->Window);
+            // TuneBloom: close fade
+            if (!vd->KeepWindow)
+                glfwDestroyWindow(vd->Window);
         }
         vd->Window = nullptr;
         IM_DELETE(vd);
     }
     viewport->PlatformUserData = viewport->PlatformHandle = nullptr;
+}
+
+// TuneBloom: close fade
+GLFWwindow* ImGui_ImplGlfw_KeepWindowOnDestroy(ImGuiViewport* viewport)
+{
+    ImGui_ImplGlfw_ViewportData* vd = (ImGui_ImplGlfw_ViewportData*)viewport->PlatformUserData;
+    if (!vd || !vd->WindowOwned)
+        return nullptr;
+    vd->KeepWindow = true;
+    return vd->Window;
 }
 
 static void ImGui_ImplGlfw_ShowWindow(ImGuiViewport* viewport)

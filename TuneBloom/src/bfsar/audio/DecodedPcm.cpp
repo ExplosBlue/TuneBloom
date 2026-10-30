@@ -105,7 +105,7 @@ bool decodeRiffChannels(const WaveFile::RiffWaveInfo& info, std::vector<std::vec
     return true;
 }
 
-bool decodeRiffBytes(const u8* data, size_t size, DecodedPcm* out)
+bool decodeRiffBytes(const u8* data, size_t size, DecodedPcm* out, WaveFile::RiffWaveInfo* outInfo)
 {
     *out = DecodedPcm();
 
@@ -125,7 +125,21 @@ bool decodeRiffBytes(const u8* data, size_t size, DecodedPcm* out)
     out->loopStartFrame = info.loopStartFrame;
     out->loopEndFrame = info.loopEndFrame;
 
+    if (outInfo)
+        *outInfo = info;
+
     return true;
+}
+
+WaveFile* BuildPcm16Wave(const DecodedPcm& pcm)
+{
+    WaveFile* wave = new WaveFile();
+
+    if (wave->setupPreviewPcm16(pcm, pcm.isLoop, pcm.loopStartFrame, pcm.loopEndFrame))
+        return wave;
+
+    delete wave;
+    return nullptr;
 }
 
 DecodedPcm decodePcmForPreview(const WaveFile::RiffWaveInfo& info)

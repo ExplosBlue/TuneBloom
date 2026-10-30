@@ -15,7 +15,7 @@ inline constexpr const char* cFileIncompleteFormat = "'%s' could not be loaded: 
 inline constexpr const char* cFileUnreadableFormat = "'%s' could not be read as a stream file";
 inline constexpr const char* cFileNotStream = "Not a valid stream file";
 inline constexpr const char* cOpenFilter = "Stream File (*.bfstm, *.bcstm, *.opus)";
-inline constexpr const char* cStreamTypeFormat = "Nintendo Stream (%s)";
+inline constexpr const char* cStreamTypeFormat = "%s Stream";
 inline constexpr const char* cFileNoInfoBlockFormat = "The INFO block of the %s file could not be found";
 inline constexpr const char* cFileBlocksMisalignedFormat = "The %s file has an invalid block size";
 inline constexpr const char* cFileNotLoaded = "The stream file is not loaded";
@@ -80,10 +80,8 @@ inline constexpr const char* cTrackAddTip = "Add Track";
 inline constexpr const char* cTrackMixerView = "Mixer View";
 inline constexpr const char* cTrackTableView = "Table View";
 inline constexpr const char* cTrackMixNotInFile = "This file stores no track volume or pan";
-inline constexpr const char* cTrackFold = "Minimize";
 inline constexpr const char* cTrackNoSound = "No Stream Sound Selected";
 inline constexpr const char* cTrackNone = "No Tracks";
-inline constexpr const char* cTrackSoloTipFormat = "%s+click to solo more than one track";
 inline constexpr const char* cTrackSurroundPan = "Surround Pan";
 inline constexpr const char* cTrackVolumeFormat = "Volume: %.3f";
 inline constexpr const char* cTrackMainSendFormat = "Main Send: %.3f";
@@ -94,8 +92,7 @@ inline constexpr const char* cTrackBiquadValueFormat = "Biquad Value: %.3f";
 inline constexpr const char* cReloadMenuLabel = "Reload Stream File";
 inline constexpr const char* cReloadBatchDoneFormat = "Reloaded %u of %u stream files";
 
-inline constexpr const char* cReloadTooltip = "Read the stream file again";
-inline constexpr const char* cReplaceTooltip = "Choose another stream file";
+inline constexpr const char* cReplaceTooltip = "Replace Stream File";
 
 inline constexpr const char* cReloadNoArchiveFolder = "Save the archive first: paths are relative";
 

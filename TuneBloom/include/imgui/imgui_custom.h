@@ -18,6 +18,8 @@ void EndSearchPopup();
 void SetScrollSmoothing(float seconds);
 void SetWheelScrollSpeed(float speed);
 
+void ResetWindowSettings(ImGuiWindow* window);
+
 void SetWindowShadowAlpha(float alpha);
 void RenderWindowShadow(ImGuiWindow* window);
 

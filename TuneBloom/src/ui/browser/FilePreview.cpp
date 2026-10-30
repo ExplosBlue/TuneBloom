@@ -10,17 +10,6 @@
 #include <bfsar/files/LooseWaveFile.h>
 #include <bfsar/files/WaveFile.h>
 
-static WaveFile* BuildPcmWave(const DecodedPcm& pcm)
-{
-    WaveFile* wave = new WaveFile();
-
-    if (wave->setupPreviewPcm16(pcm, pcm.isLoop, pcm.loopStartFrame, pcm.loopEndFrame))
-        return wave;
-
-    delete wave;
-    return nullptr;
-}
-
 void DecodeAudioBytes(DecodedAudioFile* file)
 {
     if (LooseWaveFile::IsWaveFile(file->bytes.data(), static_cast<u32>(file->bytes.size())))
@@ -67,7 +56,7 @@ WaveFile* BuildDecodedWave(const DecodedAudioFile& file)
     if (!file.isDecoded)
         return nullptr;
 
-    WaveFile* wave = file.isWaveFile ? ReadFwavFile(file.bytes) : BuildPcmWave(file.pcm);
+    WaveFile* wave = file.isWaveFile ? ReadFwavFile(file.bytes) : BuildPcm16Wave(file.pcm);
 
     if (!wave)
         return nullptr;

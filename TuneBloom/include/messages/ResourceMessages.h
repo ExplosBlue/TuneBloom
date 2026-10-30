@@ -6,8 +6,8 @@ namespace messages
 namespace resource
 {
 
-inline constexpr const char* cResourceTypeFormat = "Nintendo Audio Resource (%s)";
-inline constexpr const char* cWaveTypeFormat = "Nintendo Wave (%s)";
+inline constexpr const char* cResourceTypeFormat = "%s Audio Resource";
+inline constexpr const char* cWaveTypeFormat = "%s Sound";
 inline constexpr const char* cBarsDamaged = "The BARS file is damaged";
 inline constexpr const char* cBarsVersionUnsupported = "This BARS version is not supported";
 inline constexpr const char* cSarcDamaged = "The SARC file is damaged";
@@ -52,7 +52,6 @@ inline constexpr const char* cImportUnsupported = "Only BWAV, BFWAV and BFSTM fi
 inline constexpr const char* cImportNeedsCompleteBwav = "The BWAV must contain the whole sound, not only its start";
 inline constexpr const char* cImportReadFailed = "Couldn't read the file";
 
-inline constexpr const char* cReplaceAudioTitle = "Replace Audio";
 inline constexpr const char* cImportAudioFile = "Import Audio File";
 inline constexpr const char* cExportAudioFile = "Export Audio File";
 inline constexpr const char* cSelectOneAudioAsset = "Select one Audio Asset";
@@ -90,7 +89,6 @@ inline constexpr const char* cSarcNoMetaDetail = "BFWAV 1.1 audio, as in Mario K
 
 inline constexpr const char* cResourceVersionFormat = "%u.%u";
 inline constexpr const char* cCompression = "Compression";
-inline constexpr const char* cCompressionDetail = "Save as .zs to compress with zstd";
 inline constexpr const char* cCompressionZstd = "zstd";
 inline constexpr const char* cContentTitle = "Content";
 inline constexpr const char* cStreamsDetail = "Sounds that play from the Stream folder";

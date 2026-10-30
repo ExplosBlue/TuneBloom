@@ -6,6 +6,7 @@
 #include <ui/widgets/ListFilter.h>
 #include <messages/Messages.h>
 #include <ui/widgets/PanelLayout.h>
+#include <ui/widgets/Properties.h>
 #include <ui/items/Selection.h>
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
@@ -87,6 +88,8 @@ static constexpr f32 cDimAlpha         = 0.35f;
 static const char* cTileSizeSample  = messages::unit::cSizeSample;
 static const char* cTileFilesSample = messages::item::cStatsFilesSample;
 static const char* cTileShareSample = messages::item::cStatsShareSample;
+
+static const s32 cTileColumnNums[] = { cUseNum, 2 };
 
 static const char* const cUseNames[cUseNum] = {
     messages::common::cStream,
@@ -241,7 +244,7 @@ static void LayoutTreemap(T* nodes, size_t nodeNum, ImRect area)
     }
 }
 
-static void DrawSearchRow(f32 padding)
+static void DrawSearchRow(f32 width)
 {
     bool menuPressed = false;
 
@@ -249,14 +252,14 @@ static void DrawSearchRow(f32 padding)
     extra.menuPressed = &menuPressed;
     extra.menuActive = !sShowStreamWaves;
 
-    ListSearchField("##Search", sQuery, sizeof(sQuery), ImGui::GetContentRegionAvail().x - padding, &sCaseSensitive, false, &extra);
+    ListSearchField("##Search", sQuery, sizeof(sQuery), width, &sCaseSensitive, false, &extra);
 
     if (menuPressed)
         ImGui::OpenPopup("##ListMenu");
 
     if (BeginContextMenu("##ListMenu"))
     {
-        if (ContextMenuCheckItem(messages::item::cShowStreamWaves, sShowStreamWaves))
+        if (ContextMenuToggleItem(messages::item::cShowStreamWaves, sShowStreamWaves))
             sShowStreamWaves = !sShowStreamWaves;
 
         EndContextMenu();
@@ -361,7 +364,7 @@ static void DrawUseTiles(const StatGroup* groups, u64 totalSize, s32 isolated, f
     const f32 shareWidth = ImGui::CalcTextSize(cTileShareSample).x;
 
     f32 wideWidth = chipWidth + filesWidth + gap + shareWidth;
-    f32 narrowWidth = sizeWidth + gap + shareWidth;
+    f32 narrowWidth = chipWidth + sizeWidth + gap + shareWidth;
 
     for (s32 i = 0; i < cUseNum; i++)
     {
@@ -379,9 +382,25 @@ static void DrawUseTiles(const StatGroup* groups, u64 totalSize, s32 isolated, f
 
     const ImVec2 padding(ImFloor(em * cSoundPanelPadXEm), ImFloor(em * cSoundPanelPadYEm));
     const f32 tileExtra = padding.x * 2.0f + 1.0f;
-    const bool wide = (wideWidth + tileExtra) * cUseNum <= width;
-    const bool narrow = !wide && (narrowWidth + tileExtra) * cUseNum <= width;
-    const s32 columnNum = wide || narrow ? cUseNum : ((wideWidth + tileExtra) * 2.0f <= width ? 2 : 1);
+    s32 columnNum = 1;
+    bool narrow = false;
+
+    for (s32 num : cTileColumnNums)
+    {
+        if ((wideWidth + tileExtra) * num <= width)
+        {
+            columnNum = num;
+            break;
+        }
+
+        if ((narrowWidth + tileExtra) * num <= width)
+        {
+            columnNum = num;
+            narrow = true;
+            break;
+        }
+    }
+
     const s32 lineNum = narrow ? 3 : 2;
     const f32 lineHeight = em + ImFloor(em * cTileLineGapEm);
 
@@ -430,9 +449,9 @@ static void DrawUseTiles(const StatGroup* groups, u64 totalSize, s32 isolated, f
 
             if (narrow)
             {
-                drawList->AddText(ImVec2(pos.x, pos.y + lineHeight), dim ? dimColor : textColor, sizes[i].cstr());
+                drawList->AddText(ImVec2(pos.x + chipWidth, pos.y + lineHeight), dim ? dimColor : textColor, sizes[i].cstr());
                 drawList->AddText(ImVec2(shareX, pos.y + lineHeight), dim ? dimColor : valueColor, shares[i].cstr());
-                drawList->AddText(ImVec2(pos.x, pos.y + lineHeight * 2.0f), dimColor, files[i].cstr());
+                drawList->AddText(ImVec2(pos.x + chipWidth, pos.y + lineHeight * 2.0f), dimColor, files[i].cstr());
             }
             else
             {
@@ -591,6 +610,9 @@ static void DrawBlockTooltip(const StatBlock& block, s32 use, u64 totalSize)
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + chipSize + ImGui::GetStyle().ItemInnerSpacing.x);
     ImGui::TextUnformatted(cUseNames[use]);
 
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(style.CellPadding.x, ImFloor(style.ItemSpacing.y * 0.5f)));
+
     if (ImGui::BeginTable("##Values", 2, ImGuiTableFlags_SizingFixedFit))
     {
         u32 columnCount = 0;
@@ -615,6 +637,7 @@ static void DrawBlockTooltip(const StatBlock& block, s32 use, u64 totalSize)
         ImGui::EndTable();
     }
 
+    ImGui::PopStyleVar();
     ImGui::EndTooltip();
 }
 
@@ -669,43 +692,17 @@ static void DrawTreemap(StatGroup* groups, u64 totalSize, s32 isolated, const Im
         SelectItem(hoveredBlock->wave);
 }
 
-static void DrawTotalLine(const StatGroup* groups, u64 totalSize, u32 fileNum, s32 isolated)
+static void FormatTotal(sead::BufferedSafeString* out, u64 totalSize, u32 fileNum)
 {
-    if (isolated != cUseAll)
-    {
-        totalSize = groups[isolated].size;
-        fileNum = static_cast<u32>(groups[isolated].blocks.size());
-    }
-
     sead::FixedSafeString<32> sizeText;
     FormatItemSize(&sizeText, totalSize);
 
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetStyle().CellPadding.x);
-    ImGui::TextDisabled(fileNum == 1 ? messages::item::cStatsTotalOneFormat : messages::item::cStatsTotalFormat, sizeText.cstr(), fileNum);
-
-    if (isolated != cUseAll)
-    {
-        const sead::FormatFixedSafeString<48> note(messages::item::cStatsUseOnlyFormat, cUseNames[isolated]);
-
-        ImGui::SameLine(0.0f, 0.0f);
-        ImGui::TextDisabled(messages::item::cCountNoteFormat, note.cstr());
-    }
-
-    if (!sShowStreamWaves)
-    {
-        ImGui::SameLine(0.0f, 0.0f);
-        ImGui::TextDisabled(messages::item::cCountNoteFormat, messages::item::cStreamWavesHidden);
-    }
+    out->format(fileNum == 1 ? messages::item::cStatsTotalOneFormat : messages::item::cStatsTotalFormat, sizeText.cstr(), fileNum);
 }
 
-void DrawFileStatisticsUI()
+void DrawFileStatisticsCard()
 {
     static StatGroup sGroups[cUseNum];
-
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 padding = BeginListRow();
-
-    DrawSearchRow(padding);
 
     u64 totalSize = 0;
     u32 fileNum = 0;
@@ -714,22 +711,24 @@ void DrawFileStatisticsUI()
 
     const s32 isolated = sIsolatedUse != cUseAll && !sGroups[sIsolatedUse].blocks.empty() ? sIsolatedUse : cUseAll;
 
-    if (padding > 0.0f)
-        ImGui::Indent(padding);
+    sead::FixedSafeString<64> total;
+    FormatTotal(&total, totalSize, fileNum);
 
-    const f32 width = ImGui::GetContentRegionAvail().x - padding;
+    if (!BeginCard(messages::project::cFileStatisticsTitle, total.cstr()))
+        return;
 
+    const f32 width = ImGui::GetContentRegionAvail().x;
+
+    DrawSearchRow(width);
     DrawUseBar(sGroups, totalSize, isolated, width);
     DrawUseTiles(sGroups, totalSize, isolated, width);
 
-    const f32 footerHeight = ImGui::GetTextLineHeightWithSpacing() + style.WindowPadding.y;
-    const ImVec2 mapSize(width, sead::Mathf::max(ImGui::GetContentRegionAvail().y - footerHeight, ImGui::GetFontSize() * cMapMinHeightEm));
+    const ImVec2 mapSize(width, sead::Mathf::max(ImGui::GetContentRegionAvail().y - CalcCardBottomExtra(), ImGui::GetFontSize() * cMapMinHeightEm));
 
     if (fileNum == 0)
     {
         const ImVec2 pos = ImGui::GetCursorPos();
 
-        ImGui::SetCursorPosX(pos.x + style.CellPadding.x);
         ImGui::TextDisabled("%s", messages::item::cStatsEmpty);
 
         ImGui::SetCursorPos(pos);
@@ -740,8 +739,5 @@ void DrawFileStatisticsUI()
         DrawTreemap(sGroups, totalSize, isolated, mapSize);
     }
 
-    DrawTotalLine(sGroups, totalSize, fileNum, isolated);
-
-    if (padding > 0.0f)
-        ImGui::Unindent(padding);
+    EndCard();
 }

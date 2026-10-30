@@ -548,7 +548,7 @@ void PinDocument(Document* document)
 
     document->state().isPreview = false;
 
-    if (!document->filePath().isEmpty())
+    if (IsRememberedDocument(document))
         AddRecentFile(document->filePath().cstr());
 
     RecordDocumentSession();
@@ -585,13 +585,18 @@ void RecordDocumentSession()
 
     for (const Document* document : sDocuments)
     {
-        if (!document->state().isPreview && !document->filePath().isEmpty())
+        if (IsRememberedDocument(document))
             paths.push_back(document->filePath().cstr());
     }
 
-    const bool hasActivePath = sActive && !sActive->filePath().isEmpty();
+    const bool hasActivePath = sActive && !sActive->filePath().isEmpty() && !sActive->isPlayerOnly();
 
     SetSessionDocuments(paths, hasActivePath ? sActive->filePath().cstr() : "");
+}
+
+bool IsRememberedDocument(const Document* document)
+{
+    return document && !document->state().isPreview && !document->filePath().isEmpty() && !document->isPlayerOnly();
 }
 
 static Document* FindUnloadCandidate()

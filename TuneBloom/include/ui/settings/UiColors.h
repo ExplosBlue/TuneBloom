@@ -14,6 +14,7 @@ inline constexpr ImVec4 cPlayback      = Hex(0xF7E04A);
 inline constexpr ImVec4 cMarker        = Hex(0xFF7A8A);
 inline constexpr ImVec4 cSuccess       = Hex(0x7EE0A6);
 inline constexpr ImVec4 cWarning       = Hex(0xFFA552);
+inline constexpr ImVec4 cWindowClose   = Hex(0xC42B1C);
 
 inline constexpr ImVec4 cInkOnDark     = Hex(0xFFFFFF);
 inline constexpr ImVec4 cInkOnLight    = Hex(0x000000);

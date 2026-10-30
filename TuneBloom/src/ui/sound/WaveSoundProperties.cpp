@@ -30,7 +30,7 @@ void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)
 
             ContextMenuSeparator();
 
-            if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace))
+            if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace))
                 RequestWaveFileReplace(static_cast<WaveFile*>(waveFile));
 
             ImGui::SetItemTooltip("%s", messages::import::cReplaceWaveFileTip);

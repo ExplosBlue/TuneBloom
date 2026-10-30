@@ -329,6 +329,11 @@ void FilesPanel::collectAllOpenRows(const FrameContext& ctx, std::vector<FilesRo
     {
         const FilesRoot& entry = mRoots[root];
         const s32 folder = getRootFolder(root);
+        const char* format = nullptr;
+        u64 size = 0;
+
+        if (getRootValues(root, &format, &size))
+            rows.push_back({ .kind = FilesRowKind::Root, .root = root });
 
         if (folder >= 0 && entry.isOpen && !entry.isMissing && entry.hasSnapshot && folder < static_cast<s32>(ctx.shownCounts[root].size()) && ctx.shownCounts[root][folder] > 0)
             collectFolderRows(ctx, rows, root, folder, 1, true);
@@ -434,7 +439,12 @@ const std::string& FilesPanel::getRowName(const FilesRow& row) const
 
     const BrowserFile& file = getFile(row);
 
-    return row.kind == FilesRowKind::Sound ? file.probe.contents.sounds[row.sound].name : file.name;
+    return row.kind == FilesRowKind::Sound ? file.probe.contents.sounds[row.sound].name : getShownFileName(file);
+}
+
+const std::string& FilesPanel::getShownFileName(const BrowserFile& file) const
+{
+    return mShowExtensions ? file.name : file.stem;
 }
 
 f32 FilesPanel::calcRowNoteWidth(const FrameContext& ctx, const FilesRow& row) const
@@ -444,10 +454,15 @@ f32 FilesPanel::calcRowNoteWidth(const FrameContext& ctx, const FilesRow& row) c
     if (row.kind == FilesRowKind::File && findOpenFile(ctx, getFile(row).path))
         return gap + ImGui::CalcTextSize(cOpenFileMark).x;
 
-    if (row.kind == FilesRowKind::Folder || row.kind == FilesRowKind::Prefix || (row.kind == FilesRowKind::File && row.childCount > 0))
+    if (mShowCount && (row.kind == FilesRowKind::Folder || row.kind == FilesRowKind::Prefix || (row.kind == FilesRowKind::File && row.childCount > 0)))
         return gap + ImGui::CalcTextSize(cWidthSampleChar).x * cFolderCountChars;
 
     return 0.0f;
+}
+
+bool FilesPanel::isSpanningRow(const FilesRow& row) const
+{
+    return row.kind == FilesRowKind::Folder && !getPackFolder(row);
 }
 
 f32 FilesPanel::calcNameWant(const FrameContext& ctx, const std::vector<FilesRow>& rows) const
@@ -456,10 +471,14 @@ f32 FilesPanel::calcNameWant(const FrameContext& ctx, const std::vector<FilesRow
     const f32 indent = ImFloor(ctx.em * cIndentEm);
     const f32 lead = ctx.chevronWidth + ctx.em + ImFloor(ctx.em * cIconGapEm) + ImGui::GetStyle().CellPadding.x * 2.0f;
     f32 widest = 0.0f;
+    const char* format = nullptr;
+    u64 size = 0;
 
     for (const FilesRow& row : rows)
     {
-        if (!IsContentRow(row))
+        const bool isValueRoot = row.kind == FilesRowKind::Root && getRootValues(row.root, &format, &size);
+
+        if ((!IsContentRow(row) && !isValueRoot) || isSpanningRow(row))
             continue;
 
         const size_t nameLength = row.kind == FilesRowKind::Prefix ? row.nameStart : getRowName(row).size() - row.nameStart;
@@ -486,7 +505,15 @@ void FilesPanel::calcValueWidths(FrameContext& ctx, const std::vector<FilesRow>&
         u64 rowSize = 0;
         s32 sizeLength = 0;
 
-        if (pack)
+        if (row.kind == FilesRowKind::Root)
+        {
+            if (!getRootValues(row.root, &format, &rowSize))
+                continue;
+
+            FormatItemSize(&size, rowSize);
+            sizeLength = size.calcLength();
+        }
+        else if (pack)
         {
             format = pack->packFormat.c_str();
             rowSize = pack->packSize;
@@ -551,20 +578,31 @@ void FilesPanel::setupColumns(FrameContext& ctx)
     const f32 formatWidth = ctx.formatWidth + cellPadding;
     const f32 sizeWidth = ctx.sizeWidth + cellPadding;
 
-    ctx.showSize = ctx.sizeWidth > 0.0f && avail >= nameWant + sizeWidth;
-    ctx.showFormat = ctx.showSize && ctx.formatWidth > 0.0f && avail >= nameWant + sizeWidth + formatWidth;
+    ctx.showSize = mShowSize && ctx.sizeWidth > 0.0f && avail >= nameWant + sizeWidth;
+    ctx.showFormat = mShowFormat && ctx.formatWidth > 0.0f && (ctx.showSize || !mShowSize) && avail >= nameWant + (ctx.showSize ? sizeWidth : 0.0f) + formatWidth;
 }
 
-f32 FilesPanel::drawRowLabel(const ImVec2& pos, f32 right, const char* icon, ImU32 iconColor, const char* name, ImU32 nameColor, const char* note, ImU32 noteColor, s32 prefixLength)
+f32 FilesPanel::drawRowLabel(const ImVec2& pos, f32 right, const char* icon, ImU32 iconColor, const char* name, ImU32 nameColor, const char* note, ImU32 noteColor, s32 prefixLength, const char* count, bool isCountShown)
 {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     const f32 em = ImGui::GetFontSize();
     const f32 iconWidth = ImGui::CalcTextSize(icon).x;
     const f32 nameX = pos.x + iconWidth + ImFloor(em * cIconGapEm);
+    const f32 noteGap = ImFloor(em * cCountGapEm);
 
     drawList->AddText(pos, iconColor, icon);
 
-    const f32 noteGap = ImFloor(em * cCountGapEm);
+    if (count)
+    {
+        const f32 countWidth = ImGui::CalcTextSize(count).x;
+        const f32 slotWidth = sead::Mathf::max(countWidth, ImGui::CalcTextSize(cWidthSampleChar).x * cFolderCountChars);
+
+        if (isCountShown)
+            drawList->AddText(ImVec2(right - countWidth, pos.y), ImGui::GetColorU32(GetItemValueColor()), count);
+
+        right -= slotWidth + noteGap;
+    }
+
     const f32 noteWidth = note ? noteGap + ImGui::CalcTextSize(note).x : 0.0f;
     const f32 nameEnd = drawRowName(drawList, ImVec2(nameX, pos.y), sead::Mathf::max(right - noteWidth, nameX), name, nameColor, prefixLength);
 
@@ -664,11 +702,20 @@ void FilesPanel::drawFolderRow(FrameContext& ctx, const FilesRow& row)
     const char* icon = folder.isPack ? ICON_LC_FOLDER_ARCHIVE : folderIcon;
     const ImVec4 iconColor = folder.isPack ? GetFileKindColor(BrowserFileKind::AudioResource) : GetItemValueColor();
     const sead::FixedSafeString<32> count = FormatCountText(ctx.isSearching ? row.childCount : ctx.shownCounts[row.root][row.index]);
+    const bool isSpanning = isSpanningRow(row);
+    const f32 right = isSpanning ? CalcTableValueRight() : frame.right;
+
+    if (isSpanning)
+        PushTableRowClipRect(frame.rowMin, frame.rowMax);
 
     ImGui::GetWindowDrawList()->AddText(frame.textPos, ImGui::GetColorU32(ImGuiCol_TextDisabled), chevron);
-    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, icon, ImGui::GetColorU32(iconColor), folder.name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), count.cstr(), ImGui::GetColorU32(ImGuiCol_TextDisabled));
+    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), right, icon, ImGui::GetColorU32(iconColor), folder.name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), nullptr, 0, 0, mShowCount ? count.cstr() : nullptr);
 
-    if (folder.isPack)
+    if (isSpanning)
+    {
+        ImGui::PopClipRect();
+    }
+    else
     {
         sead::FixedSafeString<32> size;
         FormatItemSize(&size, folder.packSize);
@@ -697,7 +744,7 @@ void FilesPanel::drawPrefixRow(FrameContext& ctx, const FilesRow& row)
     FormatItemSize(&size, row.groupSize);
 
     ImGui::GetWindowDrawList()->AddText(frame.textPos, dimColor, chevron);
-    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, ICON_LC_FILE_STACK, ImGui::GetColorU32(GetFileKindColor(first.probe.kind)), name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), count.cstr(), dimColor);
+    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, ICON_LC_FILE_STACK, ImGui::GetColorU32(GetFileKindColor(first.probe.kind)), name.c_str(), ImGui::GetColorU32(ImGuiCol_Text), nullptr, 0, 0, mShowCount ? count.cstr() : nullptr);
     drawValueCells(ctx, row.isMixedFormat ? "" : first.probe.formatName, size.cstr());
 }
 
@@ -880,7 +927,7 @@ void FilesPanel::drawFileMenu(const FilesRow& row)
 void FilesPanel::drawValueCells(FrameContext& ctx, const char* format, const char* size)
 {
     if (ctx.showFormat && ImGui::TableSetColumnIndex(static_cast<s32>(FilesColumn::Format)))
-        DrawItemValueCell(format, cItemColumnFlag_Text);
+        DrawItemValueCell(format, ctx.showSize ? cItemColumnFlag_Text : cItemColumnFlag_None);
 
     if (ctx.showSize && ImGui::TableSetColumnIndex(static_cast<s32>(FilesColumn::Size)))
         DrawItemValueCell(size, cItemColumnFlag_None);
@@ -913,10 +960,10 @@ void FilesPanel::drawFileRow(FrameContext& ctx, const FilesRow& row)
         ImGui::GetWindowDrawList()->AddText(frame.textPos, ImGui::GetColorU32(ImGuiCol_TextDisabled), isExpanded ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_RIGHT);
 
     const sead::FixedSafeString<32> count = FormatCountText(row.childCount);
-    const char* note = openMark ? cOpenFileMark : ctx.isSearching && row.childCount > 0 ? count.cstr() : nullptr;
-    const ImU32 noteColor = openMark ? getOpenMarkColor(openMark) : ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    const char* note = openMark ? cOpenFileMark : nullptr;
+    const ImU32 noteColor = openMark ? getOpenMarkColor(openMark) : 0;
 
-    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, icon, iconColor, file.name.c_str() + row.nameStart, getOpenNameColor(openMark), note, noteColor, row.prefixLength);
+    drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), frame.right, icon, iconColor, getShownFileName(file).c_str() + row.nameStart, getOpenNameColor(openMark), note, noteColor, row.prefixLength, mShowCount && ctx.isSearching && row.childCount > 0 ? count.cstr() : nullptr);
 
     sead::FixedSafeString<32> size;
     FormatItemSize(&size, file.size);

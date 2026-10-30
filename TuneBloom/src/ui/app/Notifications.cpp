@@ -1,5 +1,6 @@
 #include <ui/app/Notifications.h>
 
+#include <ui/app/MenuBar.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
@@ -7,6 +8,7 @@
 #include <ui/widgets/TimeUtil.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/WindowAnimation.h>
+#include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
@@ -256,15 +258,8 @@ static f32 CalcToastBottom(const ImGuiViewport* viewport)
 static bool DrawToastAction(const Entry& entry, const ImVec2& pos, bool* isHovered)
 {
     ImGui::SetCursorPos(pos);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_CheckMark));
 
-    const bool isPressed = ImGui::SmallButton(entry.actionLabel.cstr());
-
-    ImGui::PopStyleColor();
-
-    *isHovered = ImGui::IsItemHovered();
-
-    return isPressed;
+    return DrawTextAction("##Action", entry.actionLabel.cstr(), ImGui::GetFontSize(), 0.0f, isHovered);
 }
 
 static f32 DrawToast(Entry& entry, const ImGuiViewport* viewport, f32 right, f32 bottom, bool animated)
@@ -308,7 +303,7 @@ static f32 DrawToast(Entry& entry, const ImGuiViewport* viewport, f32 right, f32
         const f32 closeSize = em;
         const ImVec2 start = ImGui::GetCursorPos();
         const bool hasAction = entry.actionCallback != nullptr;
-        const f32 actionWidth = hasAction ? ImGui::CalcTextSize(entry.actionLabel.cstr()).x + style.FramePadding.x * 2.0f + style.ItemSpacing.x : 0.0f;
+        const f32 actionWidth = hasAction ? CalcTextActionWidth(entry.actionLabel.cstr()) + style.ItemSpacing.x : 0.0f;
         const f32 closeX = ImGui::GetWindowContentRegionMax().x - closeSize;
 
         DrawEntryText(entry, closeSize + style.ItemSpacing.x + actionWidth);
@@ -458,6 +453,7 @@ static void DrawList()
         else
         {
             ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, ImFloor(em * cListMaxHeightEm)));
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, IM_COL32_BLACK_TRANS);
 
             if (ImGui::BeginChild("##List", ImVec2(0.0f, 0.0f), ImGuiChildFlags_AutoResizeY))
             {
@@ -488,6 +484,7 @@ static void DrawList()
             }
 
             ImGui::EndChild();
+            ImGui::PopStyleColor();
         }
 
         ImGui::EndPopup();
@@ -499,28 +496,10 @@ static void DrawList()
 
 f32 DrawBell(f32 right, f32 top, f32 bottom)
 {
-    const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
     const ImVec2 iconSize = ImGui::CalcTextSize(ICON_LC_BELL);
-    const f32 width = iconSize.x + style.ItemSpacing.x * 2.0f;
-    const ImVec2 min(right - width, top);
-    const ImVec2 max(right, bottom);
+    const bool hasEntry = sEntryNum != 0;
 
-    ImGui::SetCursorScreenPos(min);
-
-    if (ImGui::InvisibleButton("##Notifications", ImVec2(width, bottom - top)))
-        sWantsList = !sListOpen;
-
-    const ImGuiID id = ImGui::GetItemID();
-    const bool hovered = ImGui::IsItemHovered();
-    const bool held = ImGui::IsItemActive();
-
-    if (!sListOpen)
-        ImGui::SetItemTooltip("%s", messages::notify::cTitle);
-
-    sListAnchor = ImVec2(right, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
-
-    bool hasEntry = sEntryNum != 0;
     bool hasUnread = false;
     Kind unreadKind = Kind::Info;
 
@@ -535,23 +514,20 @@ f32 DrawBell(f32 right, f32 top, f32 bottom)
         hasUnread = true;
     }
 
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec4 iconColor = ImGui::GetStyleColorVec4(hasEntry ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+    ImVec2 iconPos;
 
-    ImVec4 fill = style.Colors[held ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered];
-    ImVec4 idle = fill;
-    idle.w = 0.0f;
+    if (MenuBarIconButton("##Notifications", ICON_LC_BELL, right, top, bottom, sListOpen, &iconColor, &iconPos))
+        sWantsList = !sListOpen;
 
-    if (sListOpen)
-        drawList->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_Header), style.FrameRounding);
-    else
-        drawList->AddRectFilled(min, max, ImGui::GetHoverColorU32(id, hovered, ImGui::GetColorU32(idle), ImGui::GetColorU32(fill)), style.FrameRounding);
+    if (!sListOpen)
+        SetMenuBarTooltip(messages::notify::cTitle);
 
-    const ImVec2 iconPos(min.x + style.ItemSpacing.x, ImFloor((top + bottom - iconSize.y) * 0.5f));
-
-    drawList->AddText(iconPos, ImGui::GetColorU32(hasEntry ? ImGuiCol_Text : ImGuiCol_TextDisabled), ICON_LC_BELL);
+    sListAnchor = ImVec2(right, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
 
     if (hasUnread)
     {
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
         const f32 radius = em * cBellDotRadiusEm;
         const ImVec2 center(iconPos.x + iconSize.x - radius, iconPos.y + radius * 2.0f);
 
@@ -559,7 +535,7 @@ f32 DrawBell(f32 right, f32 top, f32 bottom)
         drawList->AddCircleFilled(center, radius, ImGui::GetColorU32(GetKindColor(unreadKind)));
     }
 
-    return width;
+    return CalcMenuBarIconButtonWidth(ICON_LC_BELL);
 }
 
 void Draw(bool showToasts)

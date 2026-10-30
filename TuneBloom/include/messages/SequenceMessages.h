@@ -11,21 +11,19 @@ inline constexpr const char* cCommandVersionFormat = "Command '{}' requires {} v
 inline constexpr const char* cNotCompiled = "The Sequence File is not compiled";
 inline constexpr const char* cInvalidStartLabel = "The Start Label is invalid. Compile the Sequence File first";
 
-inline constexpr const char* cGoToLabelHint = "Open the Sequence File at this label";
-
-inline constexpr const char* cPlayTooltip = "Play from the label at the cursor";
+inline constexpr const char* cPlayTooltip = "Play from Label at Cursor";
 inline constexpr const char* cNoBanks = "No Bank";
 inline constexpr const char* cBanksMoreFormat = "%s +%u";
 inline constexpr const char* cFollowOffButton = "Follow: Off";
 inline constexpr const char* cFollowTrackButtonFormat = "Follow: Track %d";
-inline constexpr const char* cFollowTip = "Scroll to the playing line of a track";
+inline constexpr const char* cFollowTip = "Follow Playback";
 inline constexpr const char* cTrailLabel = "Trail";
 inline constexpr const char* cCompileButton = "Compile";
 inline constexpr const char* cStateCompiled = "Compiled";
 inline constexpr const char* cStateNotCompiled = "Not compiled";
 inline constexpr const char* cStateError = "Error";
-inline constexpr const char* cFoldAllTooltip = "Fold all labels";
-inline constexpr const char* cUnfoldAllTooltip = "Unfold all labels";
+inline constexpr const char* cFoldAllTooltip = "Fold All Labels";
+inline constexpr const char* cUnfoldAllTooltip = "Unfold All Labels";
 inline constexpr const char* cNoInstrument = "no instrument";
 inline constexpr const char* cMoreRegionsFormat = " +%d";
 inline constexpr const char* cErrorLineFormat = "Line %d: %s";
@@ -40,8 +38,8 @@ inline constexpr const char* cSuggestLabel = "Suggest While Typing";
 inline constexpr const char* cHintsLabel = "Parameter Hints";
 
 inline constexpr const char* cFindNoResults = "No results";
-inline constexpr const char* cFindPrevious = "Previous match (Shift+F3)";
-inline constexpr const char* cFindNext = "Next match (F3)";
+inline constexpr const char* cFindPrevious = "Previous Match (Shift+F3)";
+inline constexpr const char* cFindNext = "Next Match (F3)";
 inline constexpr const char* cFindClose = "Close (Escape)";
 inline constexpr const char* cShowReplace = "Show Replace";
 inline constexpr const char* cHideReplace = "Hide Replace";

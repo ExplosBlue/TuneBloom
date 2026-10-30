@@ -112,7 +112,7 @@ static void SetStreamReloadTooltip(const Sound* sound, const Sound::StreamSoundI
         return;
     }
 
-    ImGui::SetTooltip("%s", messages::stream::cReloadTooltip);
+    ImGui::SetTooltip("%s", messages::stream::cReloadMenuLabel);
 }
 
 static void DrawStreamReloadSummary(const Sound* sound, const Sound::StreamSoundInfo& strmSoundInfo)

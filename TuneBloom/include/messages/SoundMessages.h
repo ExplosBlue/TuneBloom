@@ -18,8 +18,6 @@ inline constexpr const char* cVolumeSilent = "-inf dB";
 inline constexpr const char* cVolumeWidest = "-00.0 dB";
 inline constexpr const char* cShowRemainingTime = "Click to show the remaining time";
 inline constexpr const char* cShowElapsedTime = "Click to show the elapsed time";
-inline constexpr const char* cLoopFormat = "Loop from %s to %s\nClick to turn off";
-inline constexpr const char* cLoopOffFormat = "Loop off, stops at %s\nClick to turn on";
 inline constexpr const char* cNoLoop = "No loop";
 inline constexpr const char* cSequenceNoEnd = "The sequence has no end";
 inline constexpr const char* cUnknownTime = "--:--.---";
@@ -69,7 +67,7 @@ namespace sound
 
 inline constexpr const char* c3DApplyTitle = "Apply To";
 inline constexpr const char* c3DDistanceTitle = "Distance";
-inline constexpr const char* cWaveFileMenuTip = "Wave File actions";
+inline constexpr const char* cWaveFileMenuTip = "Wave File Actions";
 inline constexpr const char* cWaveFileGoTo = "Go to Wave File";
 inline constexpr const char* cPanelEnableDetail = "Off: the sound uses the default values";
 
@@ -209,8 +207,9 @@ namespace playerframe
 
 inline constexpr const char* cWindowTitle     = "TuneBloom Player";
 inline constexpr const char* cFactSeparator   = " · ";
-inline constexpr const char* cEditTip         = "Show the editor panels of this file";
-inline constexpr const char* cReplaceTrackTip = "Import a WAV file in place of a track";
+inline constexpr const char* cOpenInEditor    = "Open in Editor";
+inline constexpr const char* cReplaceTrack    = "Replace Track";
+inline constexpr const char* cFileDetails     = "File Details";
 
 }
 

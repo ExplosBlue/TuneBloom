@@ -942,20 +942,21 @@ void DocumentTabStrip::draw()
     const f32 tabsTop = stripMin.y + ImFloor(ctx.em * cStripPadYEm);
     const f32 tabsBottom = tabsTop + ctx.tabHeight;
 
-    ImRect sidebar;
-    const bool hasSidebar = FindSidebarStripColumn(&sidebar);
+    f32 sidebarWidth = 0.0f;
+    const bool hasSidebar = FindSidebarStripWidth(&sidebarWidth);
     const bool hasDocuments = !GetOpenDocuments().empty();
 
     if (!hasSidebar && !hasDocuments)
         return;
 
-    const f32 underlineLeft = hasSidebar ? sidebar.Max.x : stripMin.x;
-    const f32 tabsLeft = hasSidebar ? sidebar.Max.x + style.DockingSeparatorSize : stripMin.x;
+    const f32 sidebarRight = stripMin.x + sidebarWidth;
+    const f32 underlineLeft = hasSidebar ? sidebarRight : stripMin.x;
+    const f32 tabsLeft = hasSidebar ? sidebarRight + style.DockingSeparatorSize : stripMin.x;
 
     drawBackground(stripMin.y, tabsBottom, underlineLeft);
 
     if (hasSidebar)
-        DrawSidebarSwitchInStrip(sidebar, tabsTop, tabsBottom);
+        DrawSidebarSwitchInStrip(ImRect(stripMin.x, tabsTop, sidebarRight, tabsBottom));
 
     if (hasDocuments)
     {

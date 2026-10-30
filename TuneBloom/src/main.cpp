@@ -38,6 +38,7 @@
 #include "ui/file/File.h"
 #include "bfsar/io/FileIo.h"
 #include "bfsar/io/PackFile.h"
+#include "platform/JumpList.h"
 #include "platform/SingleInstance.h"
 
 #include <libs/portable-file-dialogs.h>
@@ -422,6 +423,8 @@ int main(int argc, char* argv[])
 
     if (argc == 2 && argv[1][0] != '-')
         setStartupFile(argv[1]);
+    else if (argc == 2 && std::strcmp(argv[1], jumplist::cPlayerArgument) == 0)
+        SetStartupPlayer();
 
 #if defined(SEAD_PLATFORM_MACOSX)
     macos::useBundleResources();
@@ -499,7 +502,10 @@ int main(int argc, char* argv[])
     if (testhooks::IsEnabled())
         testhooks::HideWindow(framework->getWindowHandle());
     else
+    {
         singleinstance::StartListening();
+        jumplist::Update();
+    }
 
     sead::TaskBase::CreateArg rootArg(&sead::TTaskFactory<RootTask>);
     sead::Framework::RunArg runArg;

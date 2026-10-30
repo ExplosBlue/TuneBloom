@@ -134,7 +134,7 @@ void SoundContextMenuFunc(Item* item)
         WaveFile* wave = single ? static_cast<WaveFile*>(sound->getWaveSoundInfo().getWaveFileRef().getItem()) : nullptr;
         const char* reason = single ? messages::reference::cNoWaveFile : messages::import::cWaveFileNotSingleSound;
 
-        if (ContextMenuItem(ICON_LC_REPLACE, messages::import::cReplaceWaveFileMenuLabel, wave != nullptr, reason))
+        if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::import::cReplaceWaveFileMenuLabel, wave != nullptr, reason))
             RequestWaveFileReplace(wave);
 
         if (ContextMenuItem(ICON_LC_SLIDERS_HORIZONTAL, messages::import::cReimportWaveFileMenuLabel, wave != nullptr, reason))
@@ -235,7 +235,7 @@ static void DrawTypedSoundsUI(const char* id, const char* title, CreateItemCallb
 
     if (BeginListOptions(!sIncludeInSet))
     {
-        if (ContextMenuCheckItem(messages::item::cShowSoundsInSet, sIncludeInSet))
+        if (ContextMenuToggleItem(messages::item::cShowSoundsInSet, sIncludeInSet))
             sIncludeInSet = !sIncludeInSet;
 
         EndContextMenu();

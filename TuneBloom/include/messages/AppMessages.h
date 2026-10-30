@@ -131,7 +131,6 @@ inline constexpr const char* cAssociationCountFormat = "%u of %u Types";
 inline constexpr const char* cAssociationDetail = "File types that open in TuneBloom";
 inline constexpr const char* cAssociationAppColumn = "Opens With";
 inline constexpr const char* cAssociationOnlyApp = "No other app opens this file type";
-inline constexpr const char* cAssociationUserChoice = "Windows Settings selects the app for this file type";
 inline constexpr const char* cAssociationFailed = "Couldn't change the file association";
 
 inline constexpr const char* cDeviceLabel = "Playback Device";
@@ -165,6 +164,8 @@ inline constexpr const char* cScrollSmoothingLabel = "Scroll Smoothing";
 inline constexpr const char* cScrollSpeedLabel = "Scroll Speed";
 inline constexpr const char* cUIScaleLabel = "UI Scale";
 inline constexpr const char* cUIScaleRestart = "Restart to apply";
+inline constexpr const char* cWindowLayoutLabel = "Window Layout";
+inline constexpr const char* cWindowLayoutDetail = "Place and size of each panel and list column";
 inline constexpr const char* cShadowOpacityLabel = "Shadow Opacity";
 inline constexpr const char* cTimeFormatLabel = "Time Format";
 inline constexpr const char* cTimeFormat24Format = "24-Hour (%s)";
@@ -376,7 +377,7 @@ inline constexpr const char* cAbout       = "About";
 inline constexpr const char* cUnsaved     = "Unsaved";
 inline constexpr const char* cSaved       = "Saved";
 
-inline constexpr const char* cShowUnsaved      = "Show Unsaved Changes";
+inline constexpr const char* cShowUnsaved     = "Show Unsaved Changes";
 inline constexpr const char* cCreateBackup     = "Create Backup";
 inline constexpr const char* cShowBackupFolder = "Show Backup Folder";
 inline constexpr const char* cCopyPath         = "Copy Path";
@@ -398,8 +399,6 @@ inline constexpr const char* cSystemWindow = "System Window";
 inline constexpr const char* cThemeDark    = "Dark";
 inline constexpr const char* cThemeLight   = "Light";
 inline constexpr const char* cResetLayout  = "Reset Layout";
-
-inline constexpr const char* cTransport = "Transport";
 
 inline constexpr const char* cShortcuts   = "Keyboard Shortcuts";
 inline constexpr const char* cRepository  = "GitHub Repository";
@@ -434,19 +433,9 @@ inline constexpr const char* cGroupSearch   = "Search";
 inline constexpr const char* cGroupPiano    = "Piano Keyboard";
 inline constexpr const char* cGroupMouse    = "Mouse";
 
-inline constexpr const char* cCloseFileWindow = "Close File Window";
-inline constexpr const char* cCloseFile       = "Close File";
-
-inline constexpr const char* cPreviousItem   = "Previous Item";
-inline constexpr const char* cNextItem       = "Next Item";
-inline constexpr const char* cFirstItem      = "First Item";
-inline constexpr const char* cLastItem       = "Last Item";
 inline constexpr const char* cShowSelection  = "Scroll to Selection";
-inline constexpr const char* cClearSelection = "Clear Selection";
 inline constexpr const char* cCollapseFolder = "Collapse Folder";
 inline constexpr const char* cExpandFolder   = "Expand Folder";
-
-inline constexpr const char* cPlayPause = "Play / Pause";
 
 inline constexpr const char* cClearSearch    = "Clear Search";
 inline constexpr const char* cMatchCase      = "Match Case";
@@ -458,8 +447,6 @@ inline constexpr const char* cOctaveDown  = "Octave Down";
 inline constexpr const char* cOctaveUp    = "Octave Up";
 inline constexpr const char* cOctaveReset = "Reset Octave";
 
-inline constexpr const char* cAddToSelection = "Add to Selection";
-inline constexpr const char* cSelectRange    = "Select a Range";
 inline constexpr const char* cZoomHorizontal = "Zoom Horizontally";
 inline constexpr const char* cZoomVertical   = "Zoom Vertically";
 inline constexpr const char* cPanHorizontal  = "Scroll Horizontally";
@@ -470,7 +457,6 @@ inline constexpr const char* cKeyCtrl     = "Ctrl";
 inline constexpr const char* cKeyShift    = "Shift";
 inline constexpr const char* cKeyAlt      = "Alt";
 inline constexpr const char* cKeyEscape   = "Esc";
-inline constexpr const char* cKeyClick    = "Click";
 inline constexpr const char* cKeyWheel    = "Wheel";
 inline constexpr const char* cKeyDrag     = "Drag";
 

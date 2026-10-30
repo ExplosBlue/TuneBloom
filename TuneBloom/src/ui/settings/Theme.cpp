@@ -10,7 +10,6 @@
 
 static constexpr f32 cKeepTokenAlpha      = -1.0f;
 static constexpr f32 cGrayscaleSaturation = 0.05f;
-static constexpr f32 cLightTrackInkMix    = 0.13f;
 static constexpr f32 cSeriesHueStep       = 0.618034f;
 static constexpr f32 cSeriesSaturationMin = 0.5f;
 static constexpr f32 cAccentTextMix       = 0.3f;
@@ -19,6 +18,7 @@ static constexpr uicolors::Themed<f32> cWindowShadowMaxAlpha = { 1.00f, 0.40f };
 static constexpr uicolors::Themed<f32> cRaisedGradient    = { 0.03f, 0.015f };
 static constexpr uicolors::Themed<f32> cSurfaceGradient   = { 0.02f, 0.0075f };
 static constexpr uicolors::Themed<f32> cRecessedPaneValue = { 0.72f, 0.965f };
+static constexpr uicolors::Themed<f32> cTrackInkMix       = { 0.18f, 0.13f };
 
 namespace
 {
@@ -232,12 +232,9 @@ ImU32 GetRecessedPaneColorU32()
 
 ImU32 GetTrackColorU32(ImU32 frameColor)
 {
-    if (sThemeIsDark)
-        return frameColor;
-
     const ImVec4 ink = uicolors::Opaque(ImGui::GetStyleColorVec4(ImGuiCol_Text));
 
-    return ImGui::ColorConvertFloat4ToU32(ImLerp(ImGui::ColorConvertU32ToFloat4(frameColor), ink, cLightTrackInkMix));
+    return ImGui::ColorConvertFloat4ToU32(ImLerp(ImGui::ColorConvertU32ToFloat4(frameColor), ink, uicolors::Pick(cTrackInkMix, sThemeIsDark)));
 }
 
 ImVec4 GetSeriesColor(s32 index)

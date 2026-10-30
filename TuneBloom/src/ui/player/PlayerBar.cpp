@@ -1,6 +1,7 @@
 #include <ui/player/PlaybackDrawer.h>
 
 #include <ui/file/Document.h>
+#include <ui/file/LooseFileInfo.h>
 #include <ui/resource/ResourceViews.h>
 #include <ui/widgets/DockNode.h>
 #include <ui/items/ItemColumns.h>
@@ -17,6 +18,7 @@
 #include <imgui/imgui_custom.h>
 
 #include <aal/AudioAsset.h>
+#include <bfsar/io/FileIo.h>
 #include <snd/SoundSystem.h>
 
 #include <cmath>
@@ -29,6 +31,8 @@ constexpr f32   cSeekLoopInset        = 3.0f;
 constexpr f32   cSeekGhostAlpha       = 0.35f;
 constexpr f32   cSeekRegionGap        = 5.0f;
 constexpr f32   cSeekRegionHeight     = 4.0f;
+constexpr f32   cSeekHoldTolerance    = 0.01f;
+constexpr f32   cSeekHoldSeconds      = 1.0f;
 constexpr f32   cLoopMarkerThickness  = 2.0f;
 
 constexpr uicolors::Themed<f32>      cSeekLoopAlpha         = { 0.08f, 0.12f };
@@ -70,8 +74,40 @@ enum class TransportRowForm
 
 static bool sShowRemainingTime = false;
 
-bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
-                 bool seekable, bool allowDrag,
+static f32 CalcSeekMouseFraction(f32 barLeft, f32 barWidth)
+{
+    const f32 trackWidth = sead::Mathf::max(barWidth - cSeekHandleRadius * 2.0f, 1.0f);
+    return sead::Mathf::clamp2(0.0f, (ImGui::GetMousePos().x - barLeft - cSeekHandleRadius) / trackWidth, 1.0f);
+}
+
+static void SetPendingSeek(f32 target)
+{
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+
+    storage->SetFloat(ImGui::GetID("##seektarget"), target);
+    storage->SetFloat(ImGui::GetID("##seektime"), static_cast<f32>(ImGui::GetTime()));
+}
+
+static f32 ResolvePendingSeek(f32 playFraction)
+{
+    ImGuiStorage* storage = ImGui::GetStateStorage();
+    const ImGuiID targetId = ImGui::GetID("##seektarget");
+    const f32 target = storage->GetFloat(targetId, -1.0f);
+
+    if (target < 0.0f)
+        return playFraction;
+
+    const bool reached = fabsf(playFraction - target) <= cSeekHoldTolerance;
+    const bool expired = ImGui::GetTime() - storage->GetFloat(ImGui::GetID("##seektime")) > cSeekHoldSeconds;
+
+    if (!reached && !expired)
+        return target;
+
+    storage->SetFloat(targetId, -1.0f);
+    return playFraction;
+}
+
+bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate, bool seekable,
                  f32 loopStartFrac, f32 loopEndFrac, f32& outSeekFraction)
 {
     const f32 height = ImGui::GetFrameHeight();
@@ -87,15 +123,14 @@ bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
 
     const f32 trackStart = barStart.x + cSeekHandleRadius;
     const f32 trackWidth = sead::Mathf::max(width - cSeekHandleRadius * 2.0f, 1.0f);
-    const f32 mouseFrac = sead::Mathf::clamp2(0.0f, (ImGui::GetMousePos().x - trackStart) / trackWidth, 1.0f);
+    const f32 mouseFrac = CalcSeekMouseFraction(barStart.x, width);
+    const bool seeked = seekable && ImGui::IsItemDeactivated();
 
-    bool seeked = false;
+    if (held || seeked)
+        fraction = mouseFrac;
 
-    if (seekable && (ImGui::IsItemActivated() || (allowDrag && held && ImGui::IsMouseDragging(ImGuiMouseButton_Left))))
-    {
+    if (seeked)
         outSeekFraction = mouseFrac;
-        seeked = true;
-    }
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
 
@@ -247,13 +282,11 @@ struct PlaybackProgress
 
     bool determinate = true;
     bool seekable = false;
-    bool allowDrag = false;
     bool showTotalTime = true;
 
     f32 loopStartFrac = -1.0f;
     f32 loopEndFrac = -1.0f;
 
-    u32 sampleRate = 0;
     bool isLoop = false;
 
     const WaveFile* wave = nullptr;
@@ -304,7 +337,6 @@ static PlaybackProgress BuildPlaybackProgress()
     u32 sampleRate = sSoundPlayer.getSampleRate();
 
     PlaybackProgress progress;
-    progress.allowDrag = !isSeq;
 
     if (isSeq)
     {
@@ -350,7 +382,6 @@ static PlaybackProgress BuildPlaybackProgress()
             sampleCount = wave->getSampleCount();
             sampleRate = wave->getSampleRate();
             progress.totalSec = static_cast<f32>(timeutil::SamplesToSeconds(sampleCount, sampleRate));
-            progress.sampleRate = sampleRate;
             progress.isLoop = wave->getIsLoop();
             progress.wave = wave;
 
@@ -542,25 +573,11 @@ static void DrawDisplayLoop(const PlaybackProgress& progress, const ImVec2& pos)
         return;
 
     if (noEnd)
-    {
         ImGui::SetTooltip("%s", messages::playback::cSequenceNoEnd);
-    }
     else if (progress.isLoop)
-    {
-        char start[16];
-        char end[16];
-        timeutil::FormatClock(start, sizeof(start), progress.loopStartFrac * progress.totalSec);
-        timeutil::FormatClock(end, sizeof(end), progress.loopEndFrac * progress.totalSec);
-
-        if (loopEnabled)
-            ImGui::SetTooltip(messages::playback::cLoopFormat, start, end);
-        else
-            ImGui::SetTooltip(messages::playback::cLoopOffFormat, end);
-    }
+        ImGui::SetTooltip("%s", loopEnabled ? messages::common::cLoopOn : messages::common::cLoopOff);
     else
-    {
         ImGui::SetTooltip("%s", messages::playback::cNoLoop);
-    }
 }
 
 static void FormatDisplayRegion(sead::BufferedSafeString* out, const StreamFileLayout& layout, s32 regionNo)
@@ -623,7 +640,83 @@ static void SetSeekTooltip(const PlaybackProgress& progress, f32 fraction)
     ImGui::SetTooltip("%s\n%s", clock, region.cstr());
 }
 
-static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f32 height)
+static bool HasFileFacts()
+{
+    const Document* document = ActiveDocument();
+    FileFacts facts;
+
+    return document && document->getFileFacts(&facts);
+}
+
+static sead::FixedSafeString<256> FormatDisplayName(const Item* item, const StreamSource& looseStream, bool hidesExtension)
+{
+    sead::FixedSafeString<256> name;
+
+    if (item && item == GetPlayableFileItem(FindDocumentFile()))
+        name = ActiveDocument()->displayName().c_str();
+    else if (item)
+        return item->getFormattedName();
+    else if (looseStream.isValid())
+        name = looseStream.getDisplayName();
+    else
+        return sead::FixedSafeString<256>(sSoundPlayer.isActive() ? "" : messages::playback::cNoSound);
+
+    if (!hidesExtension)
+        return name;
+
+    sead::FixedSafeString<256> stem;
+    fileio::GetFileStem(&stem, name);
+
+    return stem;
+}
+
+static PlaybackProgress DrawDisplaySeekBar(const PlaybackProgress& progress, const ImVec2& pos, f32 width)
+{
+    PlaybackProgress shown = progress;
+
+    if (progress.seekable)
+    {
+        shown.fraction = ResolvePendingSeek(progress.fraction);
+
+        if (shown.fraction != progress.fraction)
+            shown.elapsedSec = shown.fraction * progress.totalSec;
+    }
+
+    if (width <= cSeekHandleRadius * 4.0f)
+        return shown;
+
+    f32 seekFrac = 0.0f;
+
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
+
+    const bool seeked = DrawSeekBar("##transport", width, shown.fraction, progress.determinate, progress.seekable, progress.loopStartFrac, progress.loopEndFrac, seekFrac);
+
+    ImGui::PopStyleVar();
+
+    DrawSeekRegions(progress.wave, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+
+    const f32 mouseFrac = CalcSeekMouseFraction(pos.x, width);
+
+    if (progress.seekable && (seeked || ImGui::IsItemActive()))
+    {
+        shown.fraction = mouseFrac;
+        shown.elapsedSec = mouseFrac * progress.totalSec;
+    }
+
+    if (progress.seekable && progress.totalSec > 0.0f && (ImGui::IsItemHovered() || ImGui::IsItemActive()))
+        SetSeekTooltip(progress, mouseFrac);
+
+    if (seeked)
+    {
+        sSoundPlayer.seek(seekFrac);
+        SetPendingSeek(seekFrac);
+    }
+
+    return shown;
+}
+
+static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f32 height, bool hasFactsLine)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
@@ -650,13 +743,23 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     const f32 right = max.x - pad;
 
     // Time
+    ImFont* timeFont = ImGui::GetFont();
+    f32 timeFontSize = em;
+    ImVec2 timePos(left, row1);
+    f32 timeHeight = em;
+
     if (large)
     {
-        ImFont* font = ImGui::GetIO().Fonts->Fonts[0];
-        const f32 fontSize = ImFloor(em * cDisplayTimeEm);
-        const f32 timeWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, "-00:00.000").x;
+        timeFont = ImGui::GetIO().Fonts->Fonts[0];
+        timeFontSize = ImFloor(em * cDisplayTimeEm);
+        timePos.y = min.y;
+        timeHeight = height - cDisplayTextRaise * 4.0f;
+    }
 
-        DrawDisplayTime(progress, ImVec2(left, min.y), timeWidth, height - cDisplayTextRaise * 4.0f, font, fontSize);
+    const f32 timeWidth = timeFont->CalcTextSizeA(timeFontSize, FLT_MAX, 0.0f, "-00:00.000").x;
+
+    if (large)
+    {
         left += timeWidth + pad;
 
         draw->AddLine(ImVec2(left, min.y + pad), ImVec2(left, max.y - pad), ImGui::GetColorU32(ImGuiCol_Border));
@@ -665,9 +768,6 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     }
     else
     {
-        const f32 timeWidth = ImGui::CalcTextSize("-00:00.000").x;
-
-        DrawDisplayTime(progress, ImVec2(left, row1), timeWidth, em, ImGui::GetFont(), em);
         nameLeft += timeWidth + pad;
     }
 
@@ -679,19 +779,13 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     const Item* item = looseStream.isValid() ? nullptr : ResolveDisplayItem();
     const bool hasDisplay = item || looseStream.isValid();
 
-    // Type and sample rate
-    if (large && hasDisplay)
+    // Type
+    if (large && hasDisplay && !hasFactsLine)
     {
-        sead::FixedSafeString<64> info(item ? GetDisplayTypeName(item) : messages::common::cStream);
+        const char* typeName = item ? GetDisplayTypeName(item) : messages::common::cStream;
 
-        if (progress.sampleRate != 0)
-        {
-            info.append("  ");
-            info.appendWithFormat(messages::unit::cHertzFormat, progress.sampleRate);
-        }
-
-        infoLeft -= ImGui::CalcTextSize(info.cstr()).x + pad;
-        draw->AddText(ImVec2(infoLeft, row1), GetDisplayValueColor(), info.cstr());
+        infoLeft -= ImGui::CalcTextSize(typeName).x + pad;
+        draw->AddText(ImVec2(infoLeft, row1), GetDisplayValueColor(), typeName);
     }
 
     infoLeft = DrawDisplayRegion(ImVec2(infoLeft, row1), pad);
@@ -701,15 +795,7 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
 
     if (nameRight > nameLeft)
     {
-        sead::FixedSafeString<256> name(sSoundPlayer.isActive() ? "" : messages::playback::cNoSound);
-
-        if (item && item == GetPlayableFileItem(FindDocumentFile()))
-            name = ActiveDocument()->displayName().c_str();
-        else if (item)
-            name = item->getFormattedName();
-        else if (looseStream.isValid())
-            name = looseStream.getDisplayName();
-
+        const sead::FixedSafeString<256> name = FormatDisplayName(item, looseStream, hasFactsLine);
         const bool bright = hasDisplay && sSoundPlayer.isActive();
 
         ImGui::PushStyleColor(ImGuiCol_Text, bright ? ImGui::GetStyleColorVec4(ImGuiCol_Text) : GetItemValueColor());
@@ -733,28 +819,9 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     else
         seekWidth = right - left;
 
-    // Seek bar
-    if (seekWidth > cSeekHandleRadius * 4.0f)
-    {
-        f32 seekFrac = 0.0f;
+    const PlaybackProgress shown = DrawDisplaySeekBar(progress, ImVec2(left, row2), seekWidth);
 
-        ImGui::SetCursorScreenPos(ImVec2(left, row2));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, 0.0f));
-
-        if (DrawSeekBar("##transport", seekWidth, progress.fraction, progress.determinate, progress.seekable, progress.allowDrag, progress.loopStartFrac, progress.loopEndFrac, seekFrac))
-            sSoundPlayer.seek(seekFrac);
-
-        ImGui::PopStyleVar();
-
-        DrawSeekRegions(progress.wave, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-
-        if (progress.seekable && progress.totalSec > 0.0f && ImGui::IsItemHovered())
-        {
-            const f32 trackWidth = seekWidth - cSeekHandleRadius * 2.0f;
-
-            SetSeekTooltip(progress, sead::Mathf::clamp2(0.0f, (ImGui::GetMousePos().x - left - cSeekHandleRadius) / trackWidth, 1.0f));
-        }
-    }
+    DrawDisplayTime(shown, timePos, timeWidth, timeHeight, timeFont, timeFontSize);
 
     ImGui::PopClipRect();
     ImGui::PopID();
@@ -836,7 +903,26 @@ static f32 MasterVolumeWidth(f32 faderWidth, bool showValue)
     return width;
 }
 
-static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
+static void DrawMasterVolumeReadout(TransportRowForm form, const ImVec2& anchor)
+{
+    if (!ImGui::IsItemHovered() && !ImGui::IsItemActive())
+        return;
+
+    ImGui::SetNextWindowPos(anchor, ImGuiCond_Always, ImVec2(0.5f, 1.0f));
+
+    if (form == TransportRowForm::Player)
+    {
+        KnobTooltip(messages::common::cPercentFloatFormat, GetMasterVolumePosition() * 100.0f);
+        return;
+    }
+
+    char value[16];
+    FormatMasterVolume(value, sizeof(value));
+
+    KnobTooltip("%s", value);
+}
+
+static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue, TransportRowForm form)
 {
     const f32 spacing = ImGui::GetStyle().ItemSpacing.x;
     const f32 em = ImGui::GetFontSize();
@@ -846,10 +932,11 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
     const f32 meterHeight = ImFloor(em * cVolumeMeterHeightEm);
     const f32 meterGap = ImFloor(em * cVolumeMeterGapEm);
     const f32 meterOffset = ImFloor(em * cVolumeMeterOffsetEm);
-    const f32 groupHeight = (em + handleSize.y) * 0.5f + meterOffset + meterHeight * 2.0f + meterGap;
+    const f32 groupHeight = handleSize.y + meterOffset + meterHeight * 2.0f + meterGap;
 
     const ImVec2 min = ImGui::GetCursorScreenPos();
-    const f32 top = ImFloor(min.y + (height - groupHeight) * 0.5f);
+    const f32 centerY = ImFloor(min.y + (height - groupHeight + handleSize.y) * 0.5f);
+    const f32 top = centerY - ImFloor(em * 0.5f);
 
     ImGui::PushID("##master");
 
@@ -892,7 +979,6 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
         SaveAudioConfig();
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const f32 centerY = ImFloor(top + em * 0.5f);
     const f32 handleX = ImFloor(trackStart + GetMasterVolumePosition() * trackWidth);
 
     const ImVec4 fillColor = GetThemeAccent();
@@ -906,6 +992,9 @@ static void DrawMasterVolume(f32 faderWidth, f32 height, bool showValue)
     const f32 trackTop = centerY - trackHeight * 0.5f;
     const f32 trackBottom = trackTop + trackHeight;
     const ImVec2 handleMin(handleX - handleSize.x * 0.5f, centerY - handleSize.y * 0.5f);
+
+    if (!showValue)
+        DrawMasterVolumeReadout(form, ImVec2(handleX, handleMin.y - meterOffset));
 
     draw->AddRectFilled(ImVec2(faderMin.x, trackTop), ImVec2(faderMin.x + faderWidth, trackBottom), GetTrackColorU32(ImGui::GetColorU32(hovered || held ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg)), trackHeight * 0.5f);
     draw->AddRectFilled(ImVec2(faderMin.x, trackTop), ImVec2(handleX, trackBottom), ImGui::GetColorU32(fillColor), trackHeight * 0.5f);
@@ -1006,39 +1095,56 @@ static void UpdatePlayerBarHeight(f32 transportHeight, f32 drawerHeight)
     SetDockNodeHeight(node, height);
 }
 
+struct TransportRowLayout
+{
+    f32 gap = 0.0f;
+    f32 buttonSize = 0.0f;
+    f32 buttonsWidth = 0.0f;
+    f32 faderWidth = 0.0f;
+    f32 overridesWidth = 0.0f;
+    f32 fixedWidth = 0.0f;
+    bool showVolumeValue = false;
+};
+
+static TransportRowLayout CalcTransportRowLayout(f32 availWidth, TransportRowForm form)
+{
+    const f32 em = ImGui::GetFontSize();
+    TransportRowLayout layout;
+
+    layout.gap = ImFloor(em * cTransportGroupGapEm);
+    layout.buttonSize = ImFloor(em * cTransportButtonEm);
+    layout.buttonsWidth = layout.buttonSize * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+
+    layout.showVolumeValue = form == TransportRowForm::Editor && availWidth >= em * cVolumeValueMinEm;
+    layout.faderWidth = form == TransportRowForm::Player ? ImFloor(em * cPlayerVolumeSliderEm) : sead::Mathf::clamp2(em * cVolumeSliderMinEm, availWidth * cVolumeSliderRatio, ImFloor(em * cVolumeSliderMaxEm));
+    layout.overridesWidth = form == TransportRowForm::Editor ? CalcPlaybackOverrideButtonsWidth() + layout.gap : 0.0f;
+
+    layout.fixedWidth = layout.buttonsWidth + layout.overridesWidth + MasterVolumeWidth(layout.faderWidth, layout.showVolumeValue) + layout.gap * 2.0f;
+    return layout;
+}
+
 static void DrawTransportRow(f32 height, TransportRowForm form)
 {
     const bool showOverrides = form == TransportRowForm::Editor;
 
-    const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
     const PlaybackProgress progress = BuildPlaybackProgress();
 
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     const f32 availWidth = ImGui::GetContentRegionAvail().x;
-    const f32 gap = ImFloor(em * cTransportGroupGapEm);
+    const TransportRowLayout layout = CalcTransportRowLayout(availWidth, form);
+    const f32 displayWidth = sead::Mathf::clamp2(em * cDisplayMinWidthEm, availWidth - layout.fixedWidth, em * cDisplayMaxWidthEm);
 
-    const f32 buttonSize = ImFloor(em * cTransportButtonEm);
-    const f32 buttonsWidth = buttonSize * 2.0f + style.ItemSpacing.x;
+    const f32 buttonsX = origin.x + ImFloor(sead::Mathf::max((availWidth - layout.fixedWidth - displayWidth) * 0.5f, 0.0f));
+    const f32 displayX = buttonsX + layout.buttonsWidth + layout.gap;
+    const f32 overridesX = displayX + displayWidth + layout.gap;
+    const f32 masterX = overridesX + layout.overridesWidth;
 
-    const bool showVolumeValue = form == TransportRowForm::Editor && availWidth >= em * cVolumeValueMinEm;
-    const f32 faderWidth = form == TransportRowForm::Player ? ImFloor(em * cPlayerVolumeSliderEm) : sead::Mathf::clamp2(em * cVolumeSliderMinEm, availWidth * cVolumeSliderRatio, ImFloor(em * cVolumeSliderMaxEm));
-    const f32 masterWidth = MasterVolumeWidth(faderWidth, showVolumeValue);
-    const f32 overridesWidth = showOverrides ? CalcPlaybackOverrideButtonsWidth() + gap : 0.0f;
-
-    const f32 fixedWidth = buttonsWidth + overridesWidth + masterWidth + gap * 2.0f;
-    const f32 displayWidth = sead::Mathf::clamp2(em * cDisplayMinWidthEm, availWidth - fixedWidth, em * cDisplayMaxWidthEm);
-
-    const f32 buttonsX = origin.x + ImFloor(sead::Mathf::max((availWidth - fixedWidth - displayWidth) * 0.5f, 0.0f));
-    const f32 displayX = buttonsX + buttonsWidth + gap;
-    const f32 overridesX = displayX + displayWidth + gap;
-    const f32 masterX = displayX + displayWidth + gap + overridesWidth;
-
-    ImGui::SetCursorScreenPos(ImVec2(buttonsX, origin.y + ImFloor((height - buttonSize) * 0.5f)));
-    DrawTransportButtons(buttonSize);
+    ImGui::SetCursorScreenPos(ImVec2(buttonsX, origin.y + ImFloor((height - layout.buttonSize) * 0.5f)));
+    DrawTransportButtons(layout.buttonSize);
 
     ImGui::SetCursorScreenPos(ImVec2(displayX, origin.y));
-    DrawTransportDisplay(progress, displayWidth, height);
+    DrawTransportDisplay(progress, displayWidth, height, form == TransportRowForm::Player && HasFileFacts());
 
     if (showOverrides)
     {
@@ -1047,7 +1153,7 @@ static void DrawTransportRow(f32 height, TransportRowForm form)
     }
 
     ImGui::SetCursorScreenPos(ImVec2(masterX, origin.y));
-    DrawMasterVolume(faderWidth, height, showVolumeValue);
+    DrawMasterVolume(layout.faderWidth, height, layout.showVolumeValue, form);
 
     ImGui::SetCursorScreenPos(origin);
     ImGui::Dummy(ImVec2(availWidth, height));
@@ -1082,6 +1188,11 @@ void DrawPlayerUI()
 f32 CalcTransportRowHeight()
 {
     return ImFloor(ImGui::GetFontSize() * cTransportHeightEm);
+}
+
+f32 CalcCompactPlayerBarMaxWidth()
+{
+    return CalcTransportRowLayout(0.0f, TransportRowForm::Player).fixedWidth + ImGui::GetFontSize() * cDisplayMaxWidthEm;
 }
 
 void DrawCompactPlayerBar()

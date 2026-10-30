@@ -131,5 +131,5 @@ void DrawSequenceStartLabelPanel(Sound::SequenceSoundInfo& seqSoundInfo)
 
     ImGui::EndDisabled();
 
-    ImGui::SetItemTooltip("%s", seqFile ? messages::sequence::cGoToLabelHint : messages::reference::cNoSequenceFile);
+    ImGui::SetItemTooltip("%s", seqFile ? messages::sequence::cMenuGoToDefinition : messages::reference::cNoSequenceFile);
 }

@@ -1,9 +1,11 @@
 #include <ui/wave/WaveImportPanelInternal.h>
 
+#include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
 #include <messages/Messages.h>
 #include <ui/widgets/PanelLayout.h>
+#include <ui/file/PathText.h>
 #include <ui/widgets/Properties.h>
 #include <ui/wave/WaveFormatUI.h>
 #include <ui/widgets/Widgets.h>
@@ -20,6 +22,8 @@ constexpr f32 cColumnGapEm      = 0.6f;
 constexpr f32 cLabelGapEm       = 0.6f;
 constexpr f32 cFieldWidthEm     = 5.0f;
 constexpr f32 cLoopModeWidthEm  = 9.0f;
+constexpr f32 cSourceFactsGapEm = 2.0f;
+constexpr f32 cSourceNameMinEm  = 8.0f;
 
 constexpr f32 cSampleDragRange       = 2000.0f;
 constexpr f32 cNormalizeMin          = -24.0f;
@@ -127,7 +131,36 @@ bool SampleField(const char* id, u32* value, u32 min, u32 max, u32 reset, u32 ra
     return changed;
 }
 
-void WaveImportPanel::drawSourceHeader(const char* header, u32 sampleRate, u32 channelCount, u32 sampleCount)
+static void DrawSourceFileRow(const char* path, const char* summary)
+{
+    DialogRow(messages::common::cFile);
+
+    const char* name = pathtext::FileName(path);
+    const f32 em = ImGui::GetFontSize();
+    const f32 gap = ImFloor(em * cSourceFactsGapEm);
+    const f32 summaryWidth = ImGui::CalcTextSize(summary).x;
+    const f32 maxNameWidth = sead::Mathf::max(ImFloor(em * cSourceNameMinEm), ImGui::GetContentRegionAvail().x - summaryWidth - gap);
+
+    ImVec2 namePos = ImGui::GetCursorScreenPos();
+    namePos.y += ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset;
+
+    const f32 nameRight = namePos.x + maxNameWidth;
+    ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), namePos, ImVec2(nameRight, namePos.y + em), nameRight, nameRight, name, nullptr, nullptr);
+    ImGui::Dummy(ImVec2(sead::Mathf::min(ImGui::CalcTextSize(name).x, maxNameWidth), em));
+
+    if (ImGui::BeginItemTooltip())
+    {
+        ImGui::TextUnformatted(name);
+        pathtext::DrawTooltipFolder(path, ImGui::CalcTextSize(name).x);
+        ImGui::EndTooltip();
+    }
+
+    ImGui::SameLine(0.0f, gap);
+    ImGui::TextColored(GetItemValueColor(), "%s", summary);
+    DialogGroupGap();
+}
+
+void WaveImportPanel::drawSourceHeader(const char* header, const char* filePath, u32 sampleRate, u32 channelCount, u32 sampleCount)
 {
     sead::FixedSafeString<32> channels;
 
@@ -142,6 +175,12 @@ void WaveImportPanel::drawSourceHeader(const char* header, u32 sampleRate, u32 c
     FormatSampleTime(&length, sampleCount, sampleRate);
 
     const sead::FormatFixedSafeString<96> summary(messages::import::cWaveSourceSummaryFormat, sampleRate, channels.cstr(), length.cstr());
+
+    if (filePath)
+    {
+        DrawSourceFileRow(filePath, summary.cstr());
+        return;
+    }
 
     if (header)
     {
@@ -178,9 +217,9 @@ static WaveImportEncoding LimitToSampleRate(const WaveImportEncoding& encoding, 
     return limited;
 }
 
-void WaveImportPanel::drawUndecodableSource(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
+void WaveImportPanel::drawUndecodableSource(const char* header, const char* filePath, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
 {
-    drawSourceHeader(header, info->sampleRate, info->numChannels, info->sampleCount);
+    drawSourceHeader(header, filePath, info->sampleRate, info->numChannels, info->sampleCount);
 
     ImGui::TextDisabled("%s", messages::import::cWaveNoPreview);
 

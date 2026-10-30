@@ -2,6 +2,8 @@
 
 #include <basis/seadTypes.h>
 
+struct ImGuiViewport;
+
 enum class WindowAnimation
 {
     Menu,
@@ -16,3 +18,6 @@ void SetAnimationEnabled(bool enabled);
 bool IsAnimationEnabled();
 
 void AnimateWindow(WindowAnimation kind);
+
+bool FadeOutPlatformWindow(ImGuiViewport* viewport);
+void DrawPlatformWindowFades();

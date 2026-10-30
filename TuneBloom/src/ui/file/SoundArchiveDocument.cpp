@@ -199,10 +199,6 @@ void SoundArchiveDocument::drawInfo(UIType tab)
             DrawBankFilesUI();
             break;
 
-        case UIType::FileStatistics:
-            DrawFileStatisticsUI();
-            break;
-
         default:
             break;
     }

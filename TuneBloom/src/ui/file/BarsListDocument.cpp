@@ -64,11 +64,6 @@ StreamSource BarsListDocument::activeStreamSource()
     return {};
 }
 
-void BarsListDocument::formatFileFacts(sead::BufferedSafeString* out) const
-{
-    FormatLooseFileFacts(out, fileFormat());
-}
-
 bool BarsListDocument::isValidName(const sead::SafeString& name) const
 {
     return BarsListFile::IsValidEntryName(name);

@@ -9,10 +9,7 @@ void prepare(void* window)
     if (!window)
         return;
 
-    NSWindow* nsWindow = static_cast<NSWindow*>(window);
-
-    [nsWindow setHasShadow:YES];
-    [nsWindow setAnimationBehavior:NSWindowAnimationBehaviorAlertPanel];
+    [static_cast<NSWindow*>(window) setHasShadow:YES];
 }
 
 void attach(void* window, void* owner)

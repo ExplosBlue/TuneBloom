@@ -12,6 +12,7 @@ bool NewFile(ArchiveFormat format, ArchivePlatform platform);
 bool OpenFile();
 bool ChooseDocumentFiles(std::vector<std::string>* paths, const char* title);
 void SetStartupFile(const char* path);
+void SetStartupPlayer();
 bool IsOpenPending();
 void UpdatePendingOpen();
 void RunStartupAction();

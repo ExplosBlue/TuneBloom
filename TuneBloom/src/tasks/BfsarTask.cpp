@@ -28,6 +28,8 @@
 #include <app/Utilll.h>
 #include <core/TestHooks.h>
 #include <libs/stb_image.h>
+#include <platform/WindowFrame.h>
+#include <platform/WindowMove.h>
 
 #include <cstring>
 
@@ -128,6 +130,9 @@ void BfsarTask::prepare()
             sRefreshCallback(window);
     });
 
+    windowmove::KeepDrawing(fw->getWindowHandle());
+    windowframe::Install(fw->getWindowHandle());
+
     glfwSetDropCallback(fw->getWindowHandle(), [](GLFWwindow *window, s32 count, const char **paths)
     {
         if (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
@@ -153,11 +158,15 @@ void BfsarTask::prepare()
 
         for (s32 i = 0; i < count; i++)
         {
-            if (HasFileExtension(paths[i], strlen(paths[i]), cWavExtension))
-            {
+            if (!HasFileExtension(paths[i], strlen(paths[i]), cWavExtension))
+                continue;
+
+            if (IsPlayerFrameShown())
+                openqueue::PushExternal(paths[i]);
+            else
                 sDroppedWavPath = paths[i];
-                return;
-            }
+
+            return;
         }
 
         MessageLog::instance()->addPopup({ messages::app::cDropUnsupported });

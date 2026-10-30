@@ -30,7 +30,7 @@ static constexpr s32 cRegionToolNum      = 2;
 static constexpr f32 cRegionNameWeight   = 1.0f;
 static constexpr f32 cRegionRangeWeight  = 1.5f;
 static constexpr f32 cRegionRangeHeight  = 12.0f;
-static constexpr f32 cRegionRangeTableEm = 34.0f;
+static constexpr f32 cRegionRangeMinEm   = 6.0f;
 
 static const char* cRegionNumberWidest   = "000";
 static const char* cRegionPositionWidest = "00:00.000";
@@ -95,20 +95,40 @@ static f32 CalcRegionEdgeInset()
     return window && !window->ScrollbarY ? ImGui::GetStyle().ScrollbarSize : 0.0f;
 }
 
+static f32 CalcRegionRangeFixedWidth(f32 fixedColumnsWidth)
+{
+    const ImGuiTable* table = ImGui::GetCurrentTable();
+    const f32 spacing = table->OuterPaddingX * 2.0f + (table->CellSpacingX1 + table->CellSpacingX2) * (cRegionColumn_Num - 1) + table->CellPaddingX * 2.0f * cRegionColumn_Num;
+    const f32 freeWidth = table->WorkRect.GetWidth() - spacing - fixedColumnsWidth;
+    const f32 minWidth = ImFloor(ImGui::GetFontSize() * cRegionRangeMinEm);
+
+    if (freeWidth * cRegionRangeWeight / (cRegionNameWeight + cRegionRangeWeight) >= minWidth)
+        return 0.0f;
+
+    return sead::Mathf::clamp2(1.0f, freeWidth - table->MinColumnWidth, minWidth);
+}
+
 static void SetupRegionColumns(f32 edgeInset)
 {
     const f32 positionWidth = ImGui::CalcTextSize(cRegionPositionWidest).x;
     const f32 fieldWidth = positionWidth + ImGui::GetStyle().FramePadding.x * 2.0f;
-    const bool showRange = ImGui::GetCurrentTable()->OuterRect.GetWidth() >= ImGui::GetFontSize() * cRegionRangeTableEm;
+    const f32 numberWidth = ImGui::CalcTextSize(cRegionNumberWidest).x;
+    const f32 lengthWidth = positionWidth + edgeInset;
+    const f32 rangeWidth = CalcRegionRangeFixedWidth(GetItemActionColumnWidth() + numberWidth + fieldWidth * 2.0f + lengthWidth);
 
     ImGui::TableSetupScrollFreeze(0, 1);
     SetupItemActionColumn();
-    ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize(cRegionNumberWidest).x);
+    ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, numberWidth);
     ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch, cRegionNameWeight);
-    ImGui::TableSetupColumn(messages::common::cRange, ImGuiTableColumnFlags_WidthStretch | (showRange ? 0 : ImGuiTableColumnFlags_Disabled), cRegionRangeWeight);
+
+    if (rangeWidth > 0.0f)
+        ImGui::TableSetupColumn(messages::common::cRange, ImGuiTableColumnFlags_WidthFixed, rangeWidth);
+    else
+        ImGui::TableSetupColumn(messages::common::cRange, ImGuiTableColumnFlags_WidthStretch, cRegionRangeWeight);
+
     ImGui::TableSetupColumn(messages::common::cStart, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
     ImGui::TableSetupColumn(messages::common::cEnd, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
-    ImGui::TableSetupColumn(messages::common::cLength, ImGuiTableColumnFlags_WidthFixed, positionWidth + edgeInset);
+    ImGui::TableSetupColumn(messages::common::cLength, ImGuiTableColumnFlags_WidthFixed, lengthWidth);
 }
 
 static void DrawRegionCellText(const char* text, const ImVec4& color, RegionAlign align, f32 rightInset = 0.0f)

@@ -51,40 +51,13 @@ struct KeyText
     const char* text;
 };
 
-const ActionRow cArchiveRows[] = {
-    { messages::common::cNewFile,         Action::NewProject },
-    { messages::common::cOpenArchive,     Action::OpenProject },
-    { messages::common::cSave,            Action::SaveProject },
-    { messages::mainmenu::cSaveAs,          Action::SaveProjectAs },
-    { messages::mainmenu::cSaveAll,         Action::SaveAllProjects },
-    { messages::keys::cCloseFile,           Action::CloseProject },
-    { messages::keys::cCloseFileWindow, Action::CloseFileWindow },
-};
-
 const ActionRow cListRows[] = {
-    { messages::common::cSelectAll,    Action::SelectAll },
-    { messages::keys::cPreviousItem,   Action::SelectPrevious },
-    { messages::keys::cNextItem,       Action::SelectNext },
-    { messages::common::cPageUp,       Action::SelectPageUp },
-    { messages::common::cPageDown,     Action::SelectPageDown },
-    { messages::keys::cFirstItem,      Action::SelectFirst },
-    { messages::keys::cLastItem,       Action::SelectLast },
+    { messages::keys::cShowSelection,  Action::ScrollToSelection },
     { messages::keys::cCollapseFolder, Action::CollapseFolder },
     { messages::keys::cExpandFolder,   Action::ExpandFolder },
-    { messages::keys::cShowSelection,  Action::ScrollToSelection },
-    { messages::keys::cClearSelection, Action::ClearSelection },
-    { messages::common::cRename,       Action::RenameSelection },
-    { messages::common::cDuplicate,    Action::DuplicateSelection },
-    { messages::common::cDelete,       Action::DeleteSelection },
-};
-
-const ActionRow cPlaybackRows[] = {
-    { messages::keys::cPlayPause, Action::PlayPause },
 };
 
 const ActionRow cSearchRows[] = {
-    { messages::common::cFind,           Action::FocusFilter },
-    { messages::keys::cClearSearch,    Action::CloseFilter },
     { messages::keys::cMatchCase,      Action::ToggleMatchCase },
     { messages::keys::cMatchWholeWord, Action::ToggleWholeWord },
 };
@@ -98,12 +71,10 @@ const ActionRow cPianoRows[] = {
 };
 
 const MouseRow cMouseRows[] = {
-    { messages::keys::cAddToSelection, Modifier::ToggleSelection, messages::keys::cKeyClick },
-    { messages::keys::cSelectRange,    Modifier::ExtendSelection, messages::keys::cKeyClick },
-    { messages::keys::cZoomHorizontal, Modifier::ZoomHorizontal,  messages::keys::cKeyWheel },
-    { messages::keys::cZoomVertical,   Modifier::ZoomVertical,    messages::keys::cKeyWheel },
-    { messages::keys::cPanHorizontal,  Modifier::PanHorizontal,   messages::keys::cKeyWheel },
-    { messages::keys::cFineAdjust,     Modifier::FineAdjust,      messages::keys::cKeyDrag },
+    { messages::keys::cZoomHorizontal, Modifier::ZoomHorizontal, messages::keys::cKeyWheel },
+    { messages::keys::cZoomVertical,   Modifier::ZoomVertical,   messages::keys::cKeyWheel },
+    { messages::keys::cPanHorizontal,  Modifier::PanHorizontal,  messages::keys::cKeyWheel },
+    { messages::keys::cFineAdjust,     Modifier::FineAdjust,     messages::keys::cKeyDrag },
 };
 
 const KeyText cKeyTexts[] = {
@@ -267,13 +238,7 @@ void DrawShortcutsDialog()
 
         const f32 top = ImGui::GetCursorScreenPos().y;
 
-        if (BeginActionBox(messages::common::cArchive, cArchiveRows))
-            EndGroupBox();
-
-        if (BeginActionBox(messages::keys::cGroupSearch, cSearchRows))
-            EndGroupBox();
-
-        if (BeginActionBox(messages::common::cPlayback, cPlaybackRows))
+        if (BeginActionBox(messages::keys::cGroupLists, cListRows))
             EndGroupBox();
 
         if (BeginMouseBox())
@@ -281,7 +246,7 @@ void DrawShortcutsDialog()
 
         ImGui::TableNextColumn();
 
-        if (BeginActionBox(messages::keys::cGroupLists, cListRows))
+        if (BeginActionBox(messages::keys::cGroupSearch, cSearchRows))
             EndGroupBox();
 
         if (BeginActionBox(messages::keys::cGroupPiano, cPianoRows))

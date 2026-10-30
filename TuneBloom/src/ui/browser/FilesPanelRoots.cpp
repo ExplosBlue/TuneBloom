@@ -46,6 +46,10 @@ static constexpr const char* cOpenFoldersKey = "openFolders";
 static constexpr const char* cOpenPrefixKey  = "openPrefixes";
 static constexpr const char* cAutoPlayKey    = "autoPlay";
 static constexpr const char* cGroupPrefixKey = "groupByPrefix";
+static constexpr const char* cExtensionsKey  = "showExtensions";
+static constexpr const char* cFormatKey      = "showFormat";
+static constexpr const char* cSizeKey        = "showSize";
+static constexpr const char* cCountKey       = "showCount";
 static constexpr const char* cCacheFolder    = "browser";
 static constexpr const char* cCacheExtension = ".cache";
 static constexpr const char* cRootMenuId     = "##rootmenu";
@@ -123,6 +127,10 @@ void FilesPanel::loadConfig()
 
     mAutoPlay = section.getBool(cAutoPlayKey, mAutoPlay);
     mGroupByPrefix = section.getBool(cGroupPrefixKey, mGroupByPrefix);
+    mShowExtensions = section.getBool(cExtensionsKey, mShowExtensions);
+    mShowFormat = section.getBool(cFormatKey, mShowFormat);
+    mShowSize = section.getBool(cSizeKey, mShowSize);
+    mShowCount = section.getBool(cCountKey, mShowCount);
 
     const json::Value* sections = section.findArray(cSectionsKey);
 
@@ -268,6 +276,10 @@ void FilesPanel::saveConfig() const
 
     section.setBool(cAutoPlayKey, mAutoPlay);
     section.setBool(cGroupPrefixKey, mGroupByPrefix);
+    section.setBool(cExtensionsKey, mShowExtensions);
+    section.setBool(cFormatKey, mShowFormat);
+    section.setBool(cSizeKey, mShowSize);
+    section.setBool(cCountKey, mShowCount);
 
     SaveConfigSection(cStateFile, cConfigSection, section);
 }
@@ -709,6 +721,27 @@ s32 FilesPanel::getRootFolder(s32 root) const
     return -1;
 }
 
+bool FilesPanel::getRootValues(s32 root, const char** format, u64* size) const
+{
+    if (const BrowserFile* file = getRootFile(root))
+    {
+        *format = file->probe.formatName;
+        *size = file->size;
+        return true;
+    }
+
+    const s32 folder = mRoots[root].isFile ? getRootFolder(root) : -1;
+
+    if (folder < 0)
+        return false;
+
+    const BrowserFolder& pack = getSnapshot(root).folders[folder];
+    *format = pack.packFormat.c_str();
+    *size = pack.packSize;
+
+    return true;
+}
+
 const BrowserFile* FilesPanel::getRootFile(s32 root) const
 {
     if (getRootFolder(root) >= 0 || !mRoots[root].hasSnapshot || mRoots[root].isMissing)
@@ -829,13 +862,17 @@ void FilesPanel::drawRootRow(FrameContext& ctx, const FilesRow& row)
             ImGui::SetTooltip(root.isMissing ? messages::recent::cNotFoundFormat : "%s", root.path.c_str());
     }
 
+    const char* format = nullptr;
+    u64 size = 0;
+    const bool hasValues = getRootValues(row.root, &format, &size);
+
     const bool isRowHovered = ImGui::IsPopupOpen(cRootMenuId) || (ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(frame.rowMin, frame.rowMax, false));
     const f32 buttonHit = frame.rowMax.y - frame.rowMin.y;
-    const f32 labelRight = frame.rowMax.x - ImGui::GetStyle().CellPadding.x - buttonHit * static_cast<f32>(GetRootButtonCount(root));
+    const f32 labelRight = hasValues ? frame.right : frame.rowMax.x - ImGui::GetStyle().CellPadding.x - buttonHit * static_cast<f32>(GetRootButtonCount(root));
 
     PushTableRowClipRect(frame.rowMin, frame.rowMax);
 
-    const f32 labelEnd = drawRootLabel(ctx, row, frame, labelRight);
+    const f32 labelEnd = drawRootLabel(ctx, row, frame, labelRight, isRowHovered && GetRootButtonCount(root) > 0, hasValues);
 
     if (isRootScanning(row.root))
     {
@@ -850,10 +887,18 @@ void FilesPanel::drawRootRow(FrameContext& ctx, const FilesRow& row)
 
     ImGui::PopClipRect();
 
+    if (hasValues)
+    {
+        sead::FixedSafeString<32> sizeText;
+        FormatItemSize(&sizeText, size);
+
+        drawValueCells(ctx, format, sizeText.cstr());
+    }
+
     drawRootMenu(root, row.root);
 }
 
-f32 FilesPanel::drawRootLabel(const FrameContext& ctx, const FilesRow& row, const RowFrame& frame, f32 right)
+f32 FilesPanel::drawRootLabel(const FrameContext& ctx, const FilesRow& row, const RowFrame& frame, f32 right, bool isCountHidden, bool hasValues)
 {
     const FilesRoot& root = mRoots[row.root];
     const BrowserFile* file = getRootFile(row.root);
@@ -887,14 +932,17 @@ f32 FilesPanel::drawRootLabel(const FrameContext& ctx, const FilesRow& row, cons
     }
 
     const sead::FixedSafeString<32> count = FormatCountText(!showCount ? 0 : ctx.isSearching ? row.childCount : ctx.shownCounts[row.root][folder]);
-    const sead::FormatFixedSafeString<288> note("%s%s%s", root.note.c_str(), !root.note.empty() && showCount ? "  " : "", showCount ? count.cstr() : "");
-    const char* noteText = openMark ? cOpenFileMark : note.isEmpty() ? nullptr : note.cstr();
+    const char* noteText = openMark ? cOpenFileMark : root.note.empty() ? nullptr : root.note.c_str();
     const ImU32 noteColor = openMark ? getOpenMarkColor(openMark) : dimColor;
+    const bool hasCount = showCount && mShowCount;
 
     if (canOpen)
         ImGui::GetWindowDrawList()->AddText(frame.textPos, dimColor, isOpen ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_RIGHT);
 
-    return drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), right, icon, iconColor, root.name.c_str(), root.isMissing ? dimColor : getOpenNameColor(openMark), noteText, noteColor);
+    const char* name = file ? getShownFileName(*file).c_str() : root.name.c_str();
+    const f32 labelRight = hasCount && !hasValues ? CalcTableValueRight() : right;
+
+    return drawRowLabel(ImVec2(frame.textPos.x + ctx.chevronWidth, frame.textPos.y), labelRight, icon, iconColor, name, root.isMissing ? dimColor : getOpenNameColor(openMark), noteText, noteColor, 0, hasCount ? count.cstr() : nullptr, !isCountHidden);
 }
 
 void FilesPanel::drawRootButtons(const FilesRoot& root, s32 index, const RowFrame& frame, bool isRowHovered)

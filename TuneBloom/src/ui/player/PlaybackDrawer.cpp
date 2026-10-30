@@ -24,7 +24,6 @@ constexpr f32 cDrawerTempoMax       = 8.0f;
 constexpr f32 cDrawerDefaultRatio   = 1.0f;
 constexpr f32 cDrawerListGapEm      = 0.75f;
 constexpr f32 cDrawerTitleLineEm    = 1.0f;
-constexpr f32 cTrackVolumeKnobEm    = 2.0f;
 constexpr f32 cTrackVolumeGapEm     = 0.3f;
 constexpr f32 cTrackVolumeMaxDb     = 6.0f;
 constexpr f32 cTrackVolumeMax       = 2.0f;
@@ -81,13 +80,11 @@ PlaybackDrawerLayout CalcPlaybackDrawerLayout()
         layout.listWidth = sead::Mathf::max(layout.listWidth, ImGui::CalcTextSize(type).x);
 
     layout.listWidth += ImGui::GetFrameHeight() + style.FramePadding.x * 2.0f;
-    layout.trackKnobSize = ImFloor(em * cTrackVolumeKnobEm);
-    layout.trackPitch = layout.trackKnobSize + ImFloor(em * cTrackVolumeGapEm);
 
     layout.panelWidths[PlaybackPanel_Sound] = layout.knobSize.x * 4.0f + layout.knobGap * 3.0f;
     layout.panelWidths[PlaybackPanel_Filter] = layout.knobSize.x * 2.0f + layout.knobGap + ImFloor(em * cDrawerListGapEm) + ImGui::CalcTextSize(cDrawerBiquadLabel).x + style.ItemSpacing.x + layout.listWidth;
     layout.panelWidths[PlaybackPanel_Sequence] = sead::Mathf::max(layout.knobSize.x, ImGui::CalcTextSize(messages::common::cSequence).x + style.ItemSpacing.x + ImFloor(em * cDrawerTitleLineEm));
-    layout.panelWidths[PlaybackPanel_Tracks] = layout.trackPitch * SoundPlayer::cMaxTracks - ImFloor(em * cTrackVolumeGapEm);
+    layout.panelWidths[PlaybackPanel_Tracks] = CalcTrackVolumeStripWidth(SoundPlayer::cMaxTracks);
 
     layout.parametersWidth = 1.0f;
     for (f32 width : layout.panelWidths)
@@ -315,23 +312,43 @@ static void DrawTrackSwitch(u32 trackNo, const ImVec2& size, bool exists)
         sSoundPlayer.setTrackSwitches(muteTracks ^ bit, soloTracks);
 }
 
-static void DrawTracksPanel(const PlaybackDrawerLayout& layout)
+static f32 CalcTrackPitch()
 {
-    BeginPlaybackPanel(messages::playback::cPanelTrackVolume,layout.panelWidths[PlaybackPanel_Tracks], layout.panelWidths[PlaybackPanel_Tracks]);
+    return CalcTrackKnobSize() + ImFloor(ImGui::GetFontSize() * cTrackVolumeGapEm);
+}
 
+f32 CalcTrackVolumeStripWidth(u32 slotNum)
+{
+    return CalcTrackPitch() * slotNum - ImFloor(ImGui::GetFontSize() * cTrackVolumeGapEm);
+}
+
+f32 CalcTrackVolumeStripHeight(bool hasWaitBar)
+{
+    const f32 waitBarHeight = hasWaitBar ? cTrackWaitBarHeight : 0.0f;
+
+    return CalcTrackKnobSize() + cSoundSlotLabelGap + waitBarHeight + ImFloor(ImGui::GetFontSize() * cTrackSwitchHeightEm);
+}
+
+void DrawTrackVolumeStrip(u32 slotNum, f32 height)
+{
     const bool isStream = sSoundPlayer.getStreamPlayer().isActive();
     const bool isSequence = sSoundPlayer.getSequencePlayer().isActive();
     const bool isWave = sSoundPlayer.getWavePlayer().isActive();
 
     const f32 em = ImGui::GetFontSize();
+    const f32 trackKnobSize = CalcTrackKnobSize();
+    const f32 trackPitch = CalcTrackPitch();
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    const ImVec2 knobSize(layout.trackKnobSize, layout.trackKnobSize);
-    const ImVec2 switchSize(layout.trackKnobSize, ImFloor(em * cTrackSwitchHeightEm));
-    const f32 switchY = layout.knobSize.y - switchSize.y;
-    const f32 knobY = ImFloor(sead::Mathf::max(0.0f, switchY - cSoundSlotLabelGap - cTrackWaitBarHeight - layout.trackKnobSize) * 0.5f);
+    const ImVec2 knobSize(trackKnobSize, trackKnobSize);
+    const ImVec2 switchSize(trackKnobSize, ImFloor(em * cTrackSwitchHeightEm));
+    const f32 switchY = height - switchSize.y;
+    const f32 knobY = ImFloor(sead::Mathf::max(0.0f, switchY - cSoundSlotLabelGap - cTrackWaitBarHeight - trackKnobSize) * 0.5f);
     ImDrawList* draw = ImGui::GetWindowDrawList();
 
-    for (u32 i = 0; i < SoundPlayer::cMaxTracks; i++)
+    if (slotNum > SoundPlayer::cMaxTracks)
+        slotNum = SoundPlayer::cMaxTracks;
+
+    for (u32 i = 0; i < slotNum; i++)
     {
         bool exists = !isWave;
         s32 wait = 0;
@@ -355,7 +372,7 @@ static void DrawTracksPanel(const PlaybackDrawerLayout& layout)
             }
         }
 
-        const ImVec2 pos(origin.x + layout.trackPitch * i, origin.y);
+        const ImVec2 pos(origin.x + trackPitch * i, origin.y);
 
         ImGui::PushID(static_cast<int>(i));
         ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + knobY));
@@ -382,7 +399,7 @@ static void DrawTracksPanel(const PlaybackDrawerLayout& layout)
 
         if (isSequence && exists && waitAmount != 0)
         {
-            const f32 fill = layout.trackKnobSize * sead::Mathf::clamp2(0.0f, static_cast<f32>(wait) / static_cast<f32>(waitAmount), 1.0f);
+            const f32 fill = trackKnobSize * sead::Mathf::clamp2(0.0f, static_cast<f32>(wait) / static_cast<f32>(waitAmount), 1.0f);
             const f32 top = pos.y + switchY - cSoundSlotLabelGap - cTrackWaitBarHeight;
 
             draw->AddRectFilled(ImVec2(pos.x, top), ImVec2(pos.x + fill, top + cTrackWaitBarHeight), ImGui::GetColorU32(GetThemeAccent()));
@@ -395,7 +412,13 @@ static void DrawTracksPanel(const PlaybackDrawerLayout& layout)
     }
 
     ImGui::SetCursorScreenPos(origin);
-    ImGui::Dummy(ImVec2(layout.panelWidths[PlaybackPanel_Tracks], layout.knobSize.y));
+    ImGui::Dummy(ImVec2(CalcTrackVolumeStripWidth(slotNum), height));
+}
+
+static void DrawTracksPanel(const PlaybackDrawerLayout& layout)
+{
+    BeginPlaybackPanel(messages::playback::cPanelTrackVolume, layout.panelWidths[PlaybackPanel_Tracks], layout.panelWidths[PlaybackPanel_Tracks]);
+    DrawTrackVolumeStrip(SoundPlayer::cMaxTracks, layout.knobSize.y);
 }
 
 static void DrawPlaybackParameters(const PlaybackDrawerLayout& layout)

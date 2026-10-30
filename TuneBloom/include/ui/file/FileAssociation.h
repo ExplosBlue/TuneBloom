@@ -10,8 +10,7 @@ namespace fileassoc
 enum class Lock
 {
     None,
-    OnlyApp,
-    UserChoice
+    OnlyApp
 };
 
 struct TypeState

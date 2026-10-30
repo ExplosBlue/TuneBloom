@@ -327,10 +327,10 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
         ImGui::SetItemTooltip("%s", messages::keys::cClearSearch);
     }
 
-    if (caseSensitive && DrawSearchToggle(ICON_LC_CASE_SENSITIVE "##Case", messages::item::cCaseSensitive, caseSensitive, height))
+    if (caseSensitive && DrawSearchToggle(ICON_LC_CASE_SENSITIVE "##Case", messages::keys::cMatchCase, caseSensitive, height))
         changed = true;
 
-    if (wholeWord && DrawSearchToggle(ICON_LC_WHOLE_WORD "##Word", messages::item::cWholeWord, wholeWord, height))
+    if (wholeWord && DrawSearchToggle(ICON_LC_WHOLE_WORD "##Word", messages::keys::cMatchWholeWord, wholeWord, height))
         changed = true;
 
     if (menuPressed)

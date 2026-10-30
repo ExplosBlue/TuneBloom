@@ -62,11 +62,15 @@ enum class RecentAction
     Remove
 };
 
-static constexpr s32    cRecentVisibleRows  = 12;
+static constexpr const char* cRecentTableId = "##RecentFiles";
+
+static constexpr s32   cRecentVisibleRows  = 12;
 static constexpr RecentSort cRecentMenuSortMax = RecentSort::Folder;
 
 static constexpr f32    cRecentTableFolderMinEm  = 6.0f;
 static constexpr f32    cRecentTableNameMinEm    = 8.0f;
+static constexpr f32    cRecentTableNameMaxShare = 0.5f;
+static constexpr f32    cRecentGroupGapEm        = 0.5f;
 static constexpr f32    cRecentEmptyGapEm        = 0.3f;
 
 static constexpr f32    cRecentNameMaxEm    = 16.0f;
@@ -822,7 +826,7 @@ static void DrawRecentGroupRow(const char* title)
 {
     ImGui::TableNextRow();
     ImGui::TableSetColumnIndex(static_cast<s32>(RecentColumn::Name));
-    DrawTableGroupRow(title);
+    DrawTableGroupRow(title, ImFloor(ImGui::GetFontSize() * cRecentGroupGapEm));
 }
 
 static RecentSort GetRecentTableSort(const ImGuiTableSortSpecs* specs, bool* outDescending)
@@ -854,19 +858,29 @@ static RecentSort GetRecentTableSort(const ImGuiTableSortSpecs* specs, bool* out
     }
 }
 
+static f32 CalcRecentScrollbarWidth()
+{
+    const ImGuiTable* table = ImGui::TableFindByID(ImGui::GetID(cRecentTableId));
+
+    return table && table->InnerWindow && !table->InnerWindow->ScrollbarY ? 0.0f : ImGui::GetStyle().ScrollbarSize;
+}
+
 static void CalcRecentTableWidths(const ItemColumn* columns, f32* widths, bool* shown)
 {
+    const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
-    const f32 cell = ImGui::GetStyle().CellPadding.x * 2.0f + 1.0f;
+    const f32 cell = style.CellPadding.x * 2.0f + 1.0f;
+    const f32 avail = ImGui::GetContentRegionAvail().x - CalcRecentScrollbarWidth();
     const f32 folderMin = em * cRecentTableFolderMinEm;
 
     const f32 nameMin = em * cRecentTableNameMinEm;
-    const f32 nameNeed = CalcRecentNameOffset() + cell + em + CalcRecentTextWidth([](const std::string& path) { return std::string(pathtext::FileName(path.c_str())); }, em * cRecentNameMaxEm);
+    const f32 nameText = CalcRecentTextWidth([](const std::string& path) { return std::string(pathtext::FileName(path.c_str())); }, avail * cRecentTableNameMaxShare);
+    const f32 nameNeed = CalcRecentNameOffset() + style.ItemSpacing.x + nameText;
 
     widths[1] = GetItemColumnWidth(columns[1]);
     widths[2] = GetItemColumnWidth(columns[2]);
 
-    f32 rest = ImGui::GetContentRegionAvail().x - cell - nameMin;
+    f32 rest = avail - cell - nameMin;
 
     for (s32 i : { 1, 2 })
     {
@@ -879,7 +893,7 @@ static void CalcRecentTableWidths(const ItemColumn* columns, f32* widths, bool* 
     const f32 folderRoom = rest - cell - sead::Mathf::max(nameNeed - nameMin, 0.0f);
 
     shown[0] = folderRoom >= folderMin;
-    widths[0] = sead::Mathf::max(folderMin, sead::Mathf::min(GetItemColumnWidth(columns[0]), folderRoom));
+    widths[0] = sead::Mathf::max(folderMin, folderRoom);
 }
 
 static bool BeginRecentTable(ItemColumn* columns, std::string* samples, f32* widths)
@@ -889,18 +903,18 @@ static bool BeginRecentTable(ItemColumn* columns, std::string* samples, f32* wid
 
     for (const RecentFileInfo& info : GetRecentFileInfos())
     {
-        const std::string texts[3] = { info.folder, FormatRecentDate(info), info.size };
+        const std::string texts[2] = { FormatRecentDate(info), info.size };
 
-        for (s32 i = 0; i < 3; i++)
+        for (s32 i = 0; i < 2; i++)
         {
             if (ImGui::CalcTextSize(texts[i].c_str()).x > ImGui::CalcTextSize(samples[i].c_str()).x)
                 samples[i] = texts[i];
         }
     }
 
-    columns[0] = { "Folder", messages::common::cFolder, samples[0].c_str(), nullptr, nullptr, cItemColumnFlag_Text | cItemColumnFlag_TextEnd, nullptr };
-    columns[1] = { "Modified", messages::common::cModified, samples[1].c_str(), nullptr, nullptr, cItemColumnFlag_Text, nullptr };
-    columns[2] = { "Size", messages::common::cSize, samples[2].c_str(), nullptr, nullptr, cItemColumnFlag_None, nullptr };
+    columns[0] = { "Folder", messages::common::cFolder, "", nullptr, nullptr, cItemColumnFlag_Text | cItemColumnFlag_TextEnd, nullptr };
+    columns[1] = { "Modified", messages::common::cModified, samples[0].c_str(), nullptr, nullptr, cItemColumnFlag_Text, nullptr };
+    columns[2] = { "Size", messages::common::cSize, samples[1].c_str(), nullptr, nullptr, cItemColumnFlag_None, nullptr };
 
     bool shown[3];
     CalcRecentTableWidths(columns, widths, shown);
@@ -913,7 +927,7 @@ static bool BeginRecentTable(ItemColumn* columns, std::string* samples, f32* wid
     const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_SizingFixedFit |
                                   ImGuiTableFlags_ScrollY | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate;
 
-    if (!ImGui::BeginTable("##RecentFiles", static_cast<s32>(RecentColumn::Num), flags))
+    if (!ImGui::BeginTable(cRecentTableId, static_cast<s32>(RecentColumn::Num), flags))
         return false;
 
     ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
@@ -946,7 +960,7 @@ bool DrawRecentFilesTable(std::string* outPath)
     }
 
     ItemColumn columns[3];
-    std::string samples[3];
+    std::string samples[2];
     f32 widths[3];
 
     PushItemTablePadding();

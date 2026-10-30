@@ -10,6 +10,8 @@
 #include <messages/Messages.h>
 #include <bfsar/model/MessageLog.h>
 #include <ui/file/SoundArchiveDocument.h>
+#include <ui/file/WavDocument.h>
+#include <ui/player/PlayerFrame.h>
 
 #include <aal/AudioResource.h>
 #include <aal/Bars.h>
@@ -33,6 +35,9 @@ namespace fs = std::filesystem;
 
 static constexpr u32 cBarsHeaderFileSize  = 0x04;
 static constexpr u32 cBarsHeaderByteOrder = 0x08;
+
+static constexpr u32 cRiffFormatOffset = 0x08;
+static constexpr u32 cRiffHeaderSize   = 0x0C;
 
 static constexpr u32 cBfsarLegacyVersionMin = 0x00010000;
 static constexpr u32 cBfsarLegacyVersionEnd = 0x00030000;
@@ -76,6 +81,11 @@ static bool CheckSoundArchiveFile(const u8* file, u32 size)
 
     MessageLog::instance()->addPopup({ sead::FormatFixedSafeString<64>(messages::archive::cBfsarVersionUnsupportedFormat, version), nullptr });
     return false;
+}
+
+static bool IsRiffWave(const u8* file, u32 size)
+{
+    return size >= cRiffHeaderSize && sead::MemUtil::compare(file, "RIFF", 4) == 0 && sead::MemUtil::compare(file + cRiffFormatOffset, "WAVE", 4) == 0;
 }
 
 static void TakeBytes(std::vector<u8>&& bytes, Document::File* outFile)
@@ -167,6 +177,12 @@ const char* Document::Load(const sead::SafeString& path, File* outFile)
         return nullptr;
     }
 
+    if (IsRiffWave(outFile->data, outFile->size))
+    {
+        outFile->kind = Kind::WavFile;
+        return nullptr;
+    }
+
     if (bea::IsBea(outFile->data, outFile->size))
         return LoadFromBea(outFile);
 
@@ -213,6 +229,10 @@ bool Document::Check(const File& file, const char** outError)
         case Kind::StreamFile:
         case Kind::WaveFile:
             return true;
+
+        case Kind::WavFile:
+            *outError = IsPlayerFrameShown() ? nullptr : messages::archive::cNotArchive;
+            return *outError == nullptr;
 
         case Kind::BarsList:
         {
@@ -295,6 +315,9 @@ Document* Document::Open(File* file, const sead::SafeString& path, const sead::S
 
         case Kind::BarsList:
             return BarsListDocument::Open(file, path);
+
+        case Kind::WavFile:
+            return WavDocument::Open(file, path);
 
         case Kind::SoundArchive:
             break;

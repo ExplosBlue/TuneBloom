@@ -6,15 +6,18 @@ namespace messages
 namespace browser
 {
 
-inline constexpr const char* cTitleFormat = "Select %s";
-inline constexpr const char* cAutoPlay    = "Auto Play";
-inline constexpr const char* cGroupPrefix = "Group by Name Prefix";
-inline constexpr const char* cSelect      = "Select";
-inline constexpr const char* cNoMatch     = "No items match the search";
-inline constexpr const char* cNoSelection = "No Wave File selected";
-inline constexpr const char* cBrowseTip   = "Click to choose from a list";
-inline constexpr const char* cSamples     = "Samples";
-inline constexpr const char* cUsedBy      = "Used By";
+inline constexpr const char* cTitleFormat  = "Select %s";
+inline constexpr const char* cAutoPlay     = "Auto Play";
+inline constexpr const char* cGroupPrefix  = "Group by Name Prefix";
+inline constexpr const char* cExtensions   = "File Extensions";
+inline constexpr const char* cFileTypes    = "File Types";
+inline constexpr const char* cCount        = "Count";
+inline constexpr const char* cSelect       = "Select";
+inline constexpr const char* cNoMatch      = "No items match the search";
+inline constexpr const char* cNoSelection  = "No Wave File selected";
+inline constexpr const char* cBrowseTip    = "Click to choose from a list";
+inline constexpr const char* cSamples      = "Samples";
+inline constexpr const char* cUsedBy       = "Used By";
 
 }
 
@@ -59,6 +62,7 @@ inline constexpr const char* cWaiting     = "Waiting to scan";
 inline constexpr const char* cKindResources = "Resources";
 
 inline constexpr const char* cKindFilterFormat = "%s (%s)";
+inline constexpr const char* cColumnTooNarrow  = "The panel is too narrow for this column";
 
 inline constexpr const char* cIndexingFormat   = "Scanning... %s files";
 inline constexpr const char* cReadingFormat    = "Reading %s of %s files";

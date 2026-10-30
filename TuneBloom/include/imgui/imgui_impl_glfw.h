@@ -35,6 +35,9 @@ IMGUI_IMPL_API bool     ImGui_ImplGlfw_InitForOther(GLFWwindow* window, bool ins
 IMGUI_IMPL_API void     ImGui_ImplGlfw_Shutdown();
 IMGUI_IMPL_API void     ImGui_ImplGlfw_NewFrame();
 
+// TuneBloom: close fade
+IMGUI_IMPL_API GLFWwindow* ImGui_ImplGlfw_KeepWindowOnDestroy(ImGuiViewport* viewport);
+
 // Emscripten related initialization phase methods
 #ifdef __EMSCRIPTEN__
 IMGUI_IMPL_API void     ImGui_ImplGlfw_InstallEmscriptenCanvasResizeCallback(const char* canvas_selector);

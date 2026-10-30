@@ -27,7 +27,7 @@ public:
     bool drawFileProperties() override;
     StreamSource activeStreamSource() override;
     PlayableFile playableFile() override;
-    void formatFileFacts(sead::BufferedSafeString* out) const override;
+    bool getFileFacts(FileFacts* out) const override;
 
     bool isValidName(const sead::SafeString& name) const override;
     const char* getNameRuleDetail() const override;
@@ -51,5 +51,10 @@ public:
     void restoreSidecars(const backup::Snapshot& snapshot) override;
 
 private:
+    void setAssetFacts(FileFacts* facts, const AudioAsset& asset) const;
+    u32 getOpusBitrate(const AudioAsset& asset) const;
+
     AudioResource mResource;
+    mutable AudioAssetFile mOpusBitrateFile;
+    mutable u32 mOpusBitrate = 0;
 };

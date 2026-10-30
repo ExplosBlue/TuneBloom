@@ -72,6 +72,11 @@ void StoreItemColumnHidden(const ImGuiTableColumn& column, const char* key)
     ImGui::MarkIniSettingsDirty();
 }
 
+void ResetItemColumnSettings()
+{
+    sUserWidthNum = 0;
+}
+
 static void* ItemColumnSettingsReadOpen(ImGuiContext*, ImGuiSettingsHandler*, const char*)
 {
     return sUserWidths;

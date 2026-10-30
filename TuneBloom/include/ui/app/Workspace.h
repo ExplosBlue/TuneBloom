@@ -29,8 +29,6 @@ enum class UIType
     SequenceFiles,
     BankFiles,
 
-    FileStatistics,
-
     AudioAssets,
 
     Max = AudioAssets

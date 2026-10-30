@@ -1,5 +1,6 @@
 #include <ui/project/ProjectViews.h>
 
+#include <ui/widgets/Dialogs.h>
 #include <ui/file/File.h>
 #include <ui/items/ItemColumns.h>
 #include <messages/Messages.h>
@@ -42,8 +43,6 @@ static const ProjectRow cSoundArchiveRows[] = {
     { UIType::WaveFiles,         ICON_LC_FILE_AUDIO,     messages::project::cRowWaveFiles,      4, false, true  },
     { UIType::SequenceFiles,     ICON_LC_FILE_MUSIC,     messages::project::cRowSequenceFiles,  4, false, true  },
     { UIType::BankFiles,         ICON_LC_KEYBOARD_MUSIC, messages::project::cRowBankFiles,      4, false, true  },
-
-    { UIType::FileStatistics,    ICON_LC_CHART_AREA,     messages::project::cRowFileStatistics, 5, false, false },
 };
 
 struct ProjectRowTable
@@ -132,67 +131,23 @@ static ProjectRowTable GetProjectRows(s32* counts)
     return { cSoundArchiveRows, IM_ARRAYSIZE(cSoundArchiveRows) };
 }
 
-bool DrawNavRow(const char* icon, const char* name, bool selected, const char* value, bool dim, bool title, f32 indent)
-{
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 iconWidth = ImGui::CalcTextSize(ICON_LC_INFO " ").x;
-
-    const ImVec2 pos = ImGui::GetCursorScreenPos();
-    const f32 width = ImGui::GetContentRegionAvail().x;
-
-    const bool pressed = ImGui::Selectable("##Row", selected, ImGuiSelectableFlags_SpanAvailWidth);
-
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const ImVec4 nameColor = ImGui::GetStyleColorVec4(dim ? ImGuiCol_TextDisabled : ImGuiCol_Text);
-
-    f32 left = pos.x + style.FramePadding.x + indent;
-    f32 right = pos.x + width - style.FramePadding.x;
-
-    if (value)
-    {
-        const f32 textWidth = ImGui::CalcTextSize(value).x;
-        const ImVec4 valueColor = dim ? nameColor : GetItemValueColor();
-
-        drawList->AddText(ImVec2(right - textWidth, pos.y), ImGui::ColorConvertFloat4ToU32(valueColor), value);
-        right -= textWidth + style.ItemSpacing.x;
-    }
-
-    drawList->AddText(ImVec2(left, pos.y), ImGui::ColorConvertFloat4ToU32(nameColor), icon);
-    left += iconWidth;
-
-    ImGui::PushStyleColor(ImGuiCol_Text, nameColor);
-    ImGui::RenderTextEllipsis(drawList, ImVec2(left, pos.y), ImVec2(right, pos.y + ImGui::GetFontSize()), right, right, name, nullptr, nullptr);
-    ImGui::PopStyleColor();
-
-    if (title)
-    {
-        const f32 lineLeft = left + ImGui::CalcTextSize(name).x + style.ItemSpacing.x;
-        const f32 lineY = ImFloor(pos.y + ImGui::GetFontSize() * 0.5f);
-
-        if (lineLeft < right)
-            drawList->AddLine(ImVec2(lineLeft, lineY), ImVec2(right, lineY), ImGui::GetColorU32(ImGuiCol_Separator));
-    }
-
-    return pressed;
-}
-
-f32 CalcNavRowGap()
+static f32 CalcNavRowGap()
 {
     return ImFloor(ImGui::GetFontSize() * cProjectRowGapEm);
 }
 
-ImVec2 CalcNavBoxPadding(bool roomy)
+static ImVec2 CalcNavBoxPadding(bool roomy)
 {
     const f32 em = ImGui::GetFontSize();
 
     return ImVec2(ImFloor(em * cProjectBoxPadXEm), roomy ? ImFloor(CalcNavRowGap() * 0.5f) + 1.0f : ImFloor(em * cProjectBoxPadYEm));
 }
 
-bool BeginNavBox(const char* id, const ImVec2& padding, bool border, f32 width)
+static bool BeginNavBox(const char* id, const ImVec2& padding, bool border)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, border ? padding : ImVec2(padding.x + 1.0f, 0.0f));
 
-    if (!ImGui::BeginTable(id, 1, border ? ImGuiTableFlags_BordersOuter : ImGuiTableFlags_PadOuterX, ImVec2(width, 0.0f)))
+    if (!ImGui::BeginTable(id, 1, border ? ImGuiTableFlags_BordersOuter : ImGuiTableFlags_PadOuterX))
     {
         ImGui::PopStyleVar();
         return false;
@@ -202,7 +157,7 @@ bool BeginNavBox(const char* id, const ImVec2& padding, bool border, f32 width)
     return true;
 }
 
-void EndNavBox()
+static void EndNavBox()
 {
     ImGui::EndTable();
     ImGui::PopStyleVar();

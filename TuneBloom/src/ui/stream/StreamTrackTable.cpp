@@ -203,11 +203,11 @@ static void DrawLooseTrackChannelCell(const TrackContext& ctx, s32 index)
     ImGui::SetCursorPosX(cellRight - buttonSize);
     ImGui::BeginDisabled(!waveFile);
 
-    if (ImGui::Button(ICON_LC_REPLACE "###ReplaceWave", ImVec2(buttonSize, buttonSize)))
+    if (ImGui::Button(ICON_LC_ARROW_DOWN_UP "###ReplaceWave", ImVec2(buttonSize, buttonSize)))
         RequestWaveFileReplace(static_cast<WaveFile*>(waveFile));
 
     ImGui::EndDisabled();
-    ImGui::SetItemTooltip("%s", waveFile ? messages::import::cReplaceAudioTip : messages::reference::cNoWaveFile);
+    ImGui::SetItemTooltip("%s", waveFile ? messages::common::cReplaceAudio : messages::reference::cNoWaveFile);
 }
 
 static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, const TrackTableView& view, bool audible)

@@ -29,6 +29,7 @@ struct WaveImportEncoding
 WaveImportEncoding MakeWaveImportEncoding(WaveFile::Encoding* encoding);
 void DrawWaveImportInfo(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info, const char* header = nullptr);
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* header = nullptr);
+void DrawWaveImportFormInfo(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
 f32 CalcWaveImportWidth();
 f32 CalcWaveImportHeight();
 std::string FinalizeImportInfoForCommit(WaveFile::RiffWaveInfo* info);

@@ -7,6 +7,8 @@
 
 #include <imgui/imgui.h>
 
+static constexpr u32 cAdpcmFrameBits = 64;
+
 const char* GetByteOrderText(sead::Endian::Types endian)
 {
     return endian == sead::Endian::eBig ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian;
@@ -39,26 +41,44 @@ void DrawLooseFileRows(const LooseFileFormat& format)
     ImGui::TextUnformatted(GetByteOrderText(format.endian));
 }
 
-void FormatLooseFileFacts(sead::BufferedSafeString* out, const LooseFileFormat& format)
+void SetWaveFacts(FileFacts* facts, const WaveFile& wave)
 {
-    out->copy(format.name);
-
-    if (!format.version.isEmpty())
-        out->appendWithFormat(" %s", format.version.cstr());
+    facts->encoding = WaveFile::sEncodingTypes[static_cast<s32>(wave.getEncoding())];
+    facts->sampleRate = wave.getSampleRate();
+    facts->sampleCount = wave.getSampleCount();
+    facts->channelNum = static_cast<u32>(wave.getChannels().size());
+    facts->bitrate = CalcWaveBitrate(wave, facts->channelNum);
+    facts->isLoop = wave.getIsLoop();
+    facts->loopStartFrame = wave.getOriginalLoopStartFrame();
+    facts->loopEndFrame = wave.getOriginalLoopEndFrame();
 }
 
-void AppendWaveFacts(sead::BufferedSafeString* out, const WaveFile& wave)
+u32 CalcWaveBitrate(const WaveFile& wave, u32 channelNum)
 {
-    AppendFileFact(out, WaveFile::sEncodingTypes[static_cast<s32>(wave.getEncoding())]);
-    AppendRateFact(out, wave.getSampleRate());
+    switch (wave.getEncoding())
+    {
+        case WaveFile::Encoding::Pcm8:
+            return CalcPcmBitrate(wave.getSampleRate(), channelNum, 8);
+        case WaveFile::Encoding::Pcm16:
+            return CalcPcmBitrate(wave.getSampleRate(), channelNum, 16);
+        case WaveFile::Encoding::DspAdpcm:
+            return CalcAdpcmBitrate(wave.getSampleRate(), channelNum);
+    }
+
+    return 0;
 }
 
-void AppendRateFact(sead::BufferedSafeString* out, u32 sampleRate)
+u32 CalcAdpcmBitrate(u32 sampleRate, u32 channelNum)
 {
-    AppendFileFact(out, sead::FormatFixedSafeString<32>(messages::unit::cHertzFormat, sampleRate).cstr());
+    return static_cast<u32>(static_cast<u64>(sampleRate) * channelNum * cAdpcmFrameBits / WaveFile::cSamplesPerFrame);
 }
 
-void AppendFileFact(sead::BufferedSafeString* out, const char* fact)
+u32 CalcPcmBitrate(u32 sampleRate, u32 channelNum, u32 bitsPerSample)
+{
+    return sampleRate * channelNum * bitsPerSample;
+}
+
+static void AppendFact(sead::BufferedSafeString* out, const char* fact)
 {
     if (!out->isEmpty())
         out->append(messages::playerframe::cFactSeparator);
@@ -66,17 +86,16 @@ void AppendFileFact(sead::BufferedSafeString* out, const char* fact)
     out->append(fact);
 }
 
-static void AppendCountFact(sead::BufferedSafeString* out, u32 count, const char* oneFormat, const char* manyFormat)
+void FormatFileFactsLine(sead::BufferedSafeString* out, const FileFacts& facts)
 {
-    AppendFileFact(out, sead::FormatFixedSafeString<32>(count == 1 ? oneFormat : manyFormat, count).cstr());
-}
+    out->copy(facts.format.name);
 
-void AppendTrackFact(sead::BufferedSafeString* out, u32 trackNum)
-{
-    AppendCountFact(out, trackNum, messages::common::cTrackCountOneFormat, messages::common::cTrackCountFormat);
-}
+    if (!facts.encoding.isEmpty())
+        AppendFact(out, facts.encoding.cstr());
 
-void AppendChannelFact(sead::BufferedSafeString* out, u32 channelNum)
-{
-    AppendCountFact(out, channelNum, messages::common::cChannelCountOneFormat, messages::common::cChannelCountFormat);
+    if (facts.bitrate != 0)
+        AppendFact(out, sead::FormatFixedSafeString<32>(messages::unit::cKilobitsFormat, (facts.bitrate + 500) / 1000).cstr());
+
+    if (facts.sampleRate != 0)
+        AppendFact(out, sead::FormatFixedSafeString<32>(messages::unit::cHertzFormat, facts.sampleRate).cstr());
 }

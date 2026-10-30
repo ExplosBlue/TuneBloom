@@ -75,9 +75,6 @@ static const char* GetLockDetail(fileassoc::Lock lock)
         case fileassoc::Lock::OnlyApp:
             return messages::preferences::cAssociationOnlyApp;
 
-        case fileassoc::Lock::UserChoice:
-            return messages::preferences::cAssociationUserChoice;
-
         case fileassoc::Lock::None:
             break;
     }
@@ -98,7 +95,7 @@ static void DrawAllCheck()
 
     const ImVec2 pos = ImGui::GetCursorPos();
 
-    ImGui::TableHeader("##All");
+    ImGui::TableHeader("##AllHeader");
     ImGui::SetCursorPos(pos);
 
     ImGui::BeginDisabled(!canChange);

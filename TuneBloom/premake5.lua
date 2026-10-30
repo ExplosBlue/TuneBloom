@@ -64,7 +64,7 @@ systemversion "latest"
 
 defines { "SEAD_PLATFORM_WINDOWS", "_CRT_SECURE_NO_WARNINGS" }
 
-links { "winmm", "shlwapi" }
+links { "winmm", "shlwapi", "dwmapi" }
 
 files { "src/platform/resource.rc" }
 

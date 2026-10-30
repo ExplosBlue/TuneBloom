@@ -233,7 +233,7 @@ void WaveImportPanel::commitLoop(FrameContext& ctx)
     ctx.info->loopEndFrame = ctx.loopEnd > ctx.cropStart ? ctx.loopEnd - ctx.cropStart : 0;
 }
 
-void WaveImportPanel::draw(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
+void WaveImportPanel::draw(const char* header, const char* filePath, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
 {
     mDrawnThisFrame = true;
 
@@ -246,12 +246,12 @@ void WaveImportPanel::draw(const char* header, const WaveImportEncoding& encodin
 
     if (!mSettings.pcm.isValid())
     {
-        drawUndecodableSource(header, encoding, info);
+        drawUndecodableSource(header, filePath, encoding, info);
         endBody();
         return;
     }
 
-    drawSourceHeader(header, mSettings.pcm.sampleRate, static_cast<u32>(mSettings.pcm.channels.size()), mSettings.pcm.sampleCount);
+    drawSourceHeader(header, filePath, mSettings.pcm.sampleRate, static_cast<u32>(mSettings.pcm.channels.size()), mSettings.pcm.sampleCount);
 
     FrameContext ctx = beginFrame(encoding, info, passThrough);
 
@@ -376,7 +376,12 @@ WaveImportEncoding MakeWaveImportEncoding(WaveFile::Encoding* encoding)
 
 void DrawWaveImportInfo(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info, const char* header)
 {
-    sPanel.draw(header, encoding, info);
+    sPanel.draw(header, nullptr, encoding, info);
+}
+
+void DrawWaveImportFormInfo(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
+{
+    sPanel.draw(nullptr, info->path.cstr(), encoding, info);
 }
 
 void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* header)

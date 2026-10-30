@@ -4,9 +4,12 @@
 #include <prim/seadSafeString.h>
 
 class AudioAsset;
+class AudioResource;
 enum class AudioAssetKind;
+struct LooseFileFormat;
 
 void FormatResourceVersion(sead::BufferedSafeString* out, u16 version);
+LooseFileFormat GetAudioResourceFormat(const AudioResource& resource);
 bool DrawBarsAudioFormatRow(AudioAssetKind* kind, const char* fixedReason, const char* bfwavReason);
 
 void DrawAudioAssetsUI();

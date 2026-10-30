@@ -155,7 +155,7 @@ void SequenceFile::drawUI()
 
 static void SeqOptionItem(const char* label, bool* value)
 {
-    if (!ContextMenuCheckItem(label, *value))
+    if (!ContextMenuToggleItem(label, *value))
         return;
 
     *value = !*value;

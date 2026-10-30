@@ -28,7 +28,7 @@ bool SampleField(const char* id, u32* value, u32 min, u32 max, u32 reset, u32 ra
 class WaveImportPanel
 {
 public:
-    void draw(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
+    void draw(const char* header, const char* filePath, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
     void reset();
     void tick();
     bool confirmCancel(bool cancelClicked);
@@ -151,8 +151,8 @@ private:
     void constrainRanges(FrameContext& ctx);
     void commitLoop(FrameContext& ctx);
 
-    void drawSourceHeader(const char* header, u32 sampleRate, u32 channelCount, u32 sampleCount);
-    void drawUndecodableSource(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
+    void drawSourceHeader(const char* header, const char* filePath, u32 sampleRate, u32 channelCount, u32 sampleCount);
+    void drawUndecodableSource(const char* header, const char* filePath, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
 
     void drawWaveformBox(FrameContext& ctx);
     void drawWaveformTools(FrameContext& ctx, f32 groupGap);

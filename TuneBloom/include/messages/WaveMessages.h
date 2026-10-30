@@ -25,7 +25,6 @@ inline constexpr const char* cReimportDecodeFailed = "This Wave File could not b
 
 inline constexpr const char* cReimportMenuLabel = "Reimport";
 inline constexpr const char* cReplaceWaveFileMenuLabel = "Replace Wave File";
-inline constexpr const char* cReplaceAudioTip = "Import a WAV file in place of the audio";
 inline constexpr const char* cReimportWaveFileMenuLabel = "Reimport Wave File";
 inline constexpr const char* cReplaceWaveFileTip = "Replace the audio with a WAV file";
 inline constexpr const char* cReimportWaveFileTip = "Change this Wave File's import settings";
@@ -54,7 +53,7 @@ inline constexpr const char* cTrackImportChannelLimitFormat = "Streams can have 
 inline constexpr const char* cTrackImportFailedFormat = "'%s' could not be imported as a Track";
 
 inline constexpr const char* cTrackImportAddFiles    = "Add WAV";
-inline constexpr const char* cTrackImportEditTip     = "Change this file's import settings";
+inline constexpr const char* cTrackImportEditTip     = "Edit Import Settings";
 inline constexpr const char* cTrackImportFollowsFirst = "Tracks after Track 0 follow its encoding, sample rate, length and loop";
 
 inline constexpr const char* cTrackImportLayoutPerFileDetail = "Files with over 2 channels split into pairs";
@@ -76,7 +75,7 @@ inline constexpr const char* cWaveSampleRateTip = "Resampled to this rate on imp
 inline constexpr const char* cWaveOpusRateTip = "Opus takes only 8, 12, 16, 24 or 48 kHz";
 inline constexpr const char* cWaveOpusStreamTip = "Opus is used only for streams";
 inline constexpr const char* cWaveOpusOnlyTip = "An Opus stream takes only Opus";
-inline constexpr const char* cWaveBitrateOriginalFormat = "%u kbit/s (original)";
+inline constexpr const char* cWaveBitrateOriginalFormat = "%u kbps (original)";
 inline constexpr const char* cWaveBitrateTip = "For each channel. Stereo uses twice this rate";
 inline constexpr const char* cWaveBitrateOpusTip = "Only Opus uses a bitrate";
 inline constexpr const char* cWaveOldDataTitle = "Old Audio Data";
@@ -133,7 +132,7 @@ inline constexpr const char* cWaveCurveSmoothStairs = "Smooth Stairs";
 inline constexpr const char* cWaveCurvePulse = "Pulse";
 inline constexpr const char* cWaveCurveHalfSine = "Half Sine";
 
-inline constexpr const char* cTrackImportRemoveTip = "Remove the file from this import";
+inline constexpr const char* cTrackImportRemoveTip = "Remove from Import";
 inline constexpr const char* cTrackImportBitsFloatFormat = "%u-bit float";
 inline constexpr const char* cTrackImportBitsFormat = "%u-bit";
 inline constexpr const char* cTrackImportTrackRangeFormat = "Tracks %u-%u";

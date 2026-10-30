@@ -55,15 +55,10 @@ static void DrawResourceFormatBox()
 
     const AudioResource& resource = ActiveAudioResource();
 
-    LooseFileFormat format;
-    format.name = resource.getContainer() == AudioResource::Container::Sarc ? messages::resource::cSarcFormat : GetResourceFormatInfo(resource.getFormat()).displayName;
-    format.endian = resource.isBigEndian() ? sead::Endian::eBig : sead::Endian::eLittle;
-    FormatResourceVersion(&format.version, resource.getVersion());
-
     RegionHeader(messages::common::cFile);
-    DrawLooseFileRows(format);
+    DrawLooseFileRows(GetAudioResourceFormat(resource));
 
-    PropertyRow(messages::resource::cCompression, messages::resource::cCompressionDetail);
+    PropertyRow(messages::resource::cCompression);
     ImGui::TextUnformatted(resource.isCompressed() ? messages::resource::cCompressionZstd : messages::common::cNone);
 
     EndPropertyBox();
@@ -97,6 +92,17 @@ static void DrawResourceContentBox()
 void FormatResourceVersion(sead::BufferedSafeString* out, u16 version)
 {
     out->format(messages::resource::cResourceVersionFormat, version >> cVersionShift, version & cVersionMinorMask);
+}
+
+LooseFileFormat GetAudioResourceFormat(const AudioResource& resource)
+{
+    LooseFileFormat format;
+    format.name = resource.getContainer() == AudioResource::Container::Sarc ? messages::resource::cSarcFormat : GetResourceFormatInfo(resource.getFormat()).displayName;
+    format.extension = GetResourceFormatInfo(resource.getFormat()).extension;
+    format.endian = resource.isBigEndian() ? sead::Endian::eBig : sead::Endian::eLittle;
+    FormatResourceVersion(&format.version, resource.getVersion());
+
+    return format;
 }
 
 static s32 FindBarsAudioIndex(AudioAssetKind kind)

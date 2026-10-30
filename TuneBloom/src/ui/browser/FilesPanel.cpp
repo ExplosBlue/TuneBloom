@@ -183,11 +183,13 @@ void FilesPanel::drawKindMenu()
             counts[static_cast<s32>(getKindFilter(static_cast<BrowserFileKind>(kind)))] += getSnapshot(root).kindCounts[kind];
     }
 
+    ContextMenuGroupTitle(messages::browser::cFileTypes);
+
     for (s32 filter = 0; filter < cKindFilterCount; filter++)
     {
         sead::FormatFixedSafeString<64> label(messages::files::cKindFilterFormat, cKindFilters[filter].label, FormatCountText(counts[filter]).cstr());
 
-        if (!ContextMenuCheckItem(label.cstr(), mKindShown[filter], counts[filter] > 0))
+        if (!ContextMenuToggleItem(label.cstr(), mKindShown[filter], counts[filter] > 0))
             continue;
 
         mKindShown[filter] = !mKindShown[filter];
@@ -195,16 +197,11 @@ void FilesPanel::drawKindMenu()
     }
 
     ContextMenuSeparator();
+    drawViewOptions();
+    ContextMenuSeparator();
 
-    if (ContextMenuCheckItem(messages::browser::cAutoPlay, mAutoPlay))
+    if (ContextMenuToggleItem(messages::browser::cAutoPlay, mAutoPlay))
         setAutoPlay(!mAutoPlay);
-
-    if (ContextMenuCheckItem(messages::browser::cGroupPrefix, mGroupByPrefix))
-    {
-        mGroupByPrefix = !mGroupByPrefix;
-        invalidateRows();
-        saveConfig();
-    }
 
     if (!mSections.empty())
     {
@@ -217,6 +214,39 @@ void FilesPanel::drawKindMenu()
     }
 
     EndContextMenu();
+}
+
+void FilesPanel::drawViewOptions()
+{
+    const struct
+    {
+        const char* label;
+        bool* value;
+        bool isTooNarrow;
+    } options[] = {
+        { messages::browser::cExtensions,  &mShowExtensions, false },
+        { messages::common::cFormat,       &mShowFormat,     mShowFormat && !mFrame.showFormat && mFrame.formatWidth > 0.0f },
+        { messages::common::cSize,         &mShowSize,       mShowSize && !mFrame.showSize && mFrame.sizeWidth > 0.0f },
+        { messages::browser::cCount,       &mShowCount,      false },
+        { messages::browser::cGroupPrefix, &mGroupByPrefix,  false },
+    };
+
+    ContextMenuGroupTitle(messages::mainmenu::cView);
+
+    for (const auto& option : options)
+    {
+        const bool pressed = ContextMenuToggleItem(option.label, *option.value);
+
+        if (option.isTooNarrow)
+            ImGui::SetItemTooltip("%s", messages::files::cColumnTooNarrow);
+
+        if (!pressed)
+            continue;
+
+        *option.value = !*option.value;
+        invalidateRows();
+        saveConfig();
+    }
 }
 
 bool FilesPanel::isAnyKindHidden() const

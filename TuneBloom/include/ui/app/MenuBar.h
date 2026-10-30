@@ -12,3 +12,9 @@ bool MenuBarItem(const char* label, const char* shortcut = nullptr, bool selecte
 bool MenuBarIconItem(const char* icon, const char* label, const char* shortcut = nullptr, bool enabled = true, const char* disabledReason = nullptr);
 
 bool BeginSubMenu(const char* label);
+
+void SetMenuBarFontSize();
+void SetMenuBarTooltip(const char* tooltip);
+
+f32 CalcMenuBarIconButtonWidth(const char* icon);
+bool MenuBarIconButton(const char* id, const char* icon, f32 right, f32 top, f32 bottom, bool isOpen = false, const ImVec4* iconColor = nullptr, ImVec2* iconPos = nullptr);

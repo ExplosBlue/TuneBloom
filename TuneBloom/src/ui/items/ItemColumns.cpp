@@ -1,6 +1,7 @@
 #include <ui/items/ItemColumns.h>
 
 #include <ui/bank/BankFileEditor.h>
+#include <ui/file/PathText.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/items/ItemColumnSettings.h>
 #include <messages/Messages.h>
@@ -635,9 +636,14 @@ bool EndItemTable(const ItemColumn* columns, u32 columnCount, const std::vector<
     return fitName;
 }
 
+f32 CalcItemCellPadX()
+{
+    return ImFloor(ImGui::GetFontSize() * cItemCellPadXEm);
+}
+
 void PushItemTablePadding()
 {
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(ImFloor(ImGui::GetFontSize() * cItemCellPadXEm), ImGui::GetStyle().CellPadding.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(CalcItemCellPadX(), ImGui::GetStyle().CellPadding.y));
 }
 
 void PushTableRowClipRect(const ImVec2& rowMin, const ImVec2& rowMax)
@@ -648,24 +654,32 @@ void PushTableRowClipRect(const ImVec2& rowMin, const ImVec2& rowMax)
     ImGui::PushClipRect(clip.Min, clip.Max, false);
 }
 
-void DrawTableGroupRow(const char* title)
+f32 CalcTableValueRight()
+{
+    const ImGuiTable* table = ImGui::GetCurrentTable();
+
+    return table->Columns[table->RightMostEnabledColumn].WorkMaxX - cItemColumnGap;
+}
+
+void DrawTableGroupRow(const char* title, f32 topGap)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGuiTable* table = ImGui::GetCurrentTable();
     const f32 rowHeight = ImGui::GetFrameHeight();
 
     const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const f32 titleY = cursor.y + topGap;
     const ImVec2 rowMin(table->WorkRect.Min.x, cursor.y);
-    const ImVec2 rowMax(table->WorkRect.Max.x, cursor.y + rowHeight);
-    const ImVec2 textPos(cursor.x, cursor.y + style.FramePadding.y);
+    const ImVec2 rowMax(table->WorkRect.Max.x, titleY + rowHeight);
+    const ImVec2 textPos(cursor.x, titleY + style.FramePadding.y);
     const f32 lineLeft = textPos.x + ImGui::CalcTextSize(title).x + style.ItemSpacing.x;
-    const f32 lineRight = table->Columns[table->RightMostEnabledColumn].WorkMaxX - cItemColumnGap;
-    const f32 lineY = ImFloor(cursor.y + rowHeight * 0.5f);
+    const f32 lineRight = CalcTableValueRight();
+    const f32 lineY = ImFloor(titleY + rowHeight * 0.5f);
 
     ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, 0);
     table->RowBgColorCounter = 0;
 
-    ImGui::Dummy(ImVec2(1.0f, rowHeight));
+    ImGui::Dummy(ImVec2(1.0f, topGap + rowHeight));
     PushTableRowClipRect(rowMin, rowMax);
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -697,6 +711,18 @@ f32 CalcItemValueCellWidth(const char* text)
     return ImGui::CalcTextSize(text).x + cItemColumnGap;
 }
 
+static void DrawPathEnd(const ImVec2& pos, f32 width, const char* text)
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImU32 color = ImGui::GetColorU32(ImGuiCol_Text);
+    const std::string fitted = pathtext::FitToWidth(text, width);
+
+    if (fitted != text && ImGui::CalcTextSize(fitted.c_str()).x <= width)
+        drawList->AddText(pos, color, fitted.c_str());
+    else
+        DrawTextEnd(drawList, pos, pos.x + width, text, color);
+}
+
 void DrawItemValueCell(const char* text, u32 flags, s32 index, bool unused)
 {
     ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -712,7 +738,7 @@ void DrawItemValueCell(const char* text, u32 flags, s32 index, bool unused)
         pos.x += cItemColumnGap;
 
         if ((flags & cItemColumnFlag_TextEnd) && textWidth > width)
-            DrawTextEnd(ImGui::GetWindowDrawList(), pos, pos.x + width, text, ImGui::GetColorU32(ImGuiCol_Text));
+            DrawPathEnd(pos, width, text);
         else
             ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), pos, ImVec2(pos.x + width, pos.y + ImGui::GetFontSize()), pos.x + width, pos.x + width, text, nullptr, nullptr);
 

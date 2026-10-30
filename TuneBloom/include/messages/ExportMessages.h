@@ -48,7 +48,6 @@ inline constexpr const char* cSegmentLoopFormat        = "Loop %d";
 inline constexpr const char* cSegmentFade              = "Fade";
 inline constexpr const char* cSampleRateOriginalFormat = "Original (%u Hz)";
 inline constexpr const char* cFileTypeWav              = "WAV, 16-bit";
-inline constexpr const char* cLoopRangeFormat          = "%s to %s";
 inline constexpr const char* cLoopCount                = "Loop Count";
 inline constexpr const char* cLoopCountDetail          = "Times the loop plays before the fade";
 inline constexpr const char* cFadeOut                  = "Fade Out";

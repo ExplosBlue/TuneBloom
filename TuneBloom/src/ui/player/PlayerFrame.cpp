@@ -8,35 +8,63 @@
 #include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
-#include <ui/items/ItemColumns.h>
 #include <messages/Messages.h>
+#include <ui/player/PlaybackDrawer.h>
+#include <ui/player/PlayerFileFacts.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/project/FileLists.h>
 #include <ui/resource/ResourceViews.h>
+#include <ui/settings/ConfigFile.h>
 #include <ui/settings/UiColors.h>
-#include <ui/stream/StreamTracks.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/widgets/Dialogs.h>
+#include <ui/widgets/Knob.h>
 
 #include <aal/AudioResource.h>
 #include <app/Utilll.h>
 #include <core/PlayerFile.h>
 #include <core/TestHooks.h>
+#include <snd/StreamSoundPlayer.h>
+#include <platform/WindowFrame.h>
+#include <platform/WindowZoom.h>
 
 #include <framework/glfw/seadGameFrameworkBaseGlfw.h>
 #include <imgui/imgui_internal.h>
 #include <libs/IconsLucide.h>
 
 #include <algorithm>
+#include <vector>
 
 static constexpr f32 cPlayerWidthEm          = 46.0f;
+static constexpr f32 cPlayerMinWidthEm       = 32.0f;
 static constexpr f32 cPlayerPadEm            = 0.8f;
 static constexpr f32 cPlayerRowGapEm         = 0.6f;
-static constexpr s32 cTrackRowsVisible       = 6;
 static constexpr s32 cModalFirstMeasureFrame = 2;
 static constexpr s32 cModalLastMeasureFrame  = 10;
 static constexpr s32 cRevealStableFrames     = 2;
 static constexpr s32 cRevealFrameLimit       = 90;
+static constexpr s32 cWidthSaveDelayFrames   = 30;
+
+static constexpr const char* cConfigSection = "player";
+static constexpr const char* cWidthKey      = "widthEm";
+
+struct SizeLimits
+{
+    s32 minWidth = GLFW_DONT_CARE;
+    s32 minHeight = GLFW_DONT_CARE;
+    s32 maxWidth = GLFW_DONT_CARE;
+    s32 maxHeight = GLFW_DONT_CARE;
+
+    bool operator==(const SizeLimits& other) const
+    {
+        return minWidth == other.minWidth && minHeight == other.minHeight && maxWidth == other.maxWidth && maxHeight == other.maxHeight;
+    }
+
+    bool operator!=(const SizeLimits& other) const
+    {
+        return !(*this == other);
+    }
+};
 
 enum class LeaveTarget
 {
@@ -49,6 +77,7 @@ static bool sIsShown = false;
 static bool sIsEnterPending = false;
 static bool sIsSizePending = false;
 static bool sIsRevealed = true;
+static bool sCanBeEmpty = false;
 static LeaveTarget sLeaveTarget = LeaveTarget::None;
 static Document* sAutoplayDocument = nullptr;
 static ImGuiID sSizedModalId = 0;
@@ -57,6 +86,9 @@ static s32 sStableFrameNum = 0;
 static s32 sHiddenFrameNum = 0;
 static s32 sNormalWidth = 0;
 static s32 sNormalHeight = 0;
+static s32 sWidthSaveFrameNum = 0;
+static f32 sWidthEm = cPlayerWidthEm;
+static SizeLimits sSizeLimits;
 
 static GLFWwindow* GetAppWindow()
 {
@@ -120,7 +152,7 @@ static void ResizeAroundCenter(GLFWwindow* window, s32 width, s32 height)
     y += (oldHeight - height) / 2;
     ClampToWorkArea(&x, &y, width, height);
 
-    glfwSetWindowSize(window, width, height);
+    windowframe::SetSize(window, width, height);
 
     if (!testhooks::IsEnabled())
         glfwSetWindowPos(window, x, y);
@@ -184,6 +216,71 @@ static void CountStableFrame(GLFWwindow* window, bool isStable)
         RevealWindow(window);
 }
 
+static s32 CalcMinWidth()
+{
+    return static_cast<s32>(ImCeil(ImGui::GetFontSize() * cPlayerMinWidthEm));
+}
+
+static s32 CalcMaxWidth()
+{
+    const f32 pad = ImFloor(ImGui::GetFontSize() * cPlayerPadEm);
+
+    return static_cast<s32>(ImCeil(CalcCompactPlayerBarMaxWidth() + pad * 2.0f));
+}
+
+static s32 CalcUserWidth()
+{
+    return std::clamp(static_cast<s32>(sWidthEm * ImGui::GetFontSize() + 0.5f), CalcMinWidth(), CalcMaxWidth());
+}
+
+static void LoadUserWidth()
+{
+    if (testhooks::IsEnabled())
+        return;
+
+    json::Value section;
+    LoadConfigSection(cStateFile, cConfigSection, &section);
+
+    sWidthEm = section.getFloat(cWidthKey, cPlayerWidthEm);
+}
+
+static void SaveUserWidth(bool isForced)
+{
+    if (sWidthSaveFrameNum == 0)
+        return;
+
+    if (!isForced && --sWidthSaveFrameNum > 0)
+        return;
+
+    sWidthSaveFrameNum = 0;
+
+    if (testhooks::IsEnabled())
+        return;
+
+    json::Value section;
+    section.setFloat(cWidthKey, sWidthEm);
+
+    SaveConfigSection(cStateFile, cConfigSection, section);
+}
+
+static void RememberUserWidth(s32 width)
+{
+    if (width == CalcUserWidth())
+        return;
+
+    sWidthEm = static_cast<f32>(width) / ImGui::GetFontSize();
+    sWidthSaveFrameNum = cWidthSaveDelayFrames;
+}
+
+static void ApplySizeLimits(GLFWwindow* window, const SizeLimits& limits)
+{
+    if (limits == sSizeLimits)
+        return;
+
+    sSizeLimits = limits;
+    windowframe::SetSizeLimits(window, limits.minWidth, limits.minHeight, limits.maxWidth, limits.maxHeight);
+}
+
 static void FitWindowToModal(GLFWwindow* window, ImGuiWindow* modal, s32 width, s32 height)
 {
     if (++sModalFrameNum < cModalFirstMeasureFrame || sModalFrameNum > cModalLastMeasureFrame)
@@ -231,30 +328,42 @@ static void FitWindowToContent(f32 contentHeight)
         sSizedModalId = modalId;
     }
 
-    const s32 width = static_cast<s32>(ImCeil(ImGui::GetFontSize() * cPlayerWidthEm));
     const s32 height = static_cast<s32>(ImCeil(contentHeight));
 
     if (modal)
     {
-        FitWindowToModal(window, modal, width, height);
+        ApplySizeLimits(window, SizeLimits());
+        FitWindowToModal(window, modal, CalcUserWidth(), height);
         return;
     }
+
+    const SizeLimits limits = { CalcMinWidth(), height, CalcMaxWidth(), height };
 
     s32 oldWidth = 0;
     s32 oldHeight = 0;
     glfwGetWindowSize(window, &oldWidth, &oldHeight);
 
+    const s32 width = sIsSizePending ? CalcUserWidth() : std::clamp(oldWidth, limits.minWidth, limits.maxWidth);
     const bool isStable = oldWidth == width && oldHeight == height;
+
+    if (limits != sSizeLimits)
+        ApplySizeLimits(window, SizeLimits());
 
     if (!isStable)
     {
         if (sIsSizePending)
             ResizeAroundCenter(window, width, height);
         else
-            glfwSetWindowSize(window, width, height);
+            windowframe::SetSize(window, width, height);
     }
 
+    ApplySizeLimits(window, limits);
+
+    if (isStable && !sIsSizePending)
+        RememberUserWidth(width);
+
     sIsSizePending = false;
+    SaveUserWidth(false);
     CountStableFrame(window, isStable);
 }
 
@@ -284,14 +393,15 @@ void ApplyPlayerFrameStart()
     sIsSizePending = true;
 
     glfwGetWindowSize(window, &sNormalWidth, &sNormalHeight);
-    glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_FALSE);
+    windowzoom::SetEnabled(ImGui::GetMainViewport()->PlatformHandleRaw, false);
     SetDetachedDialogArea(ImVec2(static_cast<f32>(sNormalWidth), static_cast<f32>(sNormalHeight)));
     HideUntilSized(window);
+    LoadUserWidth();
 
     const f32 em = ImGui::GetFontSize();
     const f32 baseHeight = ImFloor(em * cPlayerPadEm) * 2.0f + CalcTransportRowHeight() + ImFloor(em * cPlayerRowGapEm) + ImGui::GetFrameHeight() * 2.0f;
 
-    ResizeAroundCenter(window, static_cast<s32>(ImCeil(em * cPlayerWidthEm)), static_cast<s32>(ImCeil(baseHeight)));
+    ResizeAroundCenter(window, CalcUserWidth(), static_cast<s32>(ImCeil(baseHeight)));
 
     RefreshWindowTitle();
 }
@@ -313,6 +423,13 @@ void PreparePlayerFrame(const openqueue::Request& launch)
 
     sIsShown = true;
     sIsEnterPending = true;
+}
+
+void PrepareEmptyPlayerFrame()
+{
+    sIsShown = true;
+    sIsEnterPending = true;
+    sCanBeEmpty = true;
 }
 
 void NotifyPlayerFrameOpen(const openqueue::Request& request, Document* previous, Document* opened)
@@ -343,6 +460,17 @@ void RequestFullEditor()
         SetFileEditorShown(false);
 }
 
+static void ClosePlayerOnlyDocuments()
+{
+    const std::vector<Document*> documents = GetOpenDocuments();
+
+    for (Document* document : documents)
+    {
+        if (document->isPlayerOnly())
+            CloseDocument(document);
+    }
+}
+
 static void LeavePlayerFrame()
 {
     GLFWwindow* window = GetAppWindow();
@@ -350,8 +478,11 @@ static void LeavePlayerFrame()
     if (!sIsShown || !window)
         return;
 
+    ClosePlayerOnlyDocuments();
+
     sIsShown = false;
     sIsSizePending = false;
+    sCanBeEmpty = false;
     sAutoplayDocument = nullptr;
 
     if (sIsEnterPending)
@@ -361,16 +492,13 @@ static void LeavePlayerFrame()
     }
 
     RevealWindow(window);
-    glfwSetWindowAttrib(window, GLFW_RESIZABLE, GLFW_TRUE);
+    SaveUserWidth(true);
+    ApplySizeLimits(window, SizeLimits());
+    windowzoom::SetEnabled(ImGui::GetMainViewport()->PlatformHandleRaw, true);
     SetDetachedDialogArea(ImVec2());
     ResizeAroundCenter(window, sNormalWidth, sNormalHeight);
 
     RefreshWindowTitle();
-}
-
-static f32 CalcButtonWidth(const char* label)
-{
-    return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
 }
 
 static void RequestFileReplace(const PlayableFile& file, s32 trackIndex)
@@ -419,24 +547,36 @@ static void DrawReplaceTrackMenu(const PlayableFile& file)
     EndContextMenu();
 }
 
-static void DrawReplaceButton(const char* label, const PlayableFile& file)
+static f32 DrawEditButton(f32 right, f32 top, f32 bottom)
+{
+    if (MenuBarIconButton("##Edit", ICON_LC_SQUARE_PEN, right, top, bottom))
+        sLeaveTarget = LeaveTarget::FileEditor;
+
+    SetMenuBarTooltip(messages::playerframe::cOpenInEditor);
+
+    return CalcMenuBarIconButtonWidth(ICON_LC_SQUARE_PEN);
+}
+
+static f32 DrawReplaceButton(const PlayableFile& file, f32 right, f32 top, f32 bottom)
 {
     const bool isTrackMenu = file.stream.isValid() && file.stream.stream->getTrackList().size() > 1;
+    const bool isMenuOpen = ImGui::IsPopupOpen("###ReplaceTrack");
     const char* reason = nullptr;
     const bool canReplace = !file.asset || file.asset->getResource()->canReplaceAudio(*file.asset, &reason);
+    const ImVec4 disabledColor = ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
 
     ImGui::BeginDisabled(!canReplace);
-    const bool pressed = ImGui::Button(label);
+    const bool pressed = MenuBarIconButton("##Replace", ICON_LC_ARROW_DOWN_UP, right, top, bottom, isMenuOpen, canReplace ? nullptr : &disabledColor);
     ImGui::EndDisabled();
 
     if (!canReplace)
-        ImGui::SetItemTooltip("%s", reason);
-    else
-        ImGui::SetItemTooltip("%s", isTrackMenu ? messages::playerframe::cReplaceTrackTip : messages::import::cReplaceAudioTip);
+        SetMenuBarTooltip(reason);
+    else if (!isMenuOpen)
+        SetMenuBarTooltip(isTrackMenu ? messages::playerframe::cReplaceTrack : messages::common::cReplaceAudio);
 
     if (pressed && isTrackMenu)
     {
-        ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, ImGui::GetItemRectMax().y));
+        ImGui::SetNextWindowPos(ImVec2(right, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
         ImGui::OpenPopup("###ReplaceTrack");
     }
     else if (pressed)
@@ -445,135 +585,74 @@ static void DrawReplaceButton(const char* label, const PlayableFile& file)
     }
 
     if (isTrackMenu)
+    {
         DrawReplaceTrackMenu(file);
+        SetMenuBarFontSize();
+    }
+
+    return CalcMenuBarIconButtonWidth(ICON_LC_ARROW_DOWN_UP);
 }
 
-static void DrawBackupFailureMark(const char* failure)
+static f32 DrawSaveButton(f32 right, f32 top, f32 bottom)
 {
-    const f32 size = ImGui::GetFrameHeight();
-    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const ImVec4 unsavedColor = uicolors::Warning();
+
+    if (MenuBarIconButton("##Save", ICON_LC_SAVE, right, top, bottom, false, &unsavedColor))
+        RequestSaveFile();
+
+    SetMenuBarTooltip(messages::common::cSave);
+
+    return CalcMenuBarIconButtonWidth(ICON_LC_SAVE);
+}
+
+static f32 DrawBackupFailureMark(const char* failure, f32 right, f32 top, f32 bottom)
+{
+    const f32 width = CalcMenuBarIconButtonWidth(ICON_LC_TRIANGLE_ALERT);
     const ImVec2 iconSize = ImGui::CalcTextSize(ICON_LC_TRIANGLE_ALERT);
+    const ImVec2 min(right - width, top);
 
-    ImGui::Dummy(ImVec2(size, size));
-    ImGui::GetWindowDrawList()->AddText(ImFloor(pos + (ImVec2(size, size) - iconSize) * 0.5f), ImGui::GetColorU32(uicolors::Warning()), ICON_LC_TRIANGLE_ALERT);
-    ImGui::SetItemTooltip("%s", failure);
+    ImGui::SetCursorScreenPos(min);
+    ImGui::Dummy(ImVec2(width, bottom - top));
+    ImGui::GetWindowDrawList()->AddText(ImFloor(min + (ImVec2(width, bottom - top) - iconSize) * 0.5f), ImGui::GetColorU32(uicolors::Warning()), ICON_LC_TRIANGLE_ALERT);
+    SetMenuBarTooltip(failure);
+
+    return width;
 }
 
-static void DrawFileRow(Document& document, const PlayableFile& file)
+f32 DrawPlayerFrameTools(f32 right, f32 top, f32 bottom)
 {
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const bool isUnsaved = document.state().unsaved;
-    const char* backupFailure = backup::GetFailureTitle();
+    Document* document = ActiveDocument();
 
-    const sead::FormatFixedSafeString<64> saveLabel(ICON_LC_SAVE " %s###Save", messages::common::cSave);
-    const sead::FormatFixedSafeString<64> replaceLabel(ICON_LC_REPLACE " %s###Replace", messages::common::cReplace);
-    const sead::FormatFixedSafeString<64> editLabel(ICON_LC_SQUARE_PEN " %s###Edit", messages::mainmenu::cEdit);
+    if (!IsPlayerDocument(document))
+        return right;
 
-    f32 buttonsWidth = CalcButtonWidth(replaceLabel.cstr()) + style.ItemSpacing.x + CalcButtonWidth(editLabel.cstr());
+    const PlayableFile file = document->playableFile();
+    const f32 gap = ImGui::GetStyle().ItemInnerSpacing.x;
 
-    if (isUnsaved)
-        buttonsWidth += CalcButtonWidth(saveLabel.cstr()) + style.ItemSpacing.x;
-
-    if (backupFailure)
-        buttonsWidth += ImGui::GetFrameHeight() + style.ItemSpacing.x;
-
-    const ImVec2 pos = ImGui::GetCursorScreenPos();
-    const f32 availWidth = ImGui::GetContentRegionAvail().x;
-    const f32 factsRight = pos.x + availWidth - buttonsWidth - style.ItemSpacing.x;
-    const f32 textY = pos.y + style.FramePadding.y;
-
-    sead::FixedSafeString<256> facts;
-    document.formatFileFacts(&facts);
-
-    ImGui::PushStyleColor(ImGuiCol_Text, GetItemValueColor());
-    ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), ImVec2(pos.x, textY), ImVec2(factsRight, textY + ImGui::GetFontSize()), factsRight, factsRight, facts.cstr(), nullptr, nullptr);
-    ImGui::PopStyleColor();
-
-    ImGui::SetCursorScreenPos(ImVec2(pos.x + availWidth - buttonsWidth, pos.y));
-
-    if (backupFailure)
+    if (!document->isPlayerOnly())
     {
-        DrawBackupFailureMark(backupFailure);
-        ImGui::SameLine();
+        right -= DrawEditButton(right, top, bottom) + gap;
+        right -= DrawReplaceButton(file, right, top, bottom) + gap;
     }
 
-    if (isUnsaved)
-    {
-        if (ImGui::Button(saveLabel.cstr()))
-            RequestSaveFile();
+    right -= DrawFileDetailsButton(*document, right, top, bottom) + gap;
 
-        ImGui::SameLine();
-    }
+    if (document->state().unsaved)
+        right -= DrawSaveButton(right, top, bottom) + gap;
 
-    DrawReplaceButton(replaceLabel.cstr(), file);
-    ImGui::SameLine();
-    if (ImGui::Button(editLabel.cstr()))
-        sLeaveTarget = LeaveTarget::FileEditor;
+    if (const char* backupFailure = backup::GetFailureTitle())
+        return right - DrawBackupFailureMark(backupFailure, right, top, bottom);
 
-    ImGui::SetItemTooltip("%s", messages::playerframe::cEditTip);
+    return right + gap;
 }
 
-static void DrawCenteredTrackParam(const TrackContext& ctx, s32 index, TrackParam param)
+static void DrawTrackVolume(u32 trackNum)
 {
-    const f32 size = ImGui::GetFrameHeight();
-    const f32 offset = ImFloor((ImGui::GetContentRegionAvail().x - size) * 0.5f);
+    if (trackNum > cStrmTrackNum)
+        trackNum = cStrmTrackNum;
 
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + sead::Mathf::max(offset, 0.0f));
-    DrawTrackParam(ctx, index, param, size);
-}
-
-static void DrawTrackList(const StreamSource& source)
-{
-    const TrackContext ctx = MakeTrackContext(source);
-    const s32 trackNum = static_cast<s32>(ctx.tracks.size());
-
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 rowHeight = ImGui::GetFrameHeight() + style.CellPadding.y * 2.0f;
-    const bool isScrolled = trackNum > cTrackRowsVisible;
-    const f32 tableHeight = isScrolled ? ImGui::GetTextLineHeight() + (rowHeight + 1.0f) * (cTrackRowsVisible + 0.5f) : 0.0f;
-
-    ImGuiTableFlags flags = ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersInnerH;
-
-    if (isScrolled)
-        flags |= ImGuiTableFlags_ScrollY;
-
-    if (!ImGui::BeginTable("PlayerTracks", 4, flags, ImVec2(0.0f, tableHeight)))
-        return;
-
-    ImGui::TableSetupScrollFreeze(0, 1);
-    ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn(messages::stream::cTrackMute, ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn(messages::stream::cTrackSolo, ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn(messages::common::cChannels, ImGuiTableColumnFlags_WidthStretch);
-    ImGui::TableHeadersRow();
-
-    for (s32 i = 0; i < trackNum; i++)
-    {
-        const bool isAudible = source.stream->isTrackAudible(static_cast<u32>(i));
-
-        ImGui::PushID(i);
-        ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
-
-        ImGui::TableNextColumn();
-        ImGui::AlignTextToFramePadding();
-        ImGui::Text("%d", i);
-
-        ImGui::TableNextColumn();
-        DrawCenteredTrackParam(ctx, i, TrackParam::Mute);
-
-        ImGui::TableNextColumn();
-        DrawCenteredTrackParam(ctx, i, TrackParam::Solo);
-
-        ImGui::TableNextColumn();
-        DrawTrackChannelText(ctx.tracks[i]->getChannelCount(source.stream->getStreamType()), false);
-
-        if (!isAudible)
-            DimTrackCell(true);
-
-        ImGui::PopID();
-    }
-
-    ImGui::EndTable();
+    RegionHeader(messages::playback::cPanelTrackVolume);
+    DrawTrackVolumeStrip(trackNum, CalcTrackVolumeStripHeight(false));
 }
 
 static bool BeginFrameWindow()
@@ -595,23 +674,29 @@ static bool BeginFrameWindow()
     return open;
 }
 
-static f32 DrawFrameContent(Document& document)
+static bool DrawDocumentRows(Document& document)
 {
     const PlayableFile file = document.playableFile();
     const f32 gap = ImFloor(ImGui::GetFontSize() * cPlayerRowGapEm);
+    const u32 trackNum = file.stream.isValid() ? static_cast<u32>(file.stream.stream->getTrackList().size()) : 0;
 
-    DrawCompactPlayerBar();
-
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap);
-    DrawFileRow(document, file);
-
-    if (file.stream.isValid() && file.stream.stream->getTrackList().size() > 1)
+    if (trackNum > 1)
     {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap);
-        DrawTrackList(file.stream);
+        DrawTrackVolume(trackNum);
     }
 
-    return ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y + ImGui::GetCurrentWindow()->WindowPadding.y;
+    return DrawFileFactsLine(document, gap);
+}
+
+static f32 DrawFrameContent(Document* document)
+{
+    DrawCompactPlayerBar();
+
+    const bool hasStatusBar = document && DrawDocumentRows(*document);
+    const f32 bottomPad = hasStatusBar ? 0.0f : ImGui::GetCurrentWindow()->WindowPadding.y;
+
+    return ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y + bottomPad;
 }
 
 void DrawPlayerFrame()
@@ -621,8 +706,9 @@ void DrawPlayerFrame()
 
     Document* document = ActiveDocument();
     const bool isPlayer = IsPlayerDocument(document);
+    const bool isEmpty = !document && sCanBeEmpty;
 
-    if (!isPlayer && (document || !IsOpenPending()))
+    if (!isPlayer && !isEmpty && (document || !IsOpenPending()))
         sLeaveTarget = LeaveTarget::FullEditor;
 
     if (isPlayer && document == sAutoplayDocument)
@@ -635,8 +721,8 @@ void DrawPlayerFrame()
 
     f32 contentHeight = 0.0f;
 
-    if (BeginFrameWindow() && isPlayer)
-        contentHeight = DrawFrameContent(*document);
+    if (BeginFrameWindow() && (isPlayer || isEmpty))
+        contentHeight = DrawFrameContent(isPlayer ? document : nullptr);
 
     ImGui::End();
 

@@ -25,8 +25,6 @@ struct PlaybackDrawerLayout
     ImVec2 knobSize;
     f32 knobGap;
     f32 listWidth;
-    f32 trackKnobSize;
-    f32 trackPitch;
     f32 panelWidths[PlaybackPanel_Num];
     f32 parametersWidth;
     f32 parametersHeight;
@@ -45,6 +43,10 @@ void SetPlaybackDrawerView(PlaybackDrawerView view);
 PlaybackDrawerLayout CalcPlaybackDrawerLayout();
 f32 CalcPlaybackDrawerHeight(const PlaybackDrawerLayout& layout, f32 availWidth);
 void DrawPlaybackDrawer(const PlaybackDrawerLayout& layout, f32 height);
+
+f32 CalcTrackVolumeStripWidth(u32 slotNum);
+f32 CalcTrackVolumeStripHeight(bool hasWaitBar);
+void DrawTrackVolumeStrip(u32 slotNum, f32 height);
 
 f32 CalcPlaybackOverrideButtonsWidth();
 void DrawPlaybackOverrideButtons();

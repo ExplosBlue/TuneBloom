@@ -4,6 +4,7 @@
 #include <ui/widgets/Knob.h>
 #include <messages/Messages.h>
 #include <ui/widgets/Properties.h>
+#include <ui/settings/Config.h>
 #include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
@@ -31,6 +32,7 @@ static constexpr f32 cBrightButtonMix          = 0.15f;
 static constexpr f32 cIconButtonBorderSize     = 1.0f;
 static constexpr f32 cIconButtonBorderHoverMix = 0.8f;
 static constexpr f32 cVersionFieldEm           = 2.0f;
+static constexpr f32 cVersionDotGap            = 6.0f;
 static constexpr f32 cDetailTooltipWrapEm      = 32.0f;
 static constexpr f32 cInsertLineAlpha          = 0.86f;
 static constexpr f32 cInsertLineHeight         = 3.0f;
@@ -171,6 +173,29 @@ static ImFont* GetIconFont(f32 size)
     return ImGui::GetFont();
 }
 
+ImFont* FindFontOfSize(f32 size)
+{
+    for (ImFont* font : ImGui::GetIO().Fonts->Fonts)
+    {
+        if (font->FontSize == size)
+            return font;
+    }
+
+    return ImGui::GetFont();
+}
+
+ImFont* GetSmallFont()
+{
+    return FindFontOfSize(ScaleSize(cSmallFontSize));
+}
+
+f32 CalcCapCenterOffset(const ImFont* font, f32 size)
+{
+    const ImFontGlyph* capital = font->FindGlyph('H');
+
+    return capital ? (capital->Y0 + capital->Y1) * 0.5f * size / font->FontSize : size * 0.5f;
+}
+
 static ImVec4 CalcIconButtonFill(bool lit, bool isPlayTint, bool held, f32 hoverRatio)
 {
     if (!lit)
@@ -259,6 +284,30 @@ bool DrawIconButton(const char* id, const char* icon, const ImVec2& itemSize, f3
     ImGui::GetWindowDrawList()->AddText(font, iconSize, ImVec2(ImFloor(frame.min.x + (frameSize - textSize.x) * 0.5f), ImFloor(frame.min.y + (frameSize - textSize.y) * 0.5f)), frame.iconColor, icon);
 
     return frame.pressed;
+}
+
+f32 CalcTextActionWidth(const char* label)
+{
+    return ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+}
+
+bool DrawTextAction(const char* id, const char* label, f32 height, f32 textOffsetY, bool* outHovered)
+{
+    const ImVec2 textSize = ImGui::CalcTextSize(label);
+    const f32 width = CalcTextActionWidth(label);
+
+    const bool isPressed = ImGui::InvisibleButton(id, ImVec2(width, height));
+    const bool isHovered = ImGui::IsItemHovered();
+
+    const ImU32 color = ImGui::GetHoverColorU32(ImGui::GetItemID(), isHovered, ImGui::GetColorU32(ImGuiCol_CheckMark), ImGui::GetColorU32(ImGuiCol_Text));
+    const ImVec2 min = ImGui::GetItemRectMin();
+
+    ImGui::GetWindowDrawList()->AddText(ImVec2(min.x + ImFloor((width - textSize.x) * 0.5f), min.y + textOffsetY), color, label);
+
+    if (outHovered)
+        *outHovered = isHovered;
+
+    return isPressed;
 }
 
 bool DrawGlyphButton(const char* id, TransportGlyph glyph, const ImVec2& itemSize, f32 frameSize, bool lit, IconButtonTint tint, ImGuiButtonFlags flags)
@@ -579,6 +628,11 @@ static bool VersionField(u8* value, u8 maxValue)
     return DragField("##value", ImGuiDataType_U8, value, cPropertyDragSpeed, &minValue, &maxValue, "%d", ImGuiSliderFlags_AlwaysClamp);
 }
 
+f32 CalcVersionUIWidth()
+{
+    return ImFloor(ImGui::GetFontSize() * cVersionFieldEm) * 3.0f + (cVersionDotGap * 2.0f + ImGui::CalcTextSize(".").x) * 2.0f;
+}
+
 bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format, bool showLabel)
 {
     const bool isBcsar = (format == ArchiveFormat::BCSAR);
@@ -598,10 +652,10 @@ bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format, bool showLabel)
     {
         if (i > 0)
         {
-            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::SameLine(0.0f, cVersionDotGap);
             ImGui::AlignTextToFramePadding();
             ImGui::TextDisabled(".");
-            ImGui::SameLine(0.0f, 6.0f);
+            ImGui::SameLine(0.0f, cVersionDotGap);
         }
 
         ImGui::PushID(i);

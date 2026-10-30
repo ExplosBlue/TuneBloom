@@ -22,10 +22,15 @@ static void PushMenuWindowStyle()
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, ImFloor(ImGui::GetFontSize() * cMenuRoundingEm));
 }
 
-static bool OpenMenu(bool open)
+static void PopMenuWindowStyle()
 {
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
+}
+
+static bool OpenMenu(bool open)
+{
+    PopMenuWindowStyle();
 
     if (!open)
         return false;
@@ -72,6 +77,23 @@ bool BeginTableContextMenu()
     return OpenMenu(ImGui::TableBeginContextMenuPopup(table));
 }
 
+bool BeginMenuPanel(const char* id)
+{
+    PushMenuWindowStyle();
+
+    const bool open = ImGui::BeginPopup(id);
+
+    PopMenuWindowStyle();
+
+    return open;
+}
+
+void EndMenuPanel()
+{
+    AnimateWindow(WindowAnimation::Menu);
+    ImGui::EndPopup();
+}
+
 void EndContextMenu()
 {
     if (sMenuItemCount == 0)
@@ -93,10 +115,28 @@ static bool DrawMenuRow(const char* icon, const char* label, bool checked, bool 
     sMenuItemCount++;
 
     ImDrawList* drawList = BeginMenuHighlight();
-    const bool pressed = ImGui::MenuItemEx(label, icon, hint, checked, enabled);
+    const bool pressed = ImGui::MenuItemEx(label, icon, hint, false, enabled);
     EndMenuHighlight(drawList, false);
 
+    if (checked)
+        DrawMenuCheck(enabled);
+
     return pressed;
+}
+
+void DrawMenuCheck(bool enabled)
+{
+    const ImVec2 iconSize = ImGui::CalcTextSize(ICON_LC_CHECK);
+    const f32 right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+    const f32 itemTop = ImGui::GetItemRectMin().y;
+    const f32 itemHeight = ImGui::GetItemRectSize().y;
+
+    ImVec4 color = ImGui::GetStyleColorVec4(ImGuiCol_CheckMark);
+
+    if (!enabled && !(GImGui->CurrentItemFlags & ImGuiItemFlags_Disabled))
+        color.w *= ImGui::GetStyle().DisabledAlpha;
+
+    ImGui::GetWindowDrawList()->AddText(ImVec2(right - iconSize.x, ImFloor(itemTop + (itemHeight - iconSize.y) * 0.5f)), ImGui::GetColorU32(color), ICON_LC_CHECK);
 }
 
 bool ContextMenuItem(const char* icon, const char* label, bool enabled, const char* disabledReason)
@@ -128,9 +168,44 @@ bool ContextMenuCheckItem(const char* label, bool checked, bool enabled)
     return DrawMenuRow(nullptr, label, checked, enabled);
 }
 
+bool ContextMenuToggleItem(const char* label, bool checked, bool enabled)
+{
+    ImGui::PushItemFlag(ImGuiItemFlags_SelectableDontClosePopup, true);
+    const bool pressed = DrawMenuRow(nullptr, label, checked, enabled);
+    ImGui::PopItemFlag();
+
+    return pressed;
+}
+
 void ContextMenuSeparator()
 {
     sMenuSeparatorPending = sMenuItemCount > 0;
+}
+
+void ContextMenuGroupTitle(const char* title)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+
+    if (sMenuItemCount > 0)
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + style.ItemSpacing.y);
+
+    sMenuSeparatorPending = false;
+
+    const ImVec2 pos = ImGui::GetCursorScreenPos();
+    const f32 lineHeight = ImGui::GetTextLineHeight();
+    const f32 textX = pos.x;
+    const f32 lineLeft = textX + ImGui::CalcTextSize(title).x + style.ItemSpacing.x;
+    const f32 lineRight = window->Pos.x + ImGui::GetWindowContentRegionMax().x;
+    const f32 lineY = ImFloor(pos.y + lineHeight * 0.5f);
+
+    ImGui::Dummy(ImVec2(lineLeft - pos.x, lineHeight));
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddText(ImVec2(textX, pos.y), ImGui::GetColorU32(GetItemValueColor()), title);
+
+    if (lineLeft < lineRight)
+        drawList->AddLine(ImVec2(lineLeft, lineY), ImVec2(lineRight, lineY), ImGui::GetColorU32(ImGuiCol_Separator), style.SeparatorTextBorderSize);
 }
 
 bool BeginContextSubMenu(const char* icon, const char* label)
@@ -197,8 +272,6 @@ void DrawTableContextMenu()
     {
         ContextMenuSeparator();
 
-        ImGui::PushItemFlag(ImGuiItemFlags_SelectableDontClosePopup, true);
-
         for (s32 i = 0; i < table->ColumnsCount; i++)
         {
             ImGuiTableColumn& column = table->Columns[i];
@@ -212,13 +285,11 @@ void DrawTableContextMenu()
 
             ImGui::PushID(i);
 
-            if (ContextMenuCheckItem(name, column.IsUserEnabled, canHide))
+            if (ContextMenuToggleItem(name, column.IsUserEnabled, canHide))
                 column.IsUserEnabledNextFrame = !column.IsUserEnabled;
 
             ImGui::PopID();
         }
-
-        ImGui::PopItemFlag();
     }
 
     EndContextMenu();

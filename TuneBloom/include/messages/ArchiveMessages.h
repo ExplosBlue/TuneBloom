@@ -79,9 +79,10 @@ inline constexpr const char* cBeaFilter = "Sound Archive in BEA (*.bea)";
 inline constexpr const char* cBlockNotFoundFormat = "%s: the %s block could not be found";
 
 inline constexpr const char* cUntitledFileNameFormat = "Untitled.%s";
+inline constexpr const char* cNewFileResult          = "Creates";
 inline constexpr const char* cOpenFilter = "Sound Archive (*.bfsar, *.bcsar, *.cmpbin, *.bea)";
 inline constexpr const char* cOpenFilterAll = "All Supported Files (*.bfsar, *.bcsar, *.cmpbin, *.bea, *.bars, *.barslist, *.bwav, *.bfstm, *.bcstm, *.bfwav, *.bcwav, *.zs, *.pack)";
-inline constexpr const char* cSoundArchiveTypeFormat = "Nintendo Sound Archive (%s)";
+inline constexpr const char* cSoundArchiveTypeFormat = "%s Sound Archive";
 
 inline constexpr const char* cSaveOpenFailed = "The output file could not be opened";
 inline constexpr const char* cSaveWriteFailed = "The archive could not be written. The file on disk was not changed";
@@ -128,11 +129,10 @@ inline constexpr const char* cStreamNoTracksSkippedFormat = "The Stream Sound '%
 namespace project
 {
 
-inline constexpr const char* cPlatformTitle = "Platform";
+inline constexpr const char* cPlatform = "Platform";
 
-inline constexpr const char* cLimitSequenceTitle = "Sequence Limits";
-inline constexpr const char* cLimitStreamTitle = "Stream Limits";
-inline constexpr const char* cLimitWaveTitle = "Wave Limits";
+inline constexpr const char* cLimitsTitle         = "Playback Limits";
+inline constexpr const char* cFileStatisticsTitle = "File Statistics";
 
 inline constexpr const char* cLimitBufferTimes = "Buffer Times";
 
@@ -150,7 +150,6 @@ inline constexpr const char* cRowPlayers        = "Players";
 inline constexpr const char* cRowWaveFiles      = "Wave Files";
 inline constexpr const char* cRowSequenceFiles  = "Sequence Files";
 inline constexpr const char* cRowBankFiles      = "Bank Files";
-inline constexpr const char* cRowFileStatistics = "File Statistics";
 
 inline constexpr const char* cInfoWindowTitle       = "Info";
 inline constexpr const char* cPropertiesWindowTitle = "Properties";
@@ -171,9 +170,7 @@ inline constexpr const char* cModifiedTooltip = "Edited since the last save";
 inline constexpr const char* cTypeSoundSet     = "Sound Set";
 
 inline constexpr const char* cSearchHint     = "Search by name or ID...";
-inline constexpr const char* cCaseSensitive  = "Match case";
-inline constexpr const char* cWholeWord      = "Match whole word";
-inline constexpr const char* cListMenu       = "List options";
+inline constexpr const char* cListMenu       = "List Options";
 inline constexpr const char* cCountNoteFormat = " %s";
 inline constexpr const char* cCountInFormat   = "in %s";
 inline constexpr const char* cCountInPlayerFormat = "in %s - Player %s";
@@ -191,7 +188,6 @@ inline constexpr const char* cStatsTotalOneFormat = "%s in %u Wave File";
 inline constexpr const char* cStatsTotalFormat  = "%s in %u Wave Files";
 inline constexpr const char* cStatsEmpty        = "No matching Wave Files";
 inline constexpr const char* cStatsUseUnused     = "Unused";
-inline constexpr const char* cStatsUseOnlyFormat = "(%s only)";
 inline constexpr const char* cStatsShareFormat   = "%.1f%%";
 inline constexpr const char* cStatsShareDetailFormat = "%.2f%%";
 inline constexpr const char* cStatsShare         = "Share";

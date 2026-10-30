@@ -205,12 +205,13 @@ void DrawStreamTracksSection(const StreamSource& source, f32 height)
     sTrackToolsInTitleRow = true;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, ImGui::GetStyle().ChildBorderSize));
+    const bool open = ImGui::BeginChild("TracksSection", ImVec2(0.0f, height), ImGuiChildFlags_AlwaysUseWindowPadding);
+    ImGui::PopStyleVar();
 
-    if (ImGui::BeginChild("TracksSection", ImVec2(0.0f, height), ImGuiChildFlags_AlwaysUseWindowPadding))
+    if (open)
         DrawStreamTracksUI(source);
 
     ImGui::EndChild();
-    ImGui::PopStyleVar();
 
     DrawStreamTrackImportPopup(source);
 }

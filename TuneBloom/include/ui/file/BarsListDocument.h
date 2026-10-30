@@ -21,7 +21,6 @@ public:
     void drawInfo(UIType tab) override;
     bool drawFileProperties() override;
     StreamSource activeStreamSource() override;
-    void formatFileFacts(sead::BufferedSafeString* out) const override;
 
     bool isValidName(const sead::SafeString& name) const override;
     const char* getNameRuleDetail() const override;

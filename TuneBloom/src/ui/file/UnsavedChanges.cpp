@@ -7,6 +7,7 @@
 #include <ui/file/DocumentState.h>
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
+#include <ui/file/LooseFileInfo.h>
 #include <ui/browser/FilesPanel.h>
 #include <ui/items/ItemColumns.h>
 #include <messages/Messages.h>
@@ -66,6 +67,7 @@ struct ChangeRow
     bool isProjectInfo;
     bool isDocumentHeader;
     s32 changeCount;
+    const char* infoType = messages::common::cProject;
 };
 
 }
@@ -155,6 +157,21 @@ bool DocumentHasChanges(Document& document)
     return isModified || !FindRemovedItems(document, present).empty();
 }
 
+static ChangeRow MakeInfoRow(Document& document, s32 documentIndex)
+{
+    ChangeRow row = { &document, documentIndex, nullptr, Item::ItemType::Invalid, 0, messages::common::cProjectInfo, ChangeKind::Modified, true, false, 0 };
+
+    if (document.hasProjectList())
+        return row;
+
+    FileFacts facts;
+
+    row.name = document.displayName();
+    row.infoType = document.getFileFacts(&facts) && facts.kindName ? facts.kindName : messages::common::cFile;
+
+    return row;
+}
+
 static void CollectDocumentChanges(Document& document, s32 documentIndex)
 {
     DocumentFocus focus(&document);
@@ -164,7 +181,7 @@ static void CollectDocumentChanges(Document& document, s32 documentIndex)
     sRows.push_back({ &document, documentIndex, nullptr, Item::ItemType::Invalid, 0, document.displayName(), ChangeKind::Modified, false, true, 0 });
 
     if (document.isInfoModified())
-        sRows.push_back({ &document, documentIndex, nullptr, Item::ItemType::Invalid, 0, messages::common::cProjectInfo, ChangeKind::Modified, true, false, 0 });
+        sRows.push_back(MakeInfoRow(document, documentIndex));
 
     std::unordered_set<u64> present;
 
@@ -237,7 +254,7 @@ static const char* GetKindText(ChangeKind kind)
 static const char* GetTypeText(const ChangeRow& row)
 {
     if (row.isProjectInfo)
-        return messages::common::cProject;
+        return row.infoType;
 
     return GetItemTypeName(row.itemType);
 }
@@ -351,9 +368,8 @@ static void DrawDocumentHeaderRow(const ChangeRow& row)
 
     PushTableRowClipRect(ImVec2(bandMin.x, cursor.y), ImVec2(table->WorkRect.Max.x, bandMin.y + ImGui::GetFrameHeight() * 2.0f));
     ImGui::SetCursorScreenPos(bandMin);
-    const sead::FormatFixedSafeString<32> saveLabel(ICON_LC_SAVE " %s", messages::common::cSave);
 
-    if (DrawSectionTitle(row.name.c_str(), bandWidth, count.cstr(), saveLabel.cstr(), GetFileKindIcon(kind), ImGui::GetColorU32(GetFileKindColor(kind)), cursor.x - bandMin.x))
+    if (DrawSectionTitle(row.name.c_str(), bandWidth, row.changeCount > 0 ? count.cstr() : nullptr, messages::common::cSave, GetFileKindIcon(kind), ImGui::GetColorU32(GetFileKindColor(kind)), cursor.x - bandMin.x))
         sSaveRequest = row.document;
 
     ImGui::PopClipRect();
@@ -696,6 +712,10 @@ u64 GetEditGeneration()
 void SetUnsavedChanges(bool dirty)
 {
     Document* document = ActiveDocument();
+    const bool isEdit = dirty;
+
+    if (isEdit && document && document->isChangeCheckComplete())
+        dirty = DocumentHasChanges(*document);
 
     if (!dirty)
     {
@@ -708,7 +728,7 @@ void SetUnsavedChanges(bool dirty)
 
     DocumentState& state = document->state();
 
-    if (dirty)
+    if (isEdit)
     {
         state.editGeneration = modelevents::NewEditGeneration();
         PinDocument(document);

@@ -12,7 +12,7 @@
 
 static void DrawReplaceButton(WaveFile* wave, f32 buttonSize)
 {
-    if (ImGui::Button(ICON_LC_REPLACE "##Replace", ImVec2(buttonSize, buttonSize)))
+    if (ImGui::Button(ICON_LC_ARROW_DOWN_UP "##Replace", ImVec2(buttonSize, buttonSize)))
         RequestWaveFileReplace(wave);
 
     ImGui::SetItemTooltip("%s", messages::import::cReplaceWaveFileMenuLabel);

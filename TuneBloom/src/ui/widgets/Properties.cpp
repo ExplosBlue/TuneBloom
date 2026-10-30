@@ -16,6 +16,7 @@
 static constexpr f32 cGroupBoxTintAlpha = 0.25f;
 static constexpr f32 cGroupBoxGapEm     = 0.5f;
 static constexpr f32 cPageHeaderGapEm   = 0.5f;
+static constexpr f32 cChoiceGapEm       = 1.0f;
 
 static constexpr f32 cPropertyLabelWidthEm = 7.2f;
 
@@ -176,7 +177,7 @@ f32 CalcChoiceRowWidth(const char* const* labels, s32 labelNum)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
 
-    f32 width = style.ItemSpacing.x * (labelNum - 1);
+    f32 width = ImFloor(ImGui::GetFontSize() * cChoiceGapEm) * (labelNum - 1);
 
     for (s32 i = 0; i < labelNum; i++)
         width += ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(labels[i], nullptr, true).x;
@@ -187,11 +188,12 @@ f32 CalcChoiceRowWidth(const char* const* labels, s32 labelNum)
 bool DrawChoiceRow(s32* selected, const char* const* labels, s32 labelNum, const char* const* details)
 {
     const s32 oldSelected = *selected;
+    const f32 gap = ImFloor(ImGui::GetFontSize() * cChoiceGapEm);
 
     for (s32 i = 0; i < labelNum; i++)
     {
         if (i > 0)
-            ImGui::SameLine();
+            ImGui::SameLine(0.0f, gap);
 
         ImGui::RadioButton(labels[i], selected, i);
 
@@ -361,9 +363,46 @@ static void DrawSectionBand(const ImVec2& min, const ImVec2& max, ImU32 fill)
     draw->AddRect(min, bandMax, ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
 }
 
+static bool BeginSectionBody(s32 columnNum, ImGuiTableFlags flags, const f32* columnWeights, f32 minContentHeight, s32 line = 0)
+{
+    const f32 em = ImGui::GetFontSize();
+    const ImVec2 padding(ImFloor(em * cPropertySectionPadXEm), ImFloor(em * cPropertySectionPadYEm));
+
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, padding);
+
+    sead::FixedSafeString<16> id("##body");
+    if (line > 0)
+        id.appendWithFormat("%d", line);
+
+    if (!ImGui::BeginTable(id.cstr(), columnNum, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | flags))
+    {
+        ImGui::PopStyleVar();
+        ImGui::PopID();
+        return false;
+    }
+
+    if (columnWeights)
+    {
+        for (s32 i = 0; i < columnNum; i++)
+            ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthStretch, columnWeights[i]);
+    }
+
+    if (minContentHeight > 0.0f)
+        ImGui::TableNextRow(ImGuiTableRowFlags_None, minContentHeight + padding.y * 2.0f);
+
+    ImGui::TableNextColumn();
+
+    return true;
+}
+
 f32 CalcSectionTitleHeight()
 {
     return ImGui::GetFrameHeight() + ImFloor(ImGui::GetFontSize() * cPropertySectionBandPadEm) * 2.0f;
+}
+
+static f32 CalcCapCenterTextY(f32 top, f32 height)
+{
+    return ImFloor(top + height * 0.5f - CalcCapCenterOffset(ImGui::GetFont(), ImGui::GetFontSize()) + 0.5f);
 }
 
 bool DrawSectionTitle(const char* title, f32 width, const char* status, const char* action, const char* icon, u32 iconColor, f32 textInset)
@@ -373,9 +412,10 @@ bool DrawSectionTitle(const char* title, f32 width, const char* status, const ch
     const f32 inset = textInset >= 0.0f ? textInset : bandPad + style.FramePadding.x;
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const ImVec2 max(pos.x + width, pos.y + CalcSectionTitleHeight());
-    ImVec2 textPos(pos.x + inset, pos.y + bandPad + style.FramePadding.y);
-    const f32 actionWidth = action ? ImGui::CalcTextSize(action).x + style.FramePadding.x * 2.0f : 0.0f;
-    const f32 statusRight = action ? max.x - bandPad - actionWidth - style.ItemSpacing.x : max.x - inset;
+    ImVec2 textPos(pos.x + inset, CalcCapCenterTextY(pos.y, max.y - pos.y));
+    const f32 actionWidth = action ? CalcTextActionWidth(action) : 0.0f;
+    const f32 actionX = max.x - inset + style.FramePadding.x - actionWidth;
+    const f32 statusRight = action ? actionX + style.FramePadding.x - ImFloor(ImGui::GetFontSize()) : max.x - inset;
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
     bool pressed = false;
@@ -395,8 +435,8 @@ bool DrawSectionTitle(const char* title, f32 width, const char* status, const ch
 
     if (action)
     {
-        ImGui::SetCursorScreenPos(ImVec2(max.x - bandPad - actionWidth, pos.y + bandPad));
-        pressed = ImGui::Button(action);
+        ImGui::SetCursorScreenPos(ImVec2(actionX, pos.y));
+        pressed = DrawTextAction("##SectionAction", action, max.y - pos.y, textPos.y - pos.y);
         ImGui::SetCursorScreenPos(pos);
     }
 
@@ -477,18 +517,8 @@ bool BeginPropertySection(const char* title, bool* enabled, bool* changed, bool 
     }
 
     ImGui::SetCursorScreenPos(ImVec2(pos.x, max.y - 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(ImFloor(em * cPropertySectionPadXEm), ImFloor(em * cPropertySectionPadYEm)));
 
-    if (!ImGui::BeginTable("##body", columnNum, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV))
-    {
-        ImGui::PopStyleVar();
-        ImGui::PopID();
-        return false;
-    }
-
-    ImGui::TableNextColumn();
-
-    return true;
+    return BeginSectionBody(columnNum, ImGuiTableFlags_None, nullptr, 0.0f);
 }
 
 void EndPropertySection()
@@ -496,6 +526,40 @@ void EndPropertySection()
     ImGui::EndTable();
     ImGui::PopStyleVar();
     ImGui::PopID();
+}
+
+f32 CalcCardPadX()
+{
+    return ImFloor(ImGui::GetFontSize() * cPropertySectionPadXEm);
+}
+
+f32 CalcCardBottomExtra()
+{
+    return ImFloor(ImGui::GetFontSize() * cPropertySectionPadYEm) + 1.0f;
+}
+
+bool BeginCard(const char* title, const char* status, s32 columnNum, const f32* columnWeights, f32 minContentHeight)
+{
+    ImGui::PushID(title);
+
+    DrawSectionTitle(title, ImGui::GetContentRegionAvail().x, status, nullptr, nullptr, 0, CalcCardPadX() + 1.0f);
+
+    return BeginSectionBody(columnNum, ImGuiTableFlags_BordersInnerH, columnWeights, minContentHeight);
+}
+
+bool NextCardLine(s32 line, s32 columnNum, const f32* columnWeights)
+{
+    ImGui::EndTable();
+    ImGui::PopStyleVar();
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y - 1.0f);
+
+    return BeginSectionBody(columnNum, ImGuiTableFlags_BordersInnerH, columnWeights, 0.0f, line);
+}
+
+void EndCard()
+{
+    EndPropertySection();
 }
 
 static constexpr f32 cPanelHeaderGapEm  = 0.3f;

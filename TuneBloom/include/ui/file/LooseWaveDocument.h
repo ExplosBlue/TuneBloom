@@ -19,7 +19,7 @@ public:
     bool showsItemInInfo() const override;
     StreamSource activeStreamSource() override;
     PlayableFile playableFile() override;
-    void formatFileFacts(sead::BufferedSafeString* out) const override;
+    bool getFileFacts(FileFacts* out) const override;
     Item* defaultSelection() override;
 
     void forEachItemList(const std::function<void(Item::List&)>& visit) override;

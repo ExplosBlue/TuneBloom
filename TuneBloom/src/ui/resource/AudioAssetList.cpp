@@ -346,7 +346,7 @@ static void AudioAssetContextMenuFunc(Item* item)
     const char* replaceReason = messages::resource::cSelectOneAudioAsset;
     const bool canReplace = single && ActiveAudioResource().canReplaceAudio(*asset, &replaceReason);
 
-    if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace, canReplace, replaceReason))
+    if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace, canReplace, replaceReason))
         RequestAudioAssetReplace(asset);
 
     if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::resource::cImportAudioFile, canReplace, replaceReason))
@@ -442,7 +442,7 @@ static void AudioAssetCreateProperties(bool clear, Item* item, bool* validate)
 
     DrawCreateFormatRow(&sCreateImport);
     DrawStreamRow(&sCreateImport);
-    DrawWaveImportInfo(GetImportEncoding(sCreateImport, GetCreateKind(), nullptr), &sCreateImport.info, sead::FormatFixedSafeString<560>(messages::import::cWaveHeaderFormat, sCreateImport.fileName.cstr()).cstr());
+    DrawWaveImportFormInfo(GetImportEncoding(sCreateImport, GetCreateKind(), nullptr), &sCreateImport.info);
 }
 
 static InstanciateItemCallback CreateAudioAssetFunc(bool clear)
@@ -493,7 +493,7 @@ static void DrawAssetReplacePopup()
     CenterNextDialog();
     ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
 
-    if (!BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_REPLACE " %s###AssetWavImport", messages::resource::cReplaceAudioTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (!BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ARROW_DOWN_UP " %s###AssetWavImport", messages::common::cReplaceAudio).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
     AudioAsset* asset = sReplaceImport.target;

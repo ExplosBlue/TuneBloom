@@ -76,9 +76,11 @@ void DrawItemColumnCells(const Item* item, const ItemColumn* columns, u32 column
 void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* text, ImU32 color, bool alignRight = false);
 bool IsItemNotLoaded(const Item* item);
 ImVec4 GetItemValueColor();
+f32 CalcItemCellPadX();
 void PushItemTablePadding();
 void PushTableRowClipRect(const ImVec2& rowMin, const ImVec2& rowMax);
-void DrawTableGroupRow(const char* title);
+f32 CalcTableValueRight();
+void DrawTableGroupRow(const char* title, f32 topGap);
 void DrawItemCount(s32 shown, s32 total, const char* typeName, const char* note = nullptr);
 bool SortItemRows(std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount);
 bool SortItemRowsCached(u32 id, std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount);

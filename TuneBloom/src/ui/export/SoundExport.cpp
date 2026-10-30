@@ -396,7 +396,7 @@ static f64 DrawExportTimelineBox(const SoundExportSummary& summary, s32 count)
     if (!single)
         ImGui::TextColored(valueColor, messages::common::cCountOfFormat, FormatCountText(summary.loopNum).cstr(), FormatCountText(count).cstr());
     else if (summary.loopNum > 0)
-        ImGui::TextColored(valueColor, messages::exporting::cLoopRangeFormat, FormatExportTime(summary.introSec).cstr(), FormatExportTime(summary.introSec + summary.loopSec).cstr());
+        ImGui::TextColored(valueColor, messages::common::cLoopRangeFormat, FormatExportTime(summary.introSec).cstr(), FormatExportTime(summary.introSec + summary.loopSec).cstr());
     else if (summary.noEndNum > 0)
         ImGui::TextDisabled("%s", messages::common::cNotFound);
 

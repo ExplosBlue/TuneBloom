@@ -13,6 +13,12 @@ f32 CalcSectionTitleHeight();
 bool DrawSectionTitle(const char* title, f32 width, const char* status = nullptr, const char* action = nullptr, const char* icon = nullptr, u32 iconColor = 0, f32 textInset = -1.0f);
 bool BeginPropertySection(const char* title, bool* enabled = nullptr, bool* changed = nullptr, bool defaultOpen = true, s32 columnNum = 1, const char* detail = nullptr, const char* value = nullptr, const char* enableDetail = nullptr);
 void EndPropertySection();
+
+f32 CalcCardPadX();
+f32 CalcCardBottomExtra();
+bool BeginCard(const char* title, const char* status = nullptr, s32 columnNum = 1, const f32* columnWeights = nullptr, f32 minContentHeight = 0.0f);
+bool NextCardLine(s32 line, s32 columnNum = 1, const f32* columnWeights = nullptr);
+void EndCard();
 void RegisterPropertySettings();
 
 bool BeginPropertyBox(const char* id);

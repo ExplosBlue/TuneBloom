@@ -185,11 +185,17 @@ static openqueue::Request sPendingOpen;
 static bool sHasPendingOpen = false;
 static f64 sPendingOpenTime = 0.0;
 static sead::FixedSafeString<512> sStartupFile;
+static bool sIsStartupPlayer = false;
 
 void SetStartupFile(const char* path)
 {
     if (path && std::strlen(path) < static_cast<size_t>(sStartupFile.getBufferSize()))
         sStartupFile = path;
+}
+
+void SetStartupPlayer()
+{
+    sIsStartupPlayer = true;
 }
 
 static FileFilter sDocumentFilters[] = {
@@ -232,7 +238,7 @@ static void RecordDocumentPath()
     if (document->filePath().isEmpty())
         return;
 
-    if (!document->state().isPreview)
+    if (IsRememberedDocument(document))
         AddRecentFile(document->filePath().cstr());
 
     RecordDocumentSession();
@@ -257,6 +263,12 @@ void RunStartupAction()
     if (openqueue::Peek(&launch))
     {
         PreparePlayerFrame(launch);
+        return;
+    }
+
+    if (sIsStartupPlayer)
+    {
+        PrepareEmptyPlayerFrame();
         return;
     }
 

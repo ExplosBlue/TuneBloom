@@ -2,6 +2,7 @@
 
 #include <ui/file/FileFlow.h>
 #include <ui/file/RecentFiles.h>
+#include <ui/items/ItemColumns.h>
 #include <ui/widgets/Properties.h>
 #include <messages/Messages.h>
 
@@ -10,9 +11,14 @@
 #include <cstdio>
 #include <string>
 
+static f32 CalcStartBorder()
+{
+    return ImMax(ImGui::GetStyle().ChildBorderSize, 1.0f);
+}
+
 static bool BeginStartChild()
 {
-    const f32 border = ImMax(ImGui::GetStyle().ChildBorderSize, 1.0f);
+    const f32 border = CalcStartBorder();
     const ImVec2 size = ImGui::GetContentRegionAvail() + ImVec2(0.0f, border * 2.0f);
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() - border);
@@ -36,7 +42,7 @@ void DrawStartPage()
         char count[16];
         snprintf(count, sizeof(count), "%d", fileNum);
 
-        DrawSectionTitle(messages::common::cRecentFiles, ImGui::GetContentRegionAvail().x, fileNum > 0 ? count : nullptr);
+        DrawSectionTitle(messages::common::cRecentFiles, ImGui::GetContentRegionAvail().x, fileNum > 0 ? count : nullptr, nullptr, nullptr, 0, CalcStartBorder() + CalcItemCellPadX());
         open = DrawRecentFilesTable(&path);
     }
     ImGui::EndChild();

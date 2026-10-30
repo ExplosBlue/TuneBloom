@@ -5,7 +5,10 @@
 #include <messages/Messages.h>
 #include <bfsar/model/MessageLog.h>
 #include <ui/resource/ResourceViews.h>
+#include <ui/wave/WaveFormatUI.h>
 
+#include <aal/AudioAsset.h>
+#include <aal/Bwav.h>
 #include <bfsar/io/FileIo.h>
 #include <scan/FileProbe.h>
 
@@ -142,21 +145,57 @@ PlayableFile AudioResourceDocument::playableFile()
     return playable;
 }
 
-void AudioResourceDocument::formatFileFacts(sead::BufferedSafeString* out) const
+u32 AudioResourceDocument::getOpusBitrate(const AudioAsset& asset) const
 {
-    sead::FixedSafeString<16> version;
-    FormatResourceVersion(&version, mResource.getVersion());
+    const AudioAssetFile& file = asset.getStreamFile() ? asset.getStreamFile() : asset.getFile();
 
-    out->format("%s %s", GetResourceFormatInfo(mResource.getFormat()).displayName, version.cstr());
+    if (file != mOpusBitrateFile)
+    {
+        mOpusBitrateFile = file;
+        mOpusBitrate = GetAudioAssetOpusBitrate(asset);
+    }
+
+    return mOpusBitrate;
+}
+
+void AudioResourceDocument::setAssetFacts(FileFacts* facts, const AudioAsset& asset) const
+{
+    const AudioAssetInfo& info = asset.getInfo();
+
+    facts->sampleRate = info.sampleRate;
+    facts->sampleCount = info.sampleCount;
+    facts->channelNum = info.channelCount;
+    facts->isLoop = info.isLoop;
+    facts->loopStartFrame = info.loopStartFrame;
+    facts->loopEndFrame = info.loopEndFrame;
+
+    aal::BwavCodec codec;
+
+    if (!GetAudioAssetBwavCodec(asset, &codec))
+        return;
+
+    facts->encoding = cBwavCodecNames[static_cast<s32>(codec)];
+
+    if (codec == aal::BwavCodec::Opus)
+        facts->bitrate = getOpusBitrate(asset) * info.channelCount;
+    else if (codec == aal::BwavCodec::Pcm16)
+        facts->bitrate = CalcPcmBitrate(info.sampleRate, info.channelCount, 16);
+    else
+        facts->bitrate = CalcAdpcmBitrate(info.sampleRate, info.channelCount);
+}
+
+bool AudioResourceDocument::getFileFacts(FileFacts* out) const
+{
+    out->format = GetAudioResourceFormat(mResource);
+    out->kindName = messages::common::cWaveFile;
 
     for (const Item* asset : mResource.getAssetList())
     {
-        const AudioAssetInfo& info = static_cast<const AudioAsset*>(asset)->getInfo();
-
-        AppendRateFact(out, info.sampleRate);
-        AppendChannelFact(out, info.channelCount);
+        setAssetFacts(out, *static_cast<const AudioAsset*>(asset));
         break;
     }
+
+    return true;
 }
 
 bool AudioResourceDocument::isValidName(const sead::SafeString& name) const

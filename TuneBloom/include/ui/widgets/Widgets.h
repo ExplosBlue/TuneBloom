@@ -9,7 +9,12 @@
 
 #include <string>
 
+inline constexpr f32 cSmallFontSize = 18.0f;
+
 void NormalizePathSlashes(sead::BufferedSafeString* path);
+ImFont* FindFontOfSize(f32 size);
+ImFont* GetSmallFont();
+f32 CalcCapCenterOffset(const ImFont* font, f32 size);
 
 enum class TransportGlyph
 {
@@ -31,6 +36,8 @@ bool DrawGlyphButton(const char* id, TransportGlyph glyph, const ImVec2& itemSiz
 bool TransportButton(TransportGlyph glyph, const char* id, const ImVec2& size = ImVec2(0.0f, 0.0f));
 bool PlayToggleButton(TransportGlyph glyph, const char* id, const ImVec2& size, bool playing);
 bool ToggleButton(const char* label, bool on, const ImVec2& size = ImVec2(0.0f, 0.0f));
+f32 CalcTextActionWidth(const char* label);
+bool DrawTextAction(const char* id, const char* label, f32 height, f32 textOffsetY, bool* outHovered = nullptr);
 bool IsItemEditCommitted(bool changed);
 f32 GetRowButtonSize();
 bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing);
@@ -50,6 +57,7 @@ sead::FixedSafeString<24> FormatPanLabel(f32 pan);
 sead::FixedSafeString<24> FormatPanLabel(u8 pan, u8 min, u8 center, u8 max);
 sead::FixedSafeString<32> FormatCountText(u64 count);
 
+f32 CalcVersionUIWidth();
 bool DrawVersionUI(u32 *versionPtr, ArchiveFormat format, bool showLabel = true);
 bool DrawInnerVersionUI(u32 *versionPtr, u32 versionByteNum = 3);
 

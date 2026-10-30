@@ -13,6 +13,7 @@
 #include <ui/project/FileLists.h>
 #include <ui/file/FileWindow.h>
 #include <ui/file/StartPage.h>
+#include <ui/items/ItemColumnSettings.h>
 #include <ui/items/ItemList.h>
 #include <ui/project/ItemViews.h>
 #include <ui/widgets/Knob.h>
@@ -43,6 +44,7 @@
 #include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
+#include <imgui/imgui_custom.h>
 #include <imgui/imgui_internal.h>
 
 #include <framework/seadProcessMeter.h>
@@ -51,6 +53,7 @@
 
 static bool sShowSystemWindow = false;
 static bool sResetLayoutRequest = false;
+static bool sRebuildDocksRequest = false;
 static bool sIsFileEditorShown = false;
 
 static constexpr s32 cLayoutVersion = 2;
@@ -117,6 +120,38 @@ void RequestResetLayout()
     sResetLayoutRequest = true;
 }
 
+static bool IsLayoutWindow(const ImGuiWindow* window)
+{
+    if (window->Flags & (ImGuiWindowFlags_ChildWindow | ImGuiWindowFlags_ChildMenu | ImGuiWindowFlags_Tooltip))
+        return false;
+
+    return !(window->Flags & ImGuiWindowFlags_Popup) || !window->WasActive;
+}
+
+static void ResetLayout()
+{
+    ImGuiContext& g = *GImGui;
+
+    ImGui::ClearIniSettings();
+
+    for (ImGuiWindow* window : g.Windows)
+    {
+        if (IsLayoutWindow(window))
+            ImGui::ResetWindowSettings(window);
+    }
+
+    for (s32 i = 0; i < g.Tables.GetMapSize(); i++)
+    {
+        if (ImGuiTable* table = g.Tables.TryGetMapData(i))
+            table->IsResetAllRequest = true;
+    }
+
+    ResetItemColumnSettings();
+
+    sRebuildDocksRequest = true;
+    ImGui::MarkIniSettingsDirty();
+}
+
 static void* LayoutSettingsReadOpen(ImGuiContext*, ImGuiSettingsHandler*, const char*)
 {
     return &sSavedLayoutVersion;
@@ -133,7 +168,7 @@ static void LayoutSettingsReadLine(ImGuiContext*, ImGuiSettingsHandler*, void*, 
 static void LayoutSettingsApplyAll(ImGuiContext*, ImGuiSettingsHandler*)
 {
     if (sSavedLayoutVersion < cLayoutVersion)
-        RequestResetLayout();
+        sRebuildDocksRequest = true;
 
     sSavedLayoutVersion = cLayoutVersion;
 }
@@ -237,6 +272,12 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
     if (viewport == NULL)
         viewport = ImGui::GetMainViewport();
 
+    if (sResetLayoutRequest)
+    {
+        sResetLayoutRequest = false;
+        ResetLayout();
+    }
+
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::SetNextWindowViewport(viewport->ID);
@@ -261,10 +302,10 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
 
     ImGuiID dockspace_id = ImGui::GetID("DockSpace");
 
-    if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr || sResetLayoutRequest)
+    if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr || sRebuildDocksRequest)
     {
         DockBuilder(dockspace_id, viewport->WorkSize);
-        sResetLayoutRequest = false;
+        sRebuildDocksRequest = false;
     }
     else if (TakeOutputMeterPlaceRequest())
     {

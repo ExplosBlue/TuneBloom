@@ -17,6 +17,7 @@ public:
     bool isUniqueName(const sead::SafeString& name, const Item* ignoreItem) const override;
     void renumber(Item::List& list) override;
     void captureItemBaselines() override;
+    bool isChangeCheckComplete() const override;
 
     ParseContext parseContext() const override;
 

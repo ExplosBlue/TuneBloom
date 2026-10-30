@@ -12,7 +12,6 @@
 #include <ui/player/OutputMeter.h>
 #include <ui/widgets/PanelLayout.h>
 #include <ui/app/PopupMgr.h>
-#include <ui/project/ProjectViews.h>
 #include <ui/widgets/Properties.h>
 #include <ui/file/RecentFiles.h>
 #include <ui/app/Shortcuts.h>
@@ -65,21 +64,15 @@ struct SampleRate
 static constexpr f32 cWindowWidthEm  = 42.0f;
 static constexpr f32 cWindowHeightEm = 29.0f;
 static constexpr f32 cNavWidthEm     = 10.0f;
-static constexpr f32 cNavRowGapEm    = 0.5f;
-static constexpr f32 cPagePadXEm     = 1.0f;
-static constexpr f32 cPagePadYEm     = 0.8f;
 static constexpr f32 cRowGapEm       = 0.4f;
 static constexpr f32 cLabelWidthEm   = 10.0f;
 static constexpr f32 cRowButtonEm    = 6.5f;
 static constexpr f32 cHueHandleEm    = 0.5f;
-static constexpr f32 cNavBarWidthEm  = 0.15f;
 static constexpr f32 cCardHeightEm   = 4.2f;
 static constexpr f32 cCardGapEm      = 0.6f;
 
 static constexpr f32 cMidiNotesHeightEm = 7.0f;
 static constexpr f32 cUIScales[]        = { 1.0f, 1.25f, 1.5f };
-
-static constexpr f32 cNavTintAlpha = 0.25f;
 
 static constexpr uicolors::Themed<f32> cSliderFillAlpha = { 0.55f, 0.22f };
 static constexpr f32 cSliderValueWidthEm = 4.5f;
@@ -1128,6 +1121,16 @@ static bool DrawUIScaleRow(f32* scale)
     return changed;
 }
 
+static void DrawWindowLayoutRow()
+{
+    DrawRowLabel(messages::preferences::cWindowLayoutLabel);
+
+    if (ImGui::Button(messages::common::cReset, ImVec2(ImFloor(ImGui::GetFontSize() * cRowButtonEm), 0.0f)))
+        RequestResetLayout();
+
+    DrawDetailTooltip(messages::preferences::cWindowLayoutDetail);
+}
+
 static void DrawInterfacePage()
 {
     InterfaceSettings& settings = GetInterfaceSettings();
@@ -1142,6 +1145,9 @@ static void DrawInterfacePage()
     if (restart ? BeginGroupBoxWithStatus(messages::preferences::cBoxDisplay, messages::preferences::cUIScaleRestart) : BeginGroupBox(messages::preferences::cBoxDisplay))
     {
         selected |= DrawUIScaleRow(&settings.uiScale);
+
+        DrawWindowLayoutRow();
+
         selected |= DrawTimeFormatRow(&settings.twelveHourClock);
         dragged |= DrawTooltipDelayRow(&settings.tooltipDelay, &released);
         EndGroupBox();
@@ -1252,33 +1258,24 @@ void DrawPreferencesMenu()
 
 static void DrawNavRows()
 {
-    const f32 em = ImGui::GetFontSize();
-
-    ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_FrameBg, cNavTintAlpha));
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().FramePadding.y);
-    ImGui::PushItemFlag(ImGuiItemFlags_SelectableDontClosePopup, true);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, ImFloor(em * cNavRowGapEm)));
-
     for (const PageInfo& info : cPages)
     {
         ImGui::PushID(static_cast<s32>(info.page));
 
-        if (DrawNavRow(info.icon, info.name, sPage == info.page))
+        if (DialogNavRow(info.icon, info.name, sPage == info.page))
             sPage = info.page;
-
-        if (sPage == info.page)
-        {
-            const ImVec2 rowMin = ImGui::GetItemRectMin();
-            const ImVec2 rowMax = ImGui::GetItemRectMax();
-
-            ImGui::GetWindowDrawList()->AddRectFilled(rowMin, ImVec2(rowMin.x + ImFloor(em * cNavBarWidthEm), rowMax.y), ImGui::GetColorU32(ImGuiCol_CheckMark));
-        }
 
         ImGui::PopID();
     }
+}
 
-    ImGui::PopStyleVar();
-    ImGui::PopItemFlag();
+static void DrawPage()
+{
+    for (const PageInfo& info : cPages)
+    {
+        if (info.page == sPage)
+            info.draw();
+    }
 }
 
 void DrawPreferencesWindow()
@@ -1305,44 +1302,16 @@ void DrawPreferencesWindow()
 
     const f32 em = ImGui::GetFontSize();
     const ImVec2 size(ImFloor(em * cWindowWidthEm), ImFloor(em * cWindowHeightEm));
-    const ImVec2 padding(ImFloor(em * cPagePadXEm), ImFloor(em * cPagePadYEm));
 
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, padding);
-
-    if (ImGui::BeginTable("##Pages", 2, ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV, size))
+    if (BeginNavDialog("##Pages", size, ImFloor(em * cNavWidthEm)))
     {
-        ImGui::TableSetupColumn("##Nav", ImGuiTableColumnFlags_WidthFixed, ImFloor(em * cNavWidthEm));
-        ImGui::TableSetupColumn("##Page", ImGuiTableColumnFlags_WidthStretch);
-
-        ImGui::TableNextColumn();
         DrawNavRows();
 
-        ImGui::TableNextColumn();
+        if (BeginNavDialogPage(static_cast<s32>(sPage)))
+            DrawPage();
 
-        for (const PageInfo& info : cPages)
-        {
-            if (info.page != sPage)
-                continue;
-
-            ImGui::PushID(static_cast<s32>(info.page));
-
-            if (ImGui::BeginChild("##Page", ImVec2(0.0f, size.y - padding.y * 2.0f), ImGuiChildFlags_None, ImGuiWindowFlags_NoBackground))
-            {
-                ImGuiWindow* page = ImGui::GetCurrentWindow();
-                page->WorkRect.Max.x -= 1.0f;
-                page->ContentRegionRect.Max.x -= 1.0f;
-
-                info.draw();
-            }
-
-            ImGui::EndChild();
-            ImGui::PopID();
-        }
-
-        ImGui::EndTable();
+        EndNavDialog();
     }
-
-    ImGui::PopStyleVar();
 
     if (sResetAllRequested)
     {
@@ -1360,7 +1329,7 @@ void DrawPreferencesWindow()
     GroupBoxGap();
     BeginDialogFooter({messages::common::cClose}, false);
 
-    if (DialogButton(messages::common::cClose) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) && shortcuts::Pressed(shortcuts::Action::CloseDialog)))
+    if (DialogButton(messages::common::cClose) || (ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows | ImGuiFocusedFlags_NoPopupHierarchy) && shortcuts::Pressed(shortcuts::Action::CloseDialog)))
         ImGui::CloseCurrentPopup();
 
     ImGui::EndPopup();

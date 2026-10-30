@@ -20,7 +20,14 @@ void BeginDialogFooter(std::initializer_list<const char*> labels, bool separator
 bool DialogButton(const char* label);
 
 void DialogRowGap();
+void DialogGroupGap();
 void DialogRow(const char* label, const char* help = nullptr);
+
+bool DrawNavRow(const char* icon, const char* name, bool selected, const char* value = nullptr, bool dim = false, bool title = false, f32 indent = 0.0f);
+bool BeginNavDialog(const char* id, const ImVec2& size, f32 navWidth);
+bool DialogNavRow(const char* icon, const char* name, bool selected);
+bool BeginNavDialogPage(s32 pageId);
+void EndNavDialog();
 
 bool BeginDialogList(const char* id, s32 columnNum, s32 rowNum, bool frameHeader = false);
 void EndDialogList();

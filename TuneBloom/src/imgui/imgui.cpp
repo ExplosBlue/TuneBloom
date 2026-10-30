@@ -5939,6 +5939,15 @@ static void InitOrLoadWindowSettings(ImGuiWindow* window, ImGuiWindowSettings* s
     }
 }
 
+// TuneBloom: layout reset
+namespace ImGui { void ResetWindowSettings(ImGuiWindow* window); }
+
+void ImGui::ResetWindowSettings(ImGuiWindow* window)
+{
+    window->Collapsed = false;
+    InitOrLoadWindowSettings(window, NULL);
+}
+
 static ImGuiWindow* CreateNewWindow(const char* name, ImGuiWindowFlags flags)
 {
     // Create window the first time

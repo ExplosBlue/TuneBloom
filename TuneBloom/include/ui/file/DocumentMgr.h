@@ -12,6 +12,7 @@ const std::vector<Document*>& GetOpenDocuments();
 Document* FindOpenDocument(const char* path);
 Document* FindPreviewDocument();
 bool HasUnsavedDocuments();
+bool IsRememberedDocument(const Document* document);
 std::string CanonicalDocumentPath(const char* path);
 
 void AddDocument(Document* document, bool isPreview);

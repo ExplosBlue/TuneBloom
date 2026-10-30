@@ -1148,7 +1148,7 @@ static void InstrumentContextMenuFunc(Item* item)
         const std::vector<Item*> targets = IsItemMultiSelected(item) ? sMultiSelectedItems : std::vector<Item*>{item};
         const bool canAutoName = std::any_of(targets.begin(), targets.end(), CanAutoNameInstrument);
 
-        if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace))
+        if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace))
             RequestReplaceInstrument(item, sCurrentEditBank);
 
         if (ContextMenuItem(ICON_LC_WAND_SPARKLES, messages::menu::cAutoName, canAutoName, messages::menu::cAutoNameNoWaveFile))

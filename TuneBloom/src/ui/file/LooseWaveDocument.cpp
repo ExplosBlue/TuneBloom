@@ -1,6 +1,7 @@
 #include <ui/file/LooseWaveDocument.h>
 
 #include <ui/file/LooseFileInfo.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/wave/LooseWaveInfo.h>
 
@@ -66,17 +67,15 @@ PlayableFile LooseWaveDocument::playableFile()
     return playable;
 }
 
-void LooseWaveDocument::formatFileFacts(sead::BufferedSafeString* out) const
+bool LooseWaveDocument::getFileFacts(FileFacts* out) const
 {
-    const WaveFile* wave = mFile.getWave();
+    out->format = fileFormat();
+    out->kindName = messages::common::cWaveFile;
 
-    FormatLooseFileFacts(out, fileFormat());
+    if (const WaveFile* wave = mFile.getWave())
+        SetWaveFacts(out, *wave);
 
-    if (!wave)
-        return;
-
-    AppendWaveFacts(out, *wave);
-    AppendChannelFact(out, static_cast<u32>(wave->getChannels().size()));
+    return true;
 }
 
 Item* LooseWaveDocument::defaultSelection()

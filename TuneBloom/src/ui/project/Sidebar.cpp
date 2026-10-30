@@ -126,7 +126,7 @@ static void DrawSwitchInWindow()
     ImGui::Dummy(ImVec2(0.0f, height));
 }
 
-bool FindSidebarStripColumn(ImRect* outColumn)
+bool FindSidebarStripWidth(f32* outWidth)
 {
     ImGuiWindow* window = ImGui::FindWindowByName(cSidebarWindowId);
 
@@ -139,15 +139,15 @@ bool FindSidebarStripColumn(ImRect* outColumn)
     if (!root->IsDockSpace() || node->Pos.x > root->Pos.x + 0.5f || node->Pos.y > root->Pos.y + 0.5f)
         return false;
 
-    *outColumn = node->Rect();
+    *outWidth = node->Size.x;
     return true;
 }
 
-void DrawSidebarSwitchInStrip(const ImRect& column, f32 top, f32 bottom)
+void DrawSidebarSwitchInStrip(const ImRect& column)
 {
     const f32 padX = ImGui::GetStyle().WindowPadding.x;
 
-    DrawSwitch(ImRect(column.Min.x + padX, top, column.Max.x - padX, bottom), column.Min.x, column.Max.x);
+    DrawSwitch(ImRect(column.Min.x + padX, column.Min.y, column.Max.x - padX, column.Max.y), column.Min.x, column.Max.x);
 
     sIsSwitchInStrip = true;
 }

@@ -68,7 +68,7 @@ inline constexpr const char* cDoubleClickToAdd = "Double-click to add";
 inline constexpr const char* cNoInstrumentSelected = "Select an Instrument";
 
 inline constexpr const char* cInstrumentNameFormat = "Instrument %d";
-inline constexpr const char* cNextProgramNumberTooltip = "Use the next free program number";
+inline constexpr const char* cNextProgramNumberTooltip = "Use Next Free Program Number";
 inline constexpr const char* cProgramNumberShared = "Already in use";
 inline constexpr const char* cVelocityMinFixed = "The lowest Velocity Region always starts at 0";
 inline constexpr const char* cVelocityMaxFixed = "The highest Velocity Region always ends at 127";

@@ -231,7 +231,7 @@ void DrawTrackListMenu(const TrackContext& ctx, TrackEdit* edit)
 
     ContextMenuSeparator();
 
-    if (ContextMenuCheckItem(messages::stream::cTrackMixerView, IsTrackMixerView()))
+    if (ContextMenuToggleItem(messages::stream::cTrackMixerView, IsTrackMixerView()))
         edit->toggleView = true;
 
     EndContextMenu();
@@ -266,7 +266,7 @@ static void DrawTrackMuteButton(const TrackContext& ctx, s32 index, const ImVec2
     const u32 bit = 1 << index;
     const u32 muteTracks = strmInfo.getMuteTracks();
 
-    if (!DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Mute", messages::stream::cTrackMuteShort).cstr(),(muteTracks & bit) != 0, uicolors::cMarker, size))
+    if (!DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Mute", messages::stream::cTrackMuteShort).cstr(), (muteTracks & bit) != 0, uicolors::cMarker, size))
         return;
 
     strmInfo.setMuteTracks(muteTracks ^ bit);
@@ -279,11 +279,7 @@ static void DrawTrackSoloButton(const TrackContext& ctx, s32 index, const ImVec2
     const u32 bit = 1 << index;
     const u32 soloTracks = strmInfo.getSoloTracks();
 
-    const bool pressed = DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Solo", messages::stream::cTrackSoloShort).cstr(),(soloTracks & bit) != 0, uicolors::PlaybackFill(), size);
-
-    ImGui::SetItemTooltip(messages::stream::cTrackSoloTipFormat, shortcuts::Label(shortcuts::Modifier::ToggleSelection));
-
-    if (!pressed)
+    if (!DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Solo", messages::stream::cTrackSoloShort).cstr(), (soloTracks & bit) != 0, uicolors::PlaybackFill(), size))
         return;
 
     if (shortcuts::Held(shortcuts::Modifier::ToggleSelection))

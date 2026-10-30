@@ -20,11 +20,11 @@ const SeqTimeline* ResolveSeqTimeline();
 
 void DrawPlayerUI();
 f32 CalcTransportRowHeight();
+f32 CalcCompactPlayerBarMaxWidth();
 void DrawCompactPlayerBar();
 void RegisterPlaybackSettings();
 
-bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate,
-                 bool seekable, bool allowDrag,
+bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate, bool seekable,
                  f32 loopStartFrac, f32 loopEndFrac, f32& outSeekFraction);
 
 void DrawPlayersUI();

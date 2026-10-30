@@ -163,9 +163,7 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
     }
 
     if (!sFileName.isEmpty())
-    {
-        DrawWaveImportInfo(&sEncoding, &sRiffWaveInfo, sead::FormatFixedSafeString<560>(messages::import::cWaveHeaderFormat, sFileName.cstr()).cstr());
-    }
+        DrawWaveImportFormInfo(MakeWaveImportEncoding(&sEncoding), &sRiffWaveInfo);
 
     return []() -> Item*
     {
@@ -335,7 +333,7 @@ void WaveFileContextMenuFunc(Item* item)
         const std::vector<WaveFile*> waves = CollectForAction<WaveFile>(item);
         const bool single = waves.size() == 1;
 
-        if (ContextMenuItem(ICON_LC_REPLACE, messages::common::cReplace, single, messages::menu::cSelectOneWaveFile))
+        if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace, single, messages::menu::cSelectOneWaveFile))
             RequestWaveFileReplace(wave);
 
         if (ContextMenuItem(ICON_LC_SLIDERS_HORIZONTAL, messages::import::cReimportMenuLabel, single, messages::menu::cSelectOneWaveFile))
@@ -491,7 +489,7 @@ void DrawWaveFilesUI()
 
     if (BeginListOptions(!sWaveFilesIncludeStream))
     {
-        if (ContextMenuCheckItem(messages::item::cShowStreamWaves, sWaveFilesIncludeStream))
+        if (ContextMenuToggleItem(messages::item::cShowStreamWaves, sWaveFilesIncludeStream))
             sWaveFilesIncludeStream = !sWaveFilesIncludeStream;
 
         ContextMenuSeparator();
@@ -536,7 +534,7 @@ void DrawWaveFileReplacePopup()
     CenterNextDialog();
     ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
 
-    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_REPLACE " %s###WavImport", messages::import::cReplaceWaveFileMenuLabel).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ARROW_DOWN_UP " %s###WavImport", messages::import::cReplaceWaveFileMenuLabel).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         SetNextWaveImportOldData(&sImportOldData, &sImportCleared);
 

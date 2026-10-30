@@ -13,6 +13,7 @@
 
 #include <core/TestHooks.h>
 #include <platform/OwnedWindow.h>
+#include <platform/WindowFrame.h>
 
 #include <ui/widgets/Dialogs.h>
 #include <ui/browser/FilesPanel.h>
@@ -20,9 +21,11 @@
 #include <ui/player/OutputMeter.h>
 #include <ui/player/PlayerFrame.h>
 #include <ui/sequence/SeqManual.h>
+#include <ui/settings/ColorUtil.h>
 #include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
 #include <ui/widgets/WindowAnimation.h>
+#include <ui/widgets/Widgets.h>
 
 #include "libs/IconsLucide.h"
 
@@ -58,23 +61,79 @@ static bool IsModalViewport(ImGuiViewport* viewport)
     return window && (window->Flags & ImGuiWindowFlags_Modal);
 }
 
+static ImU32 CalcBorderColor(ImGuiCol background)
+{
+    const ImVec4* colors = ImGui::GetStyle().Colors;
+    const ImVec4& border = colors[ImGuiCol_Border];
+
+    return ImGui::ColorConvertFloat4ToU32(ImLerp(uicolors::Opaque(colors[background]), uicolors::Opaque(border), border.w));
+}
+
+static ImGuiCol GetViewportBackground(ImGuiViewport* viewport)
+{
+    const ImGuiWindow* window = static_cast<ImGuiViewportP*>(viewport)->Window;
+
+    return window && (window->Flags & (ImGuiWindowFlags_Popup | ImGuiWindowFlags_Tooltip)) ? ImGuiCol_PopupBg : ImGuiCol_WindowBg;
+}
+
+static void RoundPlatformWindow(ImGuiViewport* viewport)
+{
+    if (!(viewport->Flags & ImGuiViewportFlags_NoDecoration))
+        return;
+
+    windowframe::SetRoundCorners(static_cast<GLFWwindow*>(viewport->PlatformHandle), CalcBorderColor(GetViewportBackground(viewport)));
+}
+
+static void UpdatePlatformWindowBorders()
+{
+    static ImU32 sPopupBorder = 0;
+    static ImU32 sWindowBorder = 0;
+
+    const ImU32 popupBorder = CalcBorderColor(ImGuiCol_PopupBg);
+    const ImU32 windowBorder = CalcBorderColor(ImGuiCol_WindowBg);
+
+    if (popupBorder == sPopupBorder && windowBorder == sWindowBorder)
+        return;
+
+    sPopupBorder = popupBorder;
+    sWindowBorder = windowBorder;
+
+    for (ImGuiViewport* viewport : ImGui::GetPlatformIO().Viewports)
+    {
+        if (static_cast<ImGuiViewportP*>(viewport)->PlatformWindowCreated)
+            RoundPlatformWindow(viewport);
+    }
+}
+
+static bool IsPopupViewport(ImGuiViewport* viewport)
+{
+    const ImGuiWindow* window = static_cast<ImGuiViewportP*>(viewport)->Window;
+
+    return window && (window->Flags & (ImGuiWindowFlags_Popup | ImGuiWindowFlags_ChildMenu | ImGuiWindowFlags_Tooltip));
+}
+
 static void ShowPlatformWindow(ImGuiViewport* viewport)
 {
-    const bool isModal = IsModalViewport(viewport);
+    RoundPlatformWindow(viewport);
 
-    if (isModal)
+    if (IsModalViewport(viewport))
         ownedwindow::prepare(viewport->PlatformHandleRaw);
 
     sShowPlatformWindow(viewport);
 
-    if (isModal)
+    if (IsPopupViewport(viewport))
         ownedwindow::attach(viewport->PlatformHandleRaw, ImGui::GetMainViewport()->PlatformHandleRaw);
 }
 
 static void DestroyPlatformWindow(ImGuiViewport* viewport)
 {
-    ownedwindow::detach(viewport->PlatformHandleRaw);
+    const bool isFading = ImGuiTask::instance()->isDrawing() && FadeOutPlatformWindow(viewport);
+
+    if (!isFading)
+        ownedwindow::detach(viewport->PlatformHandleRaw);
+
     sDestroyPlatformWindow(viewport);
+    static_cast<ImGuiViewportP*>(viewport)->LastAlpha = 1.0f;
 }
 
 static void HookPlatformWindows()
@@ -85,6 +144,22 @@ static void HookPlatformWindows()
     sDestroyPlatformWindow = platformIo.Platform_DestroyWindow;
     platformIo.Platform_ShowWindow = &ShowPlatformWindow;
     platformIo.Platform_DestroyWindow = &DestroyPlatformWindow;
+}
+
+static void UpdateWindowFrameTheme()
+{
+    static GLFWwindow* sWindow = nullptr;
+    static bool sIsDark = false;
+
+    GLFWwindow* window = static_cast<GLFWwindow*>(ImGui::GetMainViewport()->PlatformHandle);
+    const bool isDark = IsDarkTheme();
+
+    if (window == sWindow && isDark == sIsDark)
+        return;
+
+    sWindow = window;
+    sIsDark = isDark;
+    windowframe::SetDark(window, isDark);
 }
 
 ImGuiTask::ImGuiTask(const sead::TaskConstructArg& arg)
@@ -171,6 +246,8 @@ void ImGuiTask::prepare()
             io.Fonts->AddFontFromMemoryTTF(iconsFont, iconsArg.read_size, fontSize * cIconSizeEm, &iconsConfig, iconsRanges);
         }
 
+        io.Fonts->AddFontFromMemoryTTF(font, arg.read_size, ScaleSize(cSmallFontSize), &config);
+
         ImFontConfig dialogIconConfig;
         dialogIconConfig.FontDataOwnedByAtlas = false;
         dialogIconConfig.PixelSnapH = true;
@@ -232,6 +309,8 @@ void ImGuiTask::calc()
     ImGui::NewFrame();
 
     ApplyPlayerFrameStart();
+    UpdateWindowFrameTheme();
+    UpdatePlatformWindowBorders();
     testhooks::Update();
 
     mCalcMeter.measureEnd();
@@ -263,6 +342,7 @@ void ImGuiTask::draw()
 
         ImGui::UpdatePlatformWindows();
         ImGui::RenderPlatformWindowsDefault();
+        DrawPlatformWindowFades();
 
         // Restore the OpenGL rendering context to the main window DC, since platform windows might have changed it.
         glfwMakeContextCurrent(prevContext);

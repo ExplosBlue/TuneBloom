@@ -319,6 +319,7 @@ private:
     const BrowserFolder* getPackFolder(const FilesRow& row) const;
     s32 getRootFolder(s32 root) const;
     const BrowserFile* getRootFile(s32 root) const;
+    bool getRootValues(s32 root, const char** format, u64* size) const;
     const BrowserFile* getRowFile(const FilesRow& row) const;
     bool isExpandable(const FilesRow& row) const;
     bool isSearching() const;
@@ -361,11 +362,13 @@ private:
     bool drawSearchField();
 
     void drawKindMenu();
+    void drawViewOptions();
     bool isAnyKindHidden() const;
     void drawEmptyState(const char* text);
     void drawTable(FrameContext& ctx);
     void drawRow(FrameContext& ctx, const FilesRow& row);
     const std::string& getRowName(const FilesRow& row) const;
+    const std::string& getShownFileName(const BrowserFile& file) const;
     f32 calcRowNoteWidth(const FrameContext& ctx, const FilesRow& row) const;
     f32 calcNameWant(const FrameContext& ctx, const std::vector<FilesRow>& rows) const;
     void calcValueWidths(FrameContext& ctx, const std::vector<FilesRow>& rows) const;
@@ -373,7 +376,7 @@ private:
     RowFrame beginRow(FrameContext& ctx, const FilesRow& row, f32 indent);
     static bool isChevronClicked(const FrameContext& ctx, const RowFrame& frame);
     void drawRootRow(FrameContext& ctx, const FilesRow& row);
-    f32 drawRootLabel(const FrameContext& ctx, const FilesRow& row, const RowFrame& frame, f32 right);
+    f32 drawRootLabel(const FrameContext& ctx, const FilesRow& row, const RowFrame& frame, f32 right, bool isCountHidden, bool hasValues);
     void drawRootButtons(const FilesRoot& root, s32 index, const RowFrame& frame, bool isRowHovered);
     void drawRootMenu(const FilesRoot& root, s32 index);
     void drawStatusRow(FrameContext& ctx, const FilesRow& row);
@@ -386,7 +389,8 @@ private:
     void drawFileRow(FrameContext& ctx, const FilesRow& row);
     void drawSoundRow(FrameContext& ctx, const FilesRow& row);
     void drawValueCells(FrameContext& ctx, const char* format, const char* size);
-    f32 drawRowLabel(const ImVec2& pos, f32 right, const char* icon, ImU32 iconColor, const char* name, ImU32 nameColor, const char* note, ImU32 noteColor, s32 prefixLength = 0);
+    f32 drawRowLabel(const ImVec2& pos, f32 right, const char* icon, ImU32 iconColor, const char* name, ImU32 nameColor, const char* note, ImU32 noteColor, s32 prefixLength = 0, const char* count = nullptr, bool isCountShown = true);
+    bool isSpanningRow(const FilesRow& row) const;
     f32 drawRowName(ImDrawList* drawList, const ImVec2& pos, f32 right, const char* name, ImU32 color, s32 prefixLength);
     void drawFileTooltip(const BrowserFile& file, bool showPath = false);
     void drawArchiveContents(const ArchiveContents& contents);
@@ -503,4 +507,8 @@ private:
     bool mScrollToSelected = false;
     bool mAutoPlay = true;
     bool mGroupByPrefix = false;
+    bool mShowExtensions = false;
+    bool mShowFormat = true;
+    bool mShowSize = false;
+    bool mShowCount = false;
 };

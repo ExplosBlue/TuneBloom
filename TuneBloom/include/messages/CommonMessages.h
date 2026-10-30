@@ -53,6 +53,7 @@ inline constexpr const char* cChannels = "Channels";
 inline constexpr const char* cEncoding = "Encoding";
 inline constexpr const char* cBitrate = "Bitrate";
 inline constexpr const char* cLoop = "Loop";
+inline constexpr const char* cLoopRangeFormat = "%s to %s";
 inline constexpr const char* cLoopOn = "Loop: on";
 inline constexpr const char* cLoopOff = "Loop: off";
 inline constexpr const char* cStart = "Start";
@@ -107,7 +108,7 @@ inline constexpr const char* cClose = "Close";
 inline constexpr const char* cDelete = "Delete";
 inline constexpr const char* cDuplicate = "Duplicate";
 inline constexpr const char* cCompressedFilterFormat = "Compressed %s (*.%s.%s)";
-inline constexpr const char* cCompressedFileTypeFormat = "Compressed File (%s)";
+inline constexpr const char* cCompressedFileTypeFormat = "%s Compressed File";
 inline constexpr const char* cExport = "Export";
 inline constexpr const char* cImport = "Import";
 inline constexpr const char* cFind = "Find";
@@ -118,14 +119,15 @@ inline constexpr const char* cSoundArchive = "Sound Archive";
 inline constexpr const char* cAudioResource = "Audio Resource";
 inline constexpr const char* cFileType = "File Type";
 inline constexpr const char* cExtension = "Extension";
-inline constexpr const char* cOpenArchive = "Open Archive";
 inline constexpr const char* cPause = "Pause";
 inline constexpr const char* cPlay = "Play";
 inline constexpr const char* cStop = "Stop";
 inline constexpr const char* cRename = "Rename";
 inline constexpr const char* cReplace = "Replace";
+inline constexpr const char* cReplaceAudio = "Replace Audio";
 inline constexpr const char* cReset = "Reset";
 inline constexpr const char* cRestore = "Restore";
+inline constexpr const char* cMinimize = "Minimize";
 inline constexpr const char* cSave = "Save";
 inline constexpr const char* cSelectAll = "Select All";
 inline constexpr const char* cPageUp = "Page Up";
@@ -250,7 +252,7 @@ namespace unit
 {
 
 inline constexpr const char* cHertzFormat = "%u Hz";
-inline constexpr const char* cKilobitsFormat = "%u kbit/s";
+inline constexpr const char* cKilobitsFormat = "%u kbps";
 inline constexpr const char* cBpmFormat = "%g BPM";
 inline constexpr const char* cHertzSample = "00000 Hz";
 

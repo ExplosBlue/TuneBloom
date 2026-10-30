@@ -62,7 +62,7 @@ bool DrawStreamPanelFoldTool()
 {
     const bool pressed = DrawTabRowTool(sTrackFolded ? ICON_LC_CHEVRON_UP "###TrackFold" : ICON_LC_CHEVRON_DOWN "###TrackFold", true);
 
-    ImGui::SetItemTooltip("%s", sTrackFolded ? messages::common::cRestore : messages::stream::cTrackFold);
+    ImGui::SetItemTooltip("%s", sTrackFolded ? messages::common::cRestore : messages::common::cMinimize);
 
     return pressed;
 }

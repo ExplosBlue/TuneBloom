@@ -1,6 +1,7 @@
 #include <ui/file/LooseStreamDocument.h>
 
 #include <ui/file/LooseFileInfo.h>
+#include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/sound/SoundViews.h>
 #include <ui/stream/StreamTracks.h>
@@ -70,17 +71,31 @@ PlayableFile LooseStreamDocument::playableFile()
     return playable;
 }
 
-void LooseStreamDocument::formatFileFacts(sead::BufferedSafeString* out) const
+bool LooseStreamDocument::getFileFacts(FileFacts* out) const
 {
     const Sound::StreamSoundInfo& stream = mFile.getStream();
+    const WaveFile* mainWave = stream.getMainWave();
 
-    FormatLooseFileFacts(out, fileFormat());
+    out->format = fileFormat();
+    out->kindName = messages::common::cStream;
 
-    if (const WaveFile* mainWave = stream.getMainWave())
-        AppendWaveFacts(out, *mainWave);
+    if (mainWave)
+        SetWaveFacts(out, *mainWave);
 
-    AppendTrackFact(out, static_cast<u32>(stream.getTrackList().size()));
-    AppendChannelFact(out, static_cast<u32>(stream.getAllocateChannelCount()));
+    out->trackNum = static_cast<u32>(stream.getTrackList().size());
+    out->channelNum = static_cast<u32>(stream.getAllocateChannelCount());
+
+    if (stream.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus)
+    {
+        out->encoding = messages::stream::cTypeOpus;
+        out->bitrate = stream.getOriginalOpusChannelBitrate() * out->channelNum;
+    }
+    else if (mainWave)
+    {
+        out->bitrate = CalcWaveBitrate(*mainWave, out->channelNum);
+    }
+
+    return true;
 }
 
 void LooseStreamDocument::forEachItemList(const std::function<void(Item::List&)>& visit)

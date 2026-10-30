@@ -29,6 +29,7 @@
 #include <platform/macos/defaultApp.h>
 #endif
 
+#include <cctype>
 #include <filesystem>
 #include <iterator>
 #include <string>
@@ -71,6 +72,16 @@ static constexpr FileType cFileTypes[] = {
     { cZstdExtension,   FileTypeName::ZstdFile      },
 };
 
+static std::string ToUpperText(const char* text)
+{
+    std::string upper = text;
+
+    for (char& character : upper)
+        character = static_cast<char>(std::toupper(static_cast<u8>(character)));
+
+    return upper;
+}
+
 static std::string FormatFileTypeName(FileTypeName name)
 {
     sead::FixedSafeString<128> text;
@@ -86,7 +97,7 @@ static std::string FormatFileTypeName(FileTypeName name)
             break;
 
         case FileTypeName::CmpbinFile:
-            text.format(messages::common::cCompressedFileTypeFormat, cCmpbinExtension);
+            text.format(messages::common::cCompressedFileTypeFormat, ToUpperText(cCmpbinExtension).c_str());
             break;
 
         case FileTypeName::AudioResource:
@@ -98,7 +109,7 @@ static std::string FormatFileTypeName(FileTypeName name)
             break;
 
         case FileTypeName::ZstdFile:
-            text.format(messages::common::cCompressedFileTypeFormat, cZstdExtension);
+            text.format(messages::common::cCompressedFileTypeFormat, ToUpperText(cZstdExtension).c_str());
             break;
 
         case FileTypeName::BfstmStream:
@@ -125,12 +136,13 @@ static std::string FormatFileTypeName(FileTypeName name)
 
 static constexpr const wchar_t* cClassesKey    = L"Software\\Classes\\";
 static constexpr const wchar_t* cFileExtsKey   = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\";
-static constexpr const wchar_t* cUserChoiceKey = L"\\UserChoice";
 static constexpr const wchar_t* cProgIdPrefix  = L"TuneBloom.";
 static constexpr const wchar_t* cLegacyProgId  = L"TuneBloom.SoundArchive";
 static constexpr const wchar_t* cCommandKey    = L"\\shell\\open\\command";
 static constexpr const wchar_t* cIconKey       = L"\\DefaultIcon";
 static constexpr const wchar_t* cOpenWithKey   = L"\\OpenWithProgids";
+
+static constexpr const wchar_t* cUserChoiceKeys[] = { L"\\UserChoice", L"\\UserChoiceLatest" };
 
 static std::wstring ToWide(const std::string& text)
 {
@@ -247,17 +259,37 @@ static void NotifyShell()
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }
 
+static bool IsOwnProgId(const FileType& type, const std::wstring& progId)
+{
+    return progId == GetProgId(type) || progId == cLegacyProgId;
+}
+
+static bool ClearUserChoice(const FileType& type, bool onlyOwn)
+{
+    bool success = true;
+
+    for (const wchar_t* name : cUserChoiceKeys)
+    {
+        const std::wstring key = cFileExtsKey + GetExtensionKey(type) + name;
+
+        if (onlyOwn && !IsOwnProgId(type, GetKeyText(key, L"ProgId")))
+            continue;
+
+        const LSTATUS status = RegDeleteKeyW(HKEY_CURRENT_USER, key.c_str());
+
+        success &= status == ERROR_SUCCESS || status == ERROR_FILE_NOT_FOUND;
+    }
+
+    return success;
+}
+
 static void ReadPlatformState(const FileType& type, fileassoc::TypeState* state)
 {
     const std::wstring extension = GetExtensionKey(type);
     const std::wstring executable = QueryAssociation(ASSOCSTR_EXECUTABLE, extension);
-    const std::wstring userChoice = GetKeyText(cFileExtsKey + extension + cUserChoiceKey, L"ProgId");
 
     state->isOn = !executable.empty() && _wcsicmp(executable.c_str(), GetExecutablePath().wstring().c_str()) == 0;
     state->appName = ToUtf8(QueryAssociation(ASSOCSTR_FRIENDLYAPPNAME, extension));
-
-    if (!state->isOn && !userChoice.empty() && userChoice != GetProgId(type))
-        state->lock = fileassoc::Lock::UserChoice;
 }
 
 static bool SetPlatformType(const FileType& type, bool on)
@@ -269,6 +301,7 @@ static bool SetPlatformType(const FileType& type, bool on)
 
     if (!on)
     {
+        success &= ClearUserChoice(type, true);
         success &= RemoveProgId(progId);
         NotifyShell();
 
@@ -281,6 +314,7 @@ static bool SetPlatformType(const FileType& type, bool on)
     const std::wstring progKey = GetClassKey(progId);
     const std::wstring extensionKey = GetClassKey(GetExtensionKey(type));
 
+    success &= ClearUserChoice(type, false);
     success &= SetKeyText(progKey, nullptr, ToWide(FormatFileTypeName(type.name)));
     success &= SetKeyText(progKey + cIconKey, nullptr, L"\"" + GetExecutablePath().wstring() + L"\",0");
     success &= SetKeyText(progKey + cCommandKey, nullptr, command);

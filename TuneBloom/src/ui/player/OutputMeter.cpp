@@ -2,6 +2,7 @@
 
 #include <ui/widgets/ContextMenu.h>
 #include <messages/Messages.h>
+#include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
 
 #include <snd/HardwareMgr.h>
@@ -358,7 +359,7 @@ static void DrawPeakMarker(ImDrawList* drawList, f32 peakHold, const ImVec2& min
 
 static void DrawBar(ImDrawList* drawList, const OutputMeter::ChannelState& channel, const ImVec2& min, const ImVec2& max, bool horizontal)
 {
-    drawList->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_FrameBg));
+    drawList->AddRectFilled(min, max, GetTrackColorU32(ImGui::GetColorU32(ImGuiCol_FrameBg)));
     DrawGradient(drawList, min, max, horizontal, cUnlitAlpha);
 
     // Level

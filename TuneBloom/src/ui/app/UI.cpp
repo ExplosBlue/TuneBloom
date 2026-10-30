@@ -1,6 +1,7 @@
 #include <ui/app/Workspace.h>
 
 #include <ui/app/About.h>
+#include <ui/app/NativeMenuBar.h>
 #include <ui/backup/Backup.h>
 #include <ui/browser/FileExportRun.h>
 #include <ui/file/DocumentMgr.h>
@@ -297,7 +298,7 @@ static ImGuiID DockSpaceOverViewport(const ImGuiViewport* viewport = nullptr, Im
     ImGui::Begin(label, NULL, host_window_flags);
     ImGui::PopStyleVar(3);
 
-    if (!sIsFileEditorShown)
+    if (!sIsFileEditorShown && !IsTabStripInTitleRow())
         DrawDocumentTabStrip();
 
     ImGuiID dockspace_id = ImGui::GetID("DockSpace");

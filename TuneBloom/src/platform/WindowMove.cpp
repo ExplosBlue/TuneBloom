@@ -1,5 +1,7 @@
 #include <platform/WindowMove.h>
 
+#if !defined(SEAD_PLATFORM_MACOSX)
+
 #if defined(SEAD_PLATFORM_WINDOWS)
 
 #include <basis/win/seadWindows.h>
@@ -62,5 +64,7 @@ void KeepDrawing(GLFWwindow*)
 }
 
 }
+
+#endif
 
 #endif

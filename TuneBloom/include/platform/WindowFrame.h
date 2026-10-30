@@ -44,7 +44,12 @@ bool IsCustom();
 void SetDark(GLFWwindow* window, bool isDark);
 void SetRoundCorners(GLFWwindow* window, u32 borderColor);
 void SetCaptionArea(const CaptionArea& area);
+bool IsDragPoint(const CaptionArea& area, s32 x, s32 y);
 ButtonState GetButtonState(WindowButton button);
+
+bool HasDrawnButtons();
+f32 GetTitleBarInsetLeft();
+f32 FitTitleBarHeight(f32 minHeight);
 
 bool IsWindowMaximized(GLFWwindow* window);
 bool CanMaximize(GLFWwindow* window);

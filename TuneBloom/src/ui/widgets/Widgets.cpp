@@ -44,6 +44,7 @@ static constexpr uicolors::Themed<f32> cIconButtonBorderIdleAlpha = { 0.40f, 0.5
 static constexpr uicolors::Themed<f32> cIconButtonTintAlpha       = { 0.10f, 0.10f };
 static constexpr uicolors::Themed<f32> cIconButtonTintHoverAlpha  = { 0.20f, 0.17f };
 static constexpr uicolors::Themed<f32> cIconButtonIconTextMix     = { 0.65f, 0.45f };
+static constexpr uicolors::Themed<f32> cSegmentBorderAlpha        = { 0.00f, 1.00f };
 
 static constexpr f32 cGlyphFrameRatio  = 0.36f;
 static constexpr f32 cGlyphCorner      = 0.07f;
@@ -233,6 +234,20 @@ static void DrawIconButtonBorder(const ImVec2& min, const ImVec2& max, bool held
     color.w *= alpha;
 
     ImGui::GetWindowDrawList()->AddRect(min, max, ImGui::GetColorU32(color), ImGui::GetStyle().FrameRounding, 0, cIconButtonBorderSize);
+}
+
+void DrawSegmentFace(const ImVec2& min, const ImVec2& max, ImU32 color, bool isSelected)
+{
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const f32 rounding = ImGui::GetStyle().FrameRounding;
+
+    drawList->AddRectFilled(min, max, color, rounding);
+
+    ImVec4 border = ImGui::GetStyleColorVec4(ImGuiCol_Border);
+    border.w *= uicolors::Pick(cSegmentBorderAlpha);
+
+    if (isSelected && border.w > 0.0f)
+        drawList->AddRect(min, max, ImGui::GetColorU32(border), rounding, 0, cIconButtonBorderSize);
 }
 
 static ImU32 CalcIconButtonIconColor(bool lit, bool isPlayTint, bool held, f32 hoverRatio)

@@ -31,6 +31,7 @@ enum class IconButtonTint
 
 void PushBrightButtonColors(const ImVec4& color);
 void PopBrightButtonColors();
+void DrawSegmentFace(const ImVec2& min, const ImVec2& max, ImU32 color, bool isSelected);
 bool DrawIconButton(const char* id, const char* icon, const ImVec2& itemSize, f32 frameSize, f32 iconSize, bool lit, IconButtonTint tint = IconButtonTint::Accent, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft);
 bool DrawGlyphButton(const char* id, TransportGlyph glyph, const ImVec2& itemSize, f32 frameSize, bool lit, IconButtonTint tint = IconButtonTint::Accent, ImGuiButtonFlags flags = ImGuiButtonFlags_MouseButtonLeft);
 bool TransportButton(TransportGlyph glyph, const char* id, const ImVec2& size = ImVec2(0.0f, 0.0f));

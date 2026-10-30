@@ -1,15 +1,20 @@
 #include <ui/app/MenuBar.h>
 
+#include <core/MenuTree.h>
+
 #include <ui/app/About.h>
 #include <ui/backup/Backup.h>
 #include <ui/browser/FilesPanel.h>
 #include <ui/settings/Config.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/file/DocumentMgr.h>
+#include <ui/file/DocumentTabs.h>
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
 #include <ui/file/NewFileDialog.h>
+#include <ui/file/PathText.h>
 #include <ui/app/FileTransferMenu.h>
+#include <ui/app/NativeMenuBar.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <messages/Messages.h>
@@ -42,6 +47,130 @@ static constexpr f32 cMenuBarHoverAlpha  = 0.6f;
 static constexpr f32 cMenuBarTextRaiseEm = 0.05f;
 
 static f32 sMenuBarPadY = 0.0f;
+
+enum class MenuMode
+{
+    Draw,
+    Record,
+    Activate,
+};
+
+static constexpr s32 cMenuDepthMax    = 8;
+static constexpr s32 cMenuDisabledMax = 32;
+
+struct MenuVisit
+{
+    MenuMode mode = MenuMode::Draw;
+    MenuTree* tree = nullptr;
+    MenuRole nextRole = MenuRole::None;
+    u32 pendingId = 0;
+    u32 pathIds[cMenuDepthMax] = {};
+    s32 pathNodes[cMenuDepthMax] = {};
+    s32 depth = 0;
+    u32 disabledBits = 0;
+    s32 disabledLevel = 0;
+};
+
+static MenuVisit sMenuVisit;
+static u32 sPendingMenuId = 0;
+
+static bool IsDrawingMenus()
+{
+    return sMenuVisit.mode == MenuMode::Draw;
+}
+
+static bool IsVisitDisabled()
+{
+    return sMenuVisit.disabledBits != 0;
+}
+
+static u32 GetVisitParentId()
+{
+    return sMenuVisit.depth > 0 ? sMenuVisit.pathIds[sMenuVisit.depth - 1] : 0;
+}
+
+static MenuNode* AddVisitNode(MenuNodeKind kind, u32 id, const char* label)
+{
+    MenuNode node;
+    node.kind = kind;
+    node.role = sMenuVisit.nextRole;
+    node.id = id;
+    node.parent = sMenuVisit.depth > 0 ? sMenuVisit.pathNodes[sMenuVisit.depth - 1] : -1;
+    node.label = label ? label : "";
+    node.enabled = !IsVisitDisabled();
+
+    sMenuVisit.nextRole = MenuRole::None;
+    sMenuVisit.tree->nodes.push_back(node);
+    return &sMenuVisit.tree->nodes.back();
+}
+
+void SetNextMenuRole(MenuRole role)
+{
+    if (sMenuVisit.mode == MenuMode::Record)
+        sMenuVisit.nextRole = role;
+}
+
+static bool VisitItem(const char* idKey, const char* label, std::optional<shortcuts::Action> shortcut, bool selected, bool enabled, const char* tooltip)
+{
+    const u32 id = ImHashStr(idKey, 0, GetVisitParentId());
+    const bool isEnabled = enabled && !IsVisitDisabled();
+
+    if (sMenuVisit.mode == MenuMode::Activate)
+    {
+        if (id != sMenuVisit.pendingId || !isEnabled)
+            return false;
+
+        sMenuVisit.pendingId = 0;
+        return true;
+    }
+
+    MenuNode* node = AddVisitNode(MenuNodeKind::Item, id, label);
+    node->enabled = isEnabled;
+    node->checked = selected;
+    node->keyChord = shortcut ? shortcuts::Chord(*shortcut) : 0;
+
+    if (tooltip)
+        node->tooltip = tooltip;
+
+    return false;
+}
+
+static bool VisitMenu(const char* label, bool* clicked)
+{
+    const u32 id = ImHashStr(label, 0, GetVisitParentId());
+    const bool isEnabled = !IsVisitDisabled();
+    s32 nodeIndex = -1;
+
+    if (sMenuVisit.mode == MenuMode::Record)
+    {
+        MenuNode* node = AddVisitNode(MenuNodeKind::Menu, id, label);
+        node->clickable = clicked != nullptr;
+        nodeIndex = static_cast<s32>(sMenuVisit.tree->nodes.size()) - 1;
+    }
+    else if (clicked && isEnabled && id == sMenuVisit.pendingId)
+    {
+        sMenuVisit.pendingId = 0;
+        *clicked = true;
+    }
+
+    if (!isEnabled)
+        return false;
+
+    SEAD_ASSERT(sMenuVisit.depth < cMenuDepthMax);
+
+    sMenuVisit.pathIds[sMenuVisit.depth] = id;
+    sMenuVisit.pathNodes[sMenuVisit.depth] = nodeIndex;
+    sMenuVisit.depth++;
+
+    return true;
+}
+
+static void EndVisitMenu()
+{
+    SEAD_ASSERT(sMenuVisit.depth > 0);
+
+    sMenuVisit.depth--;
+}
 
 ImDrawList* BeginMenuHighlight()
 {
@@ -145,6 +274,9 @@ static void PushMenuBarTextColor(const char* label)
 
 static bool BeginBarMenu(const char* label)
 {
+    if (!IsDrawingMenus())
+        return VisitMenu(label, nullptr);
+
     const ImVec2 barPadding = ImGui::GetStyle().FramePadding;
     const ImVec2 rangeY = CalcMenuBarPillRangeY();
 
@@ -171,6 +303,12 @@ void SetMenuBarTooltip(const char* tooltip)
 
 static void EndBarMenu()
 {
+    if (!IsDrawingMenus())
+    {
+        EndVisitMenu();
+        return;
+    }
+
     ImGui::PopStyleVar(2);
     ImGui::EndMenu();
 }
@@ -223,6 +361,9 @@ static void CloseHoverMenuOnLeave()
 
 static bool BeginHoverBarMenu(const char* label, bool* clicked)
 {
+    if (!IsDrawingMenus())
+        return VisitMenu(label, clicked);
+
     ImGuiContext& g = *GImGui;
     const ImGuiID id = ImGui::GetID(label);
     const f32 barTop = ImGui::GetWindowPos().y;
@@ -255,20 +396,24 @@ static bool BeginHoverBarMenu(const char* label, bool* clicked)
     return open;
 }
 
-bool MenuBarItem(const char* label, const char* shortcut, bool selected, bool enabled)
+bool MenuBarItem(const char* label, std::optional<shortcuts::Action> shortcut, bool selected, bool enabled)
 {
+    if (!IsDrawingMenus())
+        return VisitItem(label, label, shortcut, selected, enabled, nullptr);
+
     const f32 posY = ImGui::GetCursorScreenPos().y;
+    const char* shortcutLabel = shortcut ? shortcuts::Label(*shortcut) : nullptr;
 
     ImDrawList* drawList = BeginMenuHighlight();
     ImGui::PushStyleColor(ImGuiCol_TextDisabled, uicolors::cTransparent);
-    const bool pressed = ImGui::MenuItem(label, shortcut, false, enabled);
+    const bool pressed = ImGui::MenuItem(label, shortcutLabel, false, enabled);
     ImGui::PopStyleColor();
     EndMenuHighlight(drawList, false);
 
     if (selected)
         DrawMenuCheck(enabled);
 
-    if (shortcut && shortcut[0] != '\0')
+    if (shortcutLabel && shortcutLabel[0] != '\0')
     {
         const f32 right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
 
@@ -277,7 +422,7 @@ bool MenuBarItem(const char* label, const char* shortcut, bool selected, bool en
         if (!enabled && !(GImGui->CurrentItemFlags & ImGuiItemFlags_Disabled))
             color.w *= ImGui::GetStyle().DisabledAlpha;
 
-        drawList->AddText(ImVec2(right - ImGui::CalcTextSize(shortcut).x, posY), ImGui::GetColorU32(color), shortcut);
+        drawList->AddText(ImVec2(right - ImGui::CalcTextSize(shortcutLabel).x, posY), ImGui::GetColorU32(color), shortcutLabel);
     }
 
     return pressed;
@@ -285,6 +430,9 @@ bool MenuBarItem(const char* label, const char* shortcut, bool selected, bool en
 
 bool BeginSubMenu(const char* label)
 {
+    if (!IsDrawingMenus())
+        return VisitMenu(label, nullptr);
+
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const f32 right = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
     const bool enabled = !(GImGui->CurrentItemFlags & ImGuiItemFlags_Disabled);
@@ -304,8 +452,30 @@ bool BeginSubMenu(const char* label)
     return open;
 }
 
-bool MenuBarIconItem(const char* icon, const char* label, const char* shortcut, bool enabled, const char* disabledReason)
+bool BeginIconSubMenu(const char* icon, const char* label)
 {
+    if (!IsDrawingMenus())
+        return VisitMenu(label, nullptr);
+
+    return BeginSubMenu(sead::FormatFixedSafeString<96>("%s %s", icon, label).cstr());
+}
+
+void EndSubMenu()
+{
+    if (!IsDrawingMenus())
+    {
+        EndVisitMenu();
+        return;
+    }
+
+    ImGui::EndMenu();
+}
+
+bool MenuBarIconItem(const char* icon, const char* label, std::optional<shortcuts::Action> shortcut, bool enabled, const char* disabledReason)
+{
+    if (!IsDrawingMenus())
+        return VisitItem(label, label, shortcut, false, enabled, enabled ? nullptr : disabledReason);
+
     const bool pressed = MenuBarItem(sead::FormatFixedSafeString<96>("%s %s", icon, label).cstr(), shortcut, false, enabled);
 
     if (!enabled && disabledReason)
@@ -314,12 +484,57 @@ bool MenuBarIconItem(const char* icon, const char* label, const char* shortcut, 
     return pressed;
 }
 
+bool VisitMenuFileItem(const char* path)
+{
+    SEAD_ASSERT(!IsDrawingMenus());
+
+    return VisitItem(path, pathtext::FileName(path), std::nullopt, false, true, pathtext::Folder(path).c_str());
+}
+
+void MenuSeparator()
+{
+    if (sMenuVisit.mode == MenuMode::Record)
+        AddVisitNode(MenuNodeKind::Separator, 0, nullptr);
+    else if (IsDrawingMenus())
+        ImGui::Separator();
+}
+
+void BeginMenuDisabled(bool disabled)
+{
+    if (IsDrawingMenus())
+    {
+        ImGui::BeginDisabled(disabled);
+        return;
+    }
+
+    SEAD_ASSERT(sMenuVisit.disabledLevel < cMenuDisabledMax);
+
+    if (disabled)
+        sMenuVisit.disabledBits |= 1u << sMenuVisit.disabledLevel;
+
+    sMenuVisit.disabledLevel++;
+}
+
+void EndMenuDisabled()
+{
+    if (IsDrawingMenus())
+    {
+        ImGui::EndDisabled();
+        return;
+    }
+
+    SEAD_ASSERT(sMenuVisit.disabledLevel > 0);
+
+    sMenuVisit.disabledLevel--;
+    sMenuVisit.disabledBits &= ~(1u << sMenuVisit.disabledLevel);
+}
+
 static s32 sMenuFindFrame = 0;
 static std::optional<bool> sMenuThemeRequest;
 
 static void DrawBackupsMenu()
 {
-    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_HISTORY " %s", messages::common::cBackups).cstr()))
+    if (!BeginIconSubMenu(ICON_LC_HISTORY, messages::common::cBackups))
         return;
 
     if (MenuBarIconItem(ICON_LC_DATABASE_BACKUP, messages::mainmenu::cCreateBackup) && backup::CreateBackup())
@@ -330,10 +545,10 @@ static void DrawBackupsMenu()
 
     const std::string folder = backup::GetFolder();
 
-    if (MenuBarIconItem(ICON_LC_FOLDER_CLOCK, messages::mainmenu::cShowBackupFolder, nullptr, !folder.empty()))
+    if (MenuBarIconItem(ICON_LC_FOLDER_CLOCK, messages::mainmenu::cShowBackupFolder, std::nullopt, !folder.empty()))
         OpenFolder(folder);
 
-    ImGui::EndMenu();
+    EndSubMenu();
 }
 
 static void DrawEditMenu()
@@ -343,26 +558,26 @@ static void DrawEditMenu()
     const Item* activeItem = documentOpen ? GetActiveSelection() : nullptr;
     const bool canDuplicate = activeItem && CanDuplicateSelection(activeItem);
 
-    if (MenuBarIconItem(ICON_LC_TEXT_CURSOR_INPUT, messages::common::cRename, shortcuts::Label(shortcuts::Action::RenameSelection), hasItem && CanRenameItem(sSelectedItem)))
+    if (MenuBarIconItem(ICON_LC_TEXT_CURSOR_INPUT, messages::common::cRename, shortcuts::Action::RenameSelection, hasItem && CanRenameItem(sSelectedItem)))
         shortcuts::Trigger(shortcuts::Action::RenameSelection);
 
-    if (MenuBarIconItem(ICON_LC_COPY, messages::common::cDuplicate, shortcuts::Label(shortcuts::Action::DuplicateSelection), canDuplicate))
+    if (MenuBarIconItem(ICON_LC_COPY, messages::common::cDuplicate, shortcuts::Action::DuplicateSelection, canDuplicate))
         shortcuts::Trigger(shortcuts::Action::DuplicateSelection);
 
-    if (MenuBarIconItem(ICON_LC_LIST_CHECKS, messages::common::cSelectAll, shortcuts::Label(shortcuts::Action::SelectAll), documentOpen))
+    if (MenuBarIconItem(ICON_LC_LIST_CHECKS, messages::common::cSelectAll, shortcuts::Action::SelectAll, documentOpen))
         shortcuts::Trigger(shortcuts::Action::SelectAll);
 
-    ImGui::Separator();
+    MenuSeparator();
 
-    if (MenuBarIconItem(ICON_LC_SEARCH, messages::common::cFind, shortcuts::Label(shortcuts::Action::FocusFilter), documentOpen))
+    if (MenuBarIconItem(ICON_LC_SEARCH, messages::common::cFind, shortcuts::Action::FocusFilter, documentOpen))
     {
         sMenuFindFrame = ImGui::GetFrameCount() + 1;
         shortcuts::Trigger(shortcuts::Action::FocusFilter);
     }
 
-    ImGui::Separator();
+    MenuSeparator();
 
-    if (MenuBarIconItem(ICON_LC_TRASH_2, messages::common::cDelete, nullptr, hasItem))
+    if (MenuBarIconItem(ICON_LC_TRASH_2, messages::common::cDelete, std::nullopt, hasItem))
         shortcuts::Trigger(shortcuts::Action::DeleteSelection);
 }
 
@@ -370,26 +585,26 @@ static void DrawViewMenu()
 {
     const bool meterVisible = IsOutputMeterWindowVisible();
 
-    if (MenuBarItem(messages::mainmenu::cOutputMeter, nullptr, meterVisible))
+    if (MenuBarItem(messages::mainmenu::cOutputMeter, std::nullopt, meterVisible))
         SetOutputMeterWindowVisible(!meterVisible);
 
-    if (MenuBarItem(messages::mainmenu::cSystemWindow, nullptr, IsSystemWindowShown()))
+    if (MenuBarItem(messages::mainmenu::cSystemWindow, std::nullopt, IsSystemWindowShown()))
         SetSystemWindowShown(!IsSystemWindowShown());
 
-    ImGui::Separator();
+    MenuSeparator();
 
     if (BeginSubMenu(messages::common::cTheme))
     {
-        if (MenuBarItem(messages::mainmenu::cThemeDark, nullptr, IsDarkTheme()))
+        if (MenuBarItem(messages::mainmenu::cThemeDark, std::nullopt, IsDarkTheme()))
             sMenuThemeRequest = true;
 
-        if (MenuBarItem(messages::mainmenu::cThemeLight, nullptr, !IsDarkTheme()))
+        if (MenuBarItem(messages::mainmenu::cThemeLight, std::nullopt, !IsDarkTheme()))
             sMenuThemeRequest = false;
 
-        ImGui::EndMenu();
+        EndSubMenu();
     }
 
-    ImGui::Separator();
+    MenuSeparator();
 
     if (MenuBarItem(messages::mainmenu::cResetLayout))
         RequestResetLayout();
@@ -400,7 +615,7 @@ static void DrawHelpMenu()
     if (MenuBarIconItem(ICON_LC_KEYBOARD, messages::mainmenu::cShortcuts))
         OpenShortcutsDialog();
 
-    ImGui::Separator();
+    MenuSeparator();
 
     if (MenuBarIconItem(ICON_LC_FOLDER_GIT_2, messages::mainmenu::cRepository))
         OpenURL(cRepositoryUrl);
@@ -411,7 +626,9 @@ static void DrawHelpMenu()
     if (MenuBarIconItem(ICON_LC_MESSAGE_CIRCLE, messages::mainmenu::cDiscord))
         OpenURL(cDiscordUrl);
 
-    ImGui::Separator();
+    MenuSeparator();
+
+    SetNextMenuRole(MenuRole::About);
 
     if (MenuBarIconItem(ICON_LC_INFO, messages::mainmenu::cAbout))
         RequestAbout();
@@ -419,15 +636,16 @@ static void DrawHelpMenu()
 
 static void DrawRecentFilesMenu()
 {
-    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_CLOCK " %s", messages::mainmenu::cOpenRecent).cstr()))
+    if (!BeginIconSubMenu(ICON_LC_CLOCK, messages::mainmenu::cOpenRecent))
         return;
 
     std::string path;
+    const bool chosen = IsDrawingMenus() ? DrawRecentFilesList(&path) : VisitRecentFilesList(&path);
 
-    if (DrawRecentFilesList(&path))
+    if (chosen)
         RequestOpenFile(path.c_str());
 
-    ImGui::EndMenu();
+    EndSubMenu();
 }
 
 static void FocusInfoWindowForFind()
@@ -444,7 +662,7 @@ static void FocusInfoWindowForFind()
         ImGui::SetWindowFocus("###InfoWindow");
 }
 
-static bool IsSlimMenuBar()
+bool IsSlimMenuBar()
 {
     return IsPlayerFrameShown() || IsFileEditorShown();
 }
@@ -456,10 +674,10 @@ static void DrawFileMenu()
     const bool isSlim = IsSlimMenuBar();
     const bool isPlayer = IsPlayerFrameShown();
 
-    if (!isPlayer && MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FILE " %s", messages::mainmenu::cNew).cstr(), shortcuts::Label(shortcuts::Action::NewProject)))
+    if (!isPlayer && MenuBarIconItem(ICON_LC_FILE, messages::mainmenu::cNew, shortcuts::Action::NewProject))
         OpenNewFileDialog();
 
-    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER_OPEN " %s", messages::common::cOpen).cstr(), shortcuts::Label(shortcuts::Action::OpenProject)))
+    if (MenuBarIconItem(ICON_LC_FOLDER_OPEN, messages::common::cOpen, shortcuts::Action::OpenProject))
         RequestOpenFile();
 
     if (!isSlim && MenuBarIconItem(ICON_LC_FOLDER_PLUS, messages::common::cOpenFolder))
@@ -467,70 +685,78 @@ static void DrawFileMenu()
 
     DrawRecentFilesMenu();
 
-    ImGui::Separator();
-    ImGui::BeginDisabled(!documentOpen || ActiveDocument()->isPlayerOnly());
+    MenuSeparator();
+    BeginMenuDisabled(!documentOpen || ActiveDocument()->isPlayerOnly());
 
-    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE " %s", messages::common::cSave).cstr(), shortcuts::Label(shortcuts::Action::SaveProject)))
+    if (MenuBarIconItem(ICON_LC_SAVE, messages::common::cSave, shortcuts::Action::SaveProject))
         RequestSaveFile();
 
-    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE_ALL " %s", messages::mainmenu::cSaveAs).cstr(), shortcuts::Label(shortcuts::Action::SaveProjectAs)))
+    if (MenuBarIconItem(ICON_LC_SAVE_ALL, messages::mainmenu::cSaveAs, shortcuts::Action::SaveProjectAs))
         RequestSaveDocumentAs(ActiveDocument());
 
-    if (!isSlim && MenuBarIconItem(ICON_LC_FILE_STACK, messages::mainmenu::cSaveAll, shortcuts::Label(shortcuts::Action::SaveAllProjects), HasUnsavedDocuments()))
+    if (!isSlim && MenuBarIconItem(ICON_LC_FILE_STACK, messages::mainmenu::cSaveAll, shortcuts::Action::SaveAllProjects, HasUnsavedDocuments()))
         RequestSaveAll();
 
     if (!isPlayer)
         DrawBackupsMenu();
 
-    ImGui::EndDisabled();
-    ImGui::Separator();
+    EndMenuDisabled();
+    MenuSeparator();
 
     if (!isSlim)
     {
-        ImGui::BeginDisabled(!archiveOpen);
+        BeginMenuDisabled(!archiveOpen);
 
         DrawImportMenu();
         DrawExportMenu();
 
-        ImGui::EndDisabled();
-        ImGui::Separator();
+        EndMenuDisabled();
+        MenuSeparator();
     }
 
     const bool hasPath = documentOpen && !GetDocumentPath().isEmpty();
 
-    if (MenuBarIconItem(ICON_LC_FOLDER_SEARCH, messages::recent::cShowInFileManager, nullptr, hasPath))
+    if (MenuBarIconItem(ICON_LC_FOLDER_SEARCH, messages::recent::cShowInFileManager, std::nullopt, hasPath))
         ShowInFileManager(GetDocumentPath().cstr());
 
-    if (MenuBarIconItem(ICON_LC_COPY, messages::mainmenu::cCopyPath, nullptr, hasPath))
+    if (MenuBarIconItem(ICON_LC_COPY, messages::mainmenu::cCopyPath, std::nullopt, hasPath))
         ImGui::SetClipboardText(GetDocumentPath().cstr());
 
-    ImGui::Separator();
+    MenuSeparator();
 
     if (isSlim && MenuBarIconItem(ICON_LC_LAYOUT_PANEL_LEFT, messages::mainmenu::cOpenFullEditor))
         RequestFullEditor();
 
-    if (!isPlayer && MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, shortcuts::Label(shortcuts::Action::CloseProject), documentOpen))
+    if (!isPlayer && MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::common::cClose, shortcuts::Action::CloseProject, documentOpen))
         RequestCloseFile();
 
-    if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_DOOR_OPEN " %s", messages::mainmenu::cExit).cstr()))
-    {
+    SetNextMenuRole(MenuRole::Quit);
+
+    if (MenuBarIconItem(ICON_LC_DOOR_OPEN, messages::mainmenu::cExit))
         TryExit();
-    }
 }
 
-static f32 DrawSaveStatusChip(f32 chipRight, f32 textY)
+static f32 DrawSaveStatusChip(f32 bellLeft, const ImVec2& rangeY, f32 textY, f32 minLeft)
 {
     const ImGuiStyle& style = ImGui::GetStyle();
-    const sead::FormatFixedSafeString<64> statusLabel(HasUnsavedChanges() ? ICON_LC_FILE " %s" : ICON_LC_CHECK_CHECK " %s", HasUnsavedChanges() ? messages::mainmenu::cUnsaved : messages::mainmenu::cSaved);
-    const char* statusText = statusLabel.cstr();
-    const ImVec4 statusColor = HasUnsavedChanges() ? uicolors::Warning() : style.Colors[ImGuiCol_TextDisabled];
+    const bool isUnsaved = HasUnsavedChanges();
+    const char* statusIcon = isUnsaved ? ICON_LC_FILE : ICON_LC_CHECK_CHECK;
+    const sead::FormatFixedSafeString<64> statusLabel("%s %s", statusIcon, isUnsaved ? messages::mainmenu::cUnsaved : messages::mainmenu::cSaved);
+    const ImVec4 statusColor = isUnsaved ? uicolors::Warning() : style.Colors[ImGuiCol_TextDisabled];
 
-    const ImVec2 rangeY = CalcMenuBarPillRangeY();
-    const f32 chipLeft = chipRight - ImGui::CalcTextSize(statusText).x - style.ItemSpacing.x * 2.0f;
+    const f32 chipRight = bellLeft - style.ItemInnerSpacing.x;
+    const f32 padding = style.ItemSpacing.x * 2.0f;
+    const bool fits = chipRight - ImGui::CalcTextSize(statusLabel.cstr()).x - padding >= minLeft;
+
+    if (!isUnsaved && !fits)
+        return bellLeft;
+
+    const char* statusText = fits ? statusLabel.cstr() : statusIcon;
+    const f32 chipLeft = chipRight - ImGui::CalcTextSize(statusText).x - padding;
 
     ImGuiCol chipColor = ImGuiCol_FrameBg;
 
-    if (HasUnsavedChanges())
+    if (isUnsaved)
     {
         ImGui::SetCursorScreenPos(ImVec2(chipLeft, rangeY.x));
 
@@ -553,17 +779,17 @@ static f32 DrawSaveStatusChip(f32 chipRight, f32 textY)
     return chipLeft;
 }
 
-static f32 DrawMenuBarTools(f32 right, f32 top, f32 bottom, f32 textY)
+static f32 DrawMenuBarTools(f32 right, const ImVec2& rangeY, f32 textY, f32 minChipLeft)
 {
     if (IsPlayerFrameShown())
-        return DrawPlayerFrameTools(right, top, bottom);
+        return DrawPlayerFrameTools(right, rangeY.x, rangeY.y);
 
-    const f32 bellLeft = right - notify::DrawBell(right, top, bottom);
+    const f32 bellLeft = right - notify::DrawBell(right, rangeY.x, rangeY.y);
 
     if (!IsDocumentOpen())
         return bellLeft;
 
-    return DrawSaveStatusChip(bellLeft - ImGui::GetStyle().ItemInnerSpacing.x, textY);
+    return DrawSaveStatusChip(bellLeft, rangeY, textY, minChipLeft);
 }
 
 static void DrawBarMenu(const char* label, void (*drawMenu)())
@@ -577,8 +803,6 @@ static void DrawBarMenu(const char* label, void (*drawMenu)())
 
 static void DrawBarMenus()
 {
-    CloseHoverMenuOnLeave();
-
     DrawBarMenu(messages::common::cFile, &DrawFileMenu);
 
     if (!IsSlimMenuBar())
@@ -589,6 +813,8 @@ static void DrawBarMenus()
 
     bool preferencesClicked = false;
 
+    SetNextMenuRole(MenuRole::Settings);
+
     if (BeginHoverBarMenu(messages::mainmenu::cPreferences, &preferencesClicked))
     {
         DrawPreferencesMenu();
@@ -598,10 +824,50 @@ static void DrawBarMenus()
     if (preferencesClicked)
         OpenPreferencesWindow(PreferencesPage::File);
 
+    SetNextMenuRole(MenuRole::Help);
     DrawBarMenu(messages::common::cHelp, &DrawHelpMenu);
 }
 
-static void DrawMenuBarItems(f32 em)
+static constexpr f32 cTitleDragMinEm = 3.0f;
+
+static void PushTitleRowStyle(f32 framePadY)
+{
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, framePadY));
+}
+
+static f32 DrawTitleRowContent(const ImVec2& barMin, f32 lineBottom, f32 toolsRight, f32 framePadY, f32* outLeft, f32* outRight)
+{
+    const f32 dragGap = ImFloor(GImGui->FontBaseSize * cTitleDragMinEm);
+
+    PushTitleRowStyle(framePadY);
+
+    TitleRowPlace place;
+    place.columnLeft = barMin.x;
+    place.left = GetTitleBarContentLeft(barMin.x);
+    place.top = barMin.y + ImFloor((lineBottom - barMin.y - ImGui::GetFrameHeight()) * 0.5f + 0.5f);
+    place.bottom = place.top + ImGui::GetFrameHeight();
+
+    const f32 minChipLeft = CalcTitleRowStripMinRight(place) + dragGap;
+
+    ImGui::PopStyleVar();
+
+    const f32 textY = ImFloor((place.top + place.bottom - ImGui::GetFontSize()) * 0.5f);
+    const f32 toolsLeft = DrawMenuBarTools(toolsRight, ImVec2(place.top, place.bottom), textY, minChipLeft);
+
+    place.right = toolsLeft - dragGap;
+    place.maxRight = toolsLeft - ImGui::GetStyle().ItemInnerSpacing.x;
+
+    PushTitleRowStyle(framePadY);
+
+    *outLeft = place.left;
+    *outRight = DrawDocumentTabsInTitleRow(place);
+
+    ImGui::PopStyleVar();
+
+    return toolsLeft;
+}
+
+static void DrawMenuBarItems(f32 em, f32 framePadY)
 {
     const ImVec2 barMin = ImGui::GetWindowPos();
     const ImVec2 barMax = barMin + ImGui::GetWindowSize();
@@ -614,19 +880,40 @@ static void DrawMenuBarItems(f32 em)
     const f32 lineBottom = barMax.y - 1.0f;
 
     if (hasTitleBar)
-        ImGui::SetCursorScreenPos(ImVec2(DrawTitleBarIcon(barMin.x, barMin.y, lineBottom), ImGui::GetCursorScreenPos().y));
+        ImGui::SetCursorScreenPos(ImVec2(DrawTitleBarLeft(barMin.x, barMin.y, lineBottom), ImGui::GetCursorScreenPos().y));
 
     const f32 menuLeft = ImGui::GetCursorScreenPos().x;
-    DrawBarMenus();
+    if (!IsNativeMenuBar())
+    {
+        CloseHoverMenuOnLeave();
+        DrawBarMenus();
+    }
     const f32 menuRight = ImGui::GetCursorScreenPos().x;
 
     const ImGuiStyle& style = ImGui::GetStyle();
-    const ImVec2 pillRangeY = CalcMenuBarPillRangeY();
-    const f32 edge = hasTitleBar ? DrawWindowButtons(barMax.x, barMin.y, lineBottom) : barMax.x;
-    const f32 toolsLeft = DrawMenuBarTools(edge - style.WindowPadding.x, pillRangeY.x, pillRangeY.y, barMin.y + style.FramePadding.y + textOffsetY);
+    const f32 edge = hasTitleBar ? DrawTitleBarRight(barMax.x, barMin.y, lineBottom) : barMax.x;
+    const f32 toolsRight = edge - style.WindowPadding.x;
+
+    f32 contentLeft = menuLeft;
+    f32 contentRight = menuRight;
+
+    const f32 toolsLeft = IsTabStripInTitleRow() ? DrawTitleRowContent(barMin, lineBottom, toolsRight, framePadY, &contentLeft, &contentRight)
+                                                 : DrawMenuBarTools(toolsRight, CalcMenuBarPillRangeY(), barMin.y + style.FramePadding.y + textOffsetY, -FLT_MAX);
 
     if (hasTitleBar)
-        FinishTitleBar(menuLeft, menuRight, toolsLeft, barMax.y);
+        FinishTitleBar(contentLeft, contentRight, toolsLeft, barMax.y);
+}
+
+static f32 CalcMenuBarPadY(f32 em, f32 framePadY)
+{
+    if (!HasCustomTitleBar())
+        return ImFloor(em * cMenuBarPadYEm);
+
+    const f32 padY = ImFloor(em * cTitleBarPadYEm);
+    const f32 minHeight = em + (framePadY + padY) * 2.0f;
+    const f32 height = CalcTitleBarHeight(minHeight);
+
+    return height > minHeight ? (height - em) * 0.5f - framePadY : padY;
 }
 
 static void ApplyMenuThemeRequest()
@@ -645,9 +932,48 @@ static void ApplyMenuThemeRequest()
     }
 }
 
+void RecordMenuBar(MenuTree* tree)
+{
+    SEAD_ASSERT(tree && IsDrawingMenus());
+
+    tree->nodes.clear();
+
+    sMenuVisit = MenuVisit();
+    sMenuVisit.mode = MenuMode::Record;
+    sMenuVisit.tree = tree;
+
+    DrawBarMenus();
+
+    SEAD_ASSERT(sMenuVisit.depth == 0 && sMenuVisit.disabledLevel == 0);
+    sMenuVisit = MenuVisit();
+}
+
+void RequestMenuActivation(u32 id)
+{
+    sPendingMenuId = id;
+}
+
+static void RunPendingMenuActivation()
+{
+    if (sPendingMenuId == 0)
+        return;
+
+    sMenuVisit = MenuVisit();
+    sMenuVisit.mode = MenuMode::Activate;
+    sMenuVisit.pendingId = sPendingMenuId;
+    sPendingMenuId = 0;
+
+    DrawBarMenus();
+
+    SEAD_ASSERT(sMenuVisit.depth == 0 && sMenuVisit.disabledLevel == 0);
+    sMenuVisit = MenuVisit();
+}
+
 void DrawMenuBar()
 {
     FocusInfoWindowForFind();
+    UpdateNativeMenuBar();
+    RunPendingMenuActivation();
 
     const f32 em = ImGui::GetFontSize();
     const ImVec2 framePadding = ImGui::GetStyle().FramePadding;
@@ -661,7 +987,7 @@ void DrawMenuBar()
     ImGui::PushStyleColor(ImGuiCol_PopupBg, popupColor);
 
     ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, ImFloor(em * cMenuRoundingEm));
-    sMenuBarPadY = ImFloor(em * (HasCustomTitleBar() ? cTitleBarPadYEm : cMenuBarPadYEm));
+    sMenuBarPadY = CalcMenuBarPadY(em, framePadding.y);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(framePadding.x, framePadding.y + sMenuBarPadY));
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -670,7 +996,7 @@ void DrawMenuBar()
 
     if (barOpen)
     {
-        DrawMenuBarItems(em);
+        DrawMenuBarItems(em, framePadding.y);
         ImGui::EndMainMenuBar();
     }
 

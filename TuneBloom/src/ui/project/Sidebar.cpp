@@ -5,6 +5,8 @@
 #include <ui/file/DocumentMgr.h>
 #include <ui/file/FileDrag.h>
 #include <ui/project/ProjectViews.h>
+#include <ui/settings/UiColors.h>
+#include <ui/widgets/Widgets.h>
 #include <messages/Messages.h>
 
 #include <libs/IconsLucide.h>
@@ -53,11 +55,16 @@ static SidebarView GetShownView()
     return HasProjectView() ? sView : SidebarView::Browser;
 }
 
-static void DrawSwitchTab(SidebarView view, const ImRect& bb)
+static void DrawSwitchTab(SidebarView view, const ImRect& bb, bool isRounded)
 {
     const SidebarViewInfo& info = GetViewInfo(view);
     const bool isSelected = GetShownView() == view;
     const bool isEnabled = view != SidebarView::Project || HasProjectView();
+
+    const sead::FormatFixedSafeString<64> label("%s %s", info.icon, info.label);
+    const f32 padX = ImGui::GetStyle().FramePadding.x;
+    const bool showsLabel = ImGui::CalcTextSize(label.cstr()).x + padX * 2.0f <= bb.GetWidth();
+    const char* text = showsLabel ? label.cstr() : info.icon;
 
     ImGui::PushID(static_cast<s32>(view));
     ImGui::SetCursorScreenPos(bb.Min);
@@ -74,44 +81,60 @@ static void DrawSwitchTab(SidebarView view, const ImRect& bb)
 
     if (!isEnabled)
         ImGui::SetItemTooltip("%s", messages::project::cViewUnavailable);
+    else if (!showsLabel)
+        ImGui::SetItemTooltip("%s", info.label);
 
     const bool isHovered = isEnabled && ImGui::IsItemHovered();
     const ImVec4& tabColor = ImGui::GetStyleColorVec4(ImGuiCol_Tab);
     const ImVec4& selectedColor = ImGui::GetStyleColorVec4(ImGuiCol_TabUnfocusedActive);
     const ImU32 idleColor = ImGui::GetColorU32(isSelected ? selectedColor : tabColor);
-    const ImU32 hoverColor = ImGui::GetColorU32(isSelected ? selectedColor : ImLerp(tabColor, selectedColor, cSwitchHoverMix));
+    const ImU32 hoverColor = ImGui::GetColorU32(isSelected ? selectedColor : uicolors::BlendOver(tabColor, selectedColor, cSwitchHoverMix));
+    const ImU32 faceColor = ImGui::GetHoverColorU32(ImGui::GetItemID(), isHovered, idleColor, hoverColor);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-    ImGui::TabItemBackground(drawList, bb, ImGuiTabItemFlags_None, ImGui::GetHoverColorU32(ImGui::GetItemID(), isHovered, idleColor, hoverColor));
+    if (isRounded)
+        DrawSegmentFace(bb.Min, bb.Max, faceColor, isSelected);
+    else
+        ImGui::TabItemBackground(drawList, bb, ImGuiTabItemFlags_None, faceColor);
 
-    const sead::FormatFixedSafeString<64> label("%s %s", info.icon, info.label);
-    const f32 padX = ImGui::GetStyle().FramePadding.x;
-    const f32 textX = ImMax(bb.Min.x + padX, bb.Min.x + ImFloor((bb.GetWidth() - ImGui::CalcTextSize(label.cstr()).x) * 0.5f));
+    const f32 textX = ImMax(bb.Min.x + padX, bb.Min.x + ImFloor((bb.GetWidth() - ImGui::CalcTextSize(text).x) * 0.5f));
     const f32 textY = bb.Min.y + ImFloor((bb.GetHeight() - ImGui::GetFontSize()) * 0.5f);
     const f32 right = bb.Max.x - padX;
 
     const f32 textAlpha = isEnabled ? 1.0f : ImGui::GetStyle().DisabledAlpha;
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(isSelected || isHovered ? ImGuiCol_Text : ImGuiCol_TextDisabled, textAlpha));
-    ImGui::RenderTextEllipsis(drawList, ImVec2(textX, textY), ImVec2(right, textY + ImGui::GetFontSize()), right, right, label.cstr(), nullptr, nullptr);
+    ImGui::RenderTextEllipsis(drawList, ImVec2(textX, textY), ImVec2(right, textY + ImGui::GetFontSize()), right, right, text, nullptr, nullptr);
     ImGui::PopStyleColor();
 
     ImGui::PopID();
 }
 
-static void DrawSwitch(const ImRect& bb, f32 lineLeft, f32 lineRight)
+static f32 CalcSwitchHalfWidth(const ImRect& bb)
 {
     const f32 gap = ImFloor(ImGui::GetFontSize() * cSwitchGapEm);
-    const f32 half = ImFloor((bb.GetWidth() - gap) * 0.5f);
+
+    return ImFloor((bb.GetWidth() - gap) * 0.5f);
+}
+
+static void DrawSwitchTabs(const ImRect& bb, bool isRounded)
+{
+    const f32 half = CalcSwitchHalfWidth(bb);
+
+    DrawSwitchTab(SidebarView::Browser, ImRect(bb.Min, ImVec2(bb.Min.x + half, bb.Max.y)), isRounded);
+    DrawSwitchTab(SidebarView::Project, ImRect(ImVec2(bb.Max.x - half, bb.Min.y), bb.Max), isRounded);
+}
+
+static void DrawSwitch(const ImRect& bb, f32 lineLeft, f32 lineRight)
+{
     const f32 lineTop = bb.Max.y - ImGui::GetStyle().TabBarBorderSize;
 
-    if (half < 1.0f)
+    if (CalcSwitchHalfWidth(bb) < 1.0f)
         return;
 
     ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(lineLeft, lineTop), ImVec2(lineRight, bb.Max.y), ImGui::GetColorU32(ImGuiCol_TabUnfocusedActive));
 
-    DrawSwitchTab(SidebarView::Browser, ImRect(bb.Min, ImVec2(bb.Min.x + half, bb.Max.y)));
-    DrawSwitchTab(SidebarView::Project, ImRect(ImVec2(bb.Max.x - half, bb.Min.y), bb.Max));
+    DrawSwitchTabs(bb, false);
 }
 
 static void DrawSwitchInWindow()
@@ -148,6 +171,14 @@ void DrawSidebarSwitchInStrip(const ImRect& column)
     const f32 padX = ImGui::GetStyle().WindowPadding.x;
 
     DrawSwitch(ImRect(column.Min.x + padX, column.Min.y, column.Max.x - padX, column.Max.y), column.Min.x, column.Max.x);
+
+    sIsSwitchInStrip = true;
+}
+
+void DrawSidebarSwitchInTitleRow(const ImRect& bb)
+{
+    if (CalcSwitchHalfWidth(bb) >= 1.0f)
+        DrawSwitchTabs(bb, true);
 
     sIsSwitchInStrip = true;
 }

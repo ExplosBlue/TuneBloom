@@ -49,7 +49,12 @@ bool HasCustomTitleBar()
     return windowframe::IsCustom();
 }
 
-f32 DrawTitleBarIcon(f32 left, f32 top, f32 bottom)
+f32 CalcTitleBarHeight(f32 minHeight)
+{
+    return ImMax(minHeight, windowframe::FitTitleBarHeight(minHeight));
+}
+
+static f32 DrawTitleBarIcon(f32 left, f32 top, f32 bottom)
 {
     sead::TextureGL* texture = util::getIcon() ? sead::DynamicCast<sead::TextureGL>(util::getIcon()) : nullptr;
     const f32 slot = bottom - top;
@@ -163,7 +168,7 @@ static void DrawWindowButton(WindowButton button, f32 top, f32 bottom, bool isMa
     DrawWindowGlyph(button, isMaximized, (min + max) * 0.5f, CalcGlyphColor(id, button, hovered, held, enabled));
 }
 
-f32 DrawWindowButtons(f32 right, f32 top, f32 bottom)
+static f32 DrawWindowButtons(f32 right, f32 top, f32 bottom)
 {
     GLFWwindow* window = GetMainWindow();
     const bool isMaximized = windowframe::IsWindowMaximized(window);
@@ -182,6 +187,32 @@ f32 DrawWindowButtons(f32 right, f32 top, f32 bottom)
     return sButtons.left;
 }
 
+f32 GetTitleBarContentLeft(f32 left)
+{
+    return ImMax(left + ImGui::GetStyle().WindowPadding.x, left + windowframe::GetTitleBarInsetLeft());
+}
+
+f32 DrawTitleBarLeft(f32 left, f32 top, f32 bottom)
+{
+    if (windowframe::HasDrawnButtons())
+        return DrawTitleBarIcon(left, top, bottom);
+
+    const f32 itemInset = ImFloor(ImGui::GetStyle().ItemSpacing.x * 0.5f);
+
+    return ImMax(ImGui::GetCursorScreenPos().x, left + windowframe::GetTitleBarInsetLeft() + itemInset);
+}
+
+f32 DrawTitleBarRight(f32 right, f32 top, f32 bottom)
+{
+    if (windowframe::HasDrawnButtons())
+        return DrawWindowButtons(right, top, bottom);
+
+    sButtons = WindowButtonsLayout();
+    sButtons.left = right;
+
+    return right;
+}
+
 static windowframe::Span MakeSpan(f32 left, f32 right, f32 origin)
 {
     windowframe::Span span;
@@ -189,6 +220,21 @@ static windowframe::Span MakeSpan(f32 left, f32 right, f32 origin)
     span.right = static_cast<s32>(ImCeil(right - origin));
 
     return span;
+}
+
+static void AddWindowButtonSpans(windowframe::CaptionArea* area, f32 origin)
+{
+    for (s32 i = 0; i < windowframe::cWindowButtonNum; i++)
+    {
+        const WindowButton button = static_cast<WindowButton>(i);
+        const f32 left = GetButtonLeft(button);
+        const windowframe::Span span = MakeSpan(left, left + sButtons.width, origin);
+
+        if (IsButtonEnabled(button))
+            area->buttons[i] = span;
+        else
+            area->clientSpans[area->clientSpanNum++] = span;
+    }
 }
 
 void FinishTitleBar(f32 menuLeft, f32 menuRight, f32 toolsLeft, f32 bottom)
@@ -200,17 +246,8 @@ void FinishTitleBar(f32 menuLeft, f32 menuRight, f32 toolsLeft, f32 bottom)
     area.clientSpans[area.clientSpanNum++] = MakeSpan(menuLeft, menuRight, origin.x);
     area.clientSpans[area.clientSpanNum++] = MakeSpan(toolsLeft, sButtons.left, origin.x);
 
-    for (s32 i = 0; i < windowframe::cWindowButtonNum; i++)
-    {
-        const WindowButton button = static_cast<WindowButton>(i);
-        const f32 left = GetButtonLeft(button);
-        const windowframe::Span span = MakeSpan(left, left + sButtons.width, origin.x);
-
-        if (IsButtonEnabled(button))
-            area.buttons[i] = span;
-        else
-            area.clientSpans[area.clientSpanNum++] = span;
-    }
+    if (windowframe::HasDrawnButtons())
+        AddWindowButtonSpans(&area, origin.x);
 
     windowframe::SetCaptionArea(area);
 }

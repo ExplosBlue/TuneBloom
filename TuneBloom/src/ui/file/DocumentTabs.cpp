@@ -103,6 +103,7 @@ class DocumentTabStrip
 {
 public:
     void draw();
+    f32 drawInTitleRow(const TitleRowPlace& place);
 
 private:
     struct FrameContext
@@ -117,7 +118,9 @@ private:
         f32 viewWidth = 0.0f;
         f32 contentWidth = 0.0f;
         bool scrolls = false;
+        bool showsTabs = true;
         bool isLocked = false;
+        bool isInTitleRow = false;
         std::vector<TabLayout> tabs;
         std::vector<GroupLine> groups;
 
@@ -137,6 +140,8 @@ private:
         const TabLayout* closeAnchor = nullptr;
     };
 
+    void initContext(FrameContext* ctx) const;
+    f32 drawTabsAt(FrameContext& ctx, f32 tabsLeft, f32 right, f32 tabsTop);
     void addTab(FrameContext& ctx, TabLayout tab) const;
     void measureFileTabs(FrameContext& ctx, Document* document, f32 fold) const;
     void measureTabs(FrameContext& ctx) const;
@@ -166,6 +171,7 @@ private:
     void applyActions(const FrameContext& ctx) const;
 
     const void* mScrolledTo = nullptr;
+    f32 mScrolledViewWidth = 0.0f;
 };
 
 }
@@ -400,7 +406,7 @@ f32 DocumentTabStrip::shareWidth(FrameContext& ctx, f32 available) const
         }
 
         const f32 othersMinWidth = ctx.em * cTabMinWidthEm * static_cast<f32>(tabNum - 1);
-        const f32 activeMax = sead::Mathf::min(ImFloor(remaining * cActiveShareMax), remaining - othersMinWidth);
+        const f32 activeMax = ctx.scrolls ? remaining : sead::Mathf::min(ImFloor(remaining * cActiveShareMax), remaining - othersMinWidth);
 
         tab.width = sead::Mathf::max(sead::Mathf::min(tab.width, activeMax), ImFloor(ctx.em * cTabMinWidthEm * tab.fold));
         remaining -= tab.width;
@@ -443,6 +449,8 @@ void DocumentTabStrip::fitTabs(FrameContext& ctx, f32 available) const
         shareWidth(ctx, ctx.viewWidth);
     }
 
+    ctx.showsTabs = !ctx.scrolls || ctx.viewWidth >= ImFloor(ctx.em * cTabMinWidthEm);
+
     placeTabs(ctx);
 }
 
@@ -470,10 +478,11 @@ void DocumentTabStrip::scrollToActive(const FrameContext& ctx)
 {
     for (const TabLayout& tab : ctx.tabs)
     {
-        if (!tab.isActive || TabKey(tab) == mScrolledTo)
+        if (!tab.isActive || (TabKey(tab) == mScrolledTo && ctx.viewWidth == mScrolledViewWidth))
             continue;
 
         mScrolledTo = TabKey(tab);
+        mScrolledViewWidth = ctx.viewWidth;
 
         const f32 scroll = ImGui::GetScrollX();
 
@@ -661,11 +670,16 @@ void DocumentTabStrip::drawTabFace(const FrameContext& ctx, const TabLayout& tab
         const ImVec4 groupColor = ImGui::ColorConvertU32ToFloat4(tab.groupColor);
         const f32 tint = cGroupHeadTint * tab.groupFold;
 
-        idleColor = ImLerp(idleColor, groupColor, tint);
-        hoverColor = ImLerp(hoverColor, groupColor, tint);
+        idleColor = uicolors::BlendOver(idleColor, groupColor, tint);
+        hoverColor = uicolors::BlendOver(hoverColor, groupColor, tint);
     }
 
-    ImGui::TabItemBackground(ImGui::GetWindowDrawList(), bb, ImGuiTabItemFlags_None, ImGui::GetHoverColorU32(tabId, isHovered, ImGui::GetColorU32(idleColor), ImGui::GetColorU32(hoverColor)));
+    const ImU32 faceColor = ImGui::GetHoverColorU32(tabId, isHovered, ImGui::GetColorU32(idleColor), ImGui::GetColorU32(hoverColor));
+
+    if (ctx.isInTitleRow)
+        DrawSegmentFace(bb.Min, bb.Max, faceColor, tab.isActive);
+    else
+        ImGui::TabItemBackground(ImGui::GetWindowDrawList(), bb, ImGuiTabItemFlags_None, faceColor);
 
     drawTabLabel(ctx, tab, bb, showsClose);
 }
@@ -747,15 +761,21 @@ void DocumentTabStrip::drawTabItem(FrameContext& ctx, const TabLayout& tab, cons
     }
 }
 
+static f32 CalcGroupLineThickness(f32 em)
+{
+    return ImMax(2.0f, ImFloor(em * cGroupLineEm));
+}
+
 void DocumentTabStrip::drawGroupLine(const FrameContext& ctx) const
 {
     const ImVec2 origin = ImGui::GetWindowPos() - ImVec2(ImGui::GetScrollX(), 0.0f);
-    const f32 thickness = ImMax(2.0f, ImFloor(ctx.em * cGroupLineEm));
+    const f32 thickness = CalcGroupLineThickness(ctx.em);
+    const f32 lineTop = ctx.isInTitleRow ? ctx.tabHeight + thickness : ctx.tabHeight - thickness;
 
     for (const GroupLine& group : ctx.groups)
     {
-        const ImVec2 lineMin = origin + ImVec2(group.left, ctx.tabHeight - thickness);
-        const ImVec2 lineMax = origin + ImVec2(group.right, ctx.tabHeight);
+        const ImVec2 lineMin = origin + ImVec2(group.left, lineTop);
+        const ImVec2 lineMax = origin + ImVec2(group.right, lineTop + thickness);
 
         ImGui::GetWindowDrawList()->AddRectFilled(lineMin, lineMax, group.color, thickness * 0.5f);
     }
@@ -777,7 +797,9 @@ void DocumentTabStrip::drawTabs(FrameContext& ctx)
 {
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav;
 
-    if (ImGui::BeginChild("##DocumentTabs", ImVec2(ctx.viewWidth, ctx.tabHeight), ImGuiChildFlags_None, flags))
+    const f32 lineSpace = ctx.isInTitleRow ? CalcGroupLineThickness(ctx.em) * 2.0f : 0.0f;
+
+    if (ImGui::BeginChild("##DocumentTabs", ImVec2(ctx.viewWidth, ctx.tabHeight + lineSpace), ImGuiChildFlags_None, flags))
     {
         for (const TabLayout& tab : ctx.tabs)
             drawTab(ctx, tab);
@@ -799,12 +821,14 @@ void DocumentTabStrip::drawDocumentList(FrameContext& ctx) const
     if (!ctx.scrolls)
         return;
 
-    ImGui::SameLine(0.0f, ctx.spacing);
+    if (ctx.showsTabs)
+        ImGui::SameLine(0.0f, ctx.spacing);
 
     const ImGuiWindowFlags flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoNav;
 
     bool isPressed = false;
-    ImVec2 menuPos;
+    ImVec2 buttonMin;
+    ImVec2 buttonMax;
 
     if (ImGui::BeginChild("##DocumentListButton", ImVec2(ctx.tabHeight, ctx.tabHeight), ImGuiChildFlags_None, flags))
     {
@@ -812,7 +836,8 @@ void DocumentTabStrip::drawDocumentList(FrameContext& ctx) const
 
         ImGui::SetItemTooltip("%s", messages::documents::cOpenFiles);
 
-        menuPos = ImVec2(ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y + ctx.spacing);
+        buttonMin = ImGui::GetItemRectMin();
+        buttonMax = ImGui::GetItemRectMax() + ImVec2(0.0f, ctx.spacing);
     }
 
     ImGui::EndChild();
@@ -820,7 +845,7 @@ void DocumentTabStrip::drawDocumentList(FrameContext& ctx) const
     if (isPressed)
         ImGui::OpenPopup(cDocumentListId);
 
-    ImGui::SetNextWindowPos(menuPos, ImGuiCond_Appearing, ImVec2(1.0f, 0.0f));
+    PlaceContextMenuBelow(cDocumentListId, buttonMin, buttonMax, ctx.showsTabs);
 
     drawDocumentMenu(ctx);
 }
@@ -832,14 +857,19 @@ void DocumentTabStrip::drawDocumentMenu(FrameContext& ctx) const
 
     for (const TabLayout& tab : ctx.tabs)
     {
-        if (tab.kind != TabKind::Archive)
+        if (IsFoldingTab(tab))
             continue;
 
         ImGui::PushID(static_cast<s32>(tab.document->state().serial));
+        ImGui::PushID(TabKey(tab));
 
-        if (ContextMenuCheckItem(tab.name.c_str(), tab.document == ActiveDocument(), !ctx.isLocked))
-            ctx.activate = tab.document;
+        if (ContextMenuItem(tab.icon, tab.name.c_str(), !ctx.isLocked))
+            handleTabClick(ctx, tab);
 
+        if (tab.isActive)
+            DrawMenuCheck(!ctx.isLocked);
+
+        ImGui::PopID();
         ImGui::PopID();
     }
 
@@ -925,28 +955,54 @@ void DocumentTabStrip::applyActions(const FrameContext& ctx) const
         closeArchiveTabs(ctx);
 }
 
+void DocumentTabStrip::initContext(FrameContext* ctx) const
+{
+    ctx->em = ImGui::GetFontSize();
+    ctx->tabHeight = ImGui::GetFrameHeight();
+    ctx->padX = ImFloor(ctx->em * cTabPadXEm);
+    ctx->iconGap = ImFloor(ctx->em * cIconGapEm);
+    ctx->closeGap = ImFloor(ctx->em * cCloseGapEm);
+    ctx->closeSize = ctx->em;
+    ctx->spacing = ImFloor(ctx->em * cTabSpacingEm);
+    ctx->isLocked = IsDocumentSwitchLocked();
+}
+
+f32 DocumentTabStrip::drawTabsAt(FrameContext& ctx, f32 left, f32 right, f32 top)
+{
+    if (GetOpenDocuments().empty() || right - left < ctx.tabHeight)
+        return left;
+
+    measureTabs(ctx);
+    fitTabs(ctx, right - left);
+
+    ImGui::SetCursorScreenPos(ImVec2(left, top));
+
+    if (ctx.showsTabs)
+        drawTabs(ctx);
+
+    drawDocumentList(ctx);
+
+    if (!ctx.showsTabs)
+        return left + ctx.tabHeight;
+
+    return left + (ctx.scrolls ? ctx.viewWidth + ctx.spacing + ctx.tabHeight : ImMin(ctx.viewWidth, ctx.contentWidth));
+}
+
 void DocumentTabStrip::draw()
 {
     FrameContext ctx;
-    ctx.em = ImGui::GetFontSize();
-    ctx.tabHeight = ImGui::GetFrameHeight();
-    ctx.padX = ImFloor(ctx.em * cTabPadXEm);
-    ctx.iconGap = ImFloor(ctx.em * cIconGapEm);
-    ctx.closeGap = ImFloor(ctx.em * cCloseGapEm);
-    ctx.closeSize = ctx.em;
-    ctx.spacing = ImFloor(ctx.em * cTabSpacingEm);
-    ctx.isLocked = IsDocumentSwitchLocked();
+    initContext(&ctx);
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 stripMin = ImGui::GetCursorScreenPos();
+    const f32 right = stripMin.x + ImGui::GetContentRegionAvail().x;
     const f32 tabsTop = stripMin.y + ImFloor(ctx.em * cStripPadYEm);
     const f32 tabsBottom = tabsTop + ctx.tabHeight;
 
     f32 sidebarWidth = 0.0f;
     const bool hasSidebar = FindSidebarStripWidth(&sidebarWidth);
-    const bool hasDocuments = !GetOpenDocuments().empty();
 
-    if (!hasSidebar && !hasDocuments)
+    if (!hasSidebar && GetOpenDocuments().empty())
         return;
 
     const f32 sidebarRight = stripMin.x + sidebarWidth;
@@ -958,23 +1014,57 @@ void DocumentTabStrip::draw()
     if (hasSidebar)
         DrawSidebarSwitchInStrip(ImRect(stripMin.x, tabsTop, sidebarRight, tabsBottom));
 
-    if (hasDocuments)
-    {
-        measureTabs(ctx);
-        fitTabs(ctx, ImGui::GetContentRegionAvail().x - (tabsLeft - stripMin.x) - style.WindowPadding.x * 2.0f);
-
-        ImGui::SetCursorScreenPos(ImVec2(tabsLeft + style.WindowPadding.x, tabsTop));
-
-        drawTabs(ctx);
-        drawDocumentList(ctx);
-    }
+    drawTabsAt(ctx, tabsLeft + style.WindowPadding.x, right - style.WindowPadding.x, tabsTop);
 
     ImGui::SetCursorScreenPos(ImVec2(stripMin.x, tabsBottom + style.DockingSeparatorSize));
 
     applyActions(ctx);
 }
 
+static f32 CalcTitleRowTabsLeft(const TitleRowPlace& place)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    f32 sidebarWidth = 0.0f;
+
+    if (!FindSidebarStripWidth(&sidebarWidth))
+        return place.left + style.WindowPadding.x;
+
+    return ImMax(place.left, place.columnLeft + sidebarWidth + style.DockingSeparatorSize) + style.WindowPadding.x;
+}
+
+f32 DocumentTabStrip::drawInTitleRow(const TitleRowPlace& place)
+{
+    FrameContext ctx;
+    initContext(&ctx);
+    ctx.isInTitleRow = true;
+
+    f32 sidebarWidth = 0.0f;
+
+    if (FindSidebarStripWidth(&sidebarWidth))
+        DrawSidebarSwitchInTitleRow(ImRect(place.left, place.top, place.columnLeft + sidebarWidth - ImGui::GetStyle().WindowPadding.x, place.bottom));
+
+    const f32 tabsLeft = CalcTitleRowTabsLeft(place);
+    const f32 right = ImMax(place.right, ImMin(tabsLeft + ctx.tabHeight, place.maxRight));
+    const f32 stripRight = drawTabsAt(ctx, tabsLeft, right, place.top);
+
+    applyActions(ctx);
+
+    return stripRight;
+}
+
 void DrawDocumentTabStrip()
 {
     sStrip.draw();
+}
+
+f32 CalcTitleRowStripMinRight(const TitleRowPlace& place)
+{
+    const f32 em = ImGui::GetFontSize();
+
+    return CalcTitleRowTabsLeft(place) + ImFloor(em * cTabMinWidthEm) + ImFloor(em * cTabSpacingEm) + ImGui::GetFrameHeight();
+}
+
+f32 DrawDocumentTabsInTitleRow(const TitleRowPlace& place)
+{
+    return sStrip.drawInTitleRow(place);
 }

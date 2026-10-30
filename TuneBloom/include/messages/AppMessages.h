@@ -405,6 +405,17 @@ inline constexpr const char* cRepository  = "GitHub Repository";
 inline constexpr const char* cReportIssue = "Report an Issue";
 inline constexpr const char* cDiscord     = "Discord Server";
 
+inline constexpr const char* cAppAboutFormat  = "About %s";
+inline constexpr const char* cAppSettings     = "Settings…";
+inline constexpr const char* cAppServices     = "Services";
+inline constexpr const char* cAppHideFormat   = "Hide %s";
+inline constexpr const char* cAppHideOthers   = "Hide Others";
+inline constexpr const char* cAppShowAll      = "Show All";
+inline constexpr const char* cAppQuitFormat   = "Quit %s";
+inline constexpr const char* cWindowMenu      = "Window";
+inline constexpr const char* cWindowZoom      = "Zoom";
+inline constexpr const char* cBringAllToFront = "Bring All to Front";
+
 }
 
 namespace documents

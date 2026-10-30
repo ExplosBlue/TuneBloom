@@ -64,6 +64,17 @@ constexpr ImVec4 Opaque(const ImVec4& color)
     return ImVec4(color.x, color.y, color.z, 1.0f);
 }
 
+constexpr ImVec4 BlendOver(const ImVec4& base, const ImVec4& top, f32 amount)
+{
+    const f32 baseWeight = base.w * (1.0f - amount);
+    const f32 alpha = amount + baseWeight;
+
+    if (alpha <= 0.0f)
+        return base;
+
+    return ImVec4((top.x * amount + base.x * baseWeight) / alpha, (top.y * amount + base.y * baseWeight) / alpha, (top.z * amount + base.z * baseWeight) / alpha, alpha);
+}
+
 constexpr ImVec4 Scale(const ImVec4& color, f32 factor)
 {
     return ImVec4(color.x * factor, color.y * factor, color.z * factor, color.w);

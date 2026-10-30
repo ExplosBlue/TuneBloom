@@ -10,4 +10,5 @@ void AddRecentFile(const char* path);
 void TrimRecentFiles();
 void RegisterRecentFilesSettings();
 bool DrawRecentFilesList(std::string* outPath);
+bool VisitRecentFilesList(std::string* outPath);
 bool DrawRecentFilesTable(std::string* outPath);

@@ -48,6 +48,27 @@ static bool OpenMenu(bool open)
     return true;
 }
 
+void PlaceContextMenuBelow(const char* id, const ImVec2& anchorMin, const ImVec2& anchorMax, bool towardLeft)
+{
+    const ImRect anchor(anchorMin, anchorMax);
+
+    char name[20];
+    ImFormatString(name, IM_ARRAYSIZE(name), "##Popup_%08x", ImGui::GetID(id));
+
+    ImGuiWindow* popup = ImGui::FindWindowByName(name);
+
+    if (!popup || !popup->WasActive)
+    {
+        ImGui::SetNextWindowPos(towardLeft ? anchor.GetBR() : anchor.GetBL(), ImGuiCond_Always, ImVec2(towardLeft ? 1.0f : 0.0f, 0.0f));
+        return;
+    }
+
+    popup->AutoPosLastDirection = towardLeft ? ImGuiDir_Left : ImGuiDir_Down;
+
+    const ImVec2 size = ImGui::CalcWindowNextAutoFitSize(popup);
+    ImGui::SetNextWindowPos(ImGui::FindBestWindowPosForPopupEx(anchor.GetBL(), size, &popup->AutoPosLastDirection, ImGui::GetPopupAllowedExtentRect(popup), anchor, ImGuiPopupPositionPolicy_ComboBox));
+}
+
 bool BeginContextMenu(const char* id)
 {
     PushMenuWindowStyle();

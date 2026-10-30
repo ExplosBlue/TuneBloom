@@ -2,9 +2,12 @@
 
 #include <basis/seadTypes.h>
 
+struct ImVec2;
+
 inline constexpr f32 cMenuRoundingEm = 0.4f;
 inline constexpr f32 cMenuItemGapEm  = 0.35f;
 
+void PlaceContextMenuBelow(const char* id, const ImVec2& anchorMin, const ImVec2& anchorMax, bool towardLeft);
 bool BeginContextMenu(const char* id);
 bool BeginItemContextMenu(const char* id = nullptr);
 bool BeginWindowContextMenu(const char* id = nullptr);

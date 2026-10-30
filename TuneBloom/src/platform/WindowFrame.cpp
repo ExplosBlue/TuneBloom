@@ -16,6 +16,33 @@
 namespace windowframe
 {
 
+static bool IsInSpan(s32 x, const Span& span)
+{
+    return x >= span.left && x < span.right;
+}
+
+bool IsDragPoint(const CaptionArea& area, s32 x, s32 y)
+{
+    if (y < 0 || y >= area.height)
+        return false;
+
+    for (const Span& button : area.buttons)
+    {
+        if (IsInSpan(x, button))
+            return false;
+    }
+
+    for (s32 i = 0; i < area.clientSpanNum; i++)
+    {
+        if (IsInSpan(x, area.clientSpans[i]))
+            return false;
+    }
+
+    return true;
+}
+
+#if !defined(SEAD_PLATFORM_MACOSX)
+
 #if defined(SEAD_PLATFORM_WINDOWS)
 
 static constexpr DWORD cDwmUseImmersiveDarkMode    = 20;
@@ -51,11 +78,6 @@ static s32 CalcCaptionHeight(HWND hwnd)
     AdjustWindowRectExForDpi(&frame, style, FALSE, exStyle, GetDpiForWindow(hwnd));
 
     return -frame.top;
-}
-
-static bool IsInSpan(s32 x, const Span& span)
-{
-    return x >= span.left && x < span.right;
 }
 
 static LRESULT CalcClientSize(HWND hwnd, WPARAM wParam, LPARAM lParam)
@@ -94,13 +116,7 @@ static LRESULT HitTest(HWND hwnd, WPARAM wParam, LPARAM lParam)
             return static_cast<LRESULT>(cButtonHits[i]);
     }
 
-    for (s32 i = 0; i < sCaptionArea.clientSpanNum; i++)
-    {
-        if (IsInSpan(point.x, sCaptionArea.clientSpans[i]))
-            return HTCLIENT;
-    }
-
-    return HTCAPTION;
+    return IsDragPoint(sCaptionArea, point.x, point.y) ? HTCAPTION : HTCLIENT;
 }
 
 static void TrackLeave(HWND hwnd)
@@ -354,6 +370,21 @@ static s32 CalcSizeOffset(GLFWwindow*)
 
 #endif
 
+bool HasDrawnButtons()
+{
+    return IsCustom();
+}
+
+f32 GetTitleBarInsetLeft()
+{
+    return 0.0f;
+}
+
+f32 FitTitleBarHeight(f32)
+{
+    return 0.0f;
+}
+
 static s32 ShrinkLimit(s32 value, s32 offset)
 {
     return value == GLFW_DONT_CARE ? value : value - offset;
@@ -370,5 +401,7 @@ void SetSizeLimits(GLFWwindow* window, s32 minWidth, s32 minHeight, s32 maxWidth
 
     glfwSetWindowSizeLimits(window, minWidth, ShrinkLimit(minHeight, offset), maxWidth, ShrinkLimit(maxHeight, offset));
 }
+
+#endif
 
 }

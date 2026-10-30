@@ -654,6 +654,26 @@ static bool FinishRecentAction(RecentAction action, const std::string& path, std
     return false;
 }
 
+static bool DrawRecentEmptyItem(const std::vector<std::string>& recent)
+{
+    if (!recent.empty())
+        return false;
+
+    MenuBarItem(messages::recent::cEmpty, std::nullopt, false, false);
+    return true;
+}
+
+static void DrawRecentClearItem(std::vector<std::string>* recent)
+{
+    MenuSeparator();
+
+    if (!MenuBarIconItem(ICON_LC_BRUSH_CLEANING, messages::recent::cClear, std::nullopt, !recent->empty()))
+        return;
+
+    recent->clear();
+    SaveRecentFiles();
+}
+
 bool DrawRecentFilesList(std::string* outPath)
 {
     SEAD_ASSERT(outPath);
@@ -663,11 +683,8 @@ bool DrawRecentFilesList(std::string* outPath)
     if (ImGui::IsWindowAppearing())
         RefreshRecentFiles();
 
-    if (recent.empty())
-    {
-        MenuBarItem(messages::recent::cEmpty, nullptr, false, false);
+    if (DrawRecentEmptyItem(recent))
         return false;
-    }
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
@@ -715,17 +732,34 @@ bool DrawRecentFilesList(std::string* outPath)
         ImGui::PopStyleColor();
     }
 
-    ImGui::Separator();
-
-    const sead::FormatFixedSafeString<64> clearLabel(ICON_LC_BRUSH_CLEANING " %s", messages::recent::cClear);
-
-    if (MenuBarItem(clearLabel.cstr(), nullptr, false, !recent.empty()))
-    {
-        recent.clear();
-        SaveRecentFiles();
-    }
+    DrawRecentClearItem(&recent);
 
     return FinishRecentAction(action, actionPath, outPath);
+}
+
+bool VisitRecentFilesList(std::string* outPath)
+{
+    SEAD_ASSERT(outPath);
+
+    std::vector<std::string>& recent = GetRecentFiles();
+
+    if (DrawRecentEmptyItem(recent))
+        return false;
+
+    bool chosen = false;
+
+    for (const std::string& path : recent)
+    {
+        if (!VisitMenuFileItem(path.c_str()))
+            continue;
+
+        *outPath = path;
+        chosen = true;
+    }
+
+    DrawRecentClearItem(&recent);
+
+    return chosen;
 }
 
 static void DrawRecentTableEmpty()

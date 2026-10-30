@@ -1251,7 +1251,7 @@ void DrawPreferencesMenu()
 {
     for (const PageInfo& info : cPages)
     {
-        if (MenuBarItem(sead::FormatFixedSafeString<96>("%s %s", info.icon, info.name).cstr()))
+        if (MenuBarIconItem(info.icon, info.name))
             OpenPreferencesWindow(info.page);
     }
 }

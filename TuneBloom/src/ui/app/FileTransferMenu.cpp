@@ -29,16 +29,16 @@ static void DrawSoundExportItems(Item* item)
     const std::vector<Sound*> sounds = CollectForAction<Sound>(item);
     const SoundExportCheck check = CheckSoundExport(sounds);
 
-    if (MenuBarIconItem(ICON_LC_FILE_AUDIO, messages::mainmenu::cExportWav, nullptr, check.canExport, check.reason.cstr()))
+    if (MenuBarIconItem(ICON_LC_FILE_AUDIO, messages::mainmenu::cExportWav, std::nullopt,check.canExport, check.reason.cstr()))
         RequestExportSounds(sounds);
 
-    if (check.onlySequence && MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportMidi, nullptr, check.canExport, check.reason.cstr()))
+    if (check.onlySequence && MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportMidi, std::nullopt,check.canExport, check.reason.cstr()))
         RequestExportMidi(sounds);
 }
 
 static void DrawExportHint()
 {
-    MenuBarItem(messages::mainmenu::cExportNoSelection, nullptr, false, false);
+    MenuBarItem(messages::mainmenu::cExportNoSelection, std::nullopt,false, false);
 }
 
 static void DrawSoundSetExportItems(Item* item)
@@ -51,7 +51,7 @@ static void DrawSoundSetExportItems(Item* item)
 
     const std::vector<SoundSet*> soundSets = CollectForAction<SoundSet>(item);
 
-    if (MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportMidi, nullptr, CanExportSoundSetMidi(soundSets), messages::exporting::cSoundSetMidiNeedsSequences))
+    if (MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportMidi, std::nullopt,CanExportSoundSetMidi(soundSets), messages::exporting::cSoundSetMidiNeedsSequences))
         RequestExportMidi(soundSets);
 }
 
@@ -70,7 +70,7 @@ static void DrawSequenceFileExportItems(Item* item)
 {
     const bool isCompiled = static_cast<SequenceFile*>(item)->isValid();
 
-    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, GetInnerFileLabel(InnerFileKind::Sequence).cstr(), nullptr, isCompiled, messages::sequence::cNotCompiled))
+    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, GetInnerFileLabel(InnerFileKind::Sequence).cstr(), std::nullopt,isCompiled, messages::sequence::cNotCompiled))
         RequestExportSequenceFiles(CollectForAction<SequenceFile>(item));
 }
 
@@ -79,19 +79,19 @@ static void DrawBankFileExportItems(const std::vector<BankFile*>& bankFiles)
     const bool canExport = !bankFiles.empty();
     const char* reason = messages::bank::cNoFileAttached;
 
-    if (MenuBarIconItem(ICON_LC_PACKAGE, messages::mainmenu::cBankBundle, nullptr, canExport, reason))
+    if (MenuBarIconItem(ICON_LC_PACKAGE, messages::mainmenu::cBankBundle, std::nullopt,canExport, reason))
         RequestExportBankBundles(bankFiles);
 
-    if (MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportSf2, nullptr, canExport, reason))
+    if (MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportSf2, std::nullopt,canExport, reason))
         RequestExportBankSf2(bankFiles);
 
-    if (MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportDls, nullptr, canExport, reason))
+    if (MenuBarIconItem(ICON_LC_FILE_MUSIC, messages::mainmenu::cExportDls, std::nullopt,canExport, reason))
         RequestExportBankDls(bankFiles);
 }
 
 void DrawImportMenu()
 {
-    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_INPUT " %s", messages::common::cImport).cstr()))
+    if (!BeginIconSubMenu(ICON_LC_FILE_INPUT, messages::common::cImport))
         return;
 
     if (MenuBarIconItem(ICON_LC_FILE_INPUT, GetInnerFileLabel(InnerFileKind::Sequence).cstr()))
@@ -100,12 +100,12 @@ void DrawImportMenu()
     if (MenuBarIconItem(ICON_LC_PACKAGE_OPEN, messages::mainmenu::cBankBundle))
         RequestImportBankBundle();
 
-    ImGui::EndMenu();
+    EndSubMenu();
 }
 
 void DrawExportMenu()
 {
-    if (!BeginSubMenu(sead::FormatFixedSafeString<64>(ICON_LC_FILE_OUTPUT " %s", messages::common::cExport).cstr()))
+    if (!BeginIconSubMenu(ICON_LC_FILE_OUTPUT, messages::common::cExport))
         return;
 
     Item* item = IsSoundArchiveOpen() ? GetActiveSelection() : nullptr;
@@ -141,5 +141,5 @@ void DrawExportMenu()
             break;
     }
 
-    ImGui::EndMenu();
+    EndSubMenu();
 }

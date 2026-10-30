@@ -75,6 +75,11 @@ inline bool IsViewportsOn()
     return false;
 }
 
+inline bool IsNativeMenuOn()
+{
+    return false;
+}
+
 inline bool IsBackupOn()
 {
     return false;

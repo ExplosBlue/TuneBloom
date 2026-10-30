@@ -22,6 +22,7 @@
 
 #include <snd/snd_MemorySoundArchive.h>
 
+#include <array>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -55,6 +56,7 @@ class WaveSoundFileReader;
 
 struct ByteRange;
 struct BfsarGroupItemFiles;
+struct BfsarNameCounts;
 struct BfsarOpenContext;
 struct BfsarSaveContext;
 struct BfsarValidateContext;
@@ -80,7 +82,7 @@ public:
     void setFormat(ArchiveFormat format)
     {
         if (format != mFormat)
-            forgetReadFileVersions();
+            forgetReadConverterTraits();
 
         mFormat = format;
     }
@@ -141,6 +143,8 @@ public:
     u32 getGroupExtraFileCount(const Group* group) const;
     bool exportGroupFile(Group* group, const sead::SafeString& path);
 
+    static constexpr const char* cGroupPackExtensions[] = { "sarc", "aras" };
+
     enum class GroupFileCheck
     {
         Ok,
@@ -150,7 +154,8 @@ public:
     };
 
     GroupFileCheck checkGroupFile(const sead::SafeString& path) const;
-    std::string findGroupFileInFolder(const sead::SafeString& groupName, const sead::SafeString& folder) const;
+    std::vector<std::string> findGroupFilesInFolder(const std::vector<std::string>& groupNames, const sead::SafeString& folder) const;
+    std::string getGroupFileInPack(const sead::SafeString& path) const;
     void setGroupFilePath(const sead::SafeString& groupName, const sead::SafeString& path, bool keep) const;
     std::vector<std::string> takeDeletedGroupFiles();
     bool saveBackupStreams(const std::string &dir, const std::string &previousDir, const std::vector<BackupStream> &previous, std::vector<BackupStream> *out) const;
@@ -188,11 +193,6 @@ public:
         return sead::SafeString::cEmptyString;
     }
 
-    bool hasFilePath() const
-    {
-        return mFilePath != nullptr;
-    }
-
     const sead::SafeString &getLoadedArchivePath() const
     {
         if (mLoadedArchivePath)
@@ -219,15 +219,16 @@ public:
     void setVersion(u32 version)
     {
         if (version != mVersion)
-            forgetReadFileVersions();
+            forgetReadConverterTraits();
 
         mVersion = version;
     }
 
-    void forgetReadFileVersions()
+    void forgetReadConverterTraits()
     {
         mReadWaveFileVersion = 0;
         mReadStreamFileVersion = 0;
+        mReadGroupItemsUnsorted = false;
     }
 
     // BFSAR:        version = (0 << 24) | (major << 16) | (minor << 8) | sub
@@ -435,6 +436,7 @@ public:
     {
         wave->setArchive(this);
         wave->setVersion(getVersionForBfwav());
+        wave->setStreamTarget(getStreamFileTarget());
     }
 
     SequenceFile::List& getSequenceFileList()
@@ -768,11 +770,6 @@ public:
         mCmpbinPreferZstd = preferZstd;
     }
 
-    bool getCmpbinPreferZstd() const
-    {
-        return mCmpbinPreferZstd;
-    }
-
     void setBeaSource(bea::Source source)
     {
         mBeaSource = std::move(source);
@@ -795,6 +792,9 @@ private:
     {
         Group* group = nullptr;
         std::string path;
+        std::string filePath;
+        std::string packEntry;
+        std::string sourcePack;
         std::string stagedPath;
         std::string backupPath;
         bool isReplaced = false;
@@ -813,7 +813,7 @@ private:
 
     bool areGroupItemsSortedById_() const
     {
-        return isVersionOrLater(2, mFormat == ArchiveFormat::BCSAR ? 3 : 1, 0);
+        return !mReadGroupItemsUnsorted && isVersionOrLater(2, mFormat == ArchiveFormat::BCSAR ? 3 : 1, 0);
     }
 
     std::vector<GroupFileSave> planGroupFileSaves_(const sead::SafeString& archivePath);
@@ -833,6 +833,8 @@ private:
     std::vector<const Item*> getExtraFileOwners_(const Group* group) const;
     void attachExtraFilesToGroup_(BfsarSaveContext& ctx, const Group* group);
     bool hasGroupFileSlot_(const Group* group) const;
+    u32 getGeneratedWarcOrigFileId_(const BfsarSaveContext& ctx, u32 fileId) const;
+    u32 getFileOrderOrigId_(const BfsarSaveContext& ctx, u32 fileId) const;
     void restoreGroupFileOrder_(BfsarSaveContext& ctx, const Group* group);
 
     void readArchiveVersion_(const BfsarOpenContext& ctx);
@@ -843,7 +845,7 @@ private:
     void attachExternalGroupFile_(BfsarOpenContext& ctx, Group* group, nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo, const ByteRange& file, const std::string& path);
     void assignGroupFileSlots_(const BfsarOpenContext& ctx);
     ByteRange takeGroupFileOfArchive_(const BfsarOpenContext& ctx, const Group& group, const ByteRange& file) const;
-    ByteRange loadExternalGroupFile_(const BfsarOpenContext& ctx, const Group& group, bool searchFolders, std::string* outPath);
+    ByteRange loadExternalGroupFile_(BfsarOpenContext& ctx, const Group& group, bool searchFolders, std::string* outPath);
     bool loadExtDataGroupFile_(BfsarOpenContext& ctx, Group* group, nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo);
     void resolveGroupFile_(BfsarOpenContext& ctx, Group* group, nw::snd::internal::SoundArchiveFile::GroupInfo* groupInfo);
     bool readGroups_(BfsarOpenContext& ctx);
@@ -879,6 +881,7 @@ private:
     bool readSoundSets_(BfsarOpenContext& ctx);
     void addGroupItem_(BfsarOpenContext& ctx, const nw::snd::internal::GroupFileReader& reader, Group* group, u32 itemIdx);
     void addGroupBankFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 bankId);
+    void addOwnWaveArchiveFile_(u32 ownerFileId, u32 warcFileId);
     void addGroupSoundFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 soundId, bool isGroupItem);
     void addGroupWaveSoundSetFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, const nw::snd::internal::SoundArchiveFile::SoundGroupInfo& soundSetInfo);
     void addGroupSoundSetFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles& item);
@@ -962,6 +965,7 @@ private:
     bool validateSharedStream_(BfsarValidateContext& ctx, const Sound* sound) const;
     bool validateSounds_(BfsarValidateContext& ctx) const;
     bool validateWaveSoundOwners_(const BfsarValidateContext& ctx) const;
+    std::array<const Item::List*, 6> getNamedLists() const;
 
     u32 getItemOrigFileId_(const Item *item) const
     {
@@ -1021,11 +1025,13 @@ private:
     u32 mArchiveNameHash{0};
     u32 mReadWaveFileVersion{0};
     u32 mReadStreamFileVersion{0};
+    bool mReadGroupItemsUnsorted{false};
 
     std::vector<std::vector<u32>> mFileAttachedGroups;
     std::vector<bool> mFileOriginalIncludeInBfsar;
     std::vector<bool> mFileOriginalHasData;
     std::vector<u32> mFileOriginalHomeGroup;
+    std::unordered_map<u32, u32> mFileOriginalOwnWarc;
     std::vector<std::pair<const Item *, u32>> mItemOrigFileIds;
     StreamFileOrder mStreamFileOrder{StreamFileOrder::ByVersion};
 
@@ -1054,5 +1060,6 @@ private:
     std::vector<std::string> mLoadedGroupFilePaths;
     std::vector<std::string> mDeletedGroupFiles;
     const Group* mUnwrittenGroupFile = nullptr;
+    const BfsarNameCounts* mValidateNameCounts = nullptr;
     bool mCliMode = false;
 };

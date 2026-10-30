@@ -32,6 +32,7 @@ constexpr u32 cBlockHeaderSize  = sizeof(nw::ut::BinaryBlockHeader);
 constexpr u32 cBlockSizeOffset  = offsetof(nw::ut::BinaryBlockHeader, size);
 
 constexpr u32 cAbsentBlock      = 0xFFFFFFFF;
+constexpr u32 cTrimmedPaddingMax = 0x20;
 constexpr u32 cItemIndexMax     = 0x00FFFFFF;
 constexpr u32 cSoundInfoSizeV3  = 0x38;
 
@@ -84,6 +85,64 @@ u32 ReadDeclaredFileSize(const void* data, u64 size)
         return 0;
 
     return ReadU32(bytes + cFileSizeOffset, bigEndian);
+}
+
+bool IsTrimmedPadding(u32 declaredSize, u64 size)
+{
+    return declaredSize > size && declaredSize - size < cTrimmedPaddingMax;
+}
+
+static bool FindLastBlockSizeFields(const u8* bytes, u64 size, bool bigEndian, u64* outRefSizeField, u64* outBlockSizeField)
+{
+    const u32 count = ReadU16(bytes + cBlockCountOffset, bigEndian);
+
+    for (u32 i = 0; i < count; i++)
+    {
+        const u64 ref = cBlockRefsOffset + static_cast<u64>(i) * cBlockRefSize;
+
+        if (ref + cBlockRefSize > size)
+            return false;
+
+        const u64 offset = ReadU32(bytes + ref + cRefOffsetOffset, bigEndian);
+
+        if (offset + ReadU32(bytes + ref + cRefSizeOffset, bigEndian) != size || offset + cBlockHeaderSize > size)
+            continue;
+
+        *outRefSizeField = ref + cRefSizeOffset;
+        *outBlockSizeField = offset + cBlockSizeOffset;
+        return true;
+    }
+
+    return false;
+}
+
+bool KeepTrimmedTail(const void* source, u64 sourceSize, std::vector<u8>* written)
+{
+    const u8* sourceBytes = static_cast<const u8*>(source);
+    const u32 declaredSize = ReadDeclaredFileSize(source, sourceSize);
+    bool bigEndian = false;
+    u64 sizeFields[] = { cFileSizeOffset, 0, 0 };
+
+    if (written->size() != sourceSize || !IsTrimmedPadding(declaredSize, sourceSize) || !ReadByteOrder(written->data(), &bigEndian) ||
+        !FindLastBlockSizeFields(written->data(), written->size(), bigEndian, &sizeFields[1], &sizeFields[2]))
+        return false;
+
+    const u32 padding = declaredSize - static_cast<u32>(sourceSize);
+    std::vector<u8> kept = *written;
+
+    for (u64 field : sizeFields)
+    {
+        if (ReadU32(sourceBytes + field, bigEndian) != ReadU32(kept.data() + field, bigEndian) + padding)
+            return false;
+
+        std::memcpy(kept.data() + field, sourceBytes + field, sizeof(u32));
+    }
+
+    if (std::memcmp(kept.data(), sourceBytes, sourceSize) != 0)
+        return false;
+
+    *written = std::move(kept);
+    return true;
 }
 
 static bool ContainsString(const ByteRange& file, const char* text)

@@ -4,16 +4,20 @@
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 
 namespace aal
 {
 
 static constexpr f64 cPcmScale              = 32768.0;
+static constexpr f64 cPcm16Min              = -32768.0;
+static constexpr f64 cPcm16Max              = 32767.0;
 static constexpr f64 cLoudnessOffset        = -0.691;
 static constexpr f64 cAbsoluteGate          = -70.0;
 static constexpr f64 cRelativeGate          = -10.0;
 static constexpr f64 cRangeGate             = -20.0;
 static constexpr f64 cFloorLoudness         = -96.0;
+static constexpr f64 cAmta4SilentLoudness   = -100.0;
 static constexpr f64 cEnvelopeTolerance     = 1.0;
 static constexpr f64 cRangeLowPercentile    = 0.10;
 static constexpr f64 cRangeHighPercentile   = 0.95;
@@ -22,7 +26,12 @@ static constexpr u32 cRmsWindowBlocks       = 3;
 static constexpr u32 cMomentaryBlocks       = 4;
 static constexpr u32 cShortTermBlocks       = 30;
 static constexpr u32 cShortTermHopBlocks    = 10;
-static constexpr u32 cRangeTailBlocks       = 3;
+static constexpr u32 cTailBlocks            = 3;
+
+static constexpr s32 cSincHalfTaps          = 32;
+static constexpr f64 cSincCutoff            = 0.98;
+static constexpr f64 cSincKaiserBeta        = 8.0;
+static constexpr u32 cBesselTermsMax        = 64;
 
 static constexpr f64 cShelfFrequency        = 1681.974450955533;
 static constexpr f64 cShelfGainDb           = 3.999843853973347;
@@ -81,16 +90,18 @@ struct PlaybackSignal
 
     s16 at(u32 channel, u64 index) const
     {
-        const std::vector<s16>& samples = (*channels)[channel];
+        const u64 source = index < length || !isLoop ? index : loopStartFrame + (index - length) % (length - loopStartFrame);
 
-        if (index < used)
-            return samples[index];
-
-        if (!isLoop)
-            return 0;
-
-        return samples[loopStartFrame + (index - length) % (length - loopStartFrame)];
+        return source < used ? (*channels)[channel][source] : 0;
     }
+};
+
+struct AnalysisFrames
+{
+    u32 length = 0;
+    u32 blockCount = 0;
+    u32 pointCount = 0;
+    u32 sampleCount = 0;
 };
 
 struct FilteredSums
@@ -116,7 +127,81 @@ static std::vector<std::vector<s16>> ResampleForAnalysis(const std::vector<std::
         std::vector<s16>& converted = out.emplace_back(resampled.size());
 
         for (u32 i = 0; i < resampled.size(); i++)
-            converted[i] = AudioProcessing::restorePcm16(resampled[i]);
+            converted[i] = AudioProcessing::toPcm16(resampled[i]);
+    }
+
+    return out;
+}
+
+static f64 CalcBesselI0(f64 value)
+{
+    f64 sum = 1.0;
+    f64 term = 1.0;
+
+    for (u32 k = 1; k < cBesselTermsMax; k++)
+    {
+        const f64 factor = value / (2.0 * k);
+        term *= factor * factor;
+        sum += term;
+    }
+
+    return sum;
+}
+
+static f64 CalcSincTap(f64 offset)
+{
+    const f64 ratio = offset / cSincHalfTaps;
+    const f64 window = CalcBesselI0(cSincKaiserBeta * std::sqrt(std::max(0.0, 1.0 - ratio * ratio))) / CalcBesselI0(cSincKaiserBeta);
+    const f64 phase = cPi * cSincCutoff * offset;
+
+    return cSincCutoff * (phase == 0.0 ? 1.0 : std::sin(phase) / phase) * window;
+}
+
+static std::vector<f64> MakeSincTable(u32 phaseCount)
+{
+    std::vector<f64> table;
+    table.reserve(static_cast<size_t>(phaseCount) * cSincHalfTaps * 2);
+
+    for (u32 phase = 0; phase < phaseCount; phase++)
+    {
+        for (s32 tap = 1 - cSincHalfTaps; tap <= cSincHalfTaps; tap++)
+            table.push_back(CalcSincTap(static_cast<f64>(phase) / phaseCount - tap));
+    }
+
+    return table;
+}
+
+static std::vector<std::vector<s16>> ResampleForAmta5(const std::vector<std::vector<s16>>& channels, u32 sampleRate)
+{
+    const u64 divisor = std::gcd(sampleRate, cAmtaAnalysisRate);
+    const u64 step = sampleRate / divisor;
+    const u64 phaseCount = cAmtaAnalysisRate / divisor;
+    const std::vector<f64> table = MakeSincTable(static_cast<u32>(phaseCount));
+    const s64 inputCount = static_cast<s64>(channels.front().size());
+    const u64 outputCount = static_cast<u64>(std::llround(static_cast<f64>(inputCount) * cAmtaAnalysisRate / sampleRate));
+
+    std::vector<std::vector<s16>> out;
+
+    for (const std::vector<s16>& channel : channels)
+    {
+        std::vector<s16>& converted = out.emplace_back(outputCount);
+
+        for (u64 i = 0; i < outputCount; i++)
+        {
+            const s64 base = static_cast<s64>(i * step / phaseCount);
+            const f64* taps = &table[(i * step % phaseCount) * cSincHalfTaps * 2];
+            f64 sum = 0.0;
+
+            for (s32 tap = 1 - cSincHalfTaps; tap <= cSincHalfTaps; tap++, taps++)
+            {
+                const s64 index = base + tap;
+
+                if (index >= 0 && index < inputCount)
+                    sum += channel[index] * *taps;
+            }
+
+            converted[i] = static_cast<s16>(std::clamp(std::nearbyint(sum), cPcm16Min, cPcm16Max));
+        }
     }
 
     return out;
@@ -125,6 +210,11 @@ static std::vector<std::vector<s16>> ResampleForAnalysis(const std::vector<std::
 static u32 ScaleFrame(u32 frame, u32 sampleRate)
 {
     return static_cast<u32>(static_cast<u64>(frame) * cAmtaAnalysisRate / sampleRate);
+}
+
+static u32 ScaleFrameToSource(u32 frame, u32 sampleRate)
+{
+    return static_cast<u32>(static_cast<u64>(frame) * sampleRate / cAmtaAnalysisRate);
 }
 
 static KWeighting MakeKWeighting(u32 sampleRate)
@@ -181,6 +271,11 @@ static WindowSizes MakeWindowSizes(u32 sampleRate)
     return sizes;
 }
 
+static f64 WeighSample(const KWeighting& weighting, ChannelFilter* filter, f64 input)
+{
+    return RunBiquad(weighting.highPass, &filter->highPass, RunBiquad(weighting.shelf, &filter->shelf, input));
+}
+
 static FilteredSums FilterSignal(const PlaybackSignal& signal, u32 sampleRate, u64 sampleCount, u64 firstMark, u32 markStep)
 {
     const KWeighting weighting = MakeKWeighting(sampleRate);
@@ -213,8 +308,7 @@ static FilteredSums FilterSignal(const PlaybackSignal& signal, u32 sampleRate, u
 
         for (u32 c = 0; c < channelCount; c++)
         {
-            const f64 input = signal.at(c, n) / cPcmScale;
-            const f64 weighted = RunBiquad(weighting.highPass, &filters[c].highPass, RunBiquad(weighting.shelf, &filters[c].shelf, input));
+            const f64 weighted = WeighSample(weighting, &filters[c], signal.at(c, n) / cPcmScale);
             const f64 square = weighted * weighted;
 
             channelSums[c] += square;
@@ -225,6 +319,65 @@ static FilteredSums FilterSignal(const PlaybackSignal& signal, u32 sampleRate, u
     }
 
     return sums;
+}
+
+static std::vector<f64> FilterBlockSums(const PlaybackSignal& signal, u32 sampleRate, u64 sampleCount, u32 blockSize)
+{
+    const KWeighting weighting = MakeKWeighting(sampleRate);
+    ChannelFilter filter;
+
+    std::vector<f64> blocks;
+    f64 sum = 0.0;
+
+    for (u64 n = 0; n < sampleCount; n++)
+    {
+        const f64 weighted = WeighSample(weighting, &filter, signal.at(0, n) / cPcmScale);
+        sum += weighted * weighted;
+
+        if ((n + 1) % blockSize == 0)
+        {
+            blocks.push_back(sum);
+            sum = 0.0;
+        }
+    }
+
+    return blocks;
+}
+
+static std::vector<std::vector<s16>> MakeEnvelopeSource(const std::vector<std::vector<s16>>& channels)
+{
+    const f64 gain = 1.0 / std::sqrt(static_cast<f64>(channels.size()));
+    const std::vector<s16>& last = channels.back();
+
+    std::vector<std::vector<s16>> source(1, std::vector<s16>(last.size()));
+
+    for (size_t i = 0; i < last.size(); i++)
+        source[0][i] = static_cast<s16>(std::clamp(std::nearbyint(last[i] * gain), cPcm16Min, cPcm16Max));
+
+    return source;
+}
+
+static std::vector<f64> MeasureEnvelopePowers(const PlaybackSignal& signal, u32 sampleRate, u64 sampleCount, const WindowSizes& sizes, u32 pointCount)
+{
+    const std::vector<std::vector<s16>> source = MakeEnvelopeSource(*signal.channels);
+
+    PlaybackSignal mono = signal;
+    mono.channels = &source;
+
+    const std::vector<f64> blocks = FilterBlockSums(mono, sampleRate, sampleCount, sizes.block);
+    std::vector<f64> powers;
+
+    for (u32 j = 0; j < pointCount; j++)
+    {
+        f64 sum = 0.0;
+
+        for (u64 b = j; b < static_cast<u64>(j) + cMomentaryBlocks && b < blocks.size(); b++)
+            sum += blocks[b];
+
+        powers.push_back(sum / sizes.momentary);
+    }
+
+    return powers;
 }
 
 static f64 PrefixAt(const std::vector<f64>& prefix, s64 mark)
@@ -307,13 +460,13 @@ static std::vector<u32> SimplifyEnvelope(const std::vector<std::pair<u32, f64>>&
 
     while (anchor < last)
     {
-        if (std::abs(points[last].second - points[anchor].second) <= cEnvelopeTolerance && DoesSegmentFit(points, anchor, last))
-            break;
-
         u32 end = anchor + 1;
 
         while (end < last && DoesSegmentFit(points, anchor, end + 1))
             end++;
+
+        if (end == last && std::abs(points[last].second - points[anchor].second) <= cEnvelopeTolerance)
+            break;
 
         kept.push_back(end);
         anchor = end;
@@ -332,7 +485,7 @@ static std::vector<AmtaEnvelopePoint> BuildEnvelope(const std::vector<f64>& powe
 
     if (!isLoop && points.back().second > cFloorLoudness)
     {
-        points.emplace_back(length, cFloorLoudness);
+        points.emplace_back(points.back().first < length ? length : length + sizes.block, cFloorLoudness);
         values.push_back(0.0);
     }
 
@@ -341,7 +494,7 @@ static std::vector<AmtaEnvelopePoint> BuildEnvelope(const std::vector<f64>& powe
     for (u32 index : SimplifyEnvelope(points))
     {
         AmtaEnvelopePoint point;
-        point.position = points[index].first;
+        point.position = std::min(points[index].first, length);
         point.power = points[index].second <= cFloorLoudness ? 0.0f : static_cast<f32>(std::pow(10.0, (static_cast<f32>(CalcLoudness(values[index])) - cLoudnessOffset) / 10.0));
 
         envelope.push_back(point);
@@ -350,9 +503,28 @@ static std::vector<AmtaEnvelopePoint> BuildEnvelope(const std::vector<f64>& powe
     return envelope;
 }
 
+static std::vector<AmtaEnvelopePoint> MakeLoudnessCurve(const std::vector<f64>& powers, const WindowSizes& sizes, u32 length, bool isLoop)
+{
+    std::vector<AmtaEnvelopePoint> curve;
+
+    for (u32 j = 0; j < powers.size(); j++)
+        curve.push_back({ std::min(j * sizes.block, length), static_cast<f32>(powers[j]) });
+
+    if (!isLoop && !powers.empty() && CalcLoudness(powers.back()) > cFloorLoudness)
+        curve.push_back({ length, 0.0f });
+
+    return curve;
+}
+
+static void ScaleToSource(std::vector<AmtaEnvelopePoint>* points, u32 sampleRate)
+{
+    for (AmtaEnvelopePoint& point : *points)
+        point.position = ScaleFrameToSource(point.position, sampleRate);
+}
+
 static f64 CalcLoudnessRange(const FilteredSums& sums, const WindowSizes& sizes, u32 blockCount)
 {
-    const u64 limit = static_cast<u64>(blockCount + cRangeTailBlocks) * sizes.block;
+    const u64 limit = static_cast<u64>(blockCount + cTailBlocks) * sizes.block;
     const u64 window = static_cast<u64>(cShortTermBlocks) * sizes.block;
     const u64 hop = static_cast<u64>(cShortTermHopBlocks) * sizes.block;
 
@@ -388,95 +560,155 @@ static f64 CalcLoudnessRange(const FilteredSums& sums, const WindowSizes& sizes,
 
     std::sort(values.begin(), values.end());
 
-    const f64 lastIndex = static_cast<f64>(values.size() - 1);
+    const f64 count = static_cast<f64>(values.size());
+    const u64 highIndex = std::min<u64>(static_cast<u64>(std::nearbyint(cRangeHighPercentile * count)), values.size() - 1);
 
-    return values[static_cast<u64>(std::nearbyint(cRangeHighPercentile * lastIndex))] - values[static_cast<u64>(std::nearbyint(cRangeLowPercentile * lastIndex))];
+    return values[highIndex] - values[static_cast<u64>(std::nearbyint(cRangeLowPercentile * count))];
 }
 
-AmtaLoudness MeasureAmta5Loudness(const std::vector<std::vector<s16>>& channels, u32 sampleRate, bool isLoop, u32 loopStartFrame, bool dropLastSample)
+static AnalysisFrames MakeAnalysisFrames(u32 length, const WindowSizes& sizes)
 {
-    AmtaLoudness loudness;
+    AnalysisFrames frames;
+    frames.length = length;
+    frames.blockCount = (length + sizes.block - 1) / sizes.block;
+    frames.pointCount = length / sizes.block + 1;
+    frames.sampleCount = (frames.pointCount + cTailBlocks) * sizes.block;
 
-    if (channels.empty() || channels.front().empty() || sampleRate == 0)
-        return loudness;
+    return frames;
+}
 
-    if (sampleRate != cAmtaAnalysisRate)
-        return MeasureAmta5Loudness(ResampleForAnalysis(channels, sampleRate), cAmtaAnalysisRate, isLoop, ScaleFrame(loopStartFrame, sampleRate), dropLastSample);
+static u64 CalcBestWindowSum(const PlaybackSignal& signal, u32 windowSize, u32 windowCount, u64 start)
+{
+    u64 best = 0;
 
-    const WindowSizes sizes = MakeWindowSizes(sampleRate);
-    const u32 length = static_cast<u32>(channels.front().size());
-    const u32 channelCount = static_cast<u32>(channels.size());
-    const u32 blockCount = (length + sizes.block - 1) / sizes.block;
-    const u32 momentaryCount = isLoop ? std::max(blockCount, cMomentaryBlocks) : blockCount;
-    const u32 rmsWindowCount = (length + sizes.rms - 1) / sizes.rms;
-    const u64 total = std::max({ static_cast<u64>(momentaryCount) * sizes.block, static_cast<u64>(rmsWindowCount) * sizes.rms,
-                                 static_cast<u64>(blockCount) * sizes.block + sizes.momentary });
-
-    PlaybackSignal signal;
-    signal.channels = &channels;
-    signal.length = length;
-    signal.used = dropLastSample && !isLoop ? length - 1 : length;
-    signal.isLoop = isLoop && loopStartFrame < length;
-    signal.loopStartFrame = signal.isLoop ? loopStartFrame : 0;
-
-    u64 bestMeanSquare = 0;
-
-    for (u32 c = 0; c < channelCount; c++)
+    for (u32 c = 0; c < signal.channels->size(); c++)
     {
-        for (u32 w = 0; w < rmsWindowCount; w++)
+        for (u32 w = 0; w < windowCount; w++)
         {
             u64 sum = 0;
 
-            for (u64 n = static_cast<u64>(w) * sizes.rms; n < static_cast<u64>(w + 1) * sizes.rms; n++)
+            for (u64 n = start + static_cast<u64>(w) * windowSize; n < start + static_cast<u64>(w + 1) * windowSize; n++)
             {
                 const s64 sample = signal.at(c, n);
                 sum += static_cast<u64>(sample * sample);
             }
 
-            bestMeanSquare = std::max(bestMeanSquare, sum / sizes.rms);
+            best = std::max(best, sum);
         }
     }
 
-    const FilteredSums sums = FilterSignal(signal, sampleRate, total, 0, sizes.block);
+    return best;
+}
 
-    const auto windowPower = [&](const std::vector<f64>& prefix, s64 startBlock)
-    {
-        return (PrefixAt(prefix, startBlock + cMomentaryBlocks) - PrefixAt(prefix, startBlock)) / sizes.momentary;
-    };
+static u64 CalcBestMeanSquare(const PlaybackSignal& signal, const WindowSizes& sizes, u32 windowCount)
+{
+    return CalcBestWindowSum(signal, sizes.rms, windowCount, 0) / sizes.rms;
+}
+
+static AmtaLoudness MeasureAnalysisSignal(const PlaybackSignal& signal, u32 sourceRate, u32 sourceLength, f32 quietTailLevel)
+{
+    const WindowSizes sizes = MakeWindowSizes(cAmtaAnalysisRate);
+    const AnalysisFrames frames = MakeAnalysisFrames(signal.length, sizes);
+    const FilteredSums sums = FilterSignal(signal, cAmtaAnalysisRate, frames.sampleCount, 0, sizes.block);
 
     const auto summedPower = [&](s64 startBlock)
     {
         f64 power = 0.0;
 
         for (const std::vector<f64>& prefix : sums.channelPrefix)
-            power += windowPower(prefix, startBlock);
+            power += (PrefixAt(prefix, startBlock + cMomentaryBlocks) - PrefixAt(prefix, startBlock)) / sizes.momentary;
 
         return power;
     };
 
     f64 momentaryMax = 0.0;
 
-    for (u32 j = 1; j <= momentaryCount; j++)
+    for (u32 j = 1; j <= frames.blockCount + cTailBlocks; j++)
         momentaryMax = std::max(momentaryMax, summedPower(static_cast<s64>(j) - cMomentaryBlocks));
 
-    const std::vector<f64>& lastChannelPrefix = sums.channelPrefix.back();
-    std::vector<f64> forward;
-    std::vector<f64> envelopePower;
+    std::vector<f64> summed;
 
-    for (u32 j = 0; j < blockCount; j++)
-    {
-        forward.push_back(summedPower(j));
-        envelopePower.push_back(windowPower(lastChannelPrefix, j) / channelCount);
-    }
+    for (u32 j = 0; j < frames.pointCount; j++)
+        summed.push_back(summedPower(j));
 
-    loudness.peak = static_cast<f32>(CalcPeak(channels, signal.used));
+    std::vector<AmtaEnvelopePoint> curve = MakeLoudnessCurve(summed, sizes, signal.length, signal.isLoop);
+    const u64 bestMeanSquare = CalcBestMeanSquare(signal, sizes, (frames.blockCount + cTailBlocks) / cRmsWindowBlocks);
+
+    AmtaLoudness loudness;
+    loudness.peak = static_cast<f32>(CalcPeak(*signal.channels, signal.used));
     loudness.rms300 = static_cast<f32>(std::sqrt(static_cast<f64>(bestMeanSquare)) / cPcmScale);
     loudness.momentaryMax = static_cast<f32>(CalcLoudness(momentaryMax));
-    loudness.integrated = static_cast<f32>(CalcGatedLoudness(forward));
-    loudness.loudnessRange = static_cast<f32>(CalcLoudnessRange(sums, sizes, blockCount));
-    loudness.envelope = BuildEnvelope(envelopePower, sizes, length, signal.isLoop);
+    loudness.integrated = static_cast<f32>(CalcGatedLoudness(summed));
+    loudness.loudnessRange = static_cast<f32>(CalcLoudnessRange(sums, sizes, frames.blockCount));
+    loudness.envelope = BuildEnvelope(MeasureEnvelopePowers(signal, cAmtaAnalysisRate, frames.sampleCount, sizes, frames.pointCount), sizes, signal.length, signal.isLoop);
+
+    ScaleToSource(&loudness.envelope, sourceRate);
+    ScaleToSource(&curve, sourceRate);
+
+    loudness.quietTailFrames = CalcAmtaQuietTailFrames(loudness.envelope, sourceLength, quietTailLevel);
+    loudness.summedQuietTailFrames = CalcAmtaQuietTailFrames(curve, sourceLength, quietTailLevel);
 
     return loudness;
+}
+
+AmtaLoudness MeasureAmta5Loudness(const std::vector<std::vector<s16>>& channels, u32 sampleRate, bool isLoop, u32 loopStartFrame, bool dropLastSample, f32 quietTailLevel)
+{
+    if (channels.empty() || channels.front().empty() || sampleRate == 0)
+        return {};
+
+    const u32 sourceLength = static_cast<u32>(channels.front().size());
+    std::vector<std::vector<s16>> resampled;
+
+    if (sampleRate != cAmtaAnalysisRate)
+    {
+        std::vector<std::vector<s16>> source = channels;
+
+        for (std::vector<s16>& channel : source)
+        {
+            if (dropLastSample)
+                channel.back() = 0;
+        }
+
+        resampled = ResampleForAmta5(source, sampleRate);
+    }
+
+    const std::vector<std::vector<s16>>& analysis = resampled.empty() ? channels : resampled;
+    const u32 length = static_cast<u32>(analysis.front().size());
+    const u32 analysisLoopStart = resampled.empty() ? loopStartFrame : ScaleFrame(loopStartFrame, sampleRate);
+
+    if (length == 0)
+        return {};
+
+    PlaybackSignal signal;
+    signal.channels = &analysis;
+    signal.length = length;
+    signal.used = dropLastSample && resampled.empty() ? length - 1 : length;
+    signal.isLoop = isLoop && analysisLoopStart < length;
+    signal.loopStartFrame = signal.isLoop ? analysisLoopStart : 0;
+
+    return MeasureAnalysisSignal(signal, sampleRate, sourceLength, quietTailLevel);
+}
+
+u32 CalcAmtaQuietTailFrames(const std::vector<AmtaEnvelopePoint>& envelope, u32 length, f32 level)
+{
+    const auto loudnessOf = [](const AmtaEnvelopePoint& point) { return std::max(CalcLoudness(point.power), cFloorLoudness); };
+
+    for (size_t i = envelope.size(); i >= 2; i--)
+    {
+        const AmtaEnvelopePoint& from = envelope[i - 2];
+        const AmtaEnvelopePoint& to = envelope[i - 1];
+        const f64 fromLoudness = loudnessOf(from);
+        const f64 toLoudness = loudnessOf(to);
+
+        if (fromLoudness <= level || toLoudness > level)
+            continue;
+
+        const f64 position = from.position + (level - fromLoudness) / (toLoudness - fromLoudness) * (static_cast<f64>(to.position) - from.position);
+
+        return static_cast<u32>(std::max(0.0, std::round(length - position)));
+    }
+
+    return 0;
 }
 
 AmtaLoudness MeasureAmta4Loudness(const std::vector<std::vector<s16>>& channels, u32 sampleRate, bool hasIntegerMeanSquare)
@@ -494,27 +726,13 @@ AmtaLoudness MeasureAmta4Loudness(const std::vector<std::vector<s16>>& channels,
     const u32 rmsWindowCount = (length - 1) / sizes.rms;
     const u32 momentaryCount = (length - 1) / sizes.block;
 
-    u64 bestSum = 0;
-
-    for (const std::vector<s16>& channel : channels)
-    {
-        for (u32 w = 0; w < rmsWindowCount; w++)
-        {
-            u64 sum = 0;
-
-            for (u64 n = 1 + static_cast<u64>(w) * sizes.rms; n < 1 + static_cast<u64>(w + 1) * sizes.rms; n++)
-                sum += static_cast<u64>(static_cast<s64>(channel[n]) * channel[n]);
-
-            bestSum = std::max(bestSum, sum);
-        }
-    }
-
-    const f64 meanSquare = hasIntegerMeanSquare ? static_cast<f64>(bestSum / sizes.rms) : static_cast<f64>(bestSum) / sizes.rms;
-
     PlaybackSignal signal;
     signal.channels = &channels;
     signal.length = length;
     signal.used = length;
+
+    const u64 bestSum = CalcBestWindowSum(signal, sizes.rms, rmsWindowCount, 1);
+    const f64 meanSquare = hasIntegerMeanSquare ? static_cast<f64>(bestSum / sizes.rms) : static_cast<f64>(bestSum) / sizes.rms;
 
     const FilteredSums sums = FilterSignal(signal, sampleRate, length, 1, sizes.block);
     f64 momentaryMax = 0.0;
@@ -527,7 +745,9 @@ AmtaLoudness MeasureAmta4Loudness(const std::vector<std::vector<s16>>& channels,
 
     loudness.peak = static_cast<f32>(CalcPeak(channels, length));
     loudness.rms300 = static_cast<f32>(std::sqrt(meanSquare) / cPcmScale);
-    loudness.momentaryMax = momentaryCount != 0 ? static_cast<f32>(CalcLoudness(momentaryMax)) : 0.0f;
+
+    if (momentaryCount != 0)
+        loudness.momentaryMax = static_cast<f32>(momentaryMax > 0.0 ? CalcLoudness(momentaryMax) : cAmta4SilentLoudness);
 
     return loudness;
 }

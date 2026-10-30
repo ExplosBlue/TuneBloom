@@ -11,9 +11,12 @@
 #include <vector>
 
 static constexpr u32 cCacheMagic         = 0x49464254;
-static constexpr u32 cCacheVersion       = 4;
+static constexpr u32 cCacheVersion       = 6;
 static constexpr u32 cCacheStringMax     = 4096;
 static constexpr const char* cTempSuffix = ".tmp";
+
+namespace
+{
 
 class CacheReader
 {
@@ -45,10 +48,7 @@ public:
 
     u64 readU64()
     {
-        const u64 low = readU32();
-        const u64 high = readU32();
-
-        return high << 32 | low;
+        return has(sizeof(u64)) ? mView.readU64(advance(sizeof(u64))) : 0;
     }
 
     std::string readString()
@@ -94,10 +94,6 @@ private:
     bool mIsValid = true;
 };
 
-static void AppendU64(ByteBuilder& out, u64 value)
-{
-    out.appendU32(static_cast<u32>(value));
-    out.appendU32(static_cast<u32>(value >> 32));
 }
 
 static void AppendString(ByteBuilder& out, const char* text)
@@ -236,8 +232,8 @@ bool SaveFileIndexCache(const std::filesystem::path& path, const FileIndexCache&
     for (const auto& [key, file] : cache)
     {
         AppendString(out, key.c_str());
-        AppendU64(out, file.size);
-        AppendU64(out, static_cast<u64>(file.modified));
+        out.appendU64(file.size);
+        out.appendU64(static_cast<u64>(file.modified));
         out.appendU8(file.isAudio);
 
         if (file.isAudio)

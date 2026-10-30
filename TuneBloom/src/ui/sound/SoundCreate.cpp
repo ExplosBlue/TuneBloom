@@ -227,7 +227,7 @@ static WaveFile* ImportWave(WaveFile::RiffWaveInfo* info, WaveFile::Encoding enc
     const bool success = wave->readWavFile(*info, encoding);
 
     if (!tempPath.empty())
-        ::remove(tempPath.c_str());
+        fileio::RemoveFile(tempPath.c_str());
 
     if (success)
         return wave;
@@ -260,49 +260,30 @@ static const SoundTypeEntry cSoundTypes[] = {
     { Sound::SoundType::Seq, ICON_LC_MUSIC_3, messages::common::cSequence },
 };
 
-static sead::FormatFixedSafeString<64> FormatSoundTypeLabel(const SoundTypeEntry& entry)
-{
-    return sead::FormatFixedSafeString<64>("%s %s", entry.icon, entry.label);
-}
-
-static f32 CalcSoundTypeWidth()
-{
-    const ImGuiStyle& style = ImGui::GetStyle();
-
-    f32 width = style.ItemSpacing.x * (IM_ARRAYSIZE(cSoundTypes) - 1);
-
-    for (const SoundTypeEntry& entry : cSoundTypes)
-        width += ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(FormatSoundTypeLabel(entry).cstr()).x;
-
-    return width;
-}
-
-static void DrawSoundTypeUI()
-{
-    for (const SoundTypeEntry& entry : cSoundTypes)
-    {
-        if (&entry != cSoundTypes)
-            ImGui::SameLine();
-
-        if (ImGui::RadioButton(FormatSoundTypeLabel(entry).cstr(), sSoundType == entry.type))
-            sSoundType = entry.type;
-    }
-}
+static constexpr s32 cSoundTypeNum = IM_ARRAYSIZE(cSoundTypes);
 
 static bool BeginSourceBox(const char* title)
 {
     if (sTypeLocked)
         return BeginGroupBox(title);
 
-    const f32 typeWidth = CalcSoundTypeWidth();
+    sead::FixedSafeString<64> typeLabels[cSoundTypeNum];
+    const char* labels[cSoundTypeNum];
+    s32 selected = 0;
 
-    if (!BeginGroupBoxWithTools(messages::common::cType, typeWidth))
+    for (s32 i = 0; i < cSoundTypeNum; i++)
+    {
+        typeLabels[i].format("%s %s", cSoundTypes[i].icon, cSoundTypes[i].label);
+        labels[i] = typeLabels[i].cstr();
+
+        if (cSoundTypes[i].type == sSoundType)
+            selected = i;
+    }
+
+    if (!BeginGroupBoxWithChoice(messages::common::cType, &selected, labels, cSoundTypeNum))
         return false;
 
-    ImGui::SameLine();
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - typeWidth);
-
-    DrawSoundTypeUI();
+    sSoundType = cSoundTypes[selected].type;
 
     return true;
 }
@@ -320,11 +301,9 @@ static void EndSourceBox(s32 rowNum)
 
 static void DrawSourceChoiceUI(s32* source)
 {
-    ImGui::RadioButton(messages::sound::cWaveSourceImport, source, cSourceImport);
-    ImGui::SameLine();
-    ImGui::RadioButton(messages::source::cSelectExisting, source, cSourceExisting);
-    ImGui::SameLine();
-    ImGui::RadioButton(messages::common::cNone, source, cSourceNone);
+    const char* labels[] = { messages::sound::cWaveSourceImport, messages::source::cSelectExisting, messages::common::cNone };
+
+    DrawChoiceRow(source, labels, IM_ARRAYSIZE(labels));
 }
 
 static void DrawWaveSourceUI()
@@ -356,7 +335,6 @@ static void DrawWaveSourceUI()
         PickImportWave();
 
     ImGui::SameLine();
-
     if (sImportName.isEmpty())
         ImGui::TextDisabled("%s", messages::sound::cNoImportFile);
     else
@@ -469,10 +447,9 @@ static void DrawStreamImportSource(const char* browseLabel)
     if (ImGui::Button(browseLabel))
         PickStreamImportFiles();
 
-    ImGui::SameLine();
-
     const u32 fileCount = GetStreamCreateFileCount() + 1;
 
+    ImGui::SameLine();
     if (sStreamMainName.isEmpty())
         ImGui::TextDisabled("%s", messages::sound::cNoImportFile);
     else if (fileCount == 1)
@@ -496,7 +473,6 @@ static void DrawStreamExistingSource(const char* browseLabel)
         ImGui::SetItemTooltip("%s", messages::stream::cReloadNoArchiveFolder);
 
     ImGui::SameLine();
-
     if (sStreamPath.isEmpty())
     {
         ImGui::TextDisabled("%s", messages::sound::cNoStreamFile);

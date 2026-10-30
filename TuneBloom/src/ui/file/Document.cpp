@@ -1,7 +1,10 @@
 #include <ui/file/Document.h>
 
 #include <ui/file/AudioResourceDocument.h>
+#include <ui/file/BarsListDocument.h>
+#include <ui/file/DocumentMgr.h>
 #include <ui/file/DocumentState.h>
+#include <ui/file/FileDialogs.h>
 #include <ui/file/LooseStreamDocument.h>
 #include <ui/file/LooseWaveDocument.h>
 #include <ui/Messages.h>
@@ -10,11 +13,13 @@
 
 #include <aal/AudioResource.h>
 #include <aal/Bars.h>
+#include <aal/BarsList.h>
 #include <aal/Bwav.h>
 #include <core/ByteView.h>
 #include <core/Sarc.h>
 #include <bfsar/archive/Bea.h>
 #include <bfsar/archive/Cmpbin.h>
+#include <bfsar/audio/NxOpus.h>
 #include <bfsar/io/PackFile.h>
 #include <core/Debug.h>
 
@@ -22,6 +27,9 @@
 
 #include <cstring>
 #include <filesystem>
+#include <vector>
+
+namespace fs = std::filesystem;
 
 static constexpr u32 cBarsHeaderFileSize  = 0x04;
 static constexpr u32 cBarsHeaderByteOrder = 0x08;
@@ -159,6 +167,12 @@ const char* Document::Load(const sead::SafeString& path, File* outFile)
         return nullptr;
     }
 
+    if (aal::IsBarsList(outFile->data, outFile->size))
+    {
+        outFile->kind = Kind::BarsList;
+        return nullptr;
+    }
+
     if (bea::IsBea(outFile->data, outFile->size))
         return LoadFromBea(outFile);
 
@@ -205,9 +219,37 @@ bool Document::Check(const File& file, const char** outError)
         case Kind::StreamFile:
         case Kind::WaveFile:
             return true;
+
+        case Kind::BarsList:
+        {
+            aal::BarsList list;
+            *outError = aal::ReadBarsList(file.data, file.size, &list) ? nullptr : messages::barslist::cNotBarsList;
+
+            return *outError == nullptr;
+        }
     }
 
     return false;
+}
+
+bool Document::CheckBeforeOpen(const File& file, const char* failMessage)
+{
+    const char* error = nullptr;
+
+    if (!Check(file, &error))
+    {
+        if (error)
+            PopupMgr::instance()->addPopup({ failMessage ? failMessage : error, nullptr });
+
+        return false;
+    }
+
+    sead::Endian::Types endian = sead::Endian::eBig;
+
+    if (PeekEndian(file, &endian))
+        PrepareParseEndian(endian);
+
+    return true;
 }
 
 bool Document::PeekEndian(const File& file, sead::Endian::Types* outEndian)
@@ -226,7 +268,7 @@ bool Document::PeekEndian(const File& file, sead::Endian::Types* outEndian)
 
 bool Document::IsCompleteFile(const u8* header, u64 fileSize)
 {
-    if (cmpbin::IsZstdFrame(header, fileSize) || bea::IsBea(header, fileSize) || aal::IsBwav(header, fileSize))
+    if (cmpbin::IsZstdFrame(header, fileSize) || bea::IsBea(header, fileSize) || aal::IsBwav(header, fileSize) || nxopus::HasInfoChunk(header, fileSize) || aal::IsBarsList(header, fileSize))
         return true;
 
     if (aal::IsBars(header, fileSize))
@@ -256,6 +298,9 @@ Document* Document::Open(File* file, const sead::SafeString& path, const sead::S
 
         case Kind::WaveFile:
             return LooseWaveDocument::Open(file, path);
+
+        case Kind::BarsList:
+            return BarsListDocument::Open(file, path);
 
         case Kind::SoundArchive:
             break;
@@ -304,6 +349,11 @@ const DocumentState& Document::state() const
     return *mState;
 }
 
+const char* Document::getNameRuleDetail() const
+{
+    return messages::item::cNameInvalidDetail;
+}
+
 std::string Document::archiveName() const
 {
     if (!filePath().isEmpty())
@@ -313,6 +363,36 @@ std::string Document::archiveName() const
         return std::filesystem::path(loadedPath().cstr()).filename().string();
 
     return std::string(messages::backup::cUntitled) + "." + extension();
+}
+
+bool Document::showSaveAsDialog(sead::BufferedSafeString* outPath, const char* formatName, const char* fileExtension, const char* compressedExtension) const
+{
+    const sead::FormatFixedSafeString<32> pattern("*.%s", fileExtension);
+    const sead::FormatFixedSafeString<96> filterName("%s (%s)", formatName, pattern.cstr());
+
+    sead::FixedSafeString<32> compressedPattern;
+    sead::FixedSafeString<96> compressedName;
+
+    std::vector<FileFilter> filters;
+    filters.emplace_back(filterName.cstr(), pattern.cstr());
+
+    if (compressedExtension)
+    {
+        compressedPattern.format("*.%s", compressedExtension);
+        compressedName.format(messages::common::cCompressedFilterFormat, formatName, fileExtension, compressedExtension);
+        filters.emplace_back(compressedName.cstr(), compressedPattern.cstr());
+    }
+
+    const fs::path documentPath(filePath().isEmpty() ? displayName() : std::string(filePath().cstr()));
+    const std::string defaultPath = (fs::path(packfile::GetDiskPath(documentPath.string())).parent_path() / documentPath.filename()).string();
+
+    if (!SaveFileDialog(outPath, nullptr, static_cast<u32>(filters.size()), filters.data(), fileExtension, defaultPath.c_str()))
+        return false;
+
+    if (compressedExtension)
+        AddInnerExtension(outPath, fileExtension, compressedExtension);
+
+    return true;
 }
 
 void Document::closeWindows()

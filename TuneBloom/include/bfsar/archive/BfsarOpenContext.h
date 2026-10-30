@@ -22,6 +22,18 @@ struct WaveCacheEntry
     u32 fileDataSize;
 };
 
+struct GroupFileCandidate
+{
+    std::string path;
+    std::vector<u32> fileIds;
+};
+
+struct GroupFileIndex
+{
+    std::unordered_map<std::string, std::string> groupFiles;
+    std::unordered_map<std::string, std::vector<std::string>> groupPacks;
+};
+
 struct BfsarOpenContext
 {
     BfsarOpenContext(const nw::snd::MemorySoundArchive& soundArchive_, u32 bfsarSize_, sead::Heap* heap_, const sead::SafeString& groupFileSource_)
@@ -38,6 +50,9 @@ struct BfsarOpenContext
     const sead::SafeString& groupFileSource;
 
     std::vector<ByteRange> externalGroupFiles;
+    std::optional<std::vector<GroupFileCandidate>> groupFileCandidates;
+    std::optional<GroupFileIndex> folderGroupFiles;
+    std::optional<GroupFileIndex> upperGroupFiles;
     std::unordered_map<u32, u32> seqFileIdxMap;
     std::vector< std::vector<WaveCacheEntry> > warcFileCache;
     std::vector< std::unordered_set<u32> > waveIdMapSet;

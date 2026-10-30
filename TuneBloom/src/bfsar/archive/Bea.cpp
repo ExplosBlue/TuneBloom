@@ -39,17 +39,6 @@ static constexpr u64 cDataAlignment  = 16;
 static constexpr u64 cDataTerminator = 1;
 static constexpr u64 cSoundPeekSize  = 16;
 
-static u64 ReadU64(const ByteView& view, u64 offset)
-{
-    return static_cast<u64>(view.readU32(offset)) | static_cast<u64>(view.readU32(offset + sizeof(u32))) << 32;
-}
-
-static void PutU64(ByteBuilder* builder, u64 offset, u64 value)
-{
-    builder->putU32(offset, static_cast<u32>(value));
-    builder->putU32(offset + sizeof(u32), static_cast<u32>(value >> 32));
-}
-
 static bool HasMagic(const ByteView& view, u64 offset, const u8* magic)
 {
     return view.has(offset, cMagicLength) && std::memcmp(view.at(offset), magic, cMagicLength) == 0;
@@ -76,9 +65,9 @@ static bool ReadAsset(const ByteView& view, u64 metadataEnd, u64 fileSize, u64 e
     outAsset->entryOffset = entryOffset;
     outAsset->compressedSize = view.readU32(entryOffset + cEntryCompressedSizeOffset);
     outAsset->size = view.readU32(entryOffset + cEntrySizeOffset);
-    outAsset->dataOffset = ReadU64(view, entryOffset + cEntryDataOffset);
+    outAsset->dataOffset = view.readU64(entryOffset + cEntryDataOffset);
 
-    const u64 nameOffset = ReadU64(view, entryOffset + cEntryNameOffset);
+    const u64 nameOffset = view.readU64(entryOffset + cEntryNameOffset);
 
     if (outAsset->dataOffset < metadataEnd || outAsset->dataOffset > fileSize || outAsset->compressedSize > fileSize - outAsset->dataOffset)
         return false;
@@ -126,7 +115,7 @@ bool ReadAssetTable(const void* metadata, size_t metadataSize, u64 fileSize, std
 
     const ByteView view(metadata, metadataSize, false);
     const u32 count = view.readU32(cAssetCountOffset);
-    const u64 arrayOffset = ReadU64(view, cAssetArrayOffset);
+    const u64 arrayOffset = view.readU64(cAssetArrayOffset);
 
     if (count > cAssetCountMax || arrayOffset > metadataEnd || count * sizeof(u64) > metadataEnd - arrayOffset)
         return false;
@@ -135,7 +124,7 @@ bool ReadAssetTable(const void* metadata, size_t metadataSize, u64 fileSize, std
 
     for (u32 i = 0; i < count; i++)
     {
-        if (!ReadAsset(view, metadataEnd, fileSize, ReadU64(view, arrayOffset + i * sizeof(u64)), &(*outAssets)[i]))
+        if (!ReadAsset(view, metadataEnd, fileSize, view.readU64(arrayOffset + i * sizeof(u64)), &(*outAssets)[i]))
         {
             outAssets->clear();
             return false;
@@ -230,7 +219,7 @@ bool ReplaceAsset(const Source& source, const void* data, size_t size, std::vect
         const u32 compressedSize = isReplaced ? static_cast<u32>(frame.size()) : asset.compressedSize;
 
         builder.alignTo(cDataAlignment);
-        PutU64(&builder, asset.entryOffset + cEntryDataOffset, builder.size());
+        builder.putU64(asset.entryOffset + cEntryDataOffset, builder.size());
 
         if (isReplaced)
         {

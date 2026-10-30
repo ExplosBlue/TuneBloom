@@ -1,8 +1,10 @@
 #include <bfsar/archive/Bfsar.h>
 
 #include <bfsar/files/BfgrpFile.h>
+#include <bfsar/archive/BfsarLayoutCheck.h>
 #include <bfsar/archive/BfsarSaveContext.h>
 #include <bfsar/io/FileIo.h>
+#include <bfsar/io/PackFile.h>
 #include <bfsar/archive/GroupFilePaths.h>
 #include <bfsar/archive/SaveReport.h>
 
@@ -55,7 +57,37 @@ static std::string GetGroupFileSavePath(const Group& group, const std::filesyste
     if (IsBelowFolder(relativePath))
         return (archiveDir / relativePath).string();
 
+    std::string packPath;
+    std::string entry;
+
+    if (packfile::Split(group.getExternalFilePath(), &packPath, &entry))
+        return (archiveDir / std::filesystem::path(packPath).filename() / entry).string();
+
     return (archiveDir / loadedPath.filename()).string();
+}
+
+static void FindPackOfSavePath(const Group& group, const std::string& savePath, std::string* outFilePath, std::string* outEntry, std::string* outSourcePack)
+{
+    *outFilePath = savePath;
+
+    std::string sourcePack;
+    std::string entry;
+
+    if (!packfile::Split(group.getExternalFilePath(), &sourcePack, &entry))
+        return;
+
+    const std::filesystem::path entryPath(entry);
+    std::filesystem::path packPath(savePath);
+
+    for (auto part = entryPath.begin(); part != entryPath.end(); ++part)
+        packPath = packPath.parent_path();
+
+    if (packPath.filename() != std::filesystem::path(sourcePack).filename() || (packPath / entryPath).lexically_normal() != std::filesystem::path(savePath).lexically_normal())
+        return;
+
+    *outFilePath = packPath.string();
+    *outEntry = entry;
+    *outSourcePack = sourcePack;
 }
 
 static std::string GetPathKey(const std::string& path)
@@ -73,8 +105,8 @@ std::vector<Bfsar::GroupFileSave> Bfsar::planGroupFileSaves_(const sead::SafeStr
     std::vector<std::string> usedPaths;
 
     const char* extension = GetInnerFileExtension(mFormat, InnerFileKind::Group);
-    const std::filesystem::path archiveDir = std::filesystem::path(archivePath.cstr()).parent_path();
-    const std::filesystem::path loadedDir = mLoadedArchivePath ? std::filesystem::path(mLoadedArchivePath->cstr()).parent_path() : std::filesystem::path();
+    const std::filesystem::path archiveDir = packfile::GetFolderOnDisk(archivePath.cstr());
+    const std::filesystem::path loadedDir = mLoadedArchivePath ? std::filesystem::path(packfile::GetFolderOnDisk(mLoadedArchivePath->cstr())) : std::filesystem::path();
     const bool isSameArchive = mLoadedArchivePath && archivePath == *mLoadedArchivePath;
 
     for (Item* item : mGroupList)
@@ -87,13 +119,18 @@ std::vector<Bfsar::GroupFileSave> Bfsar::planGroupFileSaves_(const sead::SafeStr
         GroupFileSave save;
         save.group = group;
         save.path = GetGroupFileSavePath(*group, archiveDir, loadedDir, isSameArchive, extension);
+        FindPackOfSavePath(*group, save.path, &save.filePath, &save.packEntry, &save.sourcePack);
 
-        if (std::find(usedPaths.begin(), usedPaths.end(), GetPathKey(save.path)) != usedPaths.end())
+        if (std::find(usedPaths.begin(), usedPaths.end(), GetPathKey(save.filePath)) != usedPaths.end())
+        {
             save.path = (archiveDir / GetGroupFileName(*group, extension)).string();
+            save.filePath = save.path;
+            save.packEntry.clear();
+        }
 
-        save.stagedPath = save.path + cStagedFileSuffix;
+        save.stagedPath = save.filePath + cStagedFileSuffix;
 
-        usedPaths.push_back(GetPathKey(save.path));
+        usedPaths.push_back(GetPathKey(save.filePath));
         groupFileSaves.push_back(std::move(save));
     }
 
@@ -105,15 +142,17 @@ std::vector<std::string> Bfsar::getGroupFileSavePaths(const sead::SafeString& ar
     std::vector<std::string> paths;
 
     for (const GroupFileSave& save : planGroupFileSaves_(archivePath))
-        paths.push_back(save.path);
+        paths.push_back(save.filePath);
 
     if (!mLoadedArchivePath || !(archivePath == *mLoadedArchivePath))
         return paths;
 
     for (const std::string& loadedPath : mLoadedGroupFilePaths)
     {
-        if (std::find(paths.begin(), paths.end(), loadedPath) == paths.end())
-            paths.push_back(loadedPath);
+        const std::string filePath = packfile::GetDiskPath(loadedPath);
+
+        if (std::find(paths.begin(), paths.end(), filePath) == paths.end())
+            paths.push_back(filePath);
     }
 
     return paths;
@@ -126,10 +165,10 @@ std::vector<Bfsar::GroupFileSave> Bfsar::planBackupGroupFiles_(const sead::SafeS
 
     for (GroupFileSave& save : groupFileSaves)
     {
-        save.stagedPath = save.path;
+        save.stagedPath = save.filePath;
 
         if (outFiles)
-            outFiles->push_back(std::filesystem::path(save.path).lexically_relative(backupDir).generic_string());
+            outFiles->push_back(std::filesystem::path(save.filePath).lexically_relative(backupDir).generic_string());
     }
 
     return groupFileSaves;
@@ -137,8 +176,8 @@ std::vector<Bfsar::GroupFileSave> Bfsar::planBackupGroupFiles_(const sead::SafeS
 
 void Bfsar::moveGroupFilePaths_(const sead::SafeString& fromArchivePath, const sead::SafeString& toArchivePath)
 {
-    const std::filesystem::path fromDir = std::filesystem::path(fromArchivePath.cstr()).parent_path();
-    const std::filesystem::path toDir = std::filesystem::path(toArchivePath.cstr()).parent_path();
+    const std::filesystem::path fromDir = packfile::GetFolderOnDisk(fromArchivePath.cstr());
+    const std::filesystem::path toDir = packfile::GetFolderOnDisk(toArchivePath.cstr());
 
     for (Item* item : mGroupList)
     {
@@ -152,7 +191,7 @@ void Bfsar::moveGroupFilePaths_(const sead::SafeString& fromArchivePath, const s
 
 std::string Bfsar::getGroupFileSavePath(const Group* group) const
 {
-    const std::filesystem::path archiveDir = std::filesystem::path(getFilePath().cstr()).parent_path();
+    const std::filesystem::path archiveDir = packfile::GetFolderOnDisk(getFilePath().cstr());
 
     return GetGroupFileSavePath(*group, archiveDir, archiveDir, true, GetInnerFileExtension(mFormat, InnerFileKind::Group));
 }
@@ -178,7 +217,7 @@ void Bfsar::rememberGroupFilePath_(const Group* group) const
         return;
 
     const std::filesystem::path path(group->getExternalFilePath());
-    const std::filesystem::path archiveDir = std::filesystem::path(getFilePath().cstr()).parent_path();
+    const std::filesystem::path archiveDir = packfile::GetFolderOnDisk(getFilePath().cstr());
     const bool isFoundByName = path.stem() == std::filesystem::path(group->getName().cstr()) && IsBelowFolder(path.lexically_relative(archiveDir));
 
     if (!isFoundByName)
@@ -220,6 +259,7 @@ bool Bfsar::exportGroupFile(Group* group, const sead::SafeString& path)
     GroupFileSave save;
     save.group = group;
     save.path = path.cstr();
+    save.filePath = save.path;
     save.stagedPath = save.path + cStagedFileSuffix;
 
     const std::string archivePath = MakeExportArchivePath();
@@ -257,6 +297,25 @@ static const BfgrpFile* FindExternalGroupFile(const BfsarSaveContext& ctx, const
     return nullptr;
 }
 
+static bool KeepSourceTrimmedTail(const std::string& path, const std::string& sourcePath)
+{
+    std::error_code error;
+    std::vector<u8> head;
+    const u64 sourceSize = sourcePath.empty() ? 0 : std::filesystem::file_size(sourcePath, error);
+
+    if (sourceSize == 0 || error || !fileio::ReadFileStart(sourcePath.c_str(), sizeof(nw::ut::BinaryFileHeader), &head) ||
+        !IsTrimmedPadding(ReadDeclaredFileSize(head.data(), head.size()), sourceSize))
+        return true;
+
+    std::vector<u8> source;
+    std::vector<u8> written;
+
+    if (!fileio::ReadWholeFile(sourcePath.c_str(), &source) || !fileio::ReadWholeFile(path.c_str(), &written) || !KeepTrimmedTail(source.data(), source.size(), &written))
+        return true;
+
+    return fileio::WriteWholeFile(path.c_str(), written.data(), written.size()) == fileio::WriteResult::Ok;
+}
+
 static bool WriteGroupFile(const BfsarSaveContext& ctx, const Group* group, const BfgrpFile* groupFile, const std::string& path, sead::Endian::Types endian)
 {
     if (path.size() > static_cast<size_t>(fileio::cPathLengthMax))
@@ -277,7 +336,15 @@ static bool WriteGroupFile(const BfsarSaveContext& ctx, const Group* group, cons
     groupFile->prepare(group, ctx);
     groupFile->write(&handle, &stream, endian, true);
 
-    return !streamSrc.hasFailed() && handle.tryClose();
+    return !streamSrc.hasFailed() && handle.tryClose() && KeepSourceTrimmedTail(path, group->getExternalFilePath());
+}
+
+static bool PutGroupFileInPack(const std::string& stagedPath, const std::string& sourcePack, const std::string& entry)
+{
+    std::vector<u8> groupBytes;
+    std::vector<u8> packBytes;
+
+    return fileio::ReadWholeFile(stagedPath.c_str(), &groupBytes) && packfile::MakePackWithFile(sourcePack, entry, groupBytes.data(), groupBytes.size(), &packBytes) && fileio::WriteWholeFile(stagedPath.c_str(), packBytes.data(), packBytes.size()) == fileio::WriteResult::Ok;
 }
 
 void Bfsar::reportGroupFileWriteFailed_(const GroupFileSave& save) const
@@ -310,7 +377,9 @@ bool Bfsar::writeExternalGroupFiles_(BfsarSaveContext& ctx, const std::vector<Gr
     {
         const BfgrpFile* groupFile = FindExternalGroupFile(ctx, save.group);
 
-        if (groupFile && WriteGroupFile(ctx, save.group, groupFile, save.stagedPath, mEndian))
+        const bool isWritten = groupFile && WriteGroupFile(ctx, save.group, groupFile, save.stagedPath, mEndian);
+
+        if (isWritten && (save.packEntry.empty() || PutGroupFileInPack(save.stagedPath, save.sourcePack, save.packEntry)))
             continue;
 
         mUnwrittenGroupFile = save.group;
@@ -353,10 +422,10 @@ bool Bfsar::replaceGroupFiles_(std::vector<GroupFileSave>& groupFileSaves)
 {
     for (GroupFileSave& save : groupFileSaves)
     {
-        if (fileio::HasSameBytes(save.stagedPath.c_str(), save.path.c_str()))
+        if (fileio::HasSameBytes(save.stagedPath.c_str(), save.filePath.c_str()))
             continue;
 
-        if (ReplaceGroupFile(save.stagedPath, save.path, &save.backupPath))
+        if (ReplaceGroupFile(save.stagedPath, save.filePath, &save.backupPath))
         {
             save.isReplaced = true;
             continue;
@@ -382,9 +451,9 @@ void Bfsar::rollBackGroupFiles_(std::vector<GroupFileSave>& groupFileSaves) cons
             continue;
 
         if (save.backupPath.empty())
-            fileio::RemoveFile(save.path.c_str());
-        else if (!fileio::RenameOver(save.backupPath.c_str(), save.path.c_str()))
-            CopyOverFileInUse(save.backupPath, save.path);
+            fileio::RemoveFile(save.filePath.c_str());
+        else if (!fileio::RenameOver(save.backupPath.c_str(), save.filePath.c_str()))
+            CopyOverFileInUse(save.backupPath, save.filePath);
 
         fileio::RemoveFile(save.backupPath.c_str());
 
@@ -433,7 +502,7 @@ void Bfsar::updateLoadedGroupFiles_(const std::vector<GroupFileSave>& groupFileS
         if (!isSameArchive || HasPath(paths, loadedPath))
             continue;
 
-        if (!sDeleteUnusedGroupFiles)
+        if (!sDeleteUnusedGroupFiles || packfile::IsPackPath(loadedPath))
         {
             paths.push_back(loadedPath);
             continue;

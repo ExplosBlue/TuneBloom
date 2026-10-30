@@ -55,7 +55,6 @@ private:
 };
 
 FileWindow* OpenFileWindow(Item* item);
-void CloseAllFileWindows();
 void UpdateFileWindows();
 bool DrawShownFileWindow();
 bool IsFileWindowFocused();

@@ -328,15 +328,9 @@ bool SoundArchiveDocument::reload()
         return false;
     }
 
-    const char* error = nullptr;
-
-    if (!Check(file, &error))
+    if (!CheckBeforeOpen(file))
     {
         Free(&file);
-
-        if (error)
-            PopupMgr::instance()->addPopup({ error, nullptr });
-
         return false;
     }
 
@@ -351,11 +345,6 @@ bool SoundArchiveDocument::reload()
     mArchive = nullptr;
 
     return false;
-}
-
-bool SoundArchiveDocument::prepareSave()
-{
-    return true;
 }
 
 bool SoundArchiveDocument::prepareSaveAs()
@@ -427,9 +416,6 @@ bool SoundArchiveDocument::chooseSaveAsPath(sead::BufferedSafeString* outPath) c
 SaveResult SoundArchiveDocument::save(const char** outError)
 {
     *outError = nullptr;
-
-    if (mArchive->isOpen() && !mArchive->hasFilePath())
-        return SaveFileAs() ? SaveResult::Saved : SaveResult::Failed;
 
     return mArchive->save();
 }

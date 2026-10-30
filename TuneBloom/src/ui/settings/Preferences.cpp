@@ -82,6 +82,7 @@ static constexpr f32 cUIScales[]        = { 1.0f, 1.25f, 1.5f };
 static constexpr f32 cNavTintAlpha = 0.25f;
 
 static constexpr uicolors::Themed<f32> cSliderFillAlpha = { 0.55f, 0.22f };
+static constexpr f32 cSliderValueWidthEm = 4.5f;
 static constexpr uicolors::Themed<ImVec4> cHuePreviewTone = { uicolors::cAccentDefault, uicolors::light::cCheckMark };
 
 static constexpr size_t cFolderTextMax = 22;
@@ -153,8 +154,20 @@ struct SliderFill
     bool drawText;
 };
 
+static f32 CalcSliderValueWidth()
+{
+    return ImFloor(ImGui::GetFontSize() * cSliderValueWidthEm);
+}
+
+static void SetNextSliderWidth()
+{
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - CalcSliderValueWidth() - ImGui::GetStyle().ItemSpacing.x);
+}
+
 static SliderFill BeginSliderFill(const char* id)
 {
+    SetNextSliderWidth();
+
     SliderFill fill;
     fill.drawList = ImGui::GetWindowDrawList();
     fill.drawText = !ImGui::TempInputIsActive(ImGui::GetID(id));
@@ -168,21 +181,6 @@ static SliderFill BeginSliderFill(const char* id)
     ImGui::PushStyleColor(ImGuiCol_Text, fill.drawText ? uicolors::cTransparent : ImGui::GetStyleColorVec4(ImGuiCol_Text));
 
     return fill;
-}
-
-static f32 CalcSliderValueX(f32 min, f32 max, f32 grabMin, f32 grabMax, f32 textWidth)
-{
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 gap = style.ItemInnerSpacing.x;
-    const f32 centerX = ImFloor((min + max - textWidth) * 0.5f);
-
-    if (centerX + textWidth + gap <= grabMin || centerX - gap >= grabMax)
-        return centerX;
-
-    if (grabMax + gap + textWidth <= max - style.FramePadding.x)
-        return grabMax + gap;
-
-    return grabMin - gap - textWidth;
 }
 
 static void EndSliderFill(const SliderFill& fill, f32 fraction, const char* text)
@@ -201,12 +199,7 @@ static void EndSliderFill(const SliderFill& fill, f32 fraction, const char* text
     ImDrawList* drawList = fill.drawList;
 
     if (fill.drawText)
-    {
-        const f32 grabHalf = style.GrabMinSize * 0.5f;
-        const f32 textX = CalcSliderValueX(min.x, max.x, fillX - grabHalf, fillX + grabHalf, ImGui::CalcTextSize(text).x);
-
-        drawList->AddText(ImVec2(textX, min.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), text);
-    }
+        drawList->AddText(ImVec2(max.x + style.ItemSpacing.x, min.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_Text), text);
 
     drawList->ChannelsSetCurrent(0);
     drawList->AddRectFilled(min, max, ImGui::GetColorU32(frameColor), style.FrameRounding);
@@ -459,7 +452,7 @@ static void DrawSavingRows()
 
     // Unused group files
     {
-        const char* labels[] = { messages::preferences::cUnusedGroupFilesKeep, messages::preferences::cUnusedGroupFilesDelete };
+        const char* labels[] = { messages::common::cKeep, messages::preferences::cUnusedGroupFilesDelete };
         s32 selected = sDeleteUnusedGroupFiles ? 1 : 0;
 
         DrawRowLabel(messages::preferences::cUnusedGroupFilesLabel);
@@ -955,6 +948,8 @@ static void DrawHueRow(bool* changed, bool* done)
     ImGui::ColorConvertRGBtoHSV(gAccentColor.x, gAccentColor.y, gAccentColor.z, hue, saturation, value);
 
     DrawRowLabel(messages::preferences::cHueLabel);
+    SetNextSliderWidth();
+
     if (DrawHueSlider("##Hue", &hue, done))
     {
         ImGui::ColorConvertHSVtoRGB(hue, cAccentSaturation, cAccentValue, gAccentColor.x, gAccentColor.y, gAccentColor.z);

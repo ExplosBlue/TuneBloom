@@ -56,8 +56,8 @@ static bool IsReady(const LocateRow& row)
 
 static void SetRowFile(LocateRow* row, const sead::SafeString& path)
 {
-    row->path = path.cstr();
-    row->check = ActiveSoundArchive().checkGroupFile(path);
+    row->path = ActiveSoundArchive().getGroupFileInPack(path);
+    row->check = ActiveSoundArchive().checkGroupFile(sead::SafeString(row->path.c_str()));
 }
 
 void OpenGroupFileLocate()
@@ -95,10 +95,15 @@ static void BrowseRowFile(LocateRow* row)
     const sead::FormatFixedSafeString<32> filterPattern("*.%s", extension);
     const sead::FormatFixedSafeString<512> title(messages::group::cLocateBrowseTitleFormat, row->label.c_str());
 
-    FileFilter filter(filterName.cstr(), filterPattern.cstr());
+    sead::FixedSafeString<64> packPattern;
+
+    for (const char* packExtension : Bfsar::cGroupPackExtensions)
+        packPattern.appendWithFormat(packPattern.isEmpty() ? "*.%s" : " *.%s", packExtension);
+
+    FileFilter filters[] = { FileFilter(filterName.cstr(), filterPattern.cstr()), FileFilter(messages::archive::cGroupPackFilter, packPattern.cstr()) };
     sead::FixedSafeString<512> path;
 
-    if (OpenFileDialog(&path, title.cstr(), 1, &filter))
+    if (OpenFileDialog(&path, title.cstr(), IM_ARRAYSIZE(filters), filters))
         SetRowFile(row, path);
 }
 
@@ -109,15 +114,24 @@ static void SearchFolder()
     if (!SelectFolderDialog(&folder, messages::group::cLocateSearchFolderTitle))
         return;
 
+    std::vector<LocateRow*> rows;
+    std::vector<std::string> groupNames;
+
     for (LocateRow& row : sRows)
     {
         if (IsReady(row))
             continue;
 
-        const std::string path = ActiveSoundArchive().findGroupFileInFolder(sead::SafeString(row.groupName.c_str()), folder);
+        rows.push_back(&row);
+        groupNames.push_back(row.groupName);
+    }
 
-        if (!path.empty())
-            SetRowFile(&row, sead::SafeString(path.c_str()));
+    const std::vector<std::string> paths = ActiveSoundArchive().findGroupFilesInFolder(groupNames, folder);
+
+    for (u32 i = 0; i < rows.size(); i++)
+    {
+        if (!paths[i].empty())
+            SetRowFile(rows[i], sead::SafeString(paths[i].c_str()));
     }
 }
 
@@ -152,7 +166,7 @@ static const char* GetCheckText(Bfsar::GroupFileCheck check)
 {
     switch (check)
     {
-        case Bfsar::GroupFileCheck::Unreadable:   return messages::group::cLocateUnreadable;
+        case Bfsar::GroupFileCheck::Unreadable:   return messages::common::cFileUnreadable;
         case Bfsar::GroupFileCheck::NotGroupFile: return messages::reader::cNotGroupFile;
         case Bfsar::GroupFileCheck::OtherArchive: return messages::group::cLocateOtherArchive;
         default:                                  return "";

@@ -1,5 +1,7 @@
 #include <bfsar/files/BfstmFile.h>
 
+#include <aal/Bfstm.h>
+
 #include <core/Debug.h>
 #include <core/ParallelFor.h>
 
@@ -9,13 +11,13 @@
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/app/UI.h>
-#include <ui/items/Selection.h>
 
 #include <snd/snd_StreamSoundFileReader.h>
 #include <snd/StreamSoundPlayer.h>
 
 #include <stream/seadFileDeviceStream.h>
 
+#include <algorithm>
 #include <vector>
 
 static constexpr u32 cSignatureStep  = 4096;
@@ -108,7 +110,9 @@ u64 BfstmFile::ComputeContentSignature(const Sound::StreamSoundInfo &soundInfo, 
 static constexpr u32 cBytesPerBlock            = 0x2000;
 static constexpr u32 cBytesPerSeekTableEntry   = 2 * sizeof(s16);
 static constexpr u32 cBlockAlignment           = 0x20;
-static constexpr u32 cLastBlockAlignmentV2_0_1 = 0x40;
+static constexpr u32 cLastBlockAlignmentWide   = 0x40;
+static constexpr u32 cCstmTailSamples          = 128;
+static constexpr u32 cCstmOnceLastBlockTrim    = 127;
 
 namespace
 {
@@ -167,6 +171,8 @@ struct StreamWriteContext
     u32 lastBlockSamples = 0;
     u32 lastBlockBytes = 0;
     u32 lastBlockBytesPadded = 0;
+    u32 tailBlockBytes = 0;
+    u32 tailBlockBytesPadded = 0;
 };
 
 }
@@ -210,12 +216,54 @@ static void CollectTracksAndChannels(StreamWriteContext& context, const Sound::S
     LOG_BOOL("isDspAdpcm", context.isDspAdpcm);
 }
 
+static bool HasWideLastBlockAlignment(u32 version, ArchiveFormat format)
+{
+    if (format != ArchiveFormat::BFSAR)
+        return false;
+
+    if (version >= makeVersion(2, 0, 0))
+        return version >= makeVersion(2, 0, 1);
+
+    return version >= makeVersion(0, 6, 4);
+}
+
 static u32 GetLastBlockAlignment(u32 version, ArchiveFormat format)
 {
-    if (format == ArchiveFormat::BFSAR && version >= makeVersion(2, 0, 1))
-        return cLastBlockAlignmentV2_0_1;
+    return HasWideLastBlockAlignment(version, format) ? cLastBlockAlignmentWide : cBlockAlignment;
+}
 
-    return cBlockAlignment;
+static bool HasCstmTailSamples(const StreamWriteContext& context)
+{
+    return context.format == ArchiveFormat::BCSAR && (context.isLoop || context.version < makeVersion(2, 1, 0));
+}
+
+static void CalcLastBlock(StreamWriteContext& context, nw::snd::SampleFormat sampleFormat)
+{
+    const u32 blockSamples = context.sampleCount - (context.blockNum - 1) * context.samplePerBlock;
+    u32 storedSamples = blockSamples;
+
+    context.lastBlockSamples = blockSamples;
+
+    if (HasCstmTailSamples(context))
+    {
+        if (!context.isLoop)
+            context.lastBlockSamples -= std::min(blockSamples, cCstmOnceLastBlockTrim);
+
+        storedSamples = context.lastBlockSamples + cCstmTailSamples;
+    }
+
+    const u32 alignment = GetLastBlockAlignment(context.version, context.format);
+    const u32 tailSamples = storedSamples > context.samplePerBlock ? storedSamples - context.samplePerBlock : 0;
+
+    context.lastBlockBytes = nw::snd::internal::Util::GetByteBySample(storedSamples - tailSamples, sampleFormat);
+    context.lastBlockBytesPadded = sead::Mathu::roundUpPow2(context.lastBlockBytes, alignment);
+    context.tailBlockBytes = nw::snd::internal::Util::GetByteBySample(tailSamples, sampleFormat);
+    context.tailBlockBytesPadded = sead::Mathu::roundUpPow2(context.tailBlockBytes, alignment);
+}
+
+static u32 GetChannelWriteBytes(const StreamWriteContext& context)
+{
+    return cBytesPerBlock * (context.blockNum - 1) + context.lastBlockBytes + context.tailBlockBytes;
 }
 
 static void CalcBlockLayout(StreamWriteContext& context)
@@ -225,9 +273,8 @@ static void CalcBlockLayout(StreamWriteContext& context)
     context.sampleCount = context.loopEndFrame;
     context.samplePerBlock = nw::snd::internal::Util::GetSampleByByte(cBytesPerBlock, sampleFormat);
     context.blockNum = context.sampleCount / context.samplePerBlock + (context.sampleCount % context.samplePerBlock != 0);
-    context.lastBlockSamples = context.sampleCount - ((context.blockNum - 1) * context.samplePerBlock);
-    context.lastBlockBytes = nw::snd::internal::Util::GetByteBySample(context.lastBlockSamples, sampleFormat);
-    context.lastBlockBytesPadded = sead::Mathu::roundUpPow2(context.lastBlockBytes, GetLastBlockAlignment(context.version, context.format));
+
+    CalcLastBlock(context, sampleFormat);
 
     LOG_U32("sampleFormat", static_cast<u32>(sampleFormat));
     LOG_U32("sampleCount", context.sampleCount);
@@ -300,10 +347,34 @@ static void ConvertStreamChannelData(StreamWriteContext& context, u32 channelInd
         ConvertSampleEndian(context, channelData, sead::Endian::getHostEndian());
 }
 
+static void AppendPcmLoopStart(const StreamWriteContext& context, StreamChannelData& channelData)
+{
+    const u32 sampleBytes = context.mainWave->getEncoding() == WaveFile::Encoding::Pcm16 ? sizeof(s16) : sizeof(s8);
+    const u32 loopStartBytes = context.loopStartFrame * sampleBytes;
+    const u32 loopEndBytes = context.sampleCount * sampleBytes;
+    const u32 neededBytes = GetChannelWriteBytes(context);
+
+    if (channelData.bufferSize >= neededBytes || channelData.bufferSize < loopEndBytes || loopStartBytes >= loopEndBytes)
+        return;
+
+    u8* buffer = new u8[neededBytes];
+    sead::MemUtil::copy(buffer, channelData.buffer, loopEndBytes);
+
+    for (u32 i = loopEndBytes; i < neededBytes; i++)
+        buffer[i] = buffer[loopStartBytes + (i - loopEndBytes) % (loopEndBytes - loopStartBytes)];
+
+    if (channelData.shouldDelete)
+        delete[] channelData.buffer;
+
+    channelData.buffer = buffer;
+    channelData.bufferSize = neededBytes;
+    channelData.shouldDelete = true;
+}
+
 static void PrepareChannelData(StreamWriteContext& context)
 {
     u32 mainWaveSize = context.channels[0]->getDataSize();
-    u32 channelWriteBytes = cBytesPerBlock * (context.blockNum - 1) + context.lastBlockBytes;
+    u32 channelWriteBytes = GetChannelWriteBytes(context);
 
     for (u32 i = 0; i < context.channelNum; i++)
     {
@@ -318,7 +389,34 @@ static void PrepareChannelData(StreamWriteContext& context)
             CopyStreamChannelData(context, i, mainWaveSize);
         else
             ConvertStreamChannelData(context, i);
+
+        if (context.isLoop && !context.isDspAdpcm && HasCstmTailSamples(context))
+            AppendPcmLoopStart(context, context.channelData[i]);
     }
+}
+
+static bool HasRegionInfo(const StreamWriteContext& context)
+{
+    if (context.layout->version == context.version)
+        return context.layout->hasRegionInfo;
+
+    return BfstmFile::IsRegionInfoAvailable(context.version, context.format);
+}
+
+static bool HasRegionBlock(const StreamWriteContext& context)
+{
+    return !context.layout->regions.empty() && HasRegionInfo(context);
+}
+
+static void WriteRegionInfoFields(StreamWriteContext& context)
+{
+    context.stream->writeU16(sizeof(nw::snd::internal::StreamSoundFile::RegionInfo));
+    context.stream->writeU16(0); // Padding
+
+    context.writer.openReference("RegionDataRef");
+
+    if (!HasRegionBlock(context))
+        context.writer.closeNullReference("RegionDataRef");
 }
 
 static void WriteStreamSoundInfo(StreamWriteContext& context)
@@ -330,7 +428,7 @@ static void WriteStreamSoundInfo(StreamWriteContext& context)
     stream.writeU8(static_cast<u8>(mainWave.getEncoding()));
     stream.writeU8(context.isLoop);
     stream.writeU8(static_cast<u8>(context.channelNum));
-    stream.writeU8(static_cast<u8>(context.layout->regions.size()));
+    stream.writeU8(HasRegionBlock(context) ? static_cast<u8>(context.layout->regions.size()) : 0);
     stream.writeU32(mainWave.getSampleRate());
     stream.writeU32(context.loopStartFrame);
     stream.writeU32(context.sampleCount);
@@ -345,13 +443,8 @@ static void WriteStreamSoundInfo(StreamWriteContext& context)
 
     writer.openReference("SampleDataRef");
 
-    stream.writeU16(sizeof(nw::snd::internal::StreamSoundFile::RegionInfo));
-    stream.writeU16(0); // Padding
-
-    writer.openReference("RegionDataRef");
-
-    if (context.layout->regions.empty())
-        writer.closeNullReference("RegionDataRef");
+    if (HasRegionInfo(context))
+        WriteRegionInfoFields(context);
 
     if (BfstmFile::IsOriginalLoopAvailable(context.version, context.format))
     {
@@ -363,12 +456,18 @@ static void WriteStreamSoundInfo(StreamWriteContext& context)
     }
 }
 
-static void WriteTrackInfoTable(StreamWriteContext& context)
+static void OpenInfoTable(FileWriter& writer, const char* refName, const char* tableName, u32 count)
+{
+    writer.closeReference(refName, nw::snd::internal::ElementType_Table_ReferenceTable);
+    writer.pushOffsetBase();
+    writer.openReferenceTable(tableName, count);
+    writer.popOffsetBase();
+}
+
+static void WriteTrackInfos(StreamWriteContext& context)
 {
     FileWriter& writer = context.writer;
     sead::WriteStream& stream = *context.stream;
-
-    writer.openReferenceTable("TrackInfoTable", context.trackNum);
 
     u32 channelIdxStart = 0;
     for (u32 i = 0; i < context.trackNum; i++)
@@ -404,11 +503,9 @@ static void WriteTrackInfoTable(StreamWriteContext& context)
     writer.closeReferenceTable("TrackInfoTable");
 }
 
-static void WriteChannelInfoTable(StreamWriteContext& context)
+static void WriteChannelInfos(StreamWriteContext& context)
 {
     FileWriter& writer = context.writer;
-
-    writer.openReferenceTable("ChannelInfoTable", context.channelNum);
 
     for (u32 i = 0; i < context.channelNum; i++)
     {
@@ -455,26 +552,19 @@ static void WriteInfoBlock(StreamWriteContext& context)
     }
     writer.popOffsetBase();
 
-    if (BfstmFile::IsTrackInfoAvailable(context.version, context.format))
-    {
-        writer.closeReference("TrackInfoTableRef", nw::snd::internal::ElementType_Table_ReferenceTable);
-        writer.pushOffsetBase();
-        {
-            WriteTrackInfoTable(context);
-        }
-        writer.popOffsetBase();
-    }
-    else
-    {
-        writer.closeNullReference("TrackInfoTableRef");
-    }
+    const bool hasTrackInfo = BfstmFile::IsTrackInfoAvailable(context.version, context.format);
 
-    writer.closeReference("ChannelInfoTableRef", nw::snd::internal::ElementType_Table_ReferenceTable);
-    writer.pushOffsetBase();
-    {
-        WriteChannelInfoTable(context);
-    }
-    writer.popOffsetBase();
+    if (hasTrackInfo)
+        OpenInfoTable(writer, "TrackInfoTableRef", "TrackInfoTable", context.trackNum);
+    else
+        writer.closeNullReference("TrackInfoTableRef");
+
+    OpenInfoTable(writer, "ChannelInfoTableRef", "ChannelInfoTable", context.channelNum);
+
+    if (hasTrackInfo)
+        WriteTrackInfos(context);
+
+    WriteChannelInfos(context);
 
     writer.align(cBlockAlignment);
     writer.closeBlock();
@@ -533,7 +623,7 @@ static void WriteRegionBlock(StreamWriteContext& context)
     StreamRegionSampleData sampleData;
     sampleData.channels = channels;
     sampleData.channelCount = context.channelNum;
-    sampleData.channelBytes = cBytesPerBlock * (context.blockNum - 1) + context.lastBlockBytes;
+    sampleData.channelBytes = GetChannelWriteBytes(context);
     sampleData.isDspAdpcm = context.isDspAdpcm;
 
     WriteStreamRegions(context.stream, *context.layout, sampleData);
@@ -576,6 +666,9 @@ static void WriteDataBlock(StreamWriteContext& context)
         }
     }
 
+    for (u32 ch = 0; ch < context.channelNum && context.tailBlockBytesPadded != 0; ch++)
+        WriteChannelBlock(context.stream, context.channelData[ch], context.blockNum * cBytesPerBlock, context.tailBlockBytesPadded);
+
     writer.closeBlock();
 }
 
@@ -598,7 +691,7 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
     PrepareChannelData(context);
 
     bool hasSeekBlock = context.isDspAdpcm;
-    bool hasRegionBlock = !context.layout->regions.empty();
+    bool hasRegionBlock = HasRegionBlock(context);
     u32 fileBlockCount = 2 + (hasSeekBlock ? 1 : 0) + (hasRegionBlock ? 1 : 0);
 
     context.writer.openFile(GetInnerFileMagic(target.format, InnerFileKind::Stream), fileBlockCount, version);
@@ -646,7 +739,7 @@ void StreamLoopInfoBatch::Flush()
 {
     ParallelFor(static_cast<u32>(sLoopInfoBatchWaves.size()), [](u32 index)
     {
-        sLoopInfoBatchWaves[index]->updateLoopInfo_(true, false);
+        sLoopInfoBatchWaves[index]->updateLoopInfo_();
     });
 
     sLoopInfoBatchWaves.clear();
@@ -682,8 +775,7 @@ private:
     void readFileLayout_(WaveFile* wave);
     bool checkTrackLoop_(const WaveFile& wave, u32 trackNo) const;
     void readTrackChannel_(WaveFile* wave, u32 trackNo, s8 globalChannelIndex);
-    void readAdpcmChannelInfo_(WaveFile::Channel* channel, u32 trackNo, s8 globalChannelIndex);
-    u32 getSeekRowCount() const;
+    void readAdpcmChannelInfo_(WaveFile::Channel* channel, s8 globalChannelIndex);
 
     void pushTrackWarning_(const char* format, u32 trackNo)
     {
@@ -701,7 +793,7 @@ private:
     u32 mStrmFileSize;
 
     nw::snd::internal::StreamSoundFileReader mReader;
-    nw::snd::internal::StreamSoundFile::StreamSoundInfo mStreamSoundInfo;
+    aal::Bfstm mStream;
     WaveFile::Encoding mEncoding = WaveFile::Encoding::DspAdpcm;
     u32 mChannelSize = 0;
 
@@ -721,81 +813,40 @@ bool StreamWaveReader::readStreamSoundInfo_()
         return false;
     }
 
-    if (!mReader.ReadStreamSoundInfo(&mStreamSoundInfo))
+    if (!aal::ReadBfstmLayout(mStrmFile, mStrmFileSize, &mStream))
     {
-        LOG("ReadStreamWaves: failed to read StreamSoundInfo");
+        LOG("ReadStreamWaves: stream file is damaged");
         return false;
     }
 
-    LOG_U32("encodeMethod", mStreamSoundInfo.encodeMethod);
-    LOG_BOOL("isLoop", mStreamSoundInfo.isLoop);
-    LOG_U32("channelCount", mStreamSoundInfo.channelCount);
-    LOG_U32("sampleRate", mStreamSoundInfo.sampleRate);
-    LOG_U32("blockCount", mStreamSoundInfo.blockCount);
-    LOG_U32("oneBlockBytes", mStreamSoundInfo.oneBlockBytes);
-    LOG_U32("lastBlockPaddedBytes", mStreamSoundInfo.lastBlockPaddedBytes);
-    LOG_U32("frameCount", mStreamSoundInfo.frameCount);
-    LOG_U32("loopStart", mStreamSoundInfo.loopStart);
-    LOG_U32("originalLoopStart", mStreamSoundInfo.originalLoopStart);
-    LOG_U32("originalLoopEnd", mStreamSoundInfo.originalLoopEnd);
+    LOG_U32("encoding", static_cast<u32>(mStream.encoding));
+    LOG_BOOL("isLoop", mStream.isLoop);
+    LOG_U32("channelCount", static_cast<u32>(mStream.channels.size()));
+    LOG_U32("sampleRate", mStream.sampleRate);
+    LOG_U32("blockCount", mStream.blockCount);
+    LOG_U32("frameCount", mStream.frameCount);
+    LOG_U32("loopStart", mStream.loopStartFrame);
+    LOG_U32("originalLoopStart", mStream.originalLoopStartFrame);
+    LOG_U32("originalLoopEnd", mStream.originalLoopEndFrame);
 
-    mEncoding = static_cast<WaveFile::Encoding>(mStreamSoundInfo.encodeMethod);
-
-    const u64 channelCount = mStreamSoundInfo.channelCount;
-    const u64 blockCount = mStreamSoundInfo.blockCount;
-
-    if (blockCount == 0 || channelCount == 0 || channelCount > cStrmChannelNum)
+    if (mStream.blockCount == 0 || mStream.channels.size() > cStrmChannelNum)
     {
         LOG("ReadStreamWaves: invalid block or channel count");
         return false;
     }
 
-    const u64 sampleDataEnd = mReader.GetSampleDataOffset() +
-                              (blockCount - 1) * mStreamSoundInfo.oneBlockBytes * channelCount +
-                              static_cast<u64>(mStreamSoundInfo.lastBlockPaddedBytes) * channelCount;
-
-    const u64 seekDataEnd = mEncoding == WaveFile::Encoding::DspAdpcm
-                                ? mReader.GetSeekBlockOffset() + sizeof(nw::ut::BinaryBlockHeader) + blockCount * channelCount * sizeof(WaveFile::Channel::SeekInfo)
-                                : 0;
-
-    if (sampleDataEnd > mStrmFileSize || seekDataEnd > mStrmFileSize)
-    {
-        LOG("ReadStreamWaves: file is shorter than its blocks");
-        return false;
-    }
-
-    mChannelSize = mStreamSoundInfo.oneBlockBytes * (mStreamSoundInfo.blockCount - 1) + mStreamSoundInfo.lastBlockPaddedBytes;
-
-    LOG_U32("sampleDataOffset", mReader.GetSampleDataOffset());
-    LOG_U32("seekBlockOffset", mReader.GetSeekBlockOffset());
-    LOG_U32("channelSize", mChannelSize);
+    mEncoding = static_cast<WaveFile::Encoding>(mStream.encoding);
+    mChannelSize = static_cast<u32>(mStream.getChannelBytes());
 
     return true;
 }
 
 void StreamWaveReader::readChannelBuffers_()
 {
-    for (u32 i = 0; i < mStreamSoundInfo.channelCount; i++)
+    for (u32 i = 0; i < mStream.channels.size(); i++)
     {
         mChannelBuffers[i] = new u8[mChannelSize];
-    }
-
-    const u8* sampleData = static_cast<const u8*>(mStrmFile) + mReader.GetSampleDataOffset();
-
-    for (u32 blockNo = 0; blockNo < mStreamSoundInfo.blockCount; blockNo++)
-    {
-        for (u32 channelNo = 0; channelNo < mStreamSoundInfo.channelCount; channelNo++)
-        {
-            bool isLastBlock = blockNo == mStreamSoundInfo.blockCount - 1;
-            u32 blockBytes = isLastBlock ? mStreamSoundInfo.lastBlockPaddedBytes : mStreamSoundInfo.oneBlockBytes;
-
-            const void* src = sampleData;
-            sampleData += blockBytes;
-
-            void* dst = mChannelBuffers[channelNo] + (blockNo * mStreamSoundInfo.oneBlockBytes);
-
-            sead::MemUtil::copy(dst, src, blockBytes);
-        }
+        aal::CopyBfstmChannel(mStream, mStrmFile, i, mChannelBuffers[i]);
     }
 }
 
@@ -807,12 +858,12 @@ WaveFile* StreamWaveReader::createTrackWave_(u32 trackNo, u32 trackCount)
 
     mOwner.nameStreamWave(wave, mStreamName, trackNo, trackCount);
 
-    wave->mDataEndian = nw::ut::GetFileEndian(*mReader.mHeader);
+    wave->mDataEndian = mStream.isBigEndian ? sead::Endian::eBig : sead::Endian::eLittle;
     wave->mEncoding = mEncoding;
-    wave->mIsLoop = mStreamSoundInfo.isLoop;
-    wave->mSampleRate = mStreamSoundInfo.sampleRate;
-    wave->mLoopStartFrame = mStreamSoundInfo.originalLoopStart;
-    wave->mLoopEndFrame = mStreamSoundInfo.originalLoopEnd;
+    wave->mIsLoop = mStream.isLoop;
+    wave->mSampleRate = mStream.sampleRate;
+    wave->mLoopStartFrame = mStream.originalLoopStartFrame;
+    wave->mLoopEndFrame = mStream.originalLoopEndFrame;
 
     return wave;
 }
@@ -836,14 +887,14 @@ bool StreamWaveReader::checkTrackLoop_(const WaveFile& wave, u32 trackNo) const
         isLoopValid = false;
     }
 
-    if (wave.getLoopStartFrame(true) != mStreamSoundInfo.loopStart)
+    if (wave.getLoopStartFrame(true) != mStream.loopStartFrame)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopStartMismatchFormat, trackNo);
         PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
         isLoopValid = false;
     }
 
-    if (wave.getLoopEndFrame(true) != mStreamSoundInfo.frameCount)
+    if (wave.getLoopEndFrame(true) != mStream.frameCount)
     {
         sead::FormatFixedSafeString<1024> msg(messages::stream::cTrackLoopEndMismatchFormat, trackNo);
         PopupMgr::instance()->pushCurrentItemWarning(msg, messages::stream::cAudioUnreadableDetail);
@@ -853,41 +904,39 @@ bool StreamWaveReader::checkTrackLoop_(const WaveFile& wave, u32 trackNo) const
     return isLoopValid;
 }
 
-void StreamWaveReader::readAdpcmChannelInfo_(WaveFile::Channel* channel, u32 trackNo, s8 globalChannelIndex)
+static void MakeAdpcmParams(const aal::BfstmChannel& source, nw::snd::DspAdpcmParam* param, nw::snd::internal::DspAdpcmLoopParam* loopParam)
+{
+    for (u32 i = 0; i < aal::cBfstmCoefficientCount; i++)
+        param->coef[i / 2][i % 2] = static_cast<u16>(source.coefficients[i]);
+
+    param->predScale = source.predScale;
+    param->yn1 = static_cast<u16>(source.yn1);
+    param->yn2 = static_cast<u16>(source.yn2);
+
+    loopParam->loopPredScale = source.loopPredScale;
+    loopParam->loopYn1 = static_cast<u16>(source.loopYn1);
+    loopParam->loopYn2 = static_cast<u16>(source.loopYn2);
+}
+
+void StreamWaveReader::readAdpcmChannelInfo_(WaveFile::Channel* channel, s8 globalChannelIndex)
 {
     nw::snd::DspAdpcmParam adpcmParam;
     nw::snd::internal::DspAdpcmLoopParam adpcmLoopParam;
-    if (mReader.ReadDspAdpcmChannelInfo(&adpcmParam, &adpcmLoopParam, globalChannelIndex))
-        channel->setAdpcmParams_(adpcmParam, adpcmLoopParam);
-    else
-        pushTrackWarning_(messages::stream::cTrackAdpcmUnreadableFormat, trackNo);
 
-    const u32 rowCount = getSeekRowCount();
+    MakeAdpcmParams(mStream.channels[globalChannelIndex], &adpcmParam, &adpcmLoopParam);
+    channel->setAdpcmParams_(adpcmParam, adpcmLoopParam);
+
+    const u32 rowCount = std::max(mStream.seekRowCount, mStream.blockCount);
+    const u64 channelCount = mStream.channels.size();
+    const WaveFile::Channel::SeekInfo* fileRows = reinterpret_cast<const WaveFile::Channel::SeekInfo*>(static_cast<const u8*>(mStrmFile) + mStream.seekDataStart);
 
     channel->mSeekData.mSeekInfo.allocBuffer(rowCount);
     channel->mSeekData.mOwner = true;
 
-    const u8* seekStart = static_cast<const u8*>(mStrmFile) + mReader.GetSeekBlockOffset() + sizeof(nw::ut::BinaryBlockHeader);
-
     WaveFile::Channel::SeekInfo* seekInfo = channel->mSeekData.mSeekInfo.getBufferPtr();
+
     for (u32 rowNo = 0; rowNo < rowCount; rowNo++)
-    {
-        const WaveFile::Channel::SeekInfo* rowSeek = reinterpret_cast<const WaveFile::Channel::SeekInfo*>(seekStart);
-        rowSeek += rowNo * mStreamSoundInfo.channelCount;
-        seekInfo[rowNo].yn1 = rowSeek[globalChannelIndex].yn1;
-        seekInfo[rowNo].yn2 = rowSeek[globalChannelIndex].yn2;
-    }
-}
-
-u32 StreamWaveReader::getSeekRowCount() const
-{
-    const u64 blockSize = mReader.GetSeekBlockSize();
-    const u64 rowSize = static_cast<u64>(mStreamSoundInfo.channelCount) * sizeof(WaveFile::Channel::SeekInfo);
-
-    if (blockSize < sizeof(nw::ut::BinaryBlockHeader) || mReader.GetSeekBlockOffset() + blockSize > mStrmFileSize)
-        return mStreamSoundInfo.blockCount;
-
-    return static_cast<u32>(std::max<u64>(mStreamSoundInfo.blockCount, (blockSize - sizeof(nw::ut::BinaryBlockHeader)) / rowSize));
+        seekInfo[rowNo] = rowNo < mStream.seekRowCount ? fileRows[rowNo * channelCount + globalChannelIndex] : WaveFile::Channel::SeekInfo();
 }
 
 void StreamWaveReader::readTrackChannel_(WaveFile* wave, u32 trackNo, s8 globalChannelIndex)
@@ -915,7 +964,7 @@ void StreamWaveReader::readTrackChannel_(WaveFile* wave, u32 trackNo, s8 globalC
     mChannelBuffersUsed[globalChannelIndex] = true;
 
     if (wave->mEncoding == WaveFile::Encoding::DspAdpcm)
-        readAdpcmChannelInfo_(channel, trackNo, globalChannelIndex);
+        readAdpcmChannelInfo_(channel, globalChannelIndex);
 }
 
 bool StreamWaveReader::read()
@@ -960,7 +1009,7 @@ bool StreamWaveReader::read()
             if (sIsLoopInfoBatch)
                 sLoopInfoBatchWaves.push_back(wave);
             else
-                wave->updateLoopInfo_(true, false);
+                wave->updateLoopInfo_();
         }
 
         wave->mIsLoopDirty = false;

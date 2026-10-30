@@ -28,6 +28,7 @@
 #include "ui/file/SystemShell.h"
 #include "app/Utilll.h"
 #include "aal/Bars.h"
+#include "aal/BarsListFile.h"
 #include "bfsar/archive/Bea.h"
 #include "bfsar/archive/BfsarLayoutCheck.h"
 #include "bfsar/archive/Cmpbin.h"
@@ -84,6 +85,15 @@ void AssertException(const char* msg)
 static bool isBfsarBcsar(const void* file)
 {
     return memcmp(file, "FSAR", 4) == 0 || memcmp(file, "CSAR", 4) == 0;
+}
+
+static u8* NewArchiveBuffer(const std::vector<u8>& bytes, sead::FileDevice::LoadArg* loadArg)
+{
+    u8* buffer = new u8[bytes.size()];
+    std::memcpy(buffer, bytes.data(), bytes.size());
+    loadArg->read_size = bytes.size();
+
+    return buffer;
 }
 
 static bool ensureDir(const char* path)
@@ -180,6 +190,41 @@ static void dumpItemIds(Bfsar& archive)
     exitConvert(0);
 }
 
+[[noreturn]] static void convertBarsList(const char* inPath, const char* outPath, const u8* data, u64 size, bool dumpIds)
+{
+    BarsListFile list;
+    const char* error = nullptr;
+
+    if (!list.open(data, size, sead::FixedSafeString<512>(inPath)))
+    {
+        fprintf(stderr, "Failed to parse '%s'\n", inPath);
+        exitConvert(1);
+    }
+
+    if (dumpIds)
+    {
+        for (const Item* entry : list.getEntryList())
+        {
+            const FoundBars* found = list.findBars(entry);
+            fprintf(stdout, "entry      %s  %s\n", entry->getName().cstr(), found ? found->location.c_str() : "-");
+        }
+
+        exitConvert(0);
+    }
+
+    if (!testhooks::ApplyBarsListCommands(list))
+        exitConvert(1);
+
+    if (!ensureDir(outPath) || list.saveAs(sead::FixedSafeString<512>(outPath), &error) != SaveResult::Saved)
+    {
+        fprintf(stderr, "Failed to save to '%s': %s\n", outPath, error ? error : "");
+        exitConvert(1);
+    }
+
+    fprintf(stdout, "Done: '%s' -> '%s'\n", inPath, outPath);
+    exitConvert(0);
+}
+
 template <typename LooseFile>
 [[noreturn]] static void convertLooseFile(const char* inPath, const char* outPath, const u8* data, u32 size)
 {
@@ -191,6 +236,9 @@ template <typename LooseFile>
         fprintf(stderr, "Failed to parse '%s': %s\n", inPath, error.cstr());
         exitConvert(1);
     }
+
+    if (!testhooks::ApplyLooseFileCommands(looseFile))
+        exitConvert(1);
 
     if (!ensureDir(outPath) || looseFile.saveAs(sead::FixedSafeString<512>(outPath), &error) != SaveResult::Saved)
     {
@@ -212,17 +260,21 @@ template <typename LooseFile>
         exitConvert(1);
     }
 
+    std::vector<u8> packBytes;
+
     if (packfile::IsPackPath(inPath))
     {
-        std::vector<u8> bytes;
-
-        if (!packfile::ReadFile(inPath, &bytes))
+        if (!packfile::ReadFile(inPath, &packBytes))
         {
             fprintf(stderr, "Failed to load '%s'\n", inPath);
             exitConvert(1);
         }
 
-        convertAudioResource(inPath, outPath, std::move(bytes), dumpIds);
+        if (aal::IsBarsList(packBytes.data(), packBytes.size()))
+            convertBarsList(inPath, outPath, packBytes.data(), packBytes.size(), dumpIds);
+
+        if (packBytes.size() < sizeof(nw::ut::BinaryFileHeader) || !isBfsarBcsar(packBytes.data()))
+            convertAudioResource(inPath, outPath, std::move(packBytes), dumpIds);
     }
 
     sead::FileDevice* device = sead::FileDeviceMgr::instance()->findDevice("native");
@@ -235,7 +287,7 @@ template <typename LooseFile>
     sead::FileDevice::LoadArg loadArg;
     sead::FixedSafeString<512> inPathStr(inPath);
     loadArg.path = inPathStr;
-    u8* bfsarFile = device->tryLoad(loadArg);
+    u8* bfsarFile = packBytes.empty() ? device->tryLoad(loadArg) : NewArchiveBuffer(packBytes, &loadArg);
     if (!bfsarFile)
     {
         fprintf(stderr, "Failed to load '%s'\n", inPath);
@@ -249,6 +301,9 @@ template <typename LooseFile>
 
         convertAudioResource(inPath, outPath, std::move(bytes), dumpIds);
     }
+
+    if (aal::IsBarsList(bfsarFile, loadArg.read_size))
+        convertBarsList(inPath, outPath, bfsarFile, loadArg.read_size, dumpIds);
 
     if (!dumpIds && LooseStreamFile::IsStreamFile(bfsarFile, static_cast<u32>(loadArg.read_size)))
         convertLooseFile<LooseStreamFile>(inPath, outPath, bfsarFile, static_cast<u32>(loadArg.read_size));
@@ -271,9 +326,26 @@ template <typename LooseFile>
             exitConvert(1);
         }
 
-        bfsarFile = new u8[archiveBytes.size()];
-        std::memcpy(bfsarFile, archiveBytes.data(), archiveBytes.size());
-        loadArg.read_size = archiveBytes.size();
+        bfsarFile = NewArchiveBuffer(archiveBytes, &loadArg);
+    }
+
+    const bool wasCmpbin = cmpbin::IsCompressed(bfsarFile, loadArg.read_size);
+    const bool prefersZstd = wasCmpbin && cmpbin::DetectCodec(bfsarFile, loadArg.read_size) == cmpbin::Codec::Zstd;
+
+    if (wasCmpbin)
+    {
+        std::vector<u8> archiveBytes;
+        const bool decompressed = cmpbin::Decompress(bfsarFile, loadArg.read_size, archiveBytes);
+
+        device->unload(bfsarFile);
+
+        if (!decompressed)
+        {
+            fprintf(stderr, "'%s': %s\n", inPath, messages::archive::cCmpbinDecompressFailed);
+            exitConvert(1);
+        }
+
+        bfsarFile = NewArchiveBuffer(archiveBytes, &loadArg);
     }
 
     if (loadArg.read_size < sizeof(nw::ut::BinaryFileHeader) || !isBfsarBcsar(bfsarFile) || !CheckSoundArchiveHeader(bfsarFile, static_cast<u32>(loadArg.read_size)))
@@ -299,6 +371,9 @@ template <typename LooseFile>
     }
 
     archive.setBeaSource(std::move(beaSource));
+
+    if (wasCmpbin)
+        archive.setCmpbinPreferZstd(prefersZstd);
 
     if (dumpIds)
     {

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace AudioProcessing
 {
@@ -73,6 +74,74 @@ void mixToMono(const std::vector<std::vector<float>>& channels, std::vector<floa
 
     for (size_t i = 0; i < length; i++)
         out[i] *= inverseChannelCount;
+}
+
+static s16 ClampPcm16(s32 value)
+{
+    return static_cast<s16>(std::clamp<s32>(value, std::numeric_limits<s16>::min(), std::numeric_limits<s16>::max()));
+}
+
+void decodeMidSide(std::vector<s16>& mid, std::vector<s16>& side)
+{
+    const size_t count = std::min(mid.size(), side.size());
+
+    for (size_t i = 0; i < count; i++)
+    {
+        const s32 left = static_cast<s32>(mid[i]) + side[i];
+        const s32 right = static_cast<s32>(mid[i]) - side[i];
+
+        mid[i] = ClampPcm16(left);
+        side[i] = ClampPcm16(right);
+    }
+}
+
+void encodeMidSide(std::vector<s16>& left, std::vector<s16>& right)
+{
+    const size_t count = std::min(left.size(), right.size());
+
+    for (size_t i = 0; i < count; i++)
+    {
+        const s32 mid = (static_cast<s32>(left[i]) + right[i]) / 2;
+        const s32 side = (static_cast<s32>(left[i]) - right[i]) / 2;
+
+        left[i] = static_cast<s16>(mid);
+        right[i] = static_cast<s16>(side);
+    }
+}
+
+std::vector<std::vector<float>> mixToStereo(const std::vector<std::vector<float>>& channels)
+{
+    constexpr size_t cStereoChannels = 2;
+
+    if (channels.size() <= cStereoChannels)
+        return channels;
+
+    const size_t length = channels[0].size();
+    std::vector<std::vector<float>> out(cStereoChannels, std::vector<float>(length, 0.0f));
+    float sourceCounts[cStereoChannels] = {};
+
+    for (size_t c = 0; c < channels.size(); c++)
+    {
+        const size_t side = c % cStereoChannels;
+        const size_t count = std::min(length, channels[c].size());
+        const float* src = channels[c].data();
+        float* dst = out[side].data();
+
+        for (size_t i = 0; i < count; i++)
+            dst[i] += src[i];
+
+        sourceCounts[side] += 1.0f;
+    }
+
+    for (size_t side = 0; side < cStereoChannels; side++)
+    {
+        const float inverseSourceCount = 1.0f / sourceCounts[side];
+
+        for (float& sample : out[side])
+            sample *= inverseSourceCount;
+    }
+
+    return out;
 }
 
 std::vector<std::vector<float>> selectChannels(const std::vector<std::vector<float>>& channels, ChannelMode mode)

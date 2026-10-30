@@ -193,7 +193,7 @@ bool Decompress(const void* data, size_t size, std::vector<u8>& out)
     const size_t payloadSize = size - cSizePrefixBytes;
     const u32 decompressedSize = ByteView(data, size, false).readU32(0);
 
-    if (decompressedSize == 0)
+    if (decompressedSize == 0 || decompressedSize > cFrameSizeMax)
         return false;
 
     out.resize(decompressedSize);

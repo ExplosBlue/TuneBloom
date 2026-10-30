@@ -13,6 +13,7 @@
 #include <imgui/imgui_internal.h>
 
 #include <algorithm>
+#include <cstring>
 #include <string>
 
 static constexpr s32 cListPane   = 0;
@@ -50,6 +51,33 @@ void SetItemTextFilterEnabled(bool enabled)
     sTextFilterEnabled = enabled;
 }
 
+static bool HasIdNameFormat(const Item* item)
+{
+    switch (item->getItemType())
+    {
+        case Item::ItemType::BankFileInstrument:
+        case Item::ItemType::GroupItemInfo:
+        case Item::ItemType::StreamTrack:
+            return false;
+
+        default:
+            return true;
+    }
+}
+
+static bool QueryCanMatchId(const char* query)
+{
+    return std::strpbrk(query, "0123456789[]") != nullptr;
+}
+
+bool ItemMatchesQuery(const Item* item, const char* query, bool caseSensitive)
+{
+    if (HasIdNameFormat(item) && !QueryCanMatchId(query))
+        return ImGui::TextMatchesQuery(item->getNameOrNull().cstr(), query, caseSensitive);
+
+    return ImGui::TextMatchesQuery(item->getFormattedName().cstr(), query, caseSensitive);
+}
+
 static bool ItemMatchesFilterPane(const Item* item, s32 pane)
 {
     DocumentState::TabFilter& state = GetTabFilter(pane);
@@ -57,7 +85,7 @@ static bool ItemMatchesFilterPane(const Item* item, s32 pane)
     if (state.filter.isEmpty() || !sTextFilterEnabled)
         return true;
 
-    return ImGui::TextMatchesQuery(item->getFormattedName().cstr(), state.filter.cstr(), state.caseSensitive);
+    return ItemMatchesQuery(item, state.filter.cstr(), state.caseSensitive);
 }
 
 bool ItemMatchesFilter(const Item* item)
@@ -100,6 +128,106 @@ static bool DrawSearchToggle(const char* label, const char* tooltip, bool* value
     return pressed;
 }
 
+static constexpr f32 cScopeChipPadEm      = 0.4f;
+static constexpr f32 cScopeChipGapEm      = 0.3f;
+static constexpr f32 cScopeChipInsetEm    = 0.2f;
+static constexpr f32 cScopeChipFieldShare = 0.6f;
+
+static constexpr const char* cTextCut = "...";
+
+static f32 CalcScopeChipWidth(const char* scope, f32 fieldWidth)
+{
+    const f32 em = ImGui::GetFontSize();
+    const f32 pad = ImFloor(em * cScopeChipPadEm);
+    const f32 gap = ImFloor(em * cScopeChipGapEm);
+    const f32 want = pad + ImGui::CalcTextSize(scope).x + gap + ImGui::CalcTextSize(ICON_LC_X).x + pad;
+
+    return ImFloor(std::min(want, fieldWidth * cScopeChipFieldShare));
+}
+
+static void DrawMiddleCutText(ImDrawList* drawList, const ImVec2& pos, f32 width, ImU32 color, const char* text)
+{
+    const char* end = text + strlen(text);
+
+    if (ImGui::CalcTextSize(text, end).x <= width)
+    {
+        drawList->AddText(pos, color, text, end);
+        return;
+    }
+
+    const f32 cutWidth = ImGui::CalcTextSize(cTextCut).x;
+    const char* headEnd = text;
+    const char* tailStart = end;
+
+    for (bool isHead = true; headEnd < tailStart; isHead = !isHead)
+    {
+        const char* nextHead = headEnd;
+        const char* nextTail = tailStart;
+
+        if (isHead)
+        {
+            unsigned int codepoint = 0;
+            nextHead += ImTextCharFromUtf8(&codepoint, headEnd, tailStart);
+        }
+        else
+        {
+            do
+                nextTail--;
+            while (nextTail > headEnd && (static_cast<u8>(*nextTail) & 0xC0) == 0x80);
+        }
+
+        if (ImGui::CalcTextSize(text, nextHead).x + cutWidth + ImGui::CalcTextSize(nextTail, end).x > width)
+            break;
+
+        headEnd = nextHead;
+        tailStart = nextTail;
+    }
+
+    const f32 headWidth = ImGui::CalcTextSize(text, headEnd).x;
+
+    drawList->AddText(pos, color, text, headEnd);
+    drawList->AddText(ImVec2(pos.x + headWidth, pos.y), color, cTextCut);
+    drawList->AddText(ImVec2(pos.x + headWidth + cutWidth, pos.y), color, tailStart, end);
+}
+
+static void DrawSearchScopeChip(const ImVec2& pos, f32 width, f32 frameHeight, const SearchFieldExtra& extra)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 em = ImGui::GetFontSize();
+    const f32 pad = ImFloor(em * cScopeChipPadEm);
+    const f32 gap = ImFloor(em * cScopeChipGapEm);
+    const f32 inset = std::max(ImFloor(em * cScopeChipInsetEm), 2.0f);
+    const f32 textY = pos.y + style.FramePadding.y;
+    const ImVec2 chipMin(pos.x, pos.y + inset);
+    const ImVec2 chipMax(pos.x + width, pos.y + frameHeight - inset);
+    const f32 closeWidth = ImGui::CalcTextSize(ICON_LC_X).x;
+    const f32 closeLeft = chipMax.x - pad - closeWidth;
+    const f32 nameLeft = chipMin.x + pad;
+    const f32 nameRight = std::max(closeLeft - gap, nameLeft);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    ImGui::AddRectFilledRaised(drawList, chipMin, chipMax, ImGui::GetColorU32(ImGuiCol_Button), style.FrameRounding);
+
+    ImGui::SetCursorScreenPos(chipMin);
+    ImGui::InvisibleButton("##Scope", ImVec2(closeLeft - gap * 0.5f - chipMin.x, chipMax.y - chipMin.y));
+
+    if (extra.scopeHovered)
+        *extra.scopeHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip);
+
+    ImGui::SetCursorScreenPos(ImVec2(closeLeft - gap * 0.5f, chipMin.y));
+
+    if (ImGui::InvisibleButton("##ScopeClear", ImVec2(chipMax.x - closeLeft + gap * 0.5f, chipMax.y - chipMin.y)) && extra.scopeCleared)
+        *extra.scopeCleared = true;
+
+    if (extra.scopeClearTooltip)
+        ImGui::SetItemTooltip("%s", extra.scopeClearTooltip);
+
+    const ImU32 closeColor = ImGui::GetHoverColorU32(ImGui::GetItemID(), ImGui::IsItemHovered(), ImGui::GetColorU32(ImGuiCol_TextDisabled), ImGui::GetColorU32(ImGuiCol_Text));
+
+    drawList->AddText(ImVec2(closeLeft, textY), closeColor, ICON_LC_X);
+    DrawMiddleCutText(drawList, ImVec2(nameLeft, textY), nameRight - nameLeft, ImGui::GetColorU32(ImGuiCol_Text), extra.scope);
+}
+
 bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, bool* caseSensitive, bool setFocus, const SearchFieldExtra* extra)
 {
     static ImGuiID sFocusId = 0;
@@ -122,6 +250,8 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
     bool* menuPressed = extra ? extra->menuPressed : nullptr;
 
     const f32 buttonsWidth = height * ((hasText ? 1.0f : 0.0f) + (caseSensitive ? 1.0f : 0.0f) + (wholeWord ? 1.0f : 0.0f) + (menuPressed ? 1.0f : 0.0f));
+    const bool hasScope = extra && extra->scope;
+    const f32 chipWidth = hasScope ? CalcScopeChipWidth(extra->scope, width - iconWidth - buttonsWidth - (hasText ? 0.0f : height)) : 0.0f;
 
     ImGui::PushID(id);
 
@@ -129,6 +259,9 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
 
     ImGui::RenderFrame(pos, ImVec2(pos.x + width, pos.y + height), ImGui::GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
     ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + style.FramePadding.x + 1.0f, pos.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_TextDisabled), icon);
+
+    if (hasScope)
+        DrawSearchScopeChip(ImVec2(pos.x + iconWidth, pos.y), chipWidth, height, *extra);
 
     if (setFocus || sFocusId == inputId)
     {
@@ -140,8 +273,8 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
     ImGui::PushStyleColor(ImGuiCol_Button, uicolors::cTransparentU32);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 
-    ImGui::SetCursorScreenPos(ImVec2(pos.x + iconWidth, pos.y));
-    ImGui::SetNextItemWidth(width - iconWidth - buttonsWidth);
+    ImGui::SetCursorScreenPos(ImVec2(pos.x + iconWidth + chipWidth, pos.y));
+    ImGui::SetNextItemWidth(width - iconWidth - chipWidth - buttonsWidth);
 
     if (enterPressed)
     {
@@ -174,6 +307,9 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
     {
         changed = true;
     }
+
+    if (hasScope && extra->scopeCleared && !hasText && ImGui::IsItemActive() && ImGui::IsKeyPressed(ImGuiKey_Backspace, false))
+        *extra->scopeCleared = true;
 
     if (hasText)
     {

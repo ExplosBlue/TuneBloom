@@ -1,6 +1,7 @@
 #pragma once
 
-namespace ownedwindow {
+namespace ownedwindow
+{
 
 void prepare(void* window);
 void attach(void* window, void* owner);

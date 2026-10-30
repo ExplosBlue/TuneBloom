@@ -1,34 +1,26 @@
 #include <aal/AudioAsset.h>
 
 #include <aal/Amta.h>
-#include <bfsar/audio/AudioProcessing.h>
+#include <aal/AudioResource.h>
 #include <aal/Bfstm.h>
 #include <aal/Bwav.h>
-#include <core/ByteView.h>
+#include <bfsar/audio/AudioProcessing.h>
 #include <bfsar/audio/DecodedPcm.h>
+#include <bfsar/audio/NxOpus.h>
+#include <bfsar/audio/WavWriter.h>
+#include <bfsar/audio/WaveFileEditDecode.h>
+#include <bfsar/files/WaveFile.h>
+#include <bfsar/model/StateHash.h>
+#include <bfsar/player/SoundPlayer.h>
+#include <core/ByteView.h>
+#include <core/NwFile.h>
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
-#include <bfsar/player/SoundPlayer.h>
-#include <bfsar/model/StateHash.h>
-#include <bfsar/files/WaveFile.h>
-#include <bfsar/audio/WaveFileEditDecode.h>
-#include <bfsar/audio/WavWriter.h>
 
 #include <snd/snd_ElementType.h>
 
 #include <algorithm>
 
-static constexpr u32 cNwHeaderSize          = 0x14;
-static constexpr u32 cNwHeaderByteOrder     = 0x04;
-static constexpr u32 cNwHeaderFileSize      = 0x0C;
-static constexpr u32 cNwHeaderBlockCount    = 0x10;
-static constexpr u32 cNwBlockRefSize        = 0x0C;
-static constexpr u32 cNwBlockRefOffset      = 0x04;
-static constexpr u32 cNwBlockRefSizeField   = 0x08;
-static constexpr u32 cNwBlockHeaderSize     = 0x08;
-static constexpr u32 cNwReferenceSize       = 0x08;
-static constexpr u32 cNwReferenceOffset     = 0x04;
-static constexpr u32 cNwNullOffset          = 0xFFFFFFFF;
 static constexpr u32 cFwavInfoLoopEnd       = 0x0C;
 static constexpr u32 cFwavInfoChannelTable  = 0x14;
 static constexpr u32 cFwavChannelInfoSize   = 0x14;
@@ -36,12 +28,6 @@ static constexpr u32 cFwavChannelAdpcmRef   = 0x08;
 static constexpr u32 cFwavAdpcmInfoSize     = 0x2C;
 static constexpr u32 cAdpcmFrameBytes       = 8;
 static constexpr u32 cAdpcmFrameSamples     = 14;
-
-struct NwBlock
-{
-    u64 offset = 0;
-    u64 size = 0;
-};
 
 namespace
 {
@@ -65,28 +51,9 @@ struct SourceAudio
 
 }
 
-static bool FindNwBlock(const ByteView& view, u16 type, NwBlock* out)
+static bool FindNwBlock(const ByteView& view, u16 type, nwfile::Block* out)
 {
-    const u64 fileSize = view.readU32(cNwHeaderFileSize);
-    const u32 count = view.readU16(cNwHeaderBlockCount);
-
-    for (u32 i = 0; i < count; i++)
-    {
-        const u64 ref = cNwHeaderSize + static_cast<u64>(i) * cNwBlockRefSize;
-
-        if (!view.has(ref, cNwBlockRefSize))
-            return false;
-
-        if (view.readU16(ref) != type)
-            continue;
-
-        out->offset = view.readU32(ref + cNwBlockRefOffset);
-        out->size = view.readU32(ref + cNwBlockRefSizeField);
-
-        return out->offset != cNwNullOffset && out->size >= cNwBlockHeaderSize && out->offset + out->size <= fileSize;
-    }
-
-    return false;
+    return nwfile::FindBlock(view, type, out) && out->offset + out->size <= view.readU32(nwfile::cHeaderFileSize);
 }
 
 static u64 GetFwavSampleBytes(u8 encoding, u32 frames)
@@ -111,7 +78,7 @@ static bool IsFwavChannelInBounds(const ByteView& view, u64 channelInfo, u64 inf
     if (channelInfo + cFwavChannelInfoSize > infoEnd)
         return false;
 
-    const u64 samples = dataBody + view.readU32(channelInfo + cNwReferenceOffset);
+    const u64 samples = dataBody + view.readU32(channelInfo + nwfile::cReferenceOffset);
 
     if (samples + GetFwavSampleBytes(encoding, frames) > dataEnd)
         return false;
@@ -119,25 +86,25 @@ static bool IsFwavChannelInBounds(const ByteView& view, u64 channelInfo, u64 inf
     if (static_cast<WaveFile::Encoding>(encoding) != WaveFile::Encoding::DspAdpcm)
         return true;
 
-    return channelInfo + view.readU32(channelInfo + cFwavChannelAdpcmRef + cNwReferenceOffset) + cFwavAdpcmInfoSize <= infoEnd;
+    return channelInfo + view.readU32(channelInfo + cFwavChannelAdpcmRef + nwfile::cReferenceOffset) + cFwavAdpcmInfoSize <= infoEnd;
 }
 
 static bool IsFwavInBounds(const u8* file, size_t size)
 {
-    if (size < cNwHeaderSize || !ByteView::IsByteOrderMark(file, size, cNwHeaderByteOrder))
+    if (size < nwfile::cHeaderSize || !MatchesInnerFileKind(file, InnerFileKind::Wave) || !ByteView::IsByteOrderMark(file, size, nwfile::cHeaderByteOrder))
         return false;
 
-    const ByteView view(file, size, ByteView::IsBigEndianMark(file, size, cNwHeaderByteOrder));
+    const ByteView view(file, size, ByteView::IsBigEndianMark(file, size, nwfile::cHeaderByteOrder));
 
-    NwBlock info;
-    NwBlock data;
+    nwfile::Block info;
+    nwfile::Block data;
 
-    if (view.readU32(cNwHeaderFileSize) > size ||
+    if (view.readU32(nwfile::cHeaderFileSize) > size ||
         !FindNwBlock(view, nw::snd::internal::ElementType_WaveFile_InfoBlock, &info) ||
         !FindNwBlock(view, nw::snd::internal::ElementType_WaveFile_DataBlock, &data))
         return false;
 
-    const u64 infoBody = info.offset + cNwBlockHeaderSize;
+    const u64 infoBody = info.offset + nwfile::cBlockHeaderSize;
     const u64 infoEnd = info.offset + info.size;
     const u64 table = infoBody + cFwavInfoChannelTable;
 
@@ -148,15 +115,15 @@ static bool IsFwavInBounds(const u8* file, size_t size)
     const u32 frames = view.readU32(infoBody + cFwavInfoLoopEnd);
     const u32 channelCount = view.readU32(table);
 
-    if (encoding > static_cast<u8>(WaveFile::Encoding::DspAdpcm) || channelCount == 0 || table + sizeof(u32) + static_cast<u64>(channelCount) * cNwReferenceSize > infoEnd)
+    if (encoding > static_cast<u8>(WaveFile::Encoding::DspAdpcm) || channelCount == 0 || table + sizeof(u32) + static_cast<u64>(channelCount) * nwfile::cReferenceSize > infoEnd)
         return false;
 
-    const u64 dataBody = data.offset + cNwBlockHeaderSize;
+    const u64 dataBody = data.offset + nwfile::cBlockHeaderSize;
     const u64 dataEnd = data.offset + data.size;
 
     for (u32 i = 0; i < std::min<u32>(channelCount, snd::cWaveChannelMax); i++)
     {
-        const u64 channelInfo = table + view.readU32(table + sizeof(u32) + i * cNwReferenceSize + cNwReferenceOffset);
+        const u64 channelInfo = table + view.readU32(table + sizeof(u32) + i * nwfile::cReferenceSize + nwfile::cReferenceOffset);
 
         if (!IsFwavChannelInBounds(view, channelInfo, infoEnd, dataBody, dataEnd, encoding, frames))
             return false;
@@ -220,14 +187,35 @@ static void FillBfstmInfo(const aal::Bfstm& bfstm, AudioAssetInfo* info)
     info->loopEndFrame = info->sampleCount;
 }
 
+static void FillStreamFileInfo(const AudioAssetFile& stream, AudioAssetInfo* info)
+{
+    if (!stream)
+        return;
+
+    aal::Bfstm bfstm;
+    aal::Bwav bwav;
+    const AudioAssetKind kind = DetectAudioAssetKind(*stream);
+
+    if (kind == AudioAssetKind::Stream && aal::ReadBfstmInfo(stream->data(), stream->size(), &bfstm))
+        FillBfstmInfo(bfstm, info);
+    else if (kind == AudioAssetKind::Bwav && ReadAudioAssetBwav(stream, &bwav) && aal::IsBwavComplete(bwav))
+        FillBwavInfo(bwav, info);
+    else
+        return;
+
+    info->kind = kind;
+}
+
 static OutputSide GetBwavSide(aal::BwavPan pan)
 {
     switch (pan)
     {
         case aal::BwavPan::Left:
+        case aal::BwavPan::RearLeft:
             return OutputSide::Left;
 
         case aal::BwavPan::Right:
+        case aal::BwavPan::RearRight:
             return OutputSide::Right;
 
         default:
@@ -314,6 +302,7 @@ static bool ReadSourceAudio(AudioAssetKind kind, const AudioAssetFile& file, Sou
             return ReadBwavSource(file, out);
 
         case AudioAssetKind::StreamPrefetch:
+        case AudioAssetKind::Stream:
             return ReadBfstmSource(file, out);
 
         default:
@@ -321,6 +310,17 @@ static bool ReadSourceAudio(AudioAssetKind kind, const AudioAssetFile& file, Sou
     }
 
     return false;
+}
+
+static bool ReadPlayableSource(const AudioAsset& asset, SourceAudio* out)
+{
+    if (!ReadSourceAudio(asset.getInfo().kind, asset.getCompleteFile(), out))
+        return false;
+
+    if (out->channels.size() == 2 && aal::IsAmtaMidSide(asset.getMeta()))
+        AudioProcessing::decodeMidSide(out->channels[0], out->channels[1]);
+
+    return true;
 }
 
 static bool FeedsOutputChannel(OutputSide side, u32 output)
@@ -397,9 +397,8 @@ bool DecodeAudioFile(const AudioAssetFile& file, DecodedPcm* out)
 
     SourceAudio source;
     const AudioAssetKind kind = DetectAudioAssetKind(*file);
-    const bool isRead = kind == AudioAssetKind::Stream ? ReadBfstmSource(file, &source) : kind == AudioAssetKind::Bwav && ReadBwavSource(file, &source);
 
-    return isRead && BuildDecodedPcm(source, out);
+    return kind != AudioAssetKind::StreamPrefetch && ReadSourceAudio(kind, file, &source) && BuildDecodedPcm(source, out);
 }
 
 const char* GetAudioAssetKindName(AudioAssetKind kind)
@@ -478,6 +477,50 @@ bool ReadAudioAssetBwav(const AudioAssetFile& file, aal::Bwav* out)
     return file && aal::ReadBwav(file->data(), file->size(), out, &error);
 }
 
+bool GetAudioAssetBwavCodec(const AudioAsset& asset, aal::BwavCodec* out)
+{
+    const AudioAssetFile& file = asset.getFile();
+
+    return asset.getInfo().kind == AudioAssetKind::Bwav && file && aal::ReadBwavCodec(file->data(), file->size(), out);
+}
+
+u32 GetAudioAssetOpusBitrate(const AudioAsset& asset)
+{
+    const AudioAssetFile& file = asset.getStreamFile() ? asset.getStreamFile() : asset.getFile();
+    aal::Bwav bwav;
+
+    if (asset.getInfo().kind != AudioAssetKind::Bwav || !ReadAudioAssetBwav(file, &bwav) || bwav.channels.empty())
+        return 0;
+
+    const aal::BwavChannel& channel = bwav.channels.front();
+
+    if (channel.codec != aal::BwavCodec::Opus)
+        return 0;
+
+    return nxopus::MeasureChannelBitrate(channel.data.data(), channel.data.size());
+}
+
+static bool HasInfoOnlyInMeta(const AudioAsset& asset)
+{
+    return asset.getInfo().sampleRate == 0 && asset.isStream();
+}
+
+aal::AmtaSourceAudio GetAudioAssetLength(const AudioAsset& asset)
+{
+    const AudioAssetInfo& info = asset.getInfo();
+    aal::AmtaSourceAudio length = { info.sampleRate, info.sampleCount };
+
+    if (HasInfoOnlyInMeta(asset) && !aal::ReadAmtaLength(asset.getMeta(), &length))
+        length = {};
+
+    return length;
+}
+
+bool IsAudioAssetLoop(const AudioAsset& asset)
+{
+    return HasInfoOnlyInMeta(asset) ? aal::IsAmtaLoop(asset.getMeta()) : asset.getInfo().isLoop;
+}
+
 bool IsReadableFwav(const std::vector<u8>& file)
 {
     WaveFile* wave = ReadFwavFile(file);
@@ -490,12 +533,12 @@ bool IsReadableFwav(const std::vector<u8>& file)
 AudioAsset::AudioAsset()
     : Item()
     , mMeta()
+    , mMetaStreamKind(AudioAssetKind::None)
     , mFile()
     , mStreamFile()
     , mStreamFileState(StreamFileState::NotChecked)
     , mStreamFileName()
     , mIsStreamFileModified(false)
-    , mIsInResetTable(false)
     , mRevision(0)
     , mInfo()
     , mPreviewWave(nullptr)
@@ -547,7 +590,6 @@ u64 AudioAsset::computeStateSignature() const
     hash.mixName(*this);
     hash.mixBytes(mMeta.data(), mMeta.size());
     hash.mixValue(mRevision);
-    hash.mixValue(mIsInResetTable);
 
     return hash.value();
 }
@@ -560,6 +602,11 @@ const std::vector<u8>& AudioAsset::getMeta() const
 void AudioAsset::setMeta(std::vector<u8> meta)
 {
     mMeta = std::move(meta);
+
+    aal::AmtaAudioKind kind = aal::AmtaAudioKind::Bwav;
+    const bool isStream = aal::IsAmtaStream(mMeta, &kind);
+
+    mMetaStreamKind = !isStream ? AudioAssetKind::None : kind == aal::AmtaAudioKind::Bwav ? AudioAssetKind::Bwav : AudioAssetKind::Stream;
 }
 
 u16 AudioAsset::getMetaVersion() const
@@ -582,8 +629,8 @@ AudioAssetKind AudioAsset::getCompleteFileKind() const
     if (mStreamFile)
         return DetectAudioAssetKind(*mStreamFile);
 
-    if (mInfo.kind == AudioAssetKind::StreamPrefetch && mStreamFileState == StreamFileState::Found)
-        return AudioAssetKind::Stream;
+    if (mStreamFileState == StreamFileState::Found && (mInfo.kind == AudioAssetKind::StreamPrefetch || !mFile))
+        return getStreamFileKind();
 
     return mInfo.kind;
 }
@@ -631,16 +678,6 @@ void AudioAsset::markStreamFileWritten()
     mStreamFileName = getName().cstr();
 }
 
-bool AudioAsset::isInResetTable() const
-{
-    return mIsInResetTable;
-}
-
-void AudioAsset::setInResetTable(bool isInResetTable)
-{
-    mIsInResetTable = isInResetTable;
-}
-
 const AudioAssetInfo& AudioAsset::getInfo() const
 {
     return mInfo;
@@ -648,35 +685,91 @@ const AudioAssetInfo& AudioAsset::getInfo() const
 
 bool AudioAsset::isStream() const
 {
-    return mInfo.isPrefetch;
+    return mInfo.isPrefetch || mMetaStreamKind != AudioAssetKind::None;
 }
 
-bool AudioAsset::getPlaybackError(sead::BufferedSafeString* outError) const
+AudioAssetKind AudioAsset::getStreamFileKind() const
 {
+    if (!mFile)
+        return mMetaStreamKind == AudioAssetKind::None ? AudioAssetKind::Bwav : mMetaStreamKind;
+
+    return mInfo.kind == AudioAssetKind::StreamPrefetch ? AudioAssetKind::Stream : AudioAssetKind::Bwav;
+}
+
+const char* GetStreamFileStateError(StreamFileState state)
+{
+    switch (state)
+    {
+        case StreamFileState::Missing:
+            return messages::resource::cStreamFileMissing;
+
+        case StreamFileState::Damaged:
+            return messages::resource::cStreamDamaged;
+
+        case StreamFileState::Mismatched:
+            return messages::resource::cStreamMismatched;
+
+        default:
+            break;
+    }
+
+    return messages::resource::cStreamNotLoaded;
+}
+
+static const char* GetStreamPlaybackError(StreamFileState state)
+{
+    return state == StreamFileState::Loaded || state == StreamFileState::Found ? nullptr : GetStreamFileStateError(state);
+}
+
+bool AudioAsset::readsStreamFile() const
+{
+    const AudioResource* resource = getResource();
+
+    return !resource || resource->holdsStreams();
+}
+
+const char* AudioAsset::findPlaybackError() const
+{
+    if (!mFile && isStream())
+        return GetStreamPlaybackError(mStreamFileState);
+
     switch (mInfo.kind)
     {
         case AudioAssetKind::None:
-            outError->copy(messages::resource::cNoAudioFile);
-            return true;
+            return messages::resource::cNoAudioFile;
 
         case AudioAssetKind::Unknown:
-            outError->copy(messages::resource::cFormatNotPlayable);
-            return true;
+            return messages::resource::cFormatNotPlayable;
 
         default:
             break;
     }
 
     if (mInfo.channelCount == 0)
-    {
-        outError->copy(messages::resource::cAudioDamaged);
-        return true;
-    }
+        return messages::resource::cAudioDamaged;
 
-    if (!mInfo.isPrefetch || mStreamFileState == StreamFileState::Loaded || mStreamFileState == StreamFileState::Found)
+    if (!mInfo.isPrefetch)
+        return nullptr;
+
+    if (!readsStreamFile())
+        return mInfo.prefetchSampleCount == 0 ? messages::resource::cBwavNeedsAudio : nullptr;
+
+    return GetStreamPlaybackError(mStreamFileState);
+}
+
+const char* AudioAsset::getNoAudioReason() const
+{
+    return !mFile && isStream() ? GetStreamFileStateError(mStreamFileState) : messages::resource::cNoAudioFile;
+}
+
+bool AudioAsset::getPlaybackError(sead::BufferedSafeString* outError) const
+{
+    const char* error = findPlaybackError();
+
+    if (!error)
         return false;
 
-    outError->copy(mStreamFileState == StreamFileState::Mismatched ? messages::resource::cStreamMismatched : messages::resource::cStreamNotLoaded);
+    outError->copy(error);
     return true;
 }
 
@@ -696,7 +789,7 @@ bool AudioAsset::decode(DecodedPcm* out)
 
     SourceAudio source;
 
-    return ReadSourceAudio(mInfo.kind, getCompleteFile(), &source) && BuildDecodedPcm(source, out);
+    return ReadPlayableSource(*this, &source) && BuildDecodedPcm(source, out);
 }
 
 bool AudioAsset::decodePcm16(AudioAssetPcm* out)
@@ -719,7 +812,7 @@ bool AudioAsset::decodePcm16(AudioAssetPcm* out)
             std::vector<s16>& samples = out->channels.emplace_back(channel.size(), 0);
 
             for (u32 i = 0; i < channel.size(); i++)
-                samples[i] = AudioProcessing::restorePcm16(channel[i]);
+                samples[i] = AudioProcessing::toPcm16(channel[i]);
         }
 
         return true;
@@ -750,7 +843,7 @@ bool AudioAsset::writeWavFile(const sead::SafeString& path)
 
     SourceAudio source;
 
-    if (!ReadSourceAudio(mInfo.kind, getCompleteFile(), &source))
+    if (!ReadPlayableSource(*this, &source))
         return false;
 
     Pcm16Wav wav;
@@ -825,7 +918,10 @@ void AudioAsset::refreshInfo()
     mInfo = AudioAssetInfo();
 
     if (!mFile)
+    {
+        FillStreamFileInfo(mStreamFile, &mInfo);
         return;
+    }
 
     mInfo.kind = DetectAudioAssetKind(*mFile);
     mInfo.fileSize = static_cast<u32>(mFile->size());

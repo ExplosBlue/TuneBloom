@@ -1,5 +1,6 @@
 #include <ui/sound/SoundViews.h>
 
+#include <ui/app/PopupMgr.h>
 #include <ui/file/File.h>
 #include <ui/items/ItemSelector.h>
 #include <ui/widgets/Knob.h>
@@ -9,6 +10,8 @@
 #include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/widgets/Widgets.h>
+
+#include <bfsar/model/SoundSetMembership.h>
 
 const Item* SoundSet::validate(sead::BufferedSafeString& error) const
 {
@@ -204,177 +207,109 @@ static bool CascadeSetsBefore(const std::vector<SoundSet*>& sets, u32 newStartId
     return true;
 }
 
-void InsertSoundIntoSet(SoundSet *targetSet, Sound *newSound, Item *afterItem)
+static const char* GetSoundSetTypeName(const SoundSet& soundSet)
 {
-    Bfsar& archive = ActiveSoundArchive();
+    return soundSet.getSoundSetType() == SoundSet::SoundSetType::Seq ? messages::item::cTypeSequenceSoundSet : messages::common::cWaveSoundSet;
+}
 
-    Item::List &soundList = archive.getSoundList();
-    Item::List &soundSetList = archive.getSoundSetList();
+static void ReportSoundListRefusal(const SoundSetEditResult& result)
+{
+    const sead::FixedSafeString<256> setName = result.set ? result.set->getFormattedName() : sead::FixedSafeString<256>();
 
-    Item *insertAfterItem = afterItem;
+    sead::FixedSafeString<1024> text;
+    Item* item = nullptr;
 
-    if (targetSet->getIsEmpty())
+    switch (result.refusal)
     {
-        SEAD_ASSERT_MSG(!afterItem, "Cannot insert after a specific sound in an empty set as there isn't one");
+        case SoundSetEditRefusal::SharedSounds:
+            text.format(messages::soundset::cListSharedSoundsFormat, setName.cstr(), result.otherSet->getFormattedName().cstr());
+            item = result.set;
+            break;
 
-        for (Item::ListNode *node = soundSetList.prev(targetSet); node; node = soundSetList.prev(node->val()))
-        {
-            SoundSet *earlierSet = static_cast<SoundSet *>(node->val());
-            if (!earlierSet->getIsEmpty())
-            {
-                insertAfterItem = archive.getItem(earlierSet->getEndId(), soundList);
-                break;
-            }
-        }
+        case SoundSetEditRefusal::InvalidRange:
+            text.format(messages::soundset::cListInvalidRangeFormat, setName.cstr());
+            item = result.set;
+            break;
 
-        if (insertAfterItem)
-            insertAfterItem->insertBack(newSound);
-        else
-            soundList.pushFront(newSound);
+        case SoundSetEditRefusal::WrongType:
+            text.format(messages::soundset::cMoveWrongTypeFormat, result.sound->getFormattedName().cstr(), GetSoundSetTypeName(*result.set), setName.cstr());
+            break;
 
-        archive.updateList(soundList);
+        case SoundSetEditRefusal::SplitSet:
+            text.format(messages::soundset::cListSplitsSetFormat, setName.cstr());
+            break;
 
-        targetSet->setIsEmpty(false);
-        targetSet->setStartId(newSound->getId());
-        targetSet->setEndId(newSound->getId());
-    }
-    else
-    {
-        if (!insertAfterItem)
-        {
-            u32 endId = targetSet->getEndId();
-            Item::ListNode *lastNode = nullptr;
-
-            for (Item::ListNode *node = archive.getItem(targetSet->getStartId(), soundList); node && node->val()->getId() <= endId; node = soundList.next(node))
-                lastNode = node;
-
-            SEAD_ASSERT(lastNode);
-            insertAfterItem = lastNode->val();
-        }
-
-        SEAD_ASSERT_MSG(
-            insertAfterItem->getId() >= targetSet->getStartId() && insertAfterItem->getId() <= targetSet->getEndId(), 
-            "InsertSoundIntoSet: afterItem must be inside targetSet's range"
-        );
-
-        insertAfterItem->insertBack(newSound);
-        archive.updateList(soundList);
-
-        targetSet->setEndId(targetSet->getEndId() + 1);
+        default:
+            return;
     }
 
-    u32 soundCount = static_cast<u32>(soundList.size());
+    PopupMgr::instance()->addPopup({ text, item });
+}
 
-    const std::vector<SoundSet*> setsAfter = GetFilledSets(targetSet, soundSetList, true);
+static bool ApplySoundListEdit(Bfsar& archive, const SoundSetEditResult& result)
+{
+    if (result.refusal != SoundSetEditRefusal::None)
+    {
+        ReportSoundListRefusal(result);
+        return false;
+    }
 
-    if (OffsetSets(setsAfter, +1, soundCount, false))
-        OffsetSets(setsAfter, +1, soundCount, true);
-    else
-        SEAD_ASSERT_MSG(false, "Cascade offset after insert should always be in-bounds");
+    if (!result.changed)
+        return true;
 
     SetUnsavedChanges(true);
     archive.validate(false);
+
+    return true;
 }
 
-static SoundSet *FindContainingSet(u32 soundId, const Item::List &soundSetList)
-{
-    for (auto it = soundSetList.robustBegin(); it != soundSetList.robustEnd(); ++it)
-    {
-        SoundSet *set = static_cast<SoundSet *>(it->val());
-        if (!set->getIsEmpty() && soundId >= set->getStartId() && soundId <= set->getEndId())
-            return set;
-    }
-
-    return nullptr;
-}
-
-static void ShiftSetsAtOrAfter(u32 thresholdId, s32 delta, Item::List &soundSetList, u32 soundCount)
-{
-    if (delta == 0)
-        return;
-
-    for (auto it = soundSetList.robustBegin(); it != soundSetList.robustEnd(); ++it)
-    {
-        SoundSet *set = static_cast<SoundSet *>(it->val());
-
-        if (set->getIsEmpty() || set->getStartId() < thresholdId)
-            continue;
-
-        s32 newStart = static_cast<s32>(set->getStartId()) + delta;
-        s32 newEnd = static_cast<s32>(set->getEndId()) + delta;
-
-        SEAD_ASSERT_MSG(
-            newStart >= 0 && newEnd < static_cast<s32>(soundCount) && newStart <= newEnd,
-            "Set shift after structural sound edit went out of bounds");
-
-        set->setStartId(static_cast<u32>(newStart));
-        set->setEndId(static_cast<u32>(newEnd));
-
-        SetUnsavedChanges(true);
-    }
-}
-
-static void InsertSoundAt(Item *afterItem, Sound *newSound)
+bool InsertSoundHook(Item* afterItem, Item* newItem)
 {
     Bfsar& archive = ActiveSoundArchive();
 
-    Item::List &soundList = archive.getSoundList();
-    Item::List &soundSetList = archive.getSoundSetList();
-
-    SoundSet *containingSet = afterItem ? FindContainingSet(afterItem->getId(), soundSetList) : nullptr;
-
-    if (afterItem)
-        afterItem->insertBack(newSound);
-    else
-        soundList.pushBack(newSound);
-
-    archive.updateList(soundList);
-
-    if (containingSet)
-        containingSet->setEndId(containingSet->getEndId() + 1);
-
-    u32 soundCount = static_cast<u32>(soundList.size());
-    ShiftSetsAtOrAfter(newSound->getId(), +1, soundSetList, soundCount);
-
-    SetUnsavedChanges(true);
-    archive.validate(false);
+    return ApplySoundListEdit(archive, InsertSoundAfter(archive, static_cast<Sound*>(afterItem), static_cast<Sound*>(newItem)));
 }
 
-void InsertSoundAtHook(Item *afterItem, Item *newItem)
-{
-    InsertSoundAt(afterItem, static_cast<Sound *>(newItem));
-}
-
-void RemoveSoundWithCascade(Item *item)
+bool InsertSoundIntoSetHook(SoundSet* soundSet, Item* afterItem, Item* newItem)
 {
     Bfsar& archive = ActiveSoundArchive();
 
-    Sound *sound = static_cast<Sound *>(item);
-    Item::List &soundList = archive.getSoundList();
-    Item::List &soundSetList = archive.getSoundSetList();
+    return ApplySoundListEdit(archive, InsertSoundIntoSet(archive, soundSet, static_cast<Sound*>(afterItem), static_cast<Sound*>(newItem)));
+}
 
-    u32 removedId = sound->getId();
-    SoundSet *containingSet = FindContainingSet(removedId, soundSetList);
+bool RemoveSoundHook(Item* item)
+{
+    Bfsar& archive = ActiveSoundArchive();
 
-    delete sound;
-    archive.updateList(soundList);
+    return ApplySoundListEdit(archive, RemoveSound(archive, static_cast<Sound*>(item)));
+}
 
-    if (containingSet)
-    {
-        if (containingSet->getStartId() == containingSet->getEndId())
-            containingSet->setIsEmpty(true);
-        else
-            containingSet->setEndId(containingSet->getEndId() - 1);
-    }
+void MoveSoundsHook(Item* target, const std::vector<Item*>& items)
+{
+    Bfsar& archive = ActiveSoundArchive();
+    std::vector<Sound*> sounds;
 
-    u32 soundCount = static_cast<u32>(soundList.size());
-    ShiftSetsAtOrAfter(removedId + 1, -1, soundSetList, soundCount);
+    for (Item* item : items)
+        sounds.push_back(static_cast<Sound*>(item));
 
-    SetUnsavedChanges(true);
-    archive.validate(false);
+    ApplySoundListEdit(archive, MoveSoundsAfter(archive, static_cast<Sound*>(target), sounds));
 }
 
 static bool sSoundSetStickyEdit = false;
+
+static void ResetGroupLoadItems(const SoundSet* soundSet)
+{
+    for (Item* groupItem : ActiveSoundArchive().getGroupList())
+    {
+        for (Item* infoItem : static_cast<Group*>(groupItem)->getItemInfoList())
+        {
+            Group::ItemInfo* info = static_cast<Group::ItemInfo*>(infoItem);
+
+            if (info->getItemRef().getItem() == soundSet)
+                info->setLoadItem_(0);
+        }
+    }
+}
 
 static void DrawSoundSetTypeBox(SoundSet* soundSet)
 {
@@ -388,7 +323,12 @@ static void DrawSoundSetTypeBox(SoundSet* soundSet)
     s32 soundSetType = static_cast<s32>(soundSet->getSoundSetType());
     if (DrawPanelHeaderCombo(messages::soundset::cSoundTypeLabel, "##SoundType", &soundSetType, sSoundSetTypes, nullptr, IM_ARRAYSIZE(sSoundSetTypes), nullptr, isWave))
     {
-        soundSet->setSoundSetType(static_cast<SoundSet::SoundSetType>(soundSetType));
+        const SoundSet::SoundSetType newType = static_cast<SoundSet::SoundSetType>(soundSetType);
+
+        if (newType != soundSet->getSoundSetType())
+            ResetGroupLoadItems(soundSet);
+
+        soundSet->setSoundSetType(newType);
         SetUnsavedChanges(true);
     }
 

@@ -1,6 +1,7 @@
 #include <bfsar/archive/Bfsar.h>
 
 #include <bfsar/io/FileIo.h>
+#include <bfsar/io/PackFile.h>
 
 #include <core/Debug.h>
 #include <core/Json.h>
@@ -71,7 +72,7 @@ struct MetadataNames
 
 static void GetMetadataPath_(sead::BufferedSafeString* out, const sead::SafeString& archivePath)
 {
-    out->format("%s.metadata.json", archivePath.cstr());
+    out->format("%s.metadata.json", packfile::GetDiskPath(archivePath.cstr()).c_str());
 }
 
 static bool IsStoredName_(const Item& item, const char* defaultName)

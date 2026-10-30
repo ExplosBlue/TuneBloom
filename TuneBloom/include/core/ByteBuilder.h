@@ -72,6 +72,14 @@ public:
         putU32(offset, value);
     }
 
+    void appendU64(u64 value)
+    {
+        const u64 offset = mBytes.size();
+
+        mBytes.resize(offset + sizeof(u64));
+        putU64(offset, value);
+    }
+
     void appendBytes(const void* data, u64 size)
     {
         const u8* bytes = static_cast<const u8*>(data);
@@ -107,6 +115,12 @@ public:
     {
         for (u32 i = 0; i < sizeof(u32); i++)
             mBytes[offset + (mIsBigEndian ? sizeof(u32) - 1 - i : i)] = static_cast<u8>(value >> (8 * i));
+    }
+
+    void putU64(u64 offset, u64 value)
+    {
+        for (u32 i = 0; i < sizeof(u64); i++)
+            mBytes[offset + (mIsBigEndian ? sizeof(u64) - 1 - i : i)] = static_cast<u8>(value >> (8 * i));
     }
 
     void putBytes(u64 offset, const void* data, u64 size)

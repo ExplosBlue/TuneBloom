@@ -552,7 +552,7 @@ void DrawSoundPropertiesUI()
     const Sound::SoundType soundType = sound->getSoundType();
 
     if (soundType == Sound::SoundType::Strm && archive.isStreamSendAvailable())
-        DrawStreamExtensionUI(sound->getStreamSoundInfo());
+        DrawStreamExtensionUI(sound);
 
     if (soundType == Sound::SoundType::Wave)
         DrawWaveEnvelopeSection(sound->getWaveSoundInfo());

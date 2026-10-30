@@ -1,5 +1,7 @@
 #pragma once
 
+#include <bfsar/files/WaveFile.h>
+
 #include <basis/seadTypes.h>
 
 #include <string>
@@ -9,5 +11,6 @@ namespace TempWavWriter
 {
 
 std::string write(const std::vector<std::vector<float>>& channels, u32 sampleRate, bool includeLoop, u32 loopStart, u32 loopEnd, const std::string& tempPath);
+bool writeInfo(const std::vector<std::vector<float>>& channels, u32 sampleRate, const std::string& tempPath, WaveFile::RiffWaveInfo* out);
 
 }

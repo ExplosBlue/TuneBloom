@@ -4,6 +4,7 @@
 
 #include <bfsar/audio/AudioProcessing.h>
 #include <bfsar/audio/DecodedPcm.h>
+#include <bfsar/files/BfstmFile.h>
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/FileWriter.h>
 
@@ -608,7 +609,7 @@ void WaveFile::refreshSerializedHash()
         mMd5Endian = target.endian;
     }
 
-    ::remove(tempPath);
+    fileio::RemoveFile(tempPath);
 }
 
 void WaveFile::buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel::SeekData* outSeekData, const Channel::SeekData* srcSeekData, u32 preserveSamples)
@@ -687,6 +688,11 @@ void WaveFile::disposeChannels_()
     }
 }
 
+void WaveFile::setStreamTarget(const InnerFileTarget& streamTarget)
+{
+    mHasCtrStreamLoop = streamTarget.format == ArchiveFormat::BCSAR && BfstmFile::IsOriginalLoopAvailable(streamTarget.version, streamTarget.format);
+}
+
 u32 WaveFile::getLoopStartAlignmentFrames(bool forStream) const
 {
     const bool isCtr = getTarget().format == ArchiveFormat::BCSAR;
@@ -715,7 +721,7 @@ u32 WaveFile::getLoopStartAlignmentFrames(bool forStream) const
     return 0;
 }
 
-void WaveFile::updateLoopInfo_(bool update, bool updateStream)
+void WaveFile::updateLoopInfo_()
 {
     if (mEncoding != Encoding::DspAdpcm)
     {
@@ -729,25 +735,12 @@ void WaveFile::updateLoopInfo_(bool update, bool updateStream)
         ADPCMINFO adpcmInfo;
         sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
 
-        if (update)
-        {
-            FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(false), channel->getAdpcmLoopParam(false));
-            getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, getLoopStartFrame(false));
+        FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(false), channel->getAdpcmLoopParam(false));
+        getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, getLoopStartFrame(false));
 
-            channel->mAdpcmLoopParam.loopPredScale = adpcmInfo.loop_pred_scale;
-            channel->mAdpcmLoopParam.loopYn1 = adpcmInfo.loop_yn1;
-            channel->mAdpcmLoopParam.loopYn2 = adpcmInfo.loop_yn2;
-        }
-
-        if (updateStream)
-        {
-            FillAdpcmInfo(&adpcmInfo, channel->getAdpcmParam(true), channel->getAdpcmLoopParam(true));
-            getLoopContext(static_cast<u8*>(const_cast<void*>(channel->getData())), &adpcmInfo, getLoopStartFrame(true));
-
-            channel->mAdpcmLoopParamStream.loopPredScale = adpcmInfo.loop_pred_scale;
-            channel->mAdpcmLoopParamStream.loopYn1 = adpcmInfo.loop_yn1;
-            channel->mAdpcmLoopParamStream.loopYn2 = adpcmInfo.loop_yn2;
-        }
+        channel->mAdpcmLoopParam.loopPredScale = adpcmInfo.loop_pred_scale;
+        channel->mAdpcmLoopParam.loopYn1 = adpcmInfo.loop_yn1;
+        channel->mAdpcmLoopParam.loopYn2 = adpcmInfo.loop_yn2;
     }
 }
 
@@ -987,6 +980,9 @@ static void StoreAdpcmParams(const ChannelConvertContext& context, u8* dst, ADPC
     sead::MemUtil::copy(&adpcmInfoStream, &adpcmInfo, sizeof(ADPCMINFO));
     getLoopContext(dst, &adpcmInfoStream, context.loopStartFrameStream);
 
+    if (context.loopStartFrameStream < context.totalSamples)
+        adpcmInfoStream.loop_pred_scale = dst[context.loopStartFrameStream / WaveFile::cSamplesPerFrame * cAdpcmFrameBytes];
+
     if (context.outAdpcmParam)
         FillAdpcmParam(context.outAdpcmParam, context.outAdpcmLoopParam, adpcmInfo);
 
@@ -997,6 +993,7 @@ static void StoreAdpcmParams(const ChannelConvertContext& context, u8* dst, ADPC
 static u8* EncodeDspAdpcm(const ChannelConvertContext& context, s16* spooledPcm, bool isSourceAdpcm, u32 bufferSize)
 {
     u8* dst = new u8[bufferSize];
+    sead::MemUtil::fillZero(dst, bufferSize);
 
     ADPCMINFO adpcmInfo;
     sead::MemUtil::fillZero(&adpcmInfo, sizeof(adpcmInfo));
@@ -1152,7 +1149,16 @@ bool WaveFile::setupPreviewPcm16(const DecodedPcm& pcm, bool isLoop, u32 loopSta
     mDataSpoolFrames = 0;
     mIsLoopDirty = false;
 
-    for (const auto& chFloats : pcm.channels)
+    std::vector<std::vector<float>> mixedChannels;
+    const std::vector<std::vector<float>>* channels = &pcm.channels;
+
+    if (pcm.channels.size() > snd::cWaveChannelMax)
+    {
+        mixedChannels = AudioProcessing::mixToStereo(pcm.channels);
+        channels = &mixedChannels;
+    }
+
+    for (const auto& chFloats : *channels)
     {
         Channel* channel = mChannels.birthBack();
         SEAD_ASSERT(channel);

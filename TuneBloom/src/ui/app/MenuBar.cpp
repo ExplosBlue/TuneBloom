@@ -8,6 +8,7 @@
 #include <ui/file/DocumentMgr.h>
 #include <ui/file/File.h>
 #include <ui/file/FileFlow.h>
+#include <ui/file/NewFileDialog.h>
 #include <ui/app/FileTransferMenu.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
@@ -431,7 +432,7 @@ static void DrawFileMenu()
     const bool isSlim = IsSlimMenuBar();
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FILE " %s", messages::mainmenu::cNew).cstr(), shortcuts::Label(shortcuts::Action::NewProject)))
-        RequestNewFile();
+        OpenNewFileDialog();
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_FOLDER_OPEN " %s", messages::common::cOpen).cstr(), shortcuts::Label(shortcuts::Action::OpenProject)))
         RequestOpenFile();
@@ -448,7 +449,7 @@ static void DrawFileMenu()
         RequestSaveFile();
 
     if (MenuBarItem(sead::FormatFixedSafeString<64>(ICON_LC_SAVE_ALL " %s", messages::mainmenu::cSaveAs).cstr(), shortcuts::Label(shortcuts::Action::SaveProjectAs)))
-        SaveFileAs();
+        RequestSaveDocumentAs(ActiveDocument());
 
     if (!isSlim && MenuBarIconItem(ICON_LC_FILE_STACK, messages::mainmenu::cSaveAll, shortcuts::Label(shortcuts::Action::SaveAllProjects), HasUnsavedDocuments()))
         RequestSaveAll();

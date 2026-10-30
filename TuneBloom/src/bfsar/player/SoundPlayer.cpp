@@ -514,9 +514,9 @@ bool SoundPlayer::playStream_(const StreamSource& source)
         return false;
     }
 
-    if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus)
+    if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus && source.sound)
     {
-        Bfsar* archive = source.sound ? source.sound->getArchive() : nullptr;
+        Bfsar* archive = source.sound->getArchive();
 
         if (!archive || !opusstream::AttachStreamWaves(*archive, source.sound))
             return false;

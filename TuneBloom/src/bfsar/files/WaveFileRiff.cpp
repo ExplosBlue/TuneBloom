@@ -1,5 +1,6 @@
 #include <bfsar/files/WaveFile.h>
 
+#include <bfsar/audio/DecodedPcm.h>
 #include <bfsar/audio/WavWriter.h>
 #include <bfsar/io/FileIo.h>
 
@@ -12,6 +13,7 @@
 
 #include <filedevice/seadFileDeviceMgr.h>
 #include <stream/seadFileDeviceStream.h>
+#include <stream/seadRamStream.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -19,8 +21,6 @@
 #include <string>
 #include <vector>
 
-static constexpr u16 cRiffFormatPcm         = 1;
-static constexpr u16 cRiffFormatFloat       = 3;
 static constexpr u16 cRiffFormatExtensible  = 0xFFFE;
 static constexpr u32 cRiffFmtSize           = 16;
 static constexpr u32 cRiffFmtExtensibleSize = 26;
@@ -40,11 +40,14 @@ namespace
 
 struct RiffReadContext
 {
-    sead::FileHandle& handle;
-    sead::FileDeviceReadStream& stream;
+    sead::FileHandle* handle;
+    sead::RamReadStream* ramStream;
+    sead::ReadStream& stream;
     WaveFile::RiffWaveInfo* out;
     u32 actualFileSize;
+    u32 readableSize;
     bool acceptAnyPcm;
+    const char* error = nullptr;
 };
 
 struct RiffChunkHeader
@@ -74,16 +77,29 @@ struct RiffCuePoint
 
 }
 
+static bool FailRiffRead(RiffReadContext& context, const char* error)
+{
+    context.error = error;
+    return false;
+}
+
+static u64 GetRiffPosition(const RiffReadContext& context)
+{
+    return context.handle ? context.handle->getCurrentSeekPos() : context.ramStream->getCurrentPosition();
+}
+
+static bool HasRiffChunkHeader(const RiffReadContext& context)
+{
+    return GetRiffPosition(context) + cRiffChunkHeaderSize <= context.readableSize;
+}
+
 static bool ReadRiffHeader(RiffReadContext& context)
 {
     char riff[4];
     context.stream.readMemBlock(riff, 4);
 
     if (sead::MemUtil::compare(riff, "RIFF", 4) != 0)
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cNotWavFile);
 
     context.out->fileSize = context.stream.readU32();
 
@@ -91,10 +107,7 @@ static bool ReadRiffHeader(RiffReadContext& context)
     context.stream.readMemBlock(wave, 4);
 
     if (sead::MemUtil::compare(wave, "WAVE", 4) != 0)
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cNotWavFile);
 
     return true;
 }
@@ -103,13 +116,10 @@ static bool ReadRiffChunkHeader(RiffReadContext& context, RiffChunkHeader* chunk
 {
     context.stream.readMemBlock(chunk->id, 4);
     chunk->size = context.stream.readU32();
-    chunk->start = context.handle.getCurrentSeekPos();
+    chunk->start = GetRiffPosition(context);
 
     if (chunk->start + static_cast<u64>(chunk->size) > static_cast<u64>(context.actualFileSize))
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavCorruptChunk });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cWavCorruptChunk);
 
     return true;
 }
@@ -118,11 +128,8 @@ static bool FindRiffFmtChunk(RiffReadContext& context, u32* fmtChunkSize)
 {
     for (;;)
     {
-        if (context.stream.isEOF())
-        {
-            PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
-            return false;
-        }
+        if (!HasRiffChunkHeader(context))
+            return FailRiffRead(context, messages::wavefile::cNotWavFile);
 
         RiffChunkHeader chunk;
         if (!ReadRiffChunkHeader(context, &chunk))
@@ -138,17 +145,14 @@ static bool FindRiffFmtChunk(RiffReadContext& context, u32* fmtChunkSize)
     }
 
     if (*fmtChunkSize < cRiffFmtSize)
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cNotWavFile);
 
     return true;
 }
 
 static bool ReadRiffFmtChunk(RiffReadContext& context, u32 fmtChunkSize)
 {
-    sead::FileDeviceReadStream& stream = context.stream;
+    sead::ReadStream& stream = context.stream;
     WaveFile::RiffWaveInfo* out = context.out;
 
     out->chunkSize = fmtChunkSize;
@@ -173,22 +177,13 @@ static bool ReadRiffFmtChunk(RiffReadContext& context, u32 fmtChunkSize)
     const bool isFloat = context.acceptAnyPcm && out->format == cRiffFormatFloat;
 
     if (out->format != cRiffFormatPcm && !isFloat)
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavOnlyPcm });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cWavOnlyPcm);
 
     if (out->numChannels == 0 || (out->numChannels > snd::cWaveChannelMax && !context.acceptAnyPcm))
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavOnlyMonoStereo });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cWavOnlyMonoStereo);
 
     if (out->sampleRate == 0)
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cNotWavFile });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cNotWavFile);
 
     LOG_U16("format", out->format);
     LOG_U16("numChannels", out->numChannels);
@@ -205,10 +200,7 @@ static bool ReadRiffFmtChunk(RiffReadContext& context, u32 fmtChunkSize)
         validBits = validBits || out->bitsPerSample == 24 || out->bitsPerSample == 32;
 
     if (!validBits)
-    {
-        PopupMgr::instance()->addPopup({ context.acceptAnyPcm ? messages::wavefile::cWavOnlyPcmBits : messages::wavefile::cWavOnlyPcm8Pcm16 });
-        return false;
-    }
+        return FailRiffRead(context, context.acceptAnyPcm ? messages::wavefile::cWavOnlyPcmBits : messages::wavefile::cWavOnlyPcm8Pcm16);
 
     u32 fmtRemaining = fmtChunkSize > fmtConsumed ? fmtChunkSize - fmtConsumed : 0;
     stream.skip(fmtRemaining + (fmtChunkSize & 1));
@@ -218,7 +210,7 @@ static bool ReadRiffFmtChunk(RiffReadContext& context, u32 fmtChunkSize)
 
 static void ReadRiffSmplChunk(RiffReadContext& context, const RiffChunkHeader& chunk)
 {
-    sead::FileDeviceReadStream& stream = context.stream;
+    sead::ReadStream& stream = context.stream;
 
     if (chunk.size < cRiffSmplSize)
     {
@@ -255,7 +247,7 @@ static void ReadRiffSmplChunk(RiffReadContext& context, const RiffChunkHeader& c
 
 static bool ReadRiffDataChunks(RiffReadContext& context)
 {
-    while (!context.stream.isEOF())
+    while (HasRiffChunkHeader(context))
     {
         RiffChunkHeader chunk;
         if (!ReadRiffChunkHeader(context, &chunk))
@@ -280,13 +272,12 @@ static bool ReadRiffDataChunks(RiffReadContext& context)
     return true;
 }
 
-static bool FinishRiffInfo(WaveFile::RiffWaveInfo* out)
+static bool FinishRiffInfo(RiffReadContext& context)
 {
+    WaveFile::RiffWaveInfo* out = context.out;
+
     if (out->sampleBytes == 0)
-    {
-        PopupMgr::instance()->addPopup({ messages::wavefile::cWavNoData });
-        return false;
-    }
+        return FailRiffRead(context, messages::wavefile::cWavNoData);
 
     LOG_U32("sampleBytes", out->sampleBytes);
     LOG_U32("dataStart", out->dataStart);
@@ -305,6 +296,17 @@ static bool FinishRiffInfo(WaveFile::RiffWaveInfo* out)
     out->isValid = true;
 
     return true;
+}
+
+static bool ReadRiffInfo(RiffReadContext& context)
+{
+    u32 fmtChunkSize = 0;
+
+    return ReadRiffHeader(context) &&
+           FindRiffFmtChunk(context, &fmtChunkSize) &&
+           ReadRiffFmtChunk(context, fmtChunkSize) &&
+           ReadRiffDataChunks(context) &&
+           FinishRiffInfo(context);
 }
 
 bool WaveFile::readRiffWavInfo(RiffWaveInfo* out, bool acceptAnyPcm)
@@ -331,15 +333,28 @@ bool WaveFile::readRiffWavInfo(RiffWaveInfo* out, bool acceptAnyPcm)
     sead::FileDeviceReadStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(out->endian);
 
-    RiffReadContext context = { handle, stream, out, device->getFileSize(&handle), acceptAnyPcm };
+    const u32 fileSize = device->getFileSize(&handle);
+    RiffReadContext context = { &handle, nullptr, stream, out, fileSize, fileSize, acceptAnyPcm };
 
-    u32 fmtChunkSize = 0;
+    if (ReadRiffInfo(context))
+        return true;
 
-    return ReadRiffHeader(context) &&
-           FindRiffFmtChunk(context, &fmtChunkSize) &&
-           ReadRiffFmtChunk(context, fmtChunkSize) &&
-           ReadRiffDataChunks(context) &&
-           FinishRiffInfo(out);
+    PopupMgr::instance()->addPopup({ context.error });
+    return false;
+}
+
+bool WaveFile::readRiffWavBytes(const void* data, u32 size, u32 fileSize, RiffWaveInfo* out, bool acceptAnyPcm)
+{
+    SEAD_ASSERT(out);
+    out->isValid = false;
+    out->endian = sead::Endian::eLittle;
+
+    sead::RamReadStream stream(data, size, sead::Stream::Modes::eBinary);
+    stream.setBinaryEndian(out->endian);
+
+    RiffReadContext context = { nullptr, &stream, stream, out, fileSize, size, acceptAnyPcm };
+
+    return ReadRiffInfo(context);
 }
 
 static RiffCuePoint* FindRiffCuePoint(std::vector<RiffCuePoint>& cues, u32 id)
@@ -355,7 +370,7 @@ static RiffCuePoint* FindRiffCuePoint(std::vector<RiffCuePoint>& cues, u32 id)
 
 static void ReadRiffCueChunk(RiffReadContext& context, const RiffChunkHeader& chunk, std::vector<RiffCuePoint>* cues)
 {
-    sead::FileDeviceReadStream& stream = context.stream;
+    sead::ReadStream& stream = context.stream;
 
     if (chunk.size < cRiffFieldSize)
     {
@@ -381,7 +396,7 @@ static void ReadRiffCueChunk(RiffReadContext& context, const RiffChunkHeader& ch
 
 static void ReadRiffLabelChunk(RiffReadContext& context, u32 size, std::vector<RiffCuePoint>* cues)
 {
-    sead::FileDeviceReadStream& stream = context.stream;
+    sead::ReadStream& stream = context.stream;
     RiffCuePoint* cue = FindRiffCuePoint(*cues, stream.readU32());
 
     char text[cRiffLabelLengthMax + 1] = {};
@@ -396,7 +411,7 @@ static void ReadRiffLabelChunk(RiffReadContext& context, u32 size, std::vector<R
 
 static void ReadRiffLabeledTextChunk(RiffReadContext& context, u32 size, std::vector<RiffCuePoint>* cues)
 {
-    sead::FileDeviceReadStream& stream = context.stream;
+    sead::ReadStream& stream = context.stream;
     RiffCuePoint* cue = FindRiffCuePoint(*cues, stream.readU32());
     const u32 sampleLength = stream.readU32();
 
@@ -410,7 +425,7 @@ static void ReadRiffLabeledTextChunk(RiffReadContext& context, u32 size, std::ve
 
 static void ReadRiffAssociatedDataList(RiffReadContext& context, const RiffChunkHeader& chunk, std::vector<RiffCuePoint>* cues)
 {
-    sead::FileDeviceReadStream& stream = context.stream;
+    sead::ReadStream& stream = context.stream;
 
     char type[cRiffFieldSize] = {};
     u32 consumed = 0;
@@ -577,18 +592,25 @@ bool ReadWavRegions(WavRegions* out, const sead::SafeString& path)
     sead::FileDeviceReadStream stream(&handle, sead::Stream::Modes::eBinary);
     stream.setBinaryEndian(sead::Endian::eLittle);
 
-    RiffReadContext context = { handle, stream, &info, device->getFileSize(&handle), true };
+    const u32 fileSize = device->getFileSize(&handle);
+    RiffReadContext context = { &handle, nullptr, stream, &info, fileSize, fileSize, true };
     std::vector<RiffCuePoint> cues;
     u32 fmtChunkSize = 0;
 
     if (!ReadRiffHeader(context) || !FindRiffFmtChunk(context, &fmtChunkSize) || !ReadRiffFmtChunk(context, fmtChunkSize))
+    {
+        PopupMgr::instance()->addPopup({ context.error });
         return false;
+    }
 
-    while (!stream.isEOF())
+    while (HasRiffChunkHeader(context))
     {
         RiffChunkHeader chunk;
         if (!ReadRiffChunkHeader(context, &chunk))
+        {
+            PopupMgr::instance()->addPopup({ context.error });
             return false;
+        }
 
         if (chunk.is("data"))
         {

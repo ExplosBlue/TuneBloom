@@ -2,6 +2,7 @@
 
 #include <ui/widgets/Dialogs.h>
 #include <ui/Messages.h>
+#include <ui/wave/WaveFormatUI.h>
 #include <ui/wave/WaveImportPanelInternal.h>
 
 #include <libs/IconsLucide.h>
@@ -34,6 +35,7 @@ void WaveImportPanel::reset()
 
     mSettings.hasDecoded = false;
     mSettings.cachedPath.clear();
+    mRateBeforeFit = 0;
     mTouched = false;
 }
 
@@ -147,12 +149,13 @@ void WaveImportPanel::endBody()
         ImGui::EndChild();
 }
 
-WaveImportPanel::FrameContext WaveImportPanel::beginFrame(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, bool passThrough)
+WaveImportPanel::FrameContext WaveImportPanel::beginFrame(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info, bool passThrough)
 {
     FrameContext ctx;
     ctx.encoding = encoding;
     ctx.info = info;
 
+    fitSampleRateToEncoding(encoding);
     ctx.rebuiltThisFrame = updateDerived(passThrough);
 
     ctx.totalSamples = static_cast<u32>(mSettings.mono.size());
@@ -230,7 +233,7 @@ void WaveImportPanel::commitLoop(FrameContext& ctx)
     ctx.info->loopEndFrame = ctx.loopEnd > ctx.cropStart ? ctx.loopEnd - ctx.cropStart : 0;
 }
 
-void WaveImportPanel::draw(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)
+void WaveImportPanel::draw(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
 {
     mDrawnThisFrame = true;
 
@@ -254,6 +257,7 @@ void WaveImportPanel::draw(const char* header, WaveFile::Encoding* encoding, Wav
 
     drawWaveformBox(ctx);
     drawColumns(ctx);
+    drawOldDataBox(*info);
     constrainRanges(ctx);
 
     if (ctx.changed || mSettings.derivedDirty)
@@ -329,9 +333,19 @@ std::string WaveImportPanel::finalizeForCommit(WaveFile::RiffWaveInfo* info)
     return written;
 }
 
+bool WaveImportPanel::isOutputSource(const WaveFile::RiffWaveInfo& info) const
+{
+    return IsPassThroughSource(info.path) || !mSettings.matchesLoadedPath(info) || mSettings.shapedChannels.empty();
+}
+
+u32 WaveImportPanel::calcOutputSampleRate(const WaveFile::RiffWaveInfo& info) const
+{
+    return isOutputSource(info) ? info.sampleRate : mSettings.workingSampleRate;
+}
+
 u32 WaveImportPanel::calcOutputLength(const WaveFile::RiffWaveInfo& info) const
 {
-    if (IsPassThroughSource(info.path) || !mSettings.matchesLoadedPath(info) || mSettings.shapedChannels.empty())
+    if (isOutputSource(info))
         return info.sampleCount;
 
     const u32 end = std::min(info.isLoop ? mSettings.workingLoopEnd : mSettings.workingCropEnd, mSettings.shapedLength());
@@ -345,9 +359,29 @@ static WaveImportPanel sPanel;
 
 using waveimport::sPanel;
 
-void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* header)
+WaveImportEncoding MakeWaveImportEncoding(WaveFile::Encoding* encoding)
+{
+    WaveImportEncoding choice;
+
+    if (!encoding)
+        return choice;
+
+    choice.value = reinterpret_cast<s32*>(encoding);
+    choice.names = WaveFile::sEncodingTypes;
+    choice.details = cWaveEncodingDetails;
+    choice.count = IM_ARRAYSIZE(cWaveEncodingDetails);
+
+    return choice;
+}
+
+void DrawWaveImportInfo(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info, const char* header)
 {
     sPanel.draw(header, encoding, info);
+}
+
+void DrawWaveImportInfo(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* header)
+{
+    DrawWaveImportInfo(MakeWaveImportEncoding(encoding), info, header);
 }
 
 f32 CalcWaveImportWidth()
@@ -367,11 +401,6 @@ std::string FinalizeImportInfoForCommit(WaveFile::RiffWaveInfo* info)
     return sPanel.finalizeForCommit(info);
 }
 
-u32 CalcWaveImportOutputLength(const WaveFile::RiffWaveInfo& info)
-{
-    return sPanel.calcOutputLength(info);
-}
-
 void ResetWaveImport()
 {
     sPanel.reset();
@@ -387,14 +416,28 @@ bool WaveImportConfirmCancel(bool cancelClicked)
     return sPanel.confirmCancel(cancelClicked);
 }
 
+void SetNextWaveImportOldData(const OldAudioData* data, OldAudioClear* cleared)
+{
+    sPanel.setOldData(data, cleared);
+}
+
 WaveImportResult DrawWaveImportBody(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, const char* commitLabel, const char* footerWarning)
+{
+    return DrawWaveImportBody(header, MakeWaveImportEncoding(encoding), info, commitLabel, footerWarning);
+}
+
+WaveImportResult DrawWaveImportBody(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info, const char* commitLabel, const char* footerWarning)
 {
     if (ImGui::IsWindowAppearing())
         ResetWaveImport();
 
     DrawWaveImportInfo(encoding, info, header);
 
-    BeginDialogFooter({ commitLabel, messages::common::cCancel }, false, footerWarning);
+    sead::FixedSafeString<128> oldDataWarning;
+    const char* warning = footerWarning ? footerWarning : sPanel.formatOldDataWarning(*info, &oldDataWarning);
+
+    sPanel.setOldData(nullptr, nullptr);
+    BeginDialogFooter({ commitLabel, messages::common::cCancel }, false, warning);
 
     const bool commit = DialogButton(commitLabel);
     const bool cancelClicked = DialogButton(messages::common::cCancel);

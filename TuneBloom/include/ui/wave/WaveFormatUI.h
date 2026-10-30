@@ -7,7 +7,15 @@ inline constexpr u32 cWaveEncodingDetailCount = 3;
 
 extern const char* const cWaveEncodingDetails[cWaveEncodingDetailCount];
 
+inline constexpr u32 cBwavCodecCount = 3;
+
+extern const char* const cBwavCodecNames[cBwavCodecCount];
+extern const char* const cBwavCodecDetails[cBwavCodecCount];
+
 inline constexpr u32 cImportSampleRates[] = { 8000, 11025, 16000, 22050, 32000, 44100, 48000 };
+
+bool AcceptsBwavCodecSampleRate(s32 codec, u32 sampleRate);
+bool DrawOpusBitrateCombo(const char* id, u32* bitrate, u32 originalBitrate, bool isUsed);
 
 inline void SplitSampleTime(u32 samples, u32 sampleRate, u32* outMinutes, f64* outSeconds)
 {

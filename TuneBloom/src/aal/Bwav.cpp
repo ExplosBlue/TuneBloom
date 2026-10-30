@@ -3,6 +3,7 @@
 #include <core/ByteBuilder.h>
 #include <core/ByteView.h>
 #include <ui/Messages.h>
+#include <bfsar/audio/AudioProcessing.h>
 #include <bfsar/audio/NxOpus.h>
 
 #include <libs/dsp/dsp.h>
@@ -43,11 +44,15 @@ static constexpr u32 cAdpcmFrameBytes     = 8;
 static constexpr u32 cAdpcmFrameSamples   = 14;
 static constexpr u32 cSupportedVersion    = 1;
 static constexpr u16 cByteOrderMark       = 0xFEFF;
-static constexpr u32 cStereoChannelCount  = 2;
-static constexpr u32 cOpusPrefetchTail    = 256;
 static constexpr u32 cOpusPrefetchAudio   = 240;
 
+static constexpr u32 cPrefetchSamplesPcm16    = 0x1000;
+static constexpr u32 cPrefetchSamplesDspAdpcm = 0x3800;
+static constexpr u32 cPrefetchSamplesOpus     = 0x9000;
+
 static constexpr char cBwavMagic[] = "BWAV";
+
+static constexpr BwavPan cSurroundPans[] = { BwavPan::Left, BwavPan::Right, BwavPan::Center, BwavPan::Lfe, BwavPan::RearLeft, BwavPan::RearRight };
 
 struct ChannelDataSize
 {
@@ -55,9 +60,14 @@ struct ChannelDataSize
     u64 stored = 0;
 };
 
-static u64 GetOpusPrefetchSampleCount(u32 sampleCount)
+static u64 GetOpusPrefetchSampleCount(u32 sampleCount, bool hasTailField)
 {
-    return sampleCount == 0 ? 0 : static_cast<u64>(sampleCount) + cOpusPrefetchTail;
+    return sampleCount == 0 && !hasTailField ? 0 : static_cast<u64>(sampleCount) + cOpusPrefetchAudio;
+}
+
+static bool HasOpusTailField(const BwavChannel& channel)
+{
+    return channel.coefficients[0] != 0 || channel.coefficients[1] != 0;
 }
 
 static u64 GetExactSampleBytes(BwavCodec codec, u32 sampleCount)
@@ -68,13 +78,13 @@ static u64 GetExactSampleBytes(BwavCodec codec, u32 sampleCount)
     return getBytesForAdpcmSamples(sampleCount);
 }
 
-static u64 GetSampleBytes(BwavCodec codec, u32 sampleCount)
+static u64 GetSampleBytes(BwavCodec codec, u32 sampleCount, bool hasOpusTailField)
 {
     if (codec == BwavCodec::Pcm16)
         return static_cast<u64>(sampleCount) * sizeof(s16);
 
     if (codec == BwavCodec::Opus)
-        return GetOpusPrefetchSampleCount(sampleCount) * sizeof(s16);
+        return GetOpusPrefetchSampleCount(sampleCount, hasOpusTailField) * sizeof(s16);
 
     return (static_cast<u64>(sampleCount) + cAdpcmFrameSamples - 1) / cAdpcmFrameSamples * cAdpcmFrameBytes;
 }
@@ -99,7 +109,7 @@ static bool MeasureChannelData(const ByteView& view, u64 infoOffset, ChannelData
     }
 
     out->exact = GetExactSampleBytes(codec, sampleCount);
-    out->stored = GetSampleBytes(codec, sampleCount);
+    out->stored = GetSampleBytes(codec, sampleCount, view.readU32(infoOffset + cChannelCoefficients) != 0);
 
     return true;
 }
@@ -143,7 +153,7 @@ static std::vector<u32> LayoutChannelData(const Bwav& bwav, bool useFullSamples)
         offsets.push_back(offset);
 
         const bool useSampleBytes = useFullSamples && !HoldsOpusPackets(channel);
-        const u32 bytes = static_cast<u32>(useSampleBytes ? GetSampleBytes(channel.codec, channel.sampleCount) : channel.data.size());
+        const u32 bytes = static_cast<u32>(useSampleBytes ? GetSampleBytes(channel.codec, channel.sampleCount, HasOpusTailField(channel)) : channel.data.size());
         offset = sead::Mathu::roundUpPow2(offset + bytes, cSampleAlignment);
     }
 
@@ -197,7 +207,7 @@ static std::vector<u8> MakeOpusPrefetchData(const BwavChannel& source, u32 sampl
     DecodeOpusPackets(source, &decoded);
 
     const u64 audioCount = std::min<u64>(sampleCount == 0 ? 0 : static_cast<u64>(sampleCount) + cOpusPrefetchAudio, decoded.size());
-    const u64 totalCount = GetOpusPrefetchSampleCount(sampleCount);
+    const u64 totalCount = GetOpusPrefetchSampleCount(sampleCount, false);
 
     ByteBuilder builder(isBigEndian);
 
@@ -223,10 +233,13 @@ static void SetOpusPrefetchTail(BwavChannel* channel, u32 tailAudio, u32 tailOff
 
 static BwavPan GetEncodePan(u32 channelIndex, u32 channelCount)
 {
-    if (channelCount != cStereoChannelCount)
+    if (channelCount == std::size(cSurroundPans))
+        return cSurroundPans[channelIndex];
+
+    if (channelIndex + 1 == channelCount && channelCount % 2 != 0)
         return BwavPan::Center;
 
-    return channelIndex == 0 ? BwavPan::Left : BwavPan::Right;
+    return channelIndex % 2 == 0 ? BwavPan::Left : BwavPan::Right;
 }
 
 static void ReadChannelInfo(const ByteView& view, u64 offset, BwavChannel* channel)
@@ -430,12 +443,29 @@ u32 CalcBwavSampleCrc(const Bwav& bwav)
 
     for (const BwavChannel& channel : bwav.channels)
     {
-        const u64 bytes = std::min<u64>(GetSampleBytes(channel.codec, channel.sampleCount), channel.data.size());
+        const u64 bytes = std::min<u64>(GetSampleBytes(channel.codec, channel.sampleCount, HasOpusTailField(channel)), channel.data.size());
 
         crc = sead::HashCRC32::calcHashWithContext(&context, channel.data.data(), static_cast<u32>(bytes));
     }
 
     return crc;
+}
+
+u32 GetBwavPrefetchSampleCount(BwavCodec codec)
+{
+    switch (codec)
+    {
+        case BwavCodec::Pcm16:
+            return cPrefetchSamplesPcm16;
+
+        case BwavCodec::Opus:
+            return cPrefetchSamplesOpus;
+
+        default:
+            break;
+    }
+
+    return cPrefetchSamplesDspAdpcm;
 }
 
 Bwav MakeBwavPrefetch(const Bwav& full, u32 sampleCount, u16 prefetchFlag)
@@ -466,7 +496,7 @@ Bwav MakeBwavPrefetch(const Bwav& full, u32 sampleCount, u16 prefetchFlag)
         }
         else
         {
-            const u64 bytes = std::min<u64>(GetSampleBytes(source.codec, channel.sampleCount), source.data.size());
+            const u64 bytes = std::min<u64>(GetSampleBytes(source.codec, channel.sampleCount, HasOpusTailField(source)), source.data.size());
             channel.data.assign(source.data.begin(), source.data.begin() + static_cast<s64>(bytes));
         }
 
@@ -565,35 +595,105 @@ void DecodeBwavChannel(const Bwav& bwav, u32 channelIndex, std::vector<s16>* out
     decode(const_cast<u8*>(channel.data.data()), out->data(), &info, sampleCount);
 }
 
-Bwav EncodeBwav(const std::vector<std::vector<s16>>& channels, u32 sampleRate, bool isLoop, u32 loopStartFrame)
+static void EncodeDspAdpcmChannel(const std::vector<s16>& pcm, BwavChannel* channel)
 {
+    const u32 sampleCount = static_cast<u32>(pcm.size());
+    channel->data.assign(GetSampleBytes(BwavCodec::DspAdpcm, sampleCount, false), 0);
+
+    if (sampleCount == 0)
+        return;
+
+    std::vector<s16> samples = pcm;
+    ADPCMINFO info = {};
+    encode(samples.data(), channel->data.data(), &info, sampleCount);
+
+    for (u32 i = 0; i < cBwavCoefficientCount; i++)
+        channel->coefficients[i] = info.coef[i];
+}
+
+static void EncodePcm16Channel(const std::vector<s16>& pcm, bool isBigEndian, BwavChannel* channel)
+{
+    ByteBuilder builder(isBigEndian);
+    builder.reserve(pcm.size() * sizeof(s16));
+
+    for (s16 sample : pcm)
+        builder.appendU16(static_cast<u16>(sample));
+
+    channel->data = builder.take();
+}
+
+static bool EncodeOpusChannel(const std::vector<s16>& pcm, const BwavFormat& format, BwavChannel* channel)
+{
+    std::vector<f32> samples(pcm.size());
+
+    for (u64 i = 0; i < pcm.size(); i++)
+        samples[i] = AudioProcessing::fromPcm16(pcm[i]);
+
+    return nxopus::Encode({ &samples }, static_cast<u32>(pcm.size()), format.sampleRate, static_cast<s32>(format.opusChannelBitrate), nxopus::PreSkip::Keep, &channel->data) == nxopus::Error::None;
+}
+
+bool ReadBwavCodec(const void* data, u64 size, BwavCodec* out)
+{
+    if (!IsBwav(data, size))
+        return false;
+
+    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, cHeaderByteOrder));
+    const u64 codecOffset = GetChannelInfoOffset(0) + cChannelCodec;
+
+    if (view.readU16(cHeaderChannelCount) == 0 || !view.has(codecOffset, sizeof(u16)) || !IsSupportedCodec(view.readU16(codecOffset)))
+        return false;
+
+    *out = static_cast<BwavCodec>(view.readU16(codecOffset));
+    return true;
+}
+
+bool EncodeBwav(const std::vector<std::vector<s16>>& channels, const BwavFormat& format, Bwav* out, const char** outError)
+{
+    if (format.codec == BwavCodec::Opus && !nxopus::IsSupportedSampleRate(format.sampleRate))
+    {
+        *outError = messages::opus::cEncodeSampleRate;
+        return false;
+    }
+
     Bwav bwav;
+    bwav.isBigEndian = format.isBigEndian;
     bwav.channels.resize(channels.size());
 
     for (u32 i = 0; i < channels.size(); i++)
     {
-        std::vector<s16> pcm = channels[i];
+        const std::vector<s16>& pcm = channels[i];
         const u32 sampleCount = static_cast<u32>(pcm.size());
 
         BwavChannel& channel = bwav.channels[i];
-        channel.codec = BwavCodec::DspAdpcm;
+        channel.codec = format.codec;
         channel.pan = GetEncodePan(i, static_cast<u32>(channels.size()));
-        channel.sampleRate = sampleRate;
+        channel.sampleRate = format.sampleRate;
         channel.fullSampleCount = sampleCount;
         channel.sampleCount = sampleCount;
-        channel.data.assign(GetSampleBytes(BwavCodec::DspAdpcm, sampleCount), 0);
 
-        ADPCMINFO info = {};
-        encode(pcm.data(), channel.data.data(), &info, sampleCount);
-
-        for (u32 j = 0; j < cBwavCoefficientCount; j++)
-            channel.coefficients[j] = info.coef[j];
+        if (format.codec == BwavCodec::Pcm16)
+            EncodePcm16Channel(pcm, format.isBigEndian, &channel);
+        else if (format.codec == BwavCodec::DspAdpcm)
+            EncodeDspAdpcmChannel(pcm, &channel);
+        else if (sampleCount != 0 && !EncodeOpusChannel(pcm, format, &channel))
+        {
+            *outError = messages::opus::cEncodeError;
+            return false;
+        }
     }
 
-    SetBwavLoop(&bwav, isLoop, loopStartFrame);
+    SetBwavLoop(&bwav, format.isLoop, format.loopStartFrame);
+
+    if (bwav.isLoop() && format.codec == BwavCodec::DspAdpcm)
+    {
+        for (BwavChannel& channel : bwav.channels)
+            channel.data.resize(getBytesForAdpcmSamples(channel.sampleCount));
+    }
+
     bwav.sampleCrc = CalcBwavSampleCrc(bwav);
 
-    return bwav;
+    *out = std::move(bwav);
+    return true;
 }
 
 }

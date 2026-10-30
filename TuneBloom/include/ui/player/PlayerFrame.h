@@ -8,6 +8,7 @@ bool IsPlayerFrameShown();
 bool IsPlayerDocument(Document* document);
 void PreparePlayerFrame(const openqueue::Request& launch);
 void NotifyPlayerFrameOpen(const openqueue::Request& request, Document* previous, Document* opened);
+void ForgetPlayerFrameDocument(const Document* document);
 void ApplyPlayerFrameStart();
 void DrawPlayerFrame();
 void RequestFullEditor();

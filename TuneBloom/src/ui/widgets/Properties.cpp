@@ -167,6 +167,56 @@ bool BeginGroupBoxWithStatus(const char* title, const char* status)
     return true;
 }
 
+f32 CalcGroupBoxWidth(f32 contentWidth)
+{
+    return ImCeil(contentWidth) + ImFloor(ImGui::GetFontSize() * cSoundPanelPadXEm) * 2.0f + 2.0f;
+}
+
+f32 CalcChoiceRowWidth(const char* const* labels, s32 labelNum)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+
+    f32 width = style.ItemSpacing.x * (labelNum - 1);
+
+    for (s32 i = 0; i < labelNum; i++)
+        width += ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(labels[i], nullptr, true).x;
+
+    return width;
+}
+
+bool DrawChoiceRow(s32* selected, const char* const* labels, s32 labelNum, const char* const* details)
+{
+    const s32 oldSelected = *selected;
+
+    for (s32 i = 0; i < labelNum; i++)
+    {
+        if (i > 0)
+            ImGui::SameLine();
+
+        ImGui::RadioButton(labels[i], selected, i);
+
+        if (details)
+            DetailTooltip(details[i]);
+    }
+
+    return *selected != oldSelected;
+}
+
+bool BeginGroupBoxWithChoice(const char* title, s32* selected, const char* const* labels, s32 labelNum)
+{
+    const f32 choiceWidth = CalcChoiceRowWidth(labels, labelNum);
+
+    if (!BeginGroupBoxWithTools(title, choiceWidth))
+        return false;
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - choiceWidth);
+
+    DrawChoiceRow(selected, labels, labelNum);
+
+    return true;
+}
+
 void EndGroupBox()
 {
     ImGui::EndTable();
@@ -199,6 +249,11 @@ void PropertyRow(const char* label, const char* help)
         HelpMarker(help);
     }
 
+    PropertyValueColumn();
+}
+
+void PropertyValueColumn()
+{
     const ImGuiWindow* window = ImGui::GetCurrentWindow();
 
     ImGui::SameLine(CalcPropertyLabelWidth() - window->DC.ColumnsOffset.x - window->DC.GroupOffset.x);

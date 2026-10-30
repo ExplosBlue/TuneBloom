@@ -8,6 +8,7 @@
 
 #include <bfsar/files/BankFile.h>
 #include <bfsar/model/Sound.h>
+#include <bfsar/model/StateHash.h>
 #include <bfsar/player/SoundPlayer.h>
 
 #include <libs/IconsLucide.h>
@@ -646,6 +647,35 @@ void PushTableRowClipRect(const ImVec2& rowMin, const ImVec2& rowMax)
     ImGui::PushClipRect(clip.Min, clip.Max, false);
 }
 
+void DrawTableGroupRow(const char* title)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGuiTable* table = ImGui::GetCurrentTable();
+    const f32 rowHeight = ImGui::GetFrameHeight();
+
+    const ImVec2 cursor = ImGui::GetCursorScreenPos();
+    const ImVec2 rowMin(table->WorkRect.Min.x, cursor.y);
+    const ImVec2 rowMax(table->WorkRect.Max.x, cursor.y + rowHeight);
+    const ImVec2 textPos(cursor.x, cursor.y + style.FramePadding.y);
+    const f32 lineLeft = textPos.x + ImGui::CalcTextSize(title).x + style.ItemSpacing.x;
+    const f32 lineRight = table->Columns[table->RightMostEnabledColumn].WorkMaxX - cItemColumnGap;
+    const f32 lineY = ImFloor(cursor.y + rowHeight * 0.5f);
+
+    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, 0);
+    table->RowBgColorCounter = 0;
+
+    ImGui::Dummy(ImVec2(1.0f, rowHeight));
+    PushTableRowClipRect(rowMin, rowMax);
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddText(textPos, ImGui::GetColorU32(ImGuiCol_Text), title);
+
+    if (lineLeft < lineRight)
+        drawList->AddLine(ImVec2(lineLeft, lineY), ImVec2(lineRight, lineY), ImGui::GetColorU32(ImGuiCol_Separator), style.SeparatorTextBorderSize);
+
+    ImGui::PopClipRect();
+}
+
 ImVec4 GetItemValueColor()
 {
     return ImLerp(ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled), ImGui::GetStyleColorVec4(ImGuiCol_Text), cItemValueBrightness);
@@ -654,17 +684,7 @@ ImVec4 GetItemValueColor()
 void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* text, ImU32 color, bool alignRight)
 {
     const f32 markWidth = ImGui::CalcTextSize(cItemTextEndMark).x;
-    const f32 endWidth = maxX - pos.x - markWidth;
-    const char* end = text;
-
-    while (*end != '\0' && ImGui::CalcTextSize(end).x > endWidth)
-    {
-        end++;
-
-        while ((*end & 0xC0) == 0x80)
-            end++;
-    }
-
+    const char* end = FindTextTailStart(text, maxX - pos.x - markWidth);
     const f32 endX = alignRight ? ImFloor(maxX - ImGui::CalcTextSize(end).x) : pos.x + markWidth;
 
     drawList->AddText(pos, color, cItemTextEndMark);
@@ -768,50 +788,177 @@ static s32 CompareNames(const Item* a, const Item* b)
     return ImStricmp(nameB.cstr(), nameA.cstr());
 }
 
-bool SortItemRows(std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount)
+struct ItemSortOrder
 {
-    static std::vector<std::pair<s64, Item*>> sKeys;
+    u32 columnId;
+    bool descending;
+    const ItemColumn* columns;
+    u32 columnCount;
+};
 
-    if (!sortSpecs || sortSpecs->SpecsCount == 0)
-        return false;
+struct ItemSortCache
+{
+    ImGuiID id = 0;
+    u64 signature = 0;
+    std::vector<Item*> rows;
+};
 
-    const u32 columnId = sortSpecs->Specs[0].ColumnUserID;
-    const bool descending = sortSpecs->Specs[0].SortDirection == ImGuiSortDirection_Descending;
+static ItemSortOrder MakeItemSortOrder(const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount)
+{
+    const ImGuiTableColumnSortSpecs& spec = sortSpecs->Specs[0];
 
-    if (columnId == static_cast<u32>(ItemColumnId::Name))
-    {
-        std::stable_sort(rows->begin(), rows->end(), [descending](const Item* a, const Item* b)
-        {
-            const s32 order = CompareNames(a, b);
-            return descending ? order > 0 : order < 0;
-        });
+    return { spec.ColumnUserID, spec.SortDirection == ImGuiSortDirection_Descending, columns, columnCount };
+}
 
-        return true;
-    }
+static bool IsNameBefore(const Item* a, const Item* b, bool descending)
+{
+    const s32 order = CompareNames(a, b);
 
+    return descending ? order > 0 : order < 0;
+}
+
+static s64 GetItemSortKey(const Item* item, const ItemSortOrder& order)
+{
+    const u32 index = order.columnId - static_cast<u32>(ItemColumnId::First);
+
+    if (order.columnId >= static_cast<u32>(ItemColumnId::First) && index < order.columnCount)
+        return order.columns[index].sortKey(item);
+
+    return static_cast<s64>(GetItemListId(item));
+}
+
+static bool IsListOrderSorted(const std::vector<Item*>& rows, const ItemSortOrder& order)
+{
     const auto lessId = [](const Item* a, const Item* b)
     {
         return GetItemListId(a) < GetItemListId(b);
     };
 
-    if (columnId == static_cast<u32>(ItemColumnId::Id) && !descending && std::is_sorted(rows->begin(), rows->end(), lessId))
-        return false;
+    return order.columnId == static_cast<u32>(ItemColumnId::Id) && !order.descending && std::is_sorted(rows.begin(), rows.end(), lessId);
+}
 
-    const u32 index = columnId - static_cast<u32>(ItemColumnId::First);
+static bool IsItemRowOrderValid(const std::vector<Item*>& rows, const ItemSortOrder& order)
+{
+    if (order.columnId == static_cast<u32>(ItemColumnId::Name))
+    {
+        return std::is_sorted(rows.begin(), rows.end(), [&order](const Item* a, const Item* b)
+        {
+            return IsNameBefore(a, b, order.descending);
+        });
+    }
+
+    if (rows.empty())
+        return true;
+
+    s64 previous = GetItemSortKey(rows.front(), order);
+
+    for (size_t i = 1; i < rows.size(); i++)
+    {
+        const s64 key = GetItemSortKey(rows[i], order);
+
+        if (order.descending ? key > previous : key < previous)
+            return false;
+
+        previous = key;
+    }
+
+    return true;
+}
+
+static void SortItemRowsBy(std::vector<Item*>* rows, const ItemSortOrder& order)
+{
+    static std::vector<std::pair<s64, Item*>> sKeys;
+
+    if (order.columnId == static_cast<u32>(ItemColumnId::Name))
+    {
+        std::stable_sort(rows->begin(), rows->end(), [&order](const Item* a, const Item* b)
+        {
+            return IsNameBefore(a, b, order.descending);
+        });
+
+        return;
+    }
 
     sKeys.clear();
     sKeys.reserve(rows->size());
 
     for (Item* item : *rows)
-        sKeys.emplace_back(columnId >= static_cast<u32>(ItemColumnId::First) && index < columnCount ? columns[index].sortKey(item) : static_cast<s64>(GetItemListId(item)), item);
+        sKeys.emplace_back(GetItemSortKey(item, order), item);
 
-    std::stable_sort(sKeys.begin(), sKeys.end(), [descending](const std::pair<s64, Item*>& a, const std::pair<s64, Item*>& b)
+    std::stable_sort(sKeys.begin(), sKeys.end(), [&order](const std::pair<s64, Item*>& a, const std::pair<s64, Item*>& b)
     {
-        return descending ? a.first > b.first : a.first < b.first;
+        return order.descending ? a.first > b.first : a.first < b.first;
     });
 
     for (size_t i = 0; i < sKeys.size(); i++)
         (*rows)[i] = sKeys[i].second;
+}
+
+static ItemSortCache& GetItemSortCache(ImGuiID id)
+{
+    static std::vector<ItemSortCache> sCaches;
+
+    for (ItemSortCache& cache : sCaches)
+    {
+        if (cache.id == id)
+            return cache;
+    }
+
+    sCaches.push_back(ItemSortCache { id });
+
+    return sCaches.back();
+}
+
+static u64 CalcItemRowsSignature(const std::vector<Item*>& rows, const ItemSortOrder& order)
+{
+    StateHash hash;
+    hash.mixValue(order.columnId);
+    hash.mixValue(order.descending);
+
+    for (const Item* item : rows)
+        hash.mixItem(item);
+
+    return hash.value();
+}
+
+bool SortItemRows(std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount)
+{
+    if (!sortSpecs || sortSpecs->SpecsCount == 0)
+        return false;
+
+    const ItemSortOrder order = MakeItemSortOrder(sortSpecs, columns, columnCount);
+
+    if (IsListOrderSorted(*rows, order))
+        return false;
+
+    SortItemRowsBy(rows, order);
+
+    return true;
+}
+
+bool SortItemRowsCached(u32 id, std::vector<Item*>* rows, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount)
+{
+    if (!sortSpecs || sortSpecs->SpecsCount == 0)
+        return false;
+
+    const ItemSortOrder order = MakeItemSortOrder(sortSpecs, columns, columnCount);
+
+    if (IsListOrderSorted(*rows, order))
+        return false;
+
+    ItemSortCache& cache = GetItemSortCache(id);
+    const u64 signature = CalcItemRowsSignature(*rows, order);
+
+    if (cache.signature == signature && cache.rows.size() == rows->size() && IsItemRowOrderValid(cache.rows, order))
+    {
+        std::copy(cache.rows.begin(), cache.rows.end(), rows->begin());
+        return true;
+    }
+
+    SortItemRowsBy(rows, order);
+
+    cache.signature = signature;
+    cache.rows = *rows;
 
     return true;
 }

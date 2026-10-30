@@ -63,11 +63,9 @@ static void BankCreatePropertiesCallback(bool clear, Item *item, bool *validate)
 
         DialogRowGap();
 
-        ImGui::RadioButton(messages::bank::cFileModeCreateNew, &sBankFileMode, cBankFileModeCreateNew);
-        ImGui::SameLine();
-        ImGui::RadioButton(messages::source::cSelectExisting, &sBankFileMode, cBankFileModeSelectExisting);
-        ImGui::SameLine();
-        ImGui::RadioButton(messages::common::cNone, &sBankFileMode, cBankFileModeNone);
+        const char* modeLabels[] = { messages::bank::cFileModeCreateNew, messages::source::cSelectExisting, messages::common::cNone };
+
+        DrawChoiceRow(&sBankFileMode, modeLabels, IM_ARRAYSIZE(modeLabels));
 
         if (sBankFileMode == cBankFileModeNone)
         {

@@ -33,14 +33,6 @@ static FileWindow* FindFileWindow(const Item* file)
     return nullptr;
 }
 
-void CloseAllFileWindows()
-{
-    DocumentState& state = ActiveDocumentState();
-
-    state.fileWindows.clear();
-    state.shownFileWindow = nullptr;
-}
-
 void UpdateFileWindows()
 {
     DocumentState& state = ActiveDocumentState();

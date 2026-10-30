@@ -37,19 +37,34 @@ struct Bfstm
     u32 sampleRate = 0;
     u32 loopStartFrame = 0;
     u32 frameCount = 0;
+    u32 blockCount = 0;
     u32 oneBlockBytes = 0;
     u32 oneBlockSamples = 0;
+    u32 lastBlockPaddedBytes = 0;
+    u32 tailBlockBytes = 0;
     u32 sampleDataOffset = 0;
     bool hasOriginalLoop = false;
     u32 originalLoopStartFrame = 0;
     u32 originalLoopEndFrame = 0;
-    bool hasRegions = false;
     u32 prefetchFrameCount = 0;
+    u64 infoBlockStart = 0;
+    u32 infoBlockSize = 0;
+    u64 streamInfoStart = 0;
+    u64 prefetchBlockStart = 0;
+    u64 prefetchDataStart = 0;
+    u32 prefetchDataSize = 0;
+    u64 sampleDataStart = 0;
+    u64 seekDataStart = 0;
+    u32 seekRowCount = 0;
     std::vector<BfstmChannel> channels;
-    std::vector<s16> seekHistory;
-    std::vector<u8> info;
-    u32 streamInfoOffset = 0;
-    std::vector<u32> adpcmInfoOffsets;
+
+    u64 getChannelBytes() const
+    {
+        if (blockCount == 0)
+            return 0;
+
+        return static_cast<u64>(blockCount - 1) * oneBlockBytes + lastBlockPaddedBytes + tailBlockBytes;
+    }
 
     u32 getSourceSampleCount() const
     {
@@ -65,10 +80,12 @@ struct Bfstm
 bool IsBfstm(const void* data, u64 size);
 bool ReadBfstm(const void* data, u64 size, Bfstm* out, const char** outError);
 bool ReadBfstmInfo(const void* data, u64 size, Bfstm* out);
-bool WriteBfstm(const Bfstm& bfstm, std::vector<u8>* out);
-bool CanWriteBfstm(const Bfstm& bfstm, const char** outReason);
+bool ReadBfstpInfo(const void* data, u64 size, Bfstm* out);
+bool ReadBfstmHead(const void* data, u64 size, Bfstm* out, u64* outNeededSize);
+bool ReadBfstmLayout(const void* data, u64 size, Bfstm* out);
+
+void CopyBfstmChannel(const Bfstm& bfstm, const void* file, u32 channelIndex, u8* out);
 
 void DecodeBfstmChannel(const Bfstm& bfstm, u32 channelIndex, std::vector<s16>* out);
-bool EncodeBfstm(const Bfstm& shape, const std::vector<std::vector<s16>>& channels, u32 sampleRate, bool isLoop, u32 loopStartFrame, Bfstm* out, const char** outError);
 
 }

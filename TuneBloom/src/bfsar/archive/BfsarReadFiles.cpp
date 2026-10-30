@@ -182,10 +182,10 @@ static const WaveCacheEntry* FindSameWaveInEarlierArchives(const BfsarOpenContex
     {
         for (const WaveCacheEntry& other : ctx.warcFileCache[otherIndex])
         {
-            if (ctx.waveIdMapSet[warcIndex].contains(other.id))
+            if (other.fileDataSize != waveFileSize || other.hash != hash || ctx.waveIdMapSet[warcIndex].contains(other.id))
                 continue;
 
-            if (other.hash == hash && other.fileDataSize == waveFileSize && sead::MemUtil::compare(other.fileData, waveFile, waveFileSize) == 0)
+            if (sead::MemUtil::compare(other.fileData, waveFile, waveFileSize) == 0)
                 return &other;
         }
     }

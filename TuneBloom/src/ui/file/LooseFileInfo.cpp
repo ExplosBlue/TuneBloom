@@ -12,27 +12,39 @@ const char* GetByteOrderText(sead::Endian::Types endian)
     return endian == sead::Endian::eBig ? messages::innerfile::cBigEndian : messages::innerfile::cLittleEndian;
 }
 
-void DrawLooseFileRows(const InnerFileTarget& target, InnerFileKind kind)
+LooseFileFormat GetLooseFileFormat(const InnerFileTarget& target, InnerFileKind kind)
 {
-    sead::FixedSafeString<24> version;
-    FormatInnerFileVersion(&version, target.version, target.format);
+    LooseFileFormat format;
+    format.name = GetInnerFileDisplayName(target.format, kind);
+    format.extension = GetInnerFileExtension(target.format, kind);
+    format.endian = target.endian;
 
-    PropertyRow(messages::common::cFormat);
-    ImGui::TextUnformatted(GetInnerFileDisplayName(target.format, kind));
+    FormatInnerFileVersion(&format.version, target.version, target.format);
 
-    PropertyRow(messages::common::cVersion);
-    ImGui::TextUnformatted(version.cstr());
-
-    PropertyRow(messages::innerfile::cByteOrder);
-    ImGui::TextUnformatted(GetByteOrderText(target.endian));
+    return format;
 }
 
-void FormatLooseFileFacts(sead::BufferedSafeString* out, const InnerFileTarget& target, InnerFileKind kind)
+void DrawLooseFileRows(const LooseFileFormat& format)
 {
-    sead::FixedSafeString<24> version;
-    FormatInnerFileVersion(&version, target.version, target.format);
+    PropertyRow(messages::common::cFormat);
+    ImGui::TextUnformatted(format.name);
 
-    out->format("%s %s", GetInnerFileDisplayName(target.format, kind), version.cstr());
+    if (!format.version.isEmpty())
+    {
+        PropertyRow(messages::common::cVersion);
+        ImGui::TextUnformatted(format.version.cstr());
+    }
+
+    PropertyRow(messages::innerfile::cByteOrder);
+    ImGui::TextUnformatted(GetByteOrderText(format.endian));
+}
+
+void FormatLooseFileFacts(sead::BufferedSafeString* out, const LooseFileFormat& format)
+{
+    out->copy(format.name);
+
+    if (!format.version.isEmpty())
+        out->appendWithFormat(" %s", format.version.cstr());
 }
 
 void AppendWaveFacts(sead::BufferedSafeString* out, const WaveFile& wave)
@@ -61,7 +73,7 @@ static void AppendCountFact(sead::BufferedSafeString* out, u32 count, const char
 
 void AppendTrackFact(sead::BufferedSafeString* out, u32 trackNum)
 {
-    AppendCountFact(out, trackNum, messages::stream::cReloadedTracksOneFormat, messages::stream::cReloadedTracksFormat);
+    AppendCountFact(out, trackNum, messages::common::cTrackCountOneFormat, messages::common::cTrackCountFormat);
 }
 
 void AppendChannelFact(sead::BufferedSafeString* out, u32 channelNum)

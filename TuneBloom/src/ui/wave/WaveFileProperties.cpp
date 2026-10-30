@@ -87,12 +87,12 @@ static void CapWaveLoopEnd(WaveLoopEdit& edit)
     }
 }
 
-static void SetWaveLoopFlag(WaveLoopEdit& edit, bool isLoop)
+static void SetWaveLoopFlag(const WaveFile& wave, WaveLoopEdit& edit, bool isLoop)
 {
     edit.changed = true;
     edit.isLoop = isLoop;
 
-    if (edit.isLoopDirty && (edit.loopStartFrame != 0 || edit.loopEndFrame < WaveFile::cStreamMinimumLoopFrames))
+    if (edit.isLoopDirty && (edit.loopStartFrame != 0 || wave.needsStreamLoopLayout(edit.loopStartFrame, edit.loopEndFrame)))
         *edit.isLoopDirty = true;
 }
 
@@ -364,7 +364,7 @@ static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& ed
     const bool playing = sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == &wave;
 
     if (BeginWaveformHeader(buttonsWidth, edit.isLoop))
-        SetWaveLoopFlag(edit, !edit.isLoop);
+        SetWaveLoopFlag(wave, edit, !edit.isLoop);
 
     DrawWavePlayButtons(wave, playing, buttonSize);
 

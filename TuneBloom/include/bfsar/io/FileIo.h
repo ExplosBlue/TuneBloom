@@ -3,6 +3,7 @@
 #include <filedevice/seadFileDevice.h>
 #include <prim/seadSafeString.h>
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -27,7 +28,10 @@ bool RenameOver(const char* tempPath, const char* destPath);
 bool CopyFileOver(const char* srcPath, const char* destPath);
 void RemoveFile(const char* path);
 const char* GetTempFolder();
+bool GetNarrowPath(const std::filesystem::path& path, std::string* out);
 std::string CanonicalPath(const char* path);
+std::string NormalizePath(const char* path);
+bool CreateDirectoryRecursively(const std::string& directory);
 void GetFileStem(sead::BufferedSafeString* out, const sead::SafeString& path);
 
 bool OpenForWrite(sead::FileHandle* handle, const sead::SafeString& path);

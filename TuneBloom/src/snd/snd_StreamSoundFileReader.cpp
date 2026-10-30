@@ -1,5 +1,7 @@
 #include <snd/snd_StreamSoundFileReader.h>
 
+#include <bfsar/files/BfstmFile.h>
+
 #include <math/seadMathCalcCommon.h>
 
 #include <ui/Messages.h>
@@ -71,19 +73,8 @@ bool StreamSoundFileReader::IsOriginalLoopAvailable() const
 {
     const ut::BinaryFileHeader& header = *reinterpret_cast<const ut::BinaryFileHeader*>(mHeader);
     const InnerFileFormatInfo* streamFormat = FindInnerFileFormat(header.signature, InnerFileKind::Stream);
-    if (streamFormat && streamFormat->format == ArchiveFormat::BCSAR)
-    {
-        u32 major = ((u32)header.version >> 24) & 0xFF;
-        if (major >= 4)
-            return true;
-    }
-    else
-    {
-        if ((u32)header.version >= 0x00040000)
-            return true;
-    }
 
-    return false;
+    return BfstmFile::IsOriginalLoopAvailable(static_cast<u32>(header.version),streamFormat ? streamFormat->format : ArchiveFormat::BFSAR);
 }
 
 bool StreamSoundFileReader::IsValidFileHeader(const void* streamSoundFile) const

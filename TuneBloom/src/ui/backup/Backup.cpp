@@ -112,11 +112,16 @@ static void ShowFailureNotice(DocumentState::Backup& state, Bfsar::BackupResult 
     notify::Add(notify::Kind::Error, title, msg.cstr());
 }
 
+static bool CanRestoreDocument(const Document& document)
+{
+    return !document.filePath().isEmpty() || document.kind() == Document::Kind::SoundArchive;
+}
+
 static void UpdateDocument(Document& document)
 {
     DocumentState::Backup& state = document.state().backup;
 
-    if (!sAutoBackupEnabled || !IsActive() || !document.isLoaded() || !document.state().unsaved)
+    if (!sAutoBackupEnabled || !IsActive() || !document.isLoaded() || !document.state().unsaved || !CanRestoreDocument(document))
     {
         state.timerRunning = false;
         return;

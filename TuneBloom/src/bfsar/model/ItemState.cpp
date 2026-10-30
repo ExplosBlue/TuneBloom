@@ -1,7 +1,6 @@
 #include <bfsar/model/StateHash.h>
 
 #include <bfsar/archive/Bfsar.h>
-
 #include <ui/file/UnsavedChanges.h>
 
 void Item::captureBaseline()

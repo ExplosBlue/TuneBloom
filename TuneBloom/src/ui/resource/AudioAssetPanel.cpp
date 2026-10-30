@@ -1,5 +1,6 @@
 #include <ui/resource/ResourceViews.h>
 
+#include <ui/resource/AudioAssetLabels.h>
 #include <ui/file/File.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
@@ -17,8 +18,10 @@
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
 
+#include <aal/Bwav.h>
 #include <bfsar/audio/AudioProcessing.h>
 #include <bfsar/audio/DecodedPcm.h>
+#include <bfsar/files/WaveFile.h>
 
 #include <vector>
 
@@ -58,6 +61,7 @@ private:
     std::vector<float> mMono;
     bool mTooLong = false;
     ImGui::LoopWaveformState mState;
+    AssetLabelView mLabels;
     u32 mLoopStartFrame = 0;
     u32 mLoopEndFrame = 0;
 };
@@ -104,6 +108,7 @@ void AudioAssetPanel::release()
     mSource.reset();
     mMono.clear();
     mState = ImGui::LoopWaveformState{};
+    mLabels = AssetLabelView{};
 }
 
 void AudioAssetPanel::refreshView(AudioAsset* asset)
@@ -143,6 +148,7 @@ AudioAssetPanel::FrameContext AudioAssetPanel::beginFrame(AudioAsset* asset)
 
     resource.loadStreamFile(asset);
     refreshView(asset);
+    RefreshAssetLabels(&mLabels, asset);
 
     FrameContext ctx;
     ctx.asset = asset;
@@ -172,8 +178,11 @@ void AudioAssetPanel::draw(AudioAsset* asset)
 {
     FrameContext ctx = beginFrame(asset);
 
+    const u32 addFrame = ctx.playing ? static_cast<u32>(sSoundPlayer.getPlaySamplePosition(true)) : 0;
+
     drawName(ctx);
     drawWaveformBox(ctx);
+    DrawAssetMarkersBox(&mLabels, asset, ctx.info->sampleCount, ctx.info->sampleRate, addFrame);
     drawAudioBox(ctx);
 
     if (asset->isStream())
@@ -201,8 +210,12 @@ void AudioAssetPanel::drawWaveCanvas(FrameContext& ctx)
     const ImGui::LoopWaveformState::Dragging dragBefore = mState.dragging;
     f64 seekSample = -1.0;
 
+    SetAssetLabelCues(mLabels, &mState);
+
     ImGui::LoopWaveformEditor("asset", mState, mMono, ctx.info->sampleRate, mLoopStartFrame, mLoopEndFrame, playheadSample, ctx.info->isLoop, ctx.canSetLoop,
                               nullptr, ImVec2(0.0f, ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm)), true, &seekSample);
+
+    ApplyAssetLabelCues(&mLabels, ctx.asset, mState);
 
     if (dragBefore == ImGui::LoopWaveformState::Dragging::Start && mState.dragging != dragBefore && mLoopStartFrame != ctx.info->loopStartFrame)
         commitLoop(ctx, true, mLoopStartFrame);
@@ -259,17 +272,36 @@ void AudioAssetPanel::drawLoopFields(FrameContext& ctx)
         commitLoop(ctx, true, mLoopStartFrame);
 }
 
+static const char* GetAssetEncodingName(AudioAsset* asset)
+{
+    aal::BwavCodec codec = aal::BwavCodec::DspAdpcm;
+
+    if (GetAudioAssetBwavCodec(*asset, &codec))
+        return cBwavCodecNames[static_cast<u32>(codec)];
+
+    const WaveFile* wave = asset->getInfo().kind == AudioAssetKind::Fwav ? asset->getPreviewWave() : nullptr;
+
+    return wave ? WaveFile::sEncodingTypes[static_cast<s32>(wave->getEncoding())] : nullptr;
+}
+
 void AudioAssetPanel::drawAudioBox(const FrameContext& ctx)
 {
     if (!BeginPropertyBox("AssetAudio"))
         return;
 
     const AudioAssetInfo& info = *ctx.info;
+    const char* encoding = GetAssetEncodingName(ctx.asset);
 
     RegionHeader(messages::common::cFormat);
 
-    PropertyRow(messages::common::cFormat);
+    PropertyRow(messages::common::cFileType);
     ImGui::TextUnformatted(GetAudioAssetKindName(info.kind));
+
+    if (encoding)
+    {
+        PropertyRow(messages::common::cEncoding);
+        ImGui::TextUnformatted(encoding);
+    }
 
     if (info.channelCount > 0)
     {
@@ -278,7 +310,7 @@ void AudioAssetPanel::drawAudioBox(const FrameContext& ctx)
 
         DrawSampleTimeRow(messages::common::cLength, info.sampleCount, info.sampleRate);
 
-        if (info.isPrefetch)
+        if (ctx.asset->isStream())
             DrawSampleTimeRow(messages::resource::cStoredInArchive, info.prefetchSampleCount, info.sampleRate);
 
         sead::FixedSafeString<24> channels;
@@ -302,13 +334,16 @@ void AudioAssetPanel::drawStreamBox(const FrameContext& ctx)
     if (!BeginPropertyBox("AssetStream"))
         return;
 
-    const std::string path = ActiveAudioResource().getStreamFilePath(*ctx.asset);
+    const AudioResource& resource = ActiveAudioResource();
+    const bool isLoosePrefetch = resource.getContainer() == AudioResource::Container::Bwav;
 
     RegionHeader(messages::sound::cStreamFileLabel);
 
     PropertyRow(messages::resource::cStreamState);
-    ImGui::TextUnformatted(GetStreamStateText(*ctx.asset));
-    ImGui::SetItemTooltip("%s", path.c_str());
+    ImGui::TextUnformatted(isLoosePrefetch ? messages::resource::cStreamNeedsArchive : GetStreamStateText(*ctx.asset));
+
+    if (!isLoosePrefetch)
+        ImGui::SetItemTooltip("%s", resource.getStreamFilePath(*ctx.asset).c_str());
 
     EndPropertyBox();
 }
@@ -324,13 +359,16 @@ void AudioAssetPanel::drawMetadataBox(const FrameContext& ctx)
     sead::FixedSafeString<32> size;
     FormatItemSize(&size, static_cast<u32>(ctx.asset->getMeta().size()));
 
-    RegionHeader(messages::resource::cMetadataTitle);
+    DrawAssetMetadataTitle(&mLabels, ctx.asset);
 
     PropertyRow(messages::common::cVersion);
     ImGui::Text(messages::resource::cMetadataVersionFormat, version.cstr());
 
     PropertyRow(messages::common::cSize);
     ImGui::TextUnformatted(size.cstr());
+
+    DrawAssetTagsRow(&mLabels, ctx.asset);
+    DrawAssetKeyRows(&mLabels, ctx.asset);
 
     EndPropertyBox();
 }

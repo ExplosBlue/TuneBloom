@@ -34,5 +34,7 @@ struct DecodedPcm
     }
 };
 
+bool IsPlainPcm(const WaveFile::RiffWaveInfo& info);
 DecodedPcm decodePcmForPreview(const WaveFile::RiffWaveInfo& info);
 bool decodeRiffChannels(const WaveFile::RiffWaveInfo& info, std::vector<std::vector<float>>* out);
+bool decodeRiffBytes(const u8* data, size_t size, DecodedPcm* out);

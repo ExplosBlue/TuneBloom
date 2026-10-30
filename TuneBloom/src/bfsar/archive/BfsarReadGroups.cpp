@@ -4,6 +4,8 @@
 
 #include <bfsar/archive/BfsarOpenContext.h>
 #include <bfsar/archive/GroupFilePaths.h>
+#include <bfsar/io/FileIo.h>
+#include <bfsar/io/PackFile.h>
 
 #include <ui/file/LoadProgress.h>
 #include <ui/Messages.h>
@@ -24,12 +26,6 @@
 #include <unordered_set>
 #include <vector>
 
-#if defined(SEAD_PLATFORM_WINDOWS)
-#define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
-
 using nw::snd::internal::GroupFile;
 using nw::snd::internal::GroupFileReader;
 using nw::snd::internal::SoundArchiveFile;
@@ -38,10 +34,12 @@ using nw::snd::internal::Util;
 namespace
 {
 
-constexpr u32 cPathBufferSize       = 512;
-constexpr u32 cGroupSearchEntryMax  = 20000;
-constexpr s32 cGroupSearchDepthMax  = 8;
-constexpr const char* cPathBadChars = "\\/:*?\"<>|";
+constexpr u32 cPathBufferSize             = 512;
+constexpr u32 cGroupSearchEntryMax        = 20000;
+constexpr s32 cGroupSearchDepthMax        = 8;
+constexpr u32 cUpperGroupSearchLevels     = 2;
+constexpr s32 cUpperGroupSearchDepthMax   = 3;
+constexpr const char* cPathBadChars       = "\\/:*?\"<>|";
 
 }
 
@@ -55,28 +53,6 @@ static bool IsPlainFileName(const sead::SafeString& name)
         if (*c < 0x20 || *c > 0x7E || std::strchr(cPathBadChars, *c))
             return false;
     }
-
-    return true;
-}
-
-static bool GetNarrowPath(const std::filesystem::path& path, sead::BufferedSafeString* outPath)
-{
-    char buffer[cPathBufferSize];
-
-#if defined(SEAD_PLATFORM_WINDOWS)
-    BOOL usedDefaultChar = FALSE;
-    const int length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, path.c_str(), -1, buffer, cPathBufferSize, nullptr, &usedDefaultChar);
-
-    if (length <= 0 || usedDefaultChar)
-        return false;
-#else
-    if (path.native().size() >= cPathBufferSize)
-        return false;
-
-    std::snprintf(buffer, cPathBufferSize, "%s", path.c_str());
-#endif
-
-    outPath->copy(buffer);
 
     return true;
 }
@@ -118,57 +94,252 @@ static bool IsGroupFileOfName(const std::filesystem::path& path, const std::file
     return false;
 }
 
-static ByteRange FindGroupFileInFolder(const sead::SafeString& folder, const sead::SafeString& groupName, std::string* outPath)
+static bool IsGroupPackOfName(const std::filesystem::path& path, const std::filesystem::path& groupName)
+{
+    if (path.stem() != groupName)
+        return false;
+
+    for (const char* extension : Bfsar::cGroupPackExtensions)
+    {
+        if (path.extension() == std::string(".") + extension)
+            return true;
+    }
+
+    return false;
+}
+
+static std::string FindGroupFileInPack(const std::string& packPath, const std::string& groupName)
+{
+    for (ArchiveFormat format : { ArchiveFormat::BCSAR, ArchiveFormat::BFSAR })
+    {
+        const std::string path = packPath + "/" + groupName + "." + GetInnerFileExtension(format, InnerFileKind::Group);
+        u64 size = 0;
+
+        if (path.size() < cPathBufferSize && packfile::GetFileSize(path, &size))
+            return path;
+    }
+
+    return std::string();
+}
+
+static ByteRange LoadGroupFileBytes(const std::string& path)
+{
+    return path.empty() ? ByteRange() : LoadFileBytes(sead::SafeString(path.c_str()));
+}
+
+static void KeepFoundGroupFile(const std::string& path, std::string* outPath)
+{
+    fprintf(stdout, "Found external group: %s\n", path.c_str());
+    *outPath = path;
+}
+
+static ByteRange LoadFoundGroupFile(const std::string& path, std::string* outPath)
+{
+    const ByteRange file = LoadGroupFileBytes(path);
+
+    if (file.data())
+        KeepFoundGroupFile(path, outPath);
+
+    return file;
+}
+
+static GroupFileIndex IndexGroupFiles(const std::filesystem::path& folder, s32 depthMax)
 {
     namespace fs = std::filesystem;
 
-    const fs::path wantedName(groupName.cstr());
+    GroupFileIndex index;
     std::error_code error;
     u32 entryCount = 0;
 
-    for (fs::recursive_directory_iterator it(fs::path(folder.cstr()), fs::directory_options::skip_permission_denied, error), end; !error && it != end; it.increment(error))
+    for (fs::recursive_directory_iterator it(folder, fs::directory_options::skip_permission_denied, error), end; !error && it != end; it.increment(error))
     {
         if (++entryCount > cGroupSearchEntryMax)
             break;
 
         loadprogress::Update();
 
-        if (it.depth() >= cGroupSearchDepthMax)
+        if (it.depth() >= depthMax)
             it.disable_recursion_pending();
 
+        const fs::path& path = it->path();
+        const bool isGroupFile = IsGroupFileOfName(path, path.stem());
         std::error_code entryError;
+        std::string filePath;
+        std::string stem;
 
-        if (!it->is_regular_file(entryError) || entryError || !IsGroupFileOfName(it->path(), wantedName))
+        if ((!isGroupFile && !IsGroupPackOfName(path, path.stem())) || !it->is_regular_file(entryError) || entryError ||
+            !fileio::GetNarrowPath(path, &filePath) || !fileio::GetNarrowPath(path.stem(), &stem))
             continue;
 
-        sead::FixedSafeString<cPathBufferSize> filePath;
+        if (isGroupFile)
+            index.groupFiles.emplace(stem, filePath);
+        else
+            index.groupPacks[stem].push_back(filePath);
+    }
 
-        if (!GetNarrowPath(it->path(), &filePath))
-            continue;
+    return index;
+}
 
-        const ByteRange file = LoadFileBytes(filePath);
+static std::string FindIndexedGroupFile(const GroupFileIndex& index, const std::string& groupName)
+{
+    const auto packs = index.groupPacks.find(groupName);
 
-        if (file.data())
+    if (packs != index.groupPacks.end())
+    {
+        for (const std::string& pack : packs->second)
         {
-            fprintf(stdout, "Found external group: %s\n", filePath.cstr());
-            *outPath = filePath.cstr();
-            return file;
+            std::string path = FindGroupFileInPack(pack, groupName);
+
+            if (!path.empty())
+                return path;
         }
     }
 
-    return ByteRange();
+    const auto file = index.groupFiles.find(groupName);
+
+    return file != index.groupFiles.end() ? file->second : std::string();
 }
 
-static ByteRange FindExternalGroupFile(const Group& group, const sead::SafeString& archivePath, std::string* outPath)
+static bool GetArchiveFolder(const sead::SafeString& archivePath, sead::BufferedSafeString* outFolder)
+{
+    outFolder->copy(packfile::GetFolderOnDisk(archivePath.cstr()).c_str());
+
+    return !outFolder->isEmpty();
+}
+
+static std::filesystem::path GetUpperSearchFolder(const sead::SafeString& archivePath)
+{
+    std::filesystem::path folder = packfile::GetFolderOnDisk(archivePath.cstr());
+
+    for (u32 i = 0; i < cUpperGroupSearchLevels && folder.has_relative_path(); i++)
+        folder = folder.parent_path();
+
+    return folder.has_relative_path() ? folder : std::filesystem::path();
+}
+
+static ByteRange FindExternalGroupFile(BfsarOpenContext& ctx, const Group& group, std::string* outPath)
 {
     sead::FixedSafeString<cPathBufferSize> archiveDir;
 
-    if (!sead::Path::getDirectoryName(&archiveDir, archivePath) || !IsPlainFileName(group.getName()))
+    if (!GetArchiveFolder(ctx.groupFileSource, &archiveDir) || !IsPlainFileName(group.getName()))
         return ByteRange();
 
     const ByteRange file = LoadExtDataGroupFile(archiveDir, group.getName(), outPath);
 
-    return file.data() ? file : FindGroupFileInFolder(archiveDir, group.getName(), outPath);
+    if (file.data())
+        return file;
+
+    if (!ctx.folderGroupFiles)
+        ctx.folderGroupFiles = IndexGroupFiles(std::filesystem::path(archiveDir.cstr()), cGroupSearchDepthMax);
+
+    return LoadFoundGroupFile(FindIndexedGroupFile(*ctx.folderGroupFiles, group.getName().cstr()), outPath);
+}
+
+static std::vector<u32> ReadGroupFileIds(const ByteRange& file)
+{
+    std::vector<u32> fileIds;
+
+    if (!IsInnerFileKind(file, InnerFileKind::Group) || !CheckGroupFileLayout(file))
+        return fileIds;
+
+    const GroupFileReader reader(file.data());
+
+    for (u32 i = 0; reader.IsInitialized() && i < reader.GetGroupItemCount(); i++)
+        fileIds.push_back(reader.GetGroupItemInfo(i)->fileId);
+
+    std::sort(fileIds.begin(), fileIds.end());
+    fileIds.erase(std::unique(fileIds.begin(), fileIds.end()), fileIds.end());
+
+    return fileIds;
+}
+
+static void AddGroupFileCandidate(const std::string& path, std::vector<GroupFileCandidate>* out)
+{
+    if (path.empty())
+        return;
+
+    const ByteRange file = LoadFileBytes(sead::SafeString(path.c_str()));
+    std::vector<u32> fileIds = ReadGroupFileIds(file);
+
+    FreeFileBytes(file);
+
+    if (!fileIds.empty())
+        out->push_back({ path, std::move(fileIds) });
+}
+
+static std::vector<GroupFileCandidate> CollectGroupFileCandidates(const sead::SafeString& archivePath)
+{
+    namespace fs = std::filesystem;
+
+    std::vector<GroupFileCandidate> candidates;
+    sead::FixedSafeString<cPathBufferSize> archiveDir;
+    std::error_code error;
+
+    if (!GetArchiveFolder(archivePath, &archiveDir))
+        return candidates;
+
+    for (fs::directory_iterator it(fs::path(archiveDir.cstr()), error), end; !error && it != end; it.increment(error))
+    {
+        std::error_code entryError;
+        const fs::path& path = it->path();
+        std::string filePath;
+
+        if (!it->is_regular_file(entryError) || entryError || !fileio::GetNarrowPath(path, &filePath))
+            continue;
+
+        if (IsGroupFileOfName(path, path.stem()))
+            AddGroupFileCandidate(filePath, &candidates);
+        else if (IsGroupPackOfName(path, path.stem()))
+            AddGroupFileCandidate(FindGroupFileInPack(filePath, path.stem().string()), &candidates);
+    }
+
+    return candidates;
+}
+
+static std::vector<u32> GetAttachedFileIds(const nw::snd::MemorySoundArchive& soundArchive, u32 groupId)
+{
+    std::vector<u32> fileIds;
+
+    for (u32 fileId = 0; fileId < soundArchive.detail_GetFileCount(); fileId++)
+    {
+        const SoundArchiveFile::FileInfo* fileInfo = soundArchive.detail_GetFileInfo(fileId);
+        const SoundArchiveFile::InternalFileInfo* internalInfo = fileInfo ? fileInfo->GetInternalFileInfo() : nullptr;
+
+        if (!internalInfo || internalInfo->toAttachedGroupIdTable.typeId != nw::snd::internal::ElementType_Category_Tables || !internalInfo->toAttachedGroupIdTable.IsValidOffset())
+            continue;
+
+        const Util::Table<nw::ut::ResU32>* groupTable = internalInfo->GetAttachedGroupTable();
+
+        for (u32 i = 0; i < groupTable->count; i++)
+        {
+            if (groupTable->item[i] == groupId)
+            {
+                fileIds.push_back(fileId);
+                break;
+            }
+        }
+    }
+
+    return fileIds;
+}
+
+static ByteRange FindGroupFileByContent(BfsarOpenContext& ctx, const Group& group, std::string* outPath)
+{
+    const std::vector<u32> fileIds = GetAttachedFileIds(ctx.soundArchive, nw::snd::SoundArchive::GetGroupIdFromIndex(group.getId()));
+
+    if (fileIds.empty())
+        return ByteRange();
+
+    if (!ctx.groupFileCandidates)
+        ctx.groupFileCandidates = CollectGroupFileCandidates(ctx.groupFileSource);
+
+    for (const GroupFileCandidate& candidate : *ctx.groupFileCandidates)
+    {
+        if (candidate.fileIds == fileIds)
+            return LoadFoundGroupFile(candidate.path, outPath);
+    }
+
+    return ByteRange();
 }
 
 static ByteRange FindGroupFile(const BfsarOpenContext& ctx, u32 fileId)
@@ -283,14 +454,48 @@ Bfsar::GroupFileCheck Bfsar::checkGroupFile(const sead::SafeString& path) const
     return CheckGroupFile(file.bytes, static_cast<u32>(mFileOriginalHasData.size()));
 }
 
-std::string Bfsar::findGroupFileInFolder(const sead::SafeString& groupName, const sead::SafeString& folder) const
+std::string Bfsar::getGroupFileInPack(const sead::SafeString& path) const
 {
-    std::string path;
+    const std::filesystem::path filePath(path.cstr());
+    const std::string packFilePath = IsGroupPackOfName(filePath, filePath.stem()) ? FindGroupFileInPack(path.cstr(), filePath.stem().string()) : std::string();
 
-    if (IsPlainFileName(groupName))
-        FreeFileBytes(FindGroupFileInFolder(folder, groupName, &path));
+    return packFilePath.empty() ? std::string(path.cstr()) : packFilePath;
+}
 
-    return path;
+std::vector<std::string> Bfsar::findGroupFilesInFolder(const std::vector<std::string>& groupNames, const sead::SafeString& folder) const
+{
+    const GroupFileIndex index = IndexGroupFiles(std::filesystem::path(folder.cstr()), cGroupSearchDepthMax);
+    std::vector<std::string> paths;
+
+    for (const std::string& groupName : groupNames)
+        paths.push_back(IsPlainFileName(sead::SafeString(groupName.c_str())) ? FindIndexedGroupFile(index, groupName) : std::string());
+
+    return paths;
+}
+
+static ByteRange FindGroupFileAboveArchive(BfsarOpenContext& ctx, const Group& group, std::string* outPath)
+{
+    if (!IsPlainFileName(group.getName()))
+        return ByteRange();
+
+    if (!ctx.upperGroupFiles)
+    {
+        const std::filesystem::path folder = GetUpperSearchFolder(ctx.groupFileSource);
+        ctx.upperGroupFiles = folder.empty() ? GroupFileIndex() : IndexGroupFiles(folder, cUpperGroupSearchDepthMax);
+    }
+
+    const std::string path = FindIndexedGroupFile(*ctx.upperGroupFiles, group.getName().cstr());
+    const ByteRange file = LoadGroupFileBytes(path);
+
+    if (CheckGroupFile(file, ctx.soundArchive.detail_GetFileCount()) != Bfsar::GroupFileCheck::Ok)
+    {
+        FreeFileBytes(file);
+        return ByteRange();
+    }
+
+    KeepFoundGroupFile(path, outPath);
+
+    return file;
 }
 
 ByteRange Bfsar::takeGroupFileOfArchive_(const BfsarOpenContext& ctx, const Group& group, const ByteRange& file) const
@@ -307,7 +512,7 @@ ByteRange Bfsar::takeGroupFileOfArchive_(const BfsarOpenContext& ctx, const Grou
     return ByteRange();
 }
 
-ByteRange Bfsar::loadExternalGroupFile_(const BfsarOpenContext& ctx, const Group& group, bool searchFolders, std::string* outPath)
+ByteRange Bfsar::loadExternalGroupFile_(BfsarOpenContext& ctx, const Group& group, bool searchFolders, std::string* outPath)
 {
     const bool isOwnFolder = ctx.groupFileSource == getFilePath();
 
@@ -322,9 +527,15 @@ ByteRange Bfsar::loadExternalGroupFile_(const BfsarOpenContext& ctx, const Group
     sead::FixedSafeString<cPathBufferSize> archiveDir;
 
     if (searchFolders)
-        file = FindExternalGroupFile(group, ctx.groupFileSource, outPath);
-    else if (sead::Path::getDirectoryName(&archiveDir, ctx.groupFileSource) && IsPlainFileName(group.mName))
+        file = FindExternalGroupFile(ctx, group, outPath);
+    else if (GetArchiveFolder(ctx.groupFileSource, &archiveDir) && IsPlainFileName(group.mName))
         file = LoadExtDataGroupFile(archiveDir, group.mName, outPath);
+
+    if (searchFolders && !file.data() && isFileAttachedGroupAvailable())
+        file = FindGroupFileByContent(ctx, group, outPath);
+
+    if (searchFolders && !file.data())
+        file = FindGroupFileAboveArchive(ctx, group, outPath);
 
     if (searchFolders && !file.data() && mCliMode)
         fprintf(stderr, "Failed to find external group file for '%s'\n", group.mName.cstr());
@@ -462,28 +673,41 @@ void Bfsar::addGroupItem_(BfsarOpenContext& ctx, const GroupFileReader& reader, 
     group->mItemInfoList.pushBack(itemInfo);
 }
 
-static void AddGroupWaveArchiveFile(const BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 warcId)
+static u32 AddGroupWaveArchiveFile(const BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 warcId)
 {
     const SoundArchiveFile::WaveArchiveInfo* warcInfo = ctx.soundArchive.GetWaveArchiveInfo(warcId);
 
-    if (warcInfo)
-        item.fileIds->insert(warcInfo->fileId);
+    if (!warcInfo)
+        return nw::snd::SoundArchive::INVALID_ID;
+
+    item.fileIds->insert(warcInfo->fileId);
+
+    return warcInfo->fileId;
 }
 
-static void AddGroupSharedWaveArchiveFile(const BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 fileId, const std::unordered_map<u64, u32>& fileWarcIds)
+static u32 AddGroupSharedWaveArchiveFile(const BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 fileId, const std::unordered_map<u64, u32>& fileWarcIds)
 {
     const bool isLink = item.group->getOutputType() == Group::OutputType::Link;
     const auto it = fileWarcIds.find(MakeGroupFileKey(fileId, isLink ? nw::snd::SoundArchive::INVALID_ID : item.groupId));
 
     if (it == fileWarcIds.end() || it->second == nw::snd::SoundArchive::INVALID_ID)
-        return;
+        return nw::snd::SoundArchive::INVALID_ID;
 
-    AddGroupWaveArchiveFile(ctx, item, it->second);
+    const u32 warcFileId = AddGroupWaveArchiveFile(ctx, item, it->second);
 
-    const SoundArchiveFile::WaveArchiveInfo* warcInfo = ctx.soundArchive.GetWaveArchiveInfo(it->second);
+    if (isLink)
+        return warcFileId;
 
-    if (!isLink && warcInfo)
-        item.group->setOriginalSharedWarcFileId(warcInfo->fileId);
+    if (warcFileId != nw::snd::SoundArchive::INVALID_ID)
+        item.group->setOriginalSharedWarcFileId(warcFileId);
+
+    return nw::snd::SoundArchive::INVALID_ID;
+}
+
+void Bfsar::addOwnWaveArchiveFile_(u32 ownerFileId, u32 warcFileId)
+{
+    if (warcFileId != nw::snd::SoundArchive::INVALID_ID)
+        mFileOriginalOwnWarc.try_emplace(ownerFileId, warcFileId);
 }
 
 void Bfsar::addGroupBankFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles& item, u32 bankId)
@@ -504,10 +728,14 @@ void Bfsar::addGroupBankFiles_(BfsarOpenContext& ctx, const BfsarGroupItemFiles&
     switch (bank->getWaveArchiveType())
     {
         case WaveArchiveType::AutomaticShared:
-            AddGroupSharedWaveArchiveFile(ctx, item, bankInfo->fileId, ctx.bankFileWarcId);
+            addOwnWaveArchiveFile_(bankInfo->fileId, AddGroupSharedWaveArchiveFile(ctx, item, bankInfo->fileId, ctx.bankFileWarcId));
             break;
 
         case WaveArchiveType::AutomaticIndividual:
+            if (bankInfo->GetWaveArchiveItemIdTable()->count > 0)
+                addOwnWaveArchiveFile_(bankInfo->fileId, AddGroupWaveArchiveFile(ctx, item, bankInfo->GetWaveArchiveItemIdTable()->item[0]));
+            break;
+
         case WaveArchiveType::Explicit:
             if (bankInfo->GetWaveArchiveItemIdTable()->count > 0)
                 AddGroupWaveArchiveFile(ctx, item, bankInfo->GetWaveArchiveItemIdTable()->item[0]);
@@ -575,10 +803,14 @@ void Bfsar::addGroupWaveSoundSetFiles_(BfsarOpenContext& ctx, const BfsarGroupIt
     switch (soundSet->getWaveArchiveType())
     {
         case WaveArchiveType::AutomaticShared:
-            AddGroupSharedWaveArchiveFile(ctx, item, waveSoundFileId, ctx.wsdFileWarcId);
+            addOwnWaveArchiveFile_(waveSoundFileId, AddGroupSharedWaveArchiveFile(ctx, item, waveSoundFileId, ctx.wsdFileWarcId));
             break;
 
         case WaveArchiveType::AutomaticIndividual:
+            if (warcIdTable->count > 0)
+                addOwnWaveArchiveFile_(waveSoundFileId, AddGroupWaveArchiveFile(ctx, item, warcIdTable->item[0]));
+            break;
+
         case WaveArchiveType::Explicit:
             if (warcIdTable->count > 0)
                 AddGroupWaveArchiveFile(ctx, item, warcIdTable->item[0]);
@@ -734,6 +966,26 @@ static std::vector<u32> ReadGroupFileIds(const GroupFileReader& reader)
     return fileIds;
 }
 
+static bool AreGroupItemsInIdOrder(const GroupFileReader& reader)
+{
+    u32 previousId = 0;
+
+    for (u32 i = 0; i < reader.GetGroupItemExCount(); i++)
+    {
+        GroupFile::GroupItemInfoEx itemInfoEx;
+
+        if (!reader.ReadGroupItemInfoEx(&itemInfoEx, i) || itemInfoEx.itemId == 0 || itemInfoEx.itemId == nw::snd::SoundArchive::INVALID_ID)
+            continue;
+
+        if (itemInfoEx.itemId < previousId)
+            return false;
+
+        previousId = itemInfoEx.itemId;
+    }
+
+    return true;
+}
+
 static std::vector<u32> FindFilesOfNoItem(const std::vector<u32>& groupFileIds, const std::vector<VectorSet<u32>>& itemFileMap)
 {
     std::unordered_set<u32> itemFileIds;
@@ -781,6 +1033,9 @@ void Bfsar::readGroupFile_(BfsarOpenContext& ctx, Group* group, u32 groupId, con
 
     group->mOriginalFileOrder = groupFileIds;
     group->mOriginalExtraFiles = FindFilesOfNoItem(groupFileIds, itemFileMap);
+
+    if (!AreGroupItemsInIdOrder(reader))
+        mReadGroupItemsUnsorted = true;
 
     if (itemFileMap.empty())
         addGroupItemsByFile_(ctx, reader, group);

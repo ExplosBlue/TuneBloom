@@ -6,9 +6,18 @@
 
 class WaveFile;
 
+struct LooseFileFormat
+{
+    const char* name = nullptr;
+    const char* extension = nullptr;
+    sead::FixedSafeString<24> version;
+    sead::Endian::Types endian = sead::Endian::eLittle;
+};
+
 const char* GetByteOrderText(sead::Endian::Types endian);
-void DrawLooseFileRows(const InnerFileTarget& target, InnerFileKind kind);
-void FormatLooseFileFacts(sead::BufferedSafeString* out, const InnerFileTarget& target, InnerFileKind kind);
+LooseFileFormat GetLooseFileFormat(const InnerFileTarget& target, InnerFileKind kind);
+void DrawLooseFileRows(const LooseFileFormat& format);
+void FormatLooseFileFacts(sead::BufferedSafeString* out, const LooseFileFormat& format);
 void AppendFileFact(sead::BufferedSafeString* out, const char* fact);
 void AppendWaveFacts(sead::BufferedSafeString* out, const WaveFile& wave);
 void AppendRateFact(sead::BufferedSafeString* out, u32 sampleRate);

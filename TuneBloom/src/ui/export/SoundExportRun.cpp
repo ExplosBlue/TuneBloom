@@ -179,7 +179,7 @@ static void FinishSoundExport()
     if (taskNum == 1)
         ShowExportResult(GetSingleResultText(sRun.tasks[0].sound, sRun.failureCount == 0));
     else
-        ShowBatchExportResult(taskNum, sRun.failureCount, messages::exporting::cFormatWav);
+        ShowBatchExportResult(taskNum, sRun.failureCount, messages::common::cWav);
 
     if (sRun.failureCount < taskNum)
         ShowExportedFiles(sRun.showPath);

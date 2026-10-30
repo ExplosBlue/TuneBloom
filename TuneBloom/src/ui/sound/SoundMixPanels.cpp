@@ -52,6 +52,8 @@ bool DrawBiquadTypeCombo(u8* biquadType, f32 width)
     const sead::FormatFixedSafeString<16> customType("%u", *biquadType);
     bool changed = false;
 
+    const ListOpener opener = GetNextListOpener();
+
     ImGui::SetNextItemWidth(width);
     if (ImGui::BeginCombo("##BiquadType", *biquadType < IM_ARRAYSIZE(cBiquadTypes) ? cBiquadTypes[*biquadType] : customType.cstr()))
     {
@@ -63,7 +65,7 @@ bool DrawBiquadTypeCombo(u8* biquadType, f32 width)
                 changed = true;
             }
 
-            ListItemDetailTooltip(cBiquadDetails[type]);
+            ListItemDetailTooltip(cBiquadDetails[type], opener);
         }
 
         ImGui::EndCombo();

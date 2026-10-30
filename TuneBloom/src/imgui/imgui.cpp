@@ -4095,7 +4095,7 @@ static bool IsTooltipHeldBack()
     ImGuiContext& g = *GImGui;
     if (GTooltipWheelHold)
         return true;
-    return g.ActiveId != 0 && g.ActiveIdMouseButton != -1 && g.IO.MouseDown[g.ActiveIdMouseButton];
+    return g.ActiveId != 0 && g.ActiveIdSource == ImGuiInputSource_Mouse && ImGui::IsAnyMouseDown();
 }
 
 // This is roughly matching the behavior of internal-facing ItemHoverable()

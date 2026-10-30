@@ -10,7 +10,6 @@
 namespace sarc
 {
 
-static constexpr u32 cHeaderSize       = 0x14;
 static constexpr u32 cHeaderByteOrder  = 0x06;
 static constexpr u32 cHeaderFileSize   = 0x08;
 static constexpr u32 cHeaderDataOffset = 0x0C;
@@ -79,19 +78,7 @@ static bool ReadNodes(const ByteView& view, u32 count, std::vector<Node>* out)
 
 static bool ReadName(const ByteView& view, u64 namesStart, u64 namesEnd, u32 attributes, std::string* out)
 {
-    const u64 offset = namesStart + static_cast<u64>(attributes & cNameOffsetMask) * cNameAlignment;
-
-    if (offset >= namesEnd)
-        return false;
-
-    const char* first = reinterpret_cast<const char*>(view.at(offset));
-    const char* last = static_cast<const char*>(std::memchr(first, '\0', namesEnd - offset));
-
-    if (!last)
-        return false;
-
-    out->assign(first, last);
-    return true;
+    return view.readCString(namesStart + static_cast<u64>(attributes & cNameOffsetMask) * cNameAlignment, namesEnd, out);
 }
 
 bool IsSarc(const void* data, u64 size)
@@ -304,9 +291,10 @@ u32 HashName(const std::string& name, u32 key)
     return hash;
 }
 
-const Entry* FindEntry(const File& file, const std::string& name)
+template <typename T>
+static const T* FindNamedEntry(const std::vector<T>& entries, const std::string& name)
 {
-    for (const Entry& entry : file.entries)
+    for (const T& entry : entries)
     {
         if (entry.hasName && entry.name == name)
             return &entry;
@@ -315,9 +303,19 @@ const Entry* FindEntry(const File& file, const std::string& name)
     return nullptr;
 }
 
+const Entry* FindEntry(const File& file, const std::string& name)
+{
+    return FindNamedEntry(file.entries, name);
+}
+
 Entry* FindEntry(File& file, const std::string& name)
 {
     return const_cast<Entry*>(FindEntry(static_cast<const File&>(file), name));
+}
+
+const IndexEntry* FindIndexEntry(const Index& index, const std::string& name)
+{
+    return FindNamedEntry(index.entries, name);
 }
 
 }

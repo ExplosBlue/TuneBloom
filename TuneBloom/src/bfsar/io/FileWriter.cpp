@@ -41,10 +41,19 @@ void FileWriter::openFile(const sead::SafeString& magic, u32 numBlocks, u32 vers
         mStream->writeMemBlock(&ref, sizeof(ref));
     }
 
-    u32 padBytes = mHeaderSize - getPosition();
-    for (u32 i = 0; i < padBytes; i++)
+    writeZeros(mHeaderSize - getPosition());
+}
+
+void FileWriter::writeZeros(u32 count)
+{
+    static constexpr u8 cZeros[64] = {};
+
+    while (count > 0)
     {
-        mStream->writeU8(0);
+        const u32 size = sead::Mathu::min(count, static_cast<u32>(sizeof(cZeros)));
+
+        mStream->writeMemBlock(cZeros, size);
+        count -= size;
     }
 }
 
@@ -210,12 +219,7 @@ void FileWriter::align(u32 alignment)
         return;
     }
 
-    const u32 padBytes = (alignment - (getPosition() - mBlockPos) % alignment) % alignment;
-
-    for (u32 i = 0; i < padBytes; i++)
-    {
-        mStream->writeU8(0);
-    }
+    writeZeros((alignment - (getPosition() - mBlockPos) % alignment) % alignment);
 }
 
 void FileWriter::alignInFile(u32 alignment)
@@ -226,12 +230,7 @@ void FileWriter::alignInFile(u32 alignment)
         return;
     }
 
-    const u32 padBytes = (alignment - getPosition() % alignment) % alignment;
-
-    for (u32 i = 0; i < padBytes; i++)
-    {
-        mStream->writeU8(0);
-    }
+    writeZeros((alignment - getPosition() % alignment) % alignment);
 }
 
 void FileWriter::openReference(const sead::SafeString& name)

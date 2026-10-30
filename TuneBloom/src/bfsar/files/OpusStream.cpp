@@ -2,6 +2,7 @@
 
 #include <bfsar/archive/Bfsar.h>
 #include <bfsar/files/BfstmFile.h>
+#include <bfsar/files/StreamWaveOwner.h>
 #include <bfsar/audio/NxOpus.h>
 #include <bfsar/model/Sound.h>
 #include <bfsar/files/WaveFile.h>
@@ -15,8 +16,6 @@
 #include <filedevice/seadFileDeviceMgr.h>
 #include <stream/seadFileDeviceStream.h>
 
-#include <opus.h>
-
 #include <algorithm>
 #include <vector>
 
@@ -25,10 +24,6 @@ namespace opusstream
 
     namespace
     {
-
-        constexpr u32 cMaxChannelCount = 2;
-        constexpr u8 cInfoVersion = 0;
-        constexpr u16 cVariableFrameSize = 0;
 
         const char *GetDecodeErrorMessage(nxopus::Error error)
         {
@@ -57,50 +52,6 @@ namespace opusstream
             }
 
             return messages::opus::cDecodeFailed;
-        }
-
-        bool encodePackets(OpusEncoder *encoder, const std::vector<const std::vector<float> *> &channels, u32 channelCount, u32 frameSize, u64 samplesToFeed, std::vector<u8> *outData)
-        {
-            std::vector<float> frame(static_cast<size_t>(frameSize) * channelCount);
-            std::vector<u8> packet(4000);
-
-            for (u64 pos = 0; pos < samplesToFeed; pos += frameSize)
-            {
-                for (u32 s = 0; s < frameSize; s++)
-                {
-                    u64 srcIdx = pos + s;
-
-                    for (u32 c = 0; c < channelCount; c++)
-                    {
-                        const std::vector<float> &src = *channels[c];
-                        frame[static_cast<size_t>(s) * channelCount + c] = srcIdx < src.size() ? src[srcIdx] : 0.0f;
-                    }
-                }
-
-                opus_int32 packetLength = opus_encode_float(encoder, frame.data(), frameSize, packet.data(), static_cast<opus_int32>(packet.size()));
-
-                if (packetLength < 0)
-                    return false;
-
-                opus_uint32 finalRange = 0;
-                opus_encoder_ctl(encoder, OPUS_GET_FINAL_RANGE(&finalRange));
-
-                u8 header[8] = {
-                    static_cast<u8>(packetLength >> 24),
-                    static_cast<u8>(packetLength >> 16),
-                    static_cast<u8>(packetLength >> 8),
-                    static_cast<u8>(packetLength),
-                    static_cast<u8>(finalRange >> 24),
-                    static_cast<u8>(finalRange >> 16),
-                    static_cast<u8>(finalRange >> 8),
-                    static_cast<u8>(finalRange),
-                };
-
-                outData->insert(outData->end(), header, header + 8);
-                outData->insert(outData->end(), packet.data(), packet.data() + packetLength);
-            }
-
-            return true;
         }
 
         bool areAllTracksAttached(const Sound::StreamSoundInfo::Track::List &tracks)
@@ -161,12 +112,24 @@ namespace opusstream
         outInfo.preSkip = info.preSkip;
         outInfo.sampleCount = 0;
 
-        return info.channelCount >= 1 && info.channelCount <= cMaxChannelCount;
+        return info.channelCount >= 1;
     }
 
     bool IsOpusStream(const void *data, u32 size)
     {
         return nxopus::HasInfoChunk(data, size);
+    }
+
+    u32 ReadChannelBitrate(const void *data, u32 size)
+    {
+        return nxopus::SnapChannelBitrate(nxopus::MeasureChannelBitrate(data, size));
+    }
+
+    u32 GetEncodeChannelBitrate(const Sound::StreamSoundInfo &stream)
+    {
+        const u32 bitrate = stream.getOpusChannelBitrate();
+
+        return bitrate != 0 ? bitrate : cDefaultChannelBitrate;
     }
 
     bool DecodeToPcm16(const void *data, u32 size, Info &outInfo, std::vector<s16 *> &outChannelData, const char **outError)
@@ -200,6 +163,117 @@ namespace opusstream
         outChannelData = std::move(buffers);
 
         return true;
+    }
+
+    class WaveBuilder
+    {
+    public:
+        static void attach(StreamWaveOwner &owner, Sound::StreamSoundInfo &stream, const sead::SafeString &streamName, const Info &info, const std::vector<s16 *> &channelBuffers, Item *popupItem);
+
+    private:
+        static WaveFile *createWave(StreamWaveOwner &owner, const Info &info, bool isLoop, u32 loopStartFrame, u32 loopEndFrame);
+        static void attachChannel(WaveFile *wave, u8 *channelData, u32 sampleCount, u32 loopEndFrame);
+    };
+
+    WaveFile *WaveBuilder::createWave(StreamWaveOwner &owner, const Info &info, bool isLoop, u32 loopStartFrame, u32 loopEndFrame)
+    {
+        WaveFile *wave = new WaveFile();
+        owner.prepareStreamWave(wave);
+        wave->mIsFromStreamFile = true;
+
+        wave->mDataEndian = sead::Endian::Types::eLittle;
+        wave->mEncoding = WaveFile::Encoding::Pcm16;
+        wave->mIsLoop = isLoop;
+        wave->mSampleRate = info.sampleRate;
+        wave->mLoopStartFrame = loopStartFrame;
+        wave->mLoopEndFrame = loopEndFrame;
+        wave->mSampleCount = info.sampleCount;
+
+        wave->mUseOriginalData = false;
+
+        return wave;
+    }
+
+    void WaveBuilder::attachChannel(WaveFile *wave, u8 *channelData, u32 sampleCount, u32 loopEndFrame)
+    {
+        WaveFile::Channel *channel = wave->mChannels.birthBack();
+        SEAD_ASSERT(channel);
+
+        channel->mOwnsData = true;
+        channel->mData = channelData;
+        channel->mDataSize = sampleCount * sizeof(s16);
+        channel->mDataSizeMin = loopEndFrame * sizeof(s16);
+        channel->mOriginalDataOffset = 0;
+    }
+
+    void WaveBuilder::attach(StreamWaveOwner &owner, Sound::StreamSoundInfo &stream, const sead::SafeString &streamName, const Info &info, const std::vector<s16 *> &channelBuffers, Item *popupItem)
+    {
+        Sound::StreamSoundInfo::Track::List &tracks = stream.getTrackList();
+
+        bool isLoop = stream.getIsLoop();
+        u32 loopStartFrame = isLoop ? stream.getLoopStartFrame() : 0;
+        u32 loopEndFrame = isLoop ? stream.getLoopEndFrame() : info.sampleCount;
+
+        if (loopEndFrame == 0 || loopEndFrame > info.sampleCount)
+            loopEndFrame = info.sampleCount;
+
+        if (loopStartFrame >= loopEndFrame)
+        {
+            isLoop = false;
+            loopStartFrame = 0;
+        }
+
+        std::vector<bool> channelBufferUsed(channelBuffers.size(), false);
+
+        for (u32 trackNo = 0; trackNo < tracks.size(); trackNo++)
+        {
+            Sound::StreamSoundInfo::Track &track = *static_cast<Sound::StreamSoundInfo::Track *>(tracks.nth(trackNo)->val());
+
+            if (track.getWaveFileRef().isAttached())
+                continue;
+
+            WaveFile *wave = createWave(owner, info, isLoop, loopStartFrame, loopEndFrame);
+            owner.nameStreamWave(wave, streamName, trackNo, tracks.size());
+
+            owner.addStreamWave(wave);
+            track.getWaveFileRef().attach(wave);
+
+            for (s32 ch = 0; ch < track.getChannels_().size(); ch++)
+            {
+                if (ch >= snd::cWaveChannelMax)
+                    break;
+
+                s8 globalChannelIndex = *track.getChannels_().nth(ch);
+
+                if (globalChannelIndex < 0 || static_cast<u32>(globalChannelIndex) >= channelBuffers.size())
+                {
+                    sead::FormatFixedSafeString<1024> msg(messages::playback::cTrackNoChannelsFormat, trackNo);
+                    PopupMgr::instance()->addPopup({msg, popupItem});
+                    continue;
+                }
+
+                u8 *channelData = reinterpret_cast<u8 *>(channelBuffers[globalChannelIndex]);
+
+                if (channelBufferUsed[globalChannelIndex])
+                {
+                    u8 *copy = new u8[info.sampleCount * sizeof(s16)];
+                    sead::MemUtil::copy(copy, channelData, info.sampleCount * sizeof(s16));
+                    channelData = copy;
+                }
+
+                attachChannel(wave, channelData, info.sampleCount, loopEndFrame);
+                channelBufferUsed[globalChannelIndex] = true;
+            }
+
+            wave->mIsLoopDirty = false;
+            wave->mIsStreamExtended = true;
+        }
+
+        for (u32 i = 0; i < channelBuffers.size(); i++)
+        {
+            if (!channelBufferUsed[i])
+                delete[] reinterpret_cast<u8 *>(channelBuffers[i]);
+        }
     }
 
     bool AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride)
@@ -241,7 +315,12 @@ namespace opusstream
         std::vector<s16 *> channelBuffers;
         const char *error = nullptr;
 
-        bool decoded = DecodeToPcm16(fileData, static_cast<u32>(loadArg.read_size), opusInfo, channelBuffers, &error);
+        const u32 fileSize = static_cast<u32>(loadArg.read_size);
+        bool decoded = DecodeToPcm16(fileData, fileSize, opusInfo, channelBuffers, &error);
+
+        if (decoded)
+            strmSoundInfo.setOriginalOpusChannelBitrate(ReadChannelBitrate(fileData, fileSize));
+
         device->unload(fileData);
 
         if (!decoded)
@@ -251,95 +330,9 @@ namespace opusstream
             return false;
         }
 
-        bool isLoop = strmSoundInfo.getIsLoop();
-        u32 loopStartFrame = isLoop ? strmSoundInfo.getLoopStartFrame() : 0;
-        u32 loopEndFrame = isLoop ? strmSoundInfo.getLoopEndFrame() : opusInfo.sampleCount;
+        WaveBuilder::attach(archive, strmSoundInfo, sound->getName(), opusInfo, channelBuffers, sound);
 
-        if (loopEndFrame == 0 || loopEndFrame > opusInfo.sampleCount)
-            loopEndFrame = opusInfo.sampleCount;
-
-        if (loopStartFrame >= loopEndFrame)
-        {
-            isLoop = false;
-            loopStartFrame = 0;
-        }
-
-        std::vector<bool> channelBufferUsed(channelBuffers.size(), false);
-
-        for (u32 trackNo = 0; trackNo < tracks.size(); trackNo++)
-        {
-            Sound::StreamSoundInfo::Track &track = *static_cast<Sound::StreamSoundInfo::Track *>(tracks.nth(trackNo)->val());
-
-            if (track.getWaveFileRef().isAttached())
-                continue;
-
-            WaveFile *wave = new WaveFile();
-            archive.prepareStreamWave(wave);
-            wave->mIsFromStreamFile = true;
-
-            NameStreamTrackWave(wave, sound->getName(), trackNo, tracks.size());
-
-            wave->mDataEndian = sead::Endian::Types::eLittle;
-            wave->mEncoding = WaveFile::Encoding::Pcm16;
-            wave->mIsLoop = isLoop;
-            wave->mSampleRate = opusInfo.sampleRate;
-            wave->mLoopStartFrame = loopStartFrame;
-            wave->mLoopEndFrame = loopEndFrame;
-            wave->mSampleCount = opusInfo.sampleCount;
-
-            wave->mUseOriginalData = false;
-
-            archive.addStreamWave(wave);
-            track.getWaveFileRef().attach(wave);
-
-            for (s32 ch = 0; ch < track.getChannels_().size(); ch++)
-            {
-                if (ch >= snd::cWaveChannelMax)
-                    break;
-
-                s8 globalChannelIndex = *track.getChannels_().nth(ch);
-
-                if (globalChannelIndex < 0 || static_cast<u32>(globalChannelIndex) >= channelBuffers.size())
-                {
-                    sead::FormatFixedSafeString<1024> msg(messages::playback::cTrackNoChannelsFormat, trackNo);
-                    PopupMgr::instance()->addPopup({msg, sound});
-                    continue;
-                }
-
-                WaveFile::Channel *channel = wave->mChannels.birthBack();
-                SEAD_ASSERT(channel);
-
-                u8 *channelData = reinterpret_cast<u8 *>(channelBuffers[globalChannelIndex]);
-
-                if (channelBufferUsed[globalChannelIndex])
-                {
-                    u8 *copy = new u8[opusInfo.sampleCount * sizeof(s16)];
-                    sead::MemUtil::copy(copy, channelData, opusInfo.sampleCount * sizeof(s16));
-                    channelData = copy;
-                }
-
-                channel->mOwnsData = true;
-                channel->mData = channelData;
-                channel->mDataSize = opusInfo.sampleCount * sizeof(s16);
-                channel->mDataSizeMin = loopEndFrame * sizeof(s16);
-                channel->mOriginalDataOffset = 0;
-
-                channelBufferUsed[globalChannelIndex] = true;
-            }
-
-            wave->mIsLoopDirty = false;
-            wave->mIsStreamExtended = true;
-        }
-
-        for (u32 i = 0; i < channelBuffers.size(); i++)
-        {
-            if (!channelBufferUsed[i])
-            {
-                delete[] reinterpret_cast<u8 *>(channelBuffers[i]);
-            }
-        }
-
-        sound->mStreamFileSignature = ComputeContentSignature(*sound);
+        sound->mStreamFileSignature = ComputeContentSignature(strmSoundInfo);
         sound->mHasStreamFileBaseline = true;
 
         if (!wasModified)
@@ -348,13 +341,30 @@ namespace opusstream
         return true;
     }
 
-    u64 ComputeContentSignature(const Sound &sound)
+    bool ReadStreamFile(StreamWaveOwner &owner, Sound::StreamSoundInfo &stream, const sead::SafeString &streamName, const void *data, u32 size, const char **outError)
+    {
+        Info opusInfo;
+        std::vector<s16 *> channelBuffers;
+
+        if (!DecodeToPcm16(data, size, opusInfo, channelBuffers, outError))
+            return false;
+
+        ApplyStreamTrackLayout(stream, GetDefaultStreamTrackCount(opusInfo.channelCount), opusInfo.channelCount);
+        stream.setOriginalOpusChannelBitrate(ReadChannelBitrate(data, size));
+
+        WaveBuilder::attach(owner, stream, streamName, opusInfo, channelBuffers, nullptr);
+
+        return true;
+    }
+
+    u64 ComputeContentSignature(const Sound::StreamSoundInfo &stream)
     {
         StateHash hash;
 
-        const Sound::StreamSoundInfo::Track::List &trackList = sound.getStreamSoundInfo().getTrackList();
+        const Sound::StreamSoundInfo::Track::List &trackList = stream.getTrackList();
 
         hash.mixValue<u32>(trackList.size());
+        hash.mixValue<u32>(GetEncodeChannelBitrate(stream));
 
         for (u32 i = 0; i < trackList.size(); i++)
         {
@@ -378,15 +388,14 @@ namespace opusstream
         return hash.value();
     }
 
-    bool WriteStreamFile(sead::FileHandle &handle, const Sound *sound)
+    bool WriteStreamFile(sead::FileHandle &handle, const Sound::StreamSoundInfo &streamInfo, Item *popupItem)
     {
-        const Sound::StreamSoundInfo &strmSoundInfo = sound->getStreamSoundInfo();
-        const Sound::StreamSoundInfo::Track::List &tracks = strmSoundInfo.getTrackList();
+        const Sound::StreamSoundInfo::Track::List &tracks = streamInfo.getTrackList();
 
         auto fail = [&](const char *msg)
         {
             sead::FormatFixedSafeString<1024> popupMsg(messages::opus::cEncodeFailedFormat, msg);
-            PopupMgr::instance()->addPopup({popupMsg, const_cast<Sound *>(sound)});
+            PopupMgr::instance()->addPopup({popupMsg, popupItem});
             return false;
         };
 
@@ -409,7 +418,7 @@ namespace opusstream
             totalChannels += wave->getChannels().size();
         }
 
-        if (totalChannels < 1 || totalChannels > 2)
+        if (totalChannels < 1 || totalChannels > nxopus::cMaxChannelCount)
             return fail(messages::opus::cEncodeChannelLimit);
 
         const WaveFile &mainWave = *waves[0];
@@ -446,46 +455,17 @@ namespace opusstream
                 channels.push_back(&channel);
         }
 
-        int opusErr = OPUS_OK;
+        std::vector<u8> data;
+        const nxopus::Error error = nxopus::Encode(channels, sampleCount, sampleRate, static_cast<s32>(GetEncodeChannelBitrate(streamInfo) * totalChannels), nxopus::PreSkip::Drop, &data);
 
-        OpusEncoder *encoder = opus_encoder_create(sampleRate, totalChannels, OPUS_APPLICATION_AUDIO, &opusErr);
-
-        if (!encoder || opusErr != OPUS_OK)
+        if (error == nxopus::Error::EncoderCreateFailed)
             return fail(messages::opus::cEncoderCreateFailed);
 
-        opus_encoder_ctl(encoder, OPUS_SET_BITRATE(256000));
-
-        opus_int32 lookahead = 0;
-        opus_encoder_ctl(encoder, OPUS_GET_LOOKAHEAD(&lookahead));
-        u32 preSkip = static_cast<u32>(lookahead);
-
-        std::vector<u8> data;
-        data.reserve(static_cast<size_t>(sampleCount) / 2);
-
-        const bool encoded = encodePackets(encoder, channels, totalChannels, sampleRate / 50, static_cast<u64>(sampleCount) + preSkip, &data);
-
-        opus_encoder_destroy(encoder);
-
-        if (!encoded)
+        if (error != nxopus::Error::None)
             return fail(messages::opus::cEncodeError);
 
         CheckedFileStreamSrc streamSrc(&handle);
         sead::WriteStream stream(&streamSrc, sead::Stream::Modes::eBinary);
-        stream.setBinaryEndian(sead::Endian::Types::eLittle);
-
-        stream.writeU32(nxopus::cInfoChunkId);
-        stream.writeU32(nxopus::cInfoChunkSize);
-        stream.writeU8(cInfoVersion);
-        stream.writeU8(static_cast<u8>(totalChannels));
-        stream.writeU16(cVariableFrameSize);
-        stream.writeU32(sampleRate);
-        stream.writeU32(nxopus::cChunkHeaderSize + nxopus::cInfoChunkSize);
-        stream.writeU32(0);
-        stream.writeU32(0);
-        stream.writeU32(preSkip);
-
-        stream.writeU32(nxopus::cDataChunkId);
-        stream.writeU32(static_cast<u32>(data.size()));
         stream.writeMemBlock(data.data(), static_cast<u32>(data.size()));
 
         return !streamSrc.hasFailed();

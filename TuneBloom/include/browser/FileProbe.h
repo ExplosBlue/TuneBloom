@@ -10,9 +10,11 @@ enum class BrowserFileKind
 {
     SoundArchive,
     AudioResource,
+    ResourceList,
     Wave,
     Stream,
     StreamPrefetch,
+    Wav,
 
     Count
 };

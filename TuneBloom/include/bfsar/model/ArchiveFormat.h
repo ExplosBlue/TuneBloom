@@ -246,7 +246,10 @@ inline constexpr const char* cZstdExtension = "zs";
 inline constexpr const char* cCmpbinExtension = "cmpbin";
 inline constexpr const char* cBeaExtension = "bea";
 inline constexpr const char* cWavExtension = "wav";
+inline constexpr const char* cOpusExtension = "opus";
 inline constexpr const char* cResourceStreamFolder = "Stream";
+inline constexpr const char* cResourceNamedStreamSuffix = "_Stream";
+inline constexpr const char* cResourceNamedStreamPrefix = "Stream_";
 
 inline const ResourceFormatInfo& GetResourceFormatInfo(ResourceFormat format)
 {

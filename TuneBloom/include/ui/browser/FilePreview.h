@@ -16,6 +16,7 @@ struct DecodedAudioFile
     std::string name;
     std::vector<u8> bytes;
     DecodedPcm pcm;
+    bool isRead = false;
     bool isWaveFile = false;
     bool isStream = false;
     bool isDecoded = false;
@@ -30,7 +31,7 @@ public:
     FilePreview();
     ~FilePreview();
 
-    void play(const std::string& path, const std::string& name);
+    void play(const std::string& path, const std::string& name, bool reportsReadFailure = true);
     void stop();
     void update();
     bool isPlaying(const std::string& path) const;
@@ -49,4 +50,5 @@ private:
     WaveFile* mWave = nullptr;
     std::unique_ptr<LooseStreamFile> mStream;
     std::string mWavePath;
+    bool mReportsReadFailure = true;
 };

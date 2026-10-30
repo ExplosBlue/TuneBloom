@@ -473,6 +473,7 @@ WaveArchive* Bfsar::createGeneratedWaveArchive_(BfsarSaveContext& ctx, const Ite
 
     mWaveArchiveList.pushBack(warc);
     ctx.generatedWarcs.push_back(warc);
+    ctx.generatedWarcOwners[warc] = owner;
 
     return warc;
 }

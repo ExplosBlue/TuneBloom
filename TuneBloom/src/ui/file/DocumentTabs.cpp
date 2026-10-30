@@ -4,6 +4,7 @@
 #include <ui/file/Document.h>
 #include <ui/file/DocumentMgr.h>
 #include <ui/file/DocumentState.h>
+#include <ui/file/FileDrag.h>
 #include <ui/file/FileFlow.h>
 #include <ui/file/FileWindow.h>
 #include <ui/browser/FilesPanel.h>
@@ -35,7 +36,6 @@ static constexpr f32 cDirtyDotRadiusEm   = 0.16f;
 static constexpr f32 cObliqueSkew        = 0.2f;
 static constexpr f32 cWheelScrollEm      = 3.0f;
 static constexpr f32 cTooltipHintGapEm   = 0.8f;
-static constexpr f32 cTooltipFolderMinEm = 22.0f;
 static constexpr f32 cGroupLineEm        = 0.14f;
 static constexpr f32 cGroupHeadTint      = 0.22f;
 static constexpr f32 cGroupOpenSeconds   = 0.15f;
@@ -274,6 +274,24 @@ static std::vector<const TabLayout*> CollectCloseTargets(const std::vector<TabLa
     }
 
     return targets;
+}
+
+static void DrawTabDragSource(const TabLayout& tab)
+{
+    if (tab.kind != TabKind::Archive || tab.document->state().canonicalPath.empty())
+        return;
+
+    FileDragSource([&tab]()
+    {
+        FileDrag drag;
+        drag.paths.push_back(tab.document->state().canonicalPath);
+        drag.name = tab.name;
+        drag.icon = tab.icon;
+        drag.iconColor = ImGui::GetColorU32(tab.iconColor);
+        drag.origin = FileDragOrigin::Tab;
+
+        return drag;
+    });
 }
 
 void DocumentTabStrip::addTab(FrameContext& ctx, TabLayout tab) const
@@ -522,9 +540,7 @@ void DocumentTabStrip::drawTabTooltip(const TabLayout& tab) const
 
     ImGui::TextUnformatted(tab.name.c_str());
 
-    const std::string folder = pathtext::Folder(tab.document->filePath().cstr());
-    if (!folder.empty())
-        ImGui::TextDisabled("%s", pathtext::FitToWidth(folder, ImMax(width, em * cTooltipFolderMinEm)).c_str());
+    pathtext::DrawTooltipFolder(tab.document->filePath().cstr(), width);
 
     if (!statuses.empty())
         ImGui::Separator();
@@ -696,6 +712,8 @@ void DocumentTabStrip::drawTabItem(FrameContext& ctx, const TabLayout& tab, cons
     const bool clicked = ImGui::InvisibleButton("##Tab", bb.GetSize(), buttonFlags);
     const bool isHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && ImGui::IsMouseHoveringRect(bb.Min, bb.Max);
     const ImGuiID tabId = ImGui::GetItemID();
+
+    DrawTabDragSource(tab);
 
     if (clicked && !ctx.isLocked)
         handleTabClick(ctx, tab);

@@ -2,6 +2,9 @@
 
 #include <basis/seadTypes.h>
 
+#include <cstring>
+#include <string>
+
 class ByteView
 {
 public:
@@ -74,6 +77,34 @@ public:
             return static_cast<u32>(bytes[0]) << 24 | static_cast<u32>(bytes[1]) << 16 | static_cast<u32>(bytes[2]) << 8 | bytes[3];
 
         return static_cast<u32>(bytes[3]) << 24 | static_cast<u32>(bytes[2]) << 16 | static_cast<u32>(bytes[1]) << 8 | bytes[0];
+    }
+
+    u64 readU64(u64 offset) const
+    {
+        const u64 first = readU32(offset);
+        const u64 second = readU32(offset + sizeof(u32));
+
+        return mIsBigEndian ? first << 32 | second : second << 32 | first;
+    }
+
+    bool readCString(u64 offset, u64 end, std::string* out) const
+    {
+        if (offset >= end || end > mSize)
+            return false;
+
+        const char* first = reinterpret_cast<const char*>(mData + offset);
+        const char* last = static_cast<const char*>(std::memchr(first, '\0', end - offset));
+
+        if (!last)
+            return false;
+
+        out->assign(first, last);
+        return true;
+    }
+
+    bool readCString(u64 offset, std::string* out) const
+    {
+        return readCString(offset, mSize, out);
     }
 
 private:

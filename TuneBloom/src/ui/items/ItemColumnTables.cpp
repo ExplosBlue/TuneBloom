@@ -1,9 +1,12 @@
 #include <ui/items/ItemColumns.h>
 
 #include <ui/Messages.h>
+#include <ui/resource/BarsListViews.h>
 #include <ui/widgets/Widgets.h>
 
+#include <aal/Amta.h>
 #include <aal/AudioAsset.h>
+#include <aal/BarsListFile.h>
 #include <bfsar/model/Bank.h>
 #include <bfsar/files/BankFile.h>
 #include <bfsar/model/Group.h>
@@ -623,47 +626,48 @@ static void DrawLoopTooltip(const WaveFile* wave, bool loop)
 
 static constexpr const char* cAudioAssetTypeNames[] = { "-", messages::common::cWave, messages::common::cStream };
 
-static const AudioAssetInfo& GetAudioAssetInfo(const Item* item)
+static const AudioAsset& GetAudioAsset(const Item* item)
 {
-    return static_cast<const AudioAsset*>(item)->getInfo();
+    return *static_cast<const AudioAsset*>(item);
 }
 
-static bool IsAudioAssetStream(const AudioAssetInfo& info)
+static const AudioAssetInfo& GetAudioAssetInfo(const Item* item)
 {
-    return info.isPrefetch || info.kind == AudioAssetKind::StreamPrefetch;
+    return GetAudioAsset(item).getInfo();
 }
 
 static s64 GetAudioAssetLengthKey(const Item* item)
 {
-    const AudioAssetInfo& info = GetAudioAssetInfo(item);
+    const aal::AmtaSourceAudio length = GetAudioAssetLength(GetAudioAsset(item));
 
-    return info.sampleRate != 0 ? static_cast<s64>(info.sampleCount) * 1000 / info.sampleRate : 0;
+    return length.sampleRate != 0 ? static_cast<s64>(length.sampleCount) * 1000 / length.sampleRate : 0;
 }
 
 static void FormatAudioAssetLengthColumn(const Item* item, sead::BufferedSafeString* out)
 {
-    const AudioAssetInfo& info = GetAudioAssetInfo(item);
-    sead::FixedSafeString<32> length;
+    const aal::AmtaSourceAudio length = GetAudioAssetLength(GetAudioAsset(item));
+    sead::FixedSafeString<32> text;
 
-    FormatSampleLength(info.sampleCount, info.sampleRate, &length);
-    FormatLoopLength(length.cstr(), info.isLoop, out);
+    FormatSampleLength(length.sampleCount, length.sampleRate, &text);
+    FormatLoopLength(text.cstr(), IsAudioAssetLoop(GetAudioAsset(item)), out);
 }
 
 static void DrawAudioAssetLoopTooltip(const Item* item)
 {
     const AudioAssetInfo& info = GetAudioAssetInfo(item);
 
-    DrawLoopStartTooltip(info.isLoop, info.loopStartFrame, info.sampleRate);
+    DrawLoopStartTooltip(IsAudioAssetLoop(GetAudioAsset(item)), info.loopStartFrame, info.sampleRate);
 }
 
 static s64 GetAudioAssetTypeKey(const Item* item)
 {
-    const AudioAssetInfo& info = GetAudioAssetInfo(item);
+    const AudioAsset* asset = static_cast<const AudioAsset*>(item);
+    const AudioAssetKind kind = asset->getInfo().kind;
 
-    if (info.kind == AudioAssetKind::None || info.kind == AudioAssetKind::Unknown)
-        return 0;
+    if (asset->isStream())
+        return 2;
 
-    return IsAudioAssetStream(info) ? 2 : 1;
+    return kind == AudioAssetKind::None || kind == AudioAssetKind::Unknown ? 0 : 1;
 }
 
 static void FormatAudioAssetTypeColumn(const Item* item, sead::BufferedSafeString* out)
@@ -709,6 +713,36 @@ static s64 GetAudioAssetSizeKey(const Item* item)
 static void FormatAudioAssetSizeColumn(const Item* item, sead::BufferedSafeString* out)
 {
     FormatItemSize(out, GetAudioAssetInfo(item).fileSize);
+}
+
+static s64 GetBarsLocationKey(const Item* item)
+{
+    return FindEntryBars(item) ? 1 : 0;
+}
+
+static void FormatBarsLocationColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    const FoundBars* found = FindEntryBars(item);
+
+    out->copy(found ? found->location.c_str() : messages::common::cNotFound);
+}
+
+static void DrawBarsLocationTooltip(const Item* item)
+{
+    if (!FindEntryBars(item))
+        ImGui::SetTooltip("%s", messages::barslist::cNotFoundDetail);
+}
+
+static s64 GetBarsSizeKey(const Item* item)
+{
+    const FoundBars* found = FindEntryBars(item);
+
+    return found ? static_cast<s64>(found->size) : 0;
+}
+
+static void FormatBarsSizeColumn(const Item* item, sead::BufferedSafeString* out)
+{
+    FormatItemSize(out, static_cast<u64>(GetBarsSizeKey(item)));
 }
 
 static void DrawStreamLoopTooltip(const Item* item)
@@ -778,7 +812,7 @@ static const ItemColumn cWaveFileColumns[] = {
     { "Length",   messages::common::cLength,   cLoopLengthSample, &FormatWaveFileLengthColumn, &GetWaveFileLengthKey, cItemColumnFlag_None, &DrawWaveFileLoopTooltip },
     { "Channels", messages::common::cChannels, messages::common::cStereo, &FormatWaveFileChannels,      &GetWaveFileChannelsKey, cItemColumnFlag_Hidden },
     { "Rate",     messages::item::cColumnRate,     messages::unit::cHertzSample, &FormatWaveFileRateColumn,    &GetWaveFileRateKey,     cItemColumnFlag_Hidden },
-    { "Encoding", messages::common::cEncoding, messages::wavefile::cEncodingDspAdpcm, &FormatWaveFileEncodingColumn, &GetWaveFileEncodingKey, cItemColumnFlag_Hidden },
+    { "Encoding", messages::common::cEncoding, messages::wavefile::cEncodingPcm16, &FormatWaveFileEncodingColumn, &GetWaveFileEncodingKey, cItemColumnFlag_Hidden },
     { "Size",     messages::common::cSize,     messages::unit::cKilobytesSample, &FormatWaveFileSizeColumn,   &GetWaveFileSizeKey,     cItemColumnFlag_Hidden }
 };
 
@@ -789,6 +823,11 @@ static const ItemColumn cAudioAssetColumns[] = {
     { "Channels",    messages::common::cChannels, messages::common::cStereo,        &FormatAudioAssetChannelsColumn, &GetAudioAssetChannelsKey, cItemColumnFlag_Hidden },
     { "Rate",        messages::item::cColumnRate, messages::unit::cHertzSample,     &FormatAudioAssetRateColumn,     &GetAudioAssetRateKey,     cItemColumnFlag_Hidden },
     { "Size",        messages::common::cSize,     messages::unit::cKilobytesSample, &FormatAudioAssetSizeColumn,     &GetAudioAssetSizeKey,     cItemColumnFlag_Hidden }
+};
+
+static const ItemColumn cBarsListColumns[] = {
+    { "Location", messages::barslist::cLocation, "Pack/StaticHighFreqSound.pack", &FormatBarsLocationColumn, &GetBarsLocationKey, cItemColumnFlag_Text | cItemColumnFlag_TextEnd | cItemColumnFlag_WarnZero, &DrawBarsLocationTooltip },
+    { "Size",     messages::common::cSize,       messages::unit::cKilobytesSample, &FormatBarsSizeColumn, &GetBarsSizeKey, cItemColumnFlag_Hidden }
 };
 
 static const ItemColumn cSequenceFileColumns[] = {
@@ -849,6 +888,9 @@ const char* GetItemTypeName(Item::ItemType itemType)
         case Item::ItemType::AudioAsset:
             return messages::common::cAudioAsset;
 
+        case Item::ItemType::BarsListEntry:
+            return messages::barslist::cEntry;
+
         default:
             break;
     }
@@ -867,6 +909,10 @@ const ItemColumn* GetItemColumns(Item::ItemType itemType, u32* outCount)
         case Item::ItemType::AudioAsset:
             *outCount = IM_ARRAYSIZE(cAudioAssetColumns);
             return cAudioAssetColumns;
+
+        case Item::ItemType::BarsListEntry:
+            *outCount = IM_ARRAYSIZE(cBarsListColumns);
+            return cBarsListColumns;
 
         case Item::ItemType::SequenceFile:
             *outCount = IM_ARRAYSIZE(cSequenceFileColumns);

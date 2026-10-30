@@ -2,6 +2,7 @@
 
 #include <ui/file/File.h>
 #include <ui/file/FileWindow.h>
+#include <ui/file/UnsavedChanges.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/Messages.h>
 #include <ui/widgets/Properties.h>
@@ -238,33 +239,35 @@ static s32 CollectRefEntries(const Item* item, RefEntry* entries, bool* outFull)
     return entryCount;
 }
 
-static void NavigateToRefEntry(RefEntry* entry)
+static void NavigateToRefEntry(const RefEntry& entry)
 {
-    SelectItem(entry->navigateItem);
+    Item* subItem = entry.selectSubItem;
 
-    if (entry->selectSubItem)
+    SelectItem(entry.navigateItem);
+
+    if (subItem)
     {
-        if (entry->selectSubItem->getItemType() == Item::ItemType::BankFileInstrument)
+        if (subItem->getItemType() == Item::ItemType::BankFileInstrument)
         {
-            sSelectedItem = entry->selectSubItem;
+            sSelectedItem = subItem;
             sSubSelectedItem = nullptr;
-            OpenFileWindow(entry->navigateItem);
+            OpenFileWindow(entry.navigateItem);
         }
-        else if (entry->selectSubItem->getItemType() == Item::ItemType::StreamTrack)
+        else if (subItem->getItemType() == Item::ItemType::StreamTrack)
         {
-            HighlightStreamTrack(entry->selectSubItem);
-            entry->selectSubItem = nullptr;
+            HighlightStreamTrack(subItem);
+            subItem = nullptr;
         }
         else
         {
-            sSubSelectedItem = entry->selectSubItem;
+            sSubSelectedItem = subItem;
             sSelectedItemIsSubWindow = true;
         }
     }
 
-    if (entry->navigateItem->getItemType() == Item::ItemType::Sound)
+    if (entry.navigateItem->getItemType() == Item::ItemType::Sound)
     {
-        const Sound* sound = static_cast<const Sound*>(entry->navigateItem);
+        const Sound* sound = static_cast<const Sound*>(entry.navigateItem);
         switch (sound->getSoundType())
         {
             case Sound::SoundType::Seq:  SetUITab(UIType::SequenceSounds); break;
@@ -273,9 +276,11 @@ static void NavigateToRefEntry(RefEntry* entry)
             default: break;
         }
 
-        sSelectedItem = entry->navigateItem;
-        sSubSelectedItem = entry->selectSubItem;
-        sSelectedItemIsSubWindow = entry->selectSubItem != nullptr;
+        sSelectedItem = entry.navigateItem;
+        sSubSelectedItem = subItem;
+        sSelectedItemIsSubWindow = subItem != nullptr;
+        sMultiSelectedItems.clear();
+        sMultiSelectAnchor = entry.navigateItem;
     }
 }
 
@@ -318,7 +323,7 @@ static bool DrawRefEntryRows(RefEntry* entries, s32 entryCount)
 
         if (pressed)
         {
-            NavigateToRefEntry(&entries[i]);
+            NavigateToRefEntry(entries[i]);
             clicked = true;
         }
     }
@@ -326,12 +331,40 @@ static bool DrawRefEntryRows(RefEntry* entries, s32 entryCount)
     return clicked;
 }
 
+struct RefEntryCache
+{
+    u64 itemUid = 0;
+    u64 generation = 0;
+    s32 referenceCount = -1;
+    s32 entryCount = 0;
+    bool full = false;
+};
+
+static RefEntryCache sRefEntryCache;
+
+void ForgetReferenceEntries()
+{
+    sRefEntryCache = RefEntryCache();
+}
+
 bool DrawReferencesUI(Item* item, f32 reserveBelow)
 {
     static RefEntry entries[cReferenceMax];
 
-    bool full = false;
-    const s32 entryCount = CollectRefEntries(item, entries, &full);
+    RefEntryCache& cache = sRefEntryCache;
+    const s32 referenceCount = static_cast<s32>(item->getReferences().size());
+
+    if (cache.itemUid != item->getUid() || cache.generation != GetEditGeneration() || cache.referenceCount != referenceCount)
+    {
+        cache.full = false;
+        cache.entryCount = CollectRefEntries(item, entries, &cache.full);
+        cache.itemUid = item->getUid();
+        cache.generation = GetEditGeneration();
+        cache.referenceCount = referenceCount;
+    }
+
+    const s32 entryCount = cache.entryCount;
+    const bool full = cache.full;
 
     if (!BeginPropertySection(sead::FormatFixedSafeString<64>("%s###References", messages::innerfile::cReferences).cstr(), nullptr, nullptr, true, 1, nullptr, sead::FormatFixedSafeString<16>(full ? "%d+" : "%d", entryCount).cstr()))
         return false;

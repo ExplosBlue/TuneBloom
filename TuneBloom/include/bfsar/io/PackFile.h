@@ -8,6 +8,8 @@
 namespace packfile
 {
 
+inline constexpr char cFolderName[] = "Pack";
+
 struct Resource
 {
     std::string name;
@@ -26,7 +28,10 @@ bool GetFileSize(const std::string& path, u64* outSize);
 bool IsSoundPackFile(const std::string& path);
 bool ListResources(const std::string& packPath, std::vector<Resource>* out);
 
+bool ReadPackContents(const std::string& packPath, std::vector<u8>* out);
 bool ReadFile(const std::string& path, std::vector<u8>* out);
 bool WriteFile(const std::string& path, const void* data, size_t size);
+bool CopyFileOver(const std::string& srcPath, const std::string& destPath);
+bool MakePackWithFile(const std::string& packPath, const std::string& innerName, const void* data, size_t size, std::vector<u8>* out);
 
 }

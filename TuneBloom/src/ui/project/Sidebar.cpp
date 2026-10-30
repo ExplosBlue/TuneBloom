@@ -3,6 +3,7 @@
 #include <ui/browser/FilesPanel.h>
 #include <ui/file/Document.h>
 #include <ui/file/DocumentMgr.h>
+#include <ui/file/FileDrag.h>
 #include <ui/project/ProjectViews.h>
 #include <ui/Messages.h>
 
@@ -63,7 +64,10 @@ static void DrawSwitchTab(SidebarView view, const ImRect& bb)
 
     ImGui::BeginDisabled(!isEnabled);
 
-    if (ImGui::InvisibleButton("##View", bb.GetSize(), ImGuiButtonFlags_PressedOnClick))
+    const bool opensOnDragHold = view == SidebarView::Browser && GetFileDrag();
+    const ImGuiButtonFlags flags = static_cast<ImGuiButtonFlags>(ImGuiButtonFlags_PressedOnClick) | (opensOnDragHold ? static_cast<ImGuiButtonFlags>(ImGuiButtonFlags_PressedOnDragDropHold) : 0);
+
+    if (ImGui::InvisibleButton("##View", bb.GetSize(), flags))
         sView = view;
 
     ImGui::EndDisabled();

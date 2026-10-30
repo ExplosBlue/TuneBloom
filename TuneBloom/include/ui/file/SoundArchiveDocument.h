@@ -39,7 +39,6 @@ public:
     void unload() override;
     bool reload() override;
 
-    bool prepareSave() override;
     bool prepareSaveAs() override;
     bool chooseSaveAsPath(sead::BufferedSafeString* outPath) const override;
     SaveResult save(const char** outError) override;

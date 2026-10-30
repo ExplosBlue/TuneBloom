@@ -4,7 +4,6 @@
 
 class Document;
 
-void RequestNewFile();
 void RequestOpenFile();
 void RequestOpenFile(const char* path, openqueue::Origin origin = openqueue::Origin::App);
 void RequestPreviewFile(const char* path);

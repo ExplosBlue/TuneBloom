@@ -9,21 +9,26 @@ using ItemNamePrefixCallback = const char* (*)(Item* item);
 using ItemRowActionCallback = void (*)(Item* item);
 using ContextMenuCallback = void (*)(Item* item);
 using ItemFilterCallback = bool (*)(const Item* item);
-using ItemInsertCallback = void (*)(Item* afterItem, Item* newItem);
-using ItemRemoveCallback = void (*)(Item* item);
+using ItemInsertCallback = bool (*)(Item* afterItem, Item* newItem);
+using ItemRemoveCallback = bool (*)(Item* item);
 using ItemListFooterCallback = void (*)();
+
+struct FileDrag;
+using ItemListFileDropCallback = bool (*)(const FileDrag& drag, bool isDropped);
 
 struct ItemColumn;
 
 void SetNextItemListNote(const char* note);
 void SetNextItemListColumns(const ItemColumn* columns, u32 columnCount, bool hideAll = false);
 void SetNextItemListAction(ItemRowActionCallback callback);
+void SetNextItemListOpen(ItemRowActionCallback callback);
 void SetNextItemListAddDialogWidth(f32 width);
 void SetNextItemListFixedOrder();
 void SetNextItemListRemovable(bool removable);
 void SetNextItemListDeselectable();
 void SetNextItemListFooter(ItemListFooterCallback callback, f32 width);
 void SetNextItemListRemoveText(const char* label, const char* manyFormat, bool removesData);
+void SetNextItemListFileDrop(ItemListFileDropCallback callback, const char* action, bool opensAddDialog = false);
 
 void DrawAllItemsUI(const char* id, const char *listName, Item::List &list, CreateItemCallback createCallback = nullptr, ItemNamePrefixCallback nameCallback = nullptr, ContextMenuCallback menuCallback = nullptr, ItemFilterCallback filterCallback = nullptr, bool disableAddWindow = false, ItemInsertCallback onInsert = nullptr, ItemRemoveCallback onRemove = nullptr, bool forceSubWindow = false, Item *highlightItem = nullptr);
 void DrawItemPropertiesUI(bool labelLeft = false);

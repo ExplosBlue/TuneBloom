@@ -3,6 +3,7 @@
 #include <filedevice/seadFileDeviceMgr.h>
 #include <filedevice/seadPath.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -182,12 +183,64 @@ void RemoveFile(const char* path)
     std::filesystem::remove(path, ec);
 }
 
+bool GetNarrowPath(const std::filesystem::path& path, std::string* out)
+{
+#if defined(SEAD_PLATFORM_WINDOWS)
+    const std::wstring& wide = path.native();
+    const int wideLength = static_cast<int>(wide.size());
+    const int length = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, wide.c_str(), wideLength, nullptr, 0, nullptr, nullptr);
+    BOOL usedDefaultChar = FALSE;
+
+    if (length <= 0 && !wide.empty())
+        return false;
+
+    out->resize(static_cast<size_t>(length));
+
+    if (length > 0 && WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, wide.c_str(), wideLength, out->data(), length, nullptr, &usedDefaultChar) != length)
+        return false;
+
+    return !usedDefaultChar;
+#else
+    *out = path.native();
+
+    return true;
+#endif
+}
+
 std::string CanonicalPath(const char* path)
 {
     std::error_code error;
     const std::filesystem::path canonical = std::filesystem::weakly_canonical(std::filesystem::path(path), error);
+    std::string narrow;
 
-    return error ? std::string(path) : canonical.string();
+    return error || !GetNarrowPath(canonical, &narrow) ? std::string(path) : narrow;
+}
+
+std::string NormalizePath(const char* path)
+{
+    if (path[0] == '\0')
+        return std::string();
+
+    std::error_code error;
+    const std::filesystem::path absolute = std::filesystem::absolute(std::filesystem::path(path), error);
+
+    std::string normalized = error ? std::string(path) : absolute.lexically_normal().string();
+
+#if defined(SEAD_PLATFORM_WINDOWS)
+    std::replace(normalized.begin(), normalized.end(), '/', '\\');
+#endif
+
+    return normalized;
+}
+
+bool CreateDirectoryRecursively(const std::string& directory)
+{
+    std::error_code error;
+
+    if (std::filesystem::exists(directory, error))
+        return std::filesystem::is_directory(directory, error);
+
+    return std::filesystem::create_directories(directory, error);
 }
 
 void GetFileStem(sead::BufferedSafeString* out, const sead::SafeString& path)

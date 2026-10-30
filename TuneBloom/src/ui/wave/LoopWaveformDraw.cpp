@@ -3,12 +3,15 @@
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/TimeUtil.h>
 
+#include <imgui/imgui_custom.h>
 #include <imgui/imgui_internal.h>
 
 #include <math/seadMathCalcCommon.h>
 
 #include <algorithm>
 #include <cmath>
+#include <numeric>
+#include <vector>
 
 namespace ImGui
 {
@@ -26,6 +29,11 @@ constexpr float  cWaveDimMix          = 0.5f;
 constexpr float  cEdgeMix             = 0.14f;
 constexpr int    cEdgeSoftAlpha       = 150;
 constexpr u32    cLoopGlowAlpha       = 0x28;
+
+constexpr float  cCueLineAlpha        = 0.55f;
+constexpr float  cCueRangeAlpha       = 0.08f;
+constexpr float  cCueLabelPadX        = 4.0f;
+constexpr int    cCueLabelRows        = 3;
 
 constexpr uicolors::Themed<u32> cIntroGlowAlpha = { 0x1A, 0x23 };
 constexpr uicolors::Themed<u32> cCrossfadeAlpha = { 0x24, 0x2D };
@@ -350,6 +358,78 @@ static void DrawLoopHandles(const WaveformDraw& ctx, const LoopWaveformState& st
         DrawHandle(ctx.draw, ctx.origin, loopEndX, ctx.height, false, state.focus == LoopWaveformState::Focus::End);
 }
 
+static int FindCueLabelRow(const float* rowRight, float x)
+{
+    for (int row = 0; row < cCueLabelRows; row++)
+    {
+        if (rowRight[row] <= x)
+            return row;
+    }
+
+    return -1;
+}
+
+static void DrawCues(const WaveformDraw& ctx, LoopWaveformState& state)
+{
+    state.cueLabels.assign(state.cues.size(), LoopWaveformState::CueLabel());
+
+    if (state.cues.empty())
+        return;
+
+    ImDrawList* draw = ctx.draw;
+    const ImVec2 origin = ctx.origin;
+    const float right = origin.x + ctx.width;
+    const float bottom = origin.y + ctx.height;
+    const float labelHeight = GetTextLineHeight();
+    const ImVec4 idleFill = ColorConvertU32ToFloat4(Palette().edge);
+    const ImVec4 ink = GetStyleColorVec4(ImGuiCol_Text);
+    const ImVec4 canvas = ColorConvertU32ToFloat4(Palette().bg);
+    float rowRight[cCueLabelRows] = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+
+    std::vector<int> order(state.cues.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(), [&state](int first, int second) { return state.cues[first].start < state.cues[second].start; });
+
+    draw->PushClipRect(origin, ImVec2(right, bottom), true);
+
+    for (int i : order)
+    {
+        const LoopWaveformState::Cue& cue = state.cues[i];
+        const float hover = GetHoverRatio(GetCurrentWindow()->GetID(i), i == state.cueHover);
+        const float lit = i == state.cueSelected || i == state.cueDragIndex ? 1.0f : hover;
+        const float x = ImFloor(origin.x + SampleToX(state, cue.start, ctx.width)) + 0.5f;
+
+        if (cue.length > 0)
+        {
+            const float endX = origin.x + SampleToX(state, cue.start + cue.length, ctx.width);
+            draw->AddRectFilled(ImVec2(x, origin.y), ImVec2(endX, bottom), GetColorU32(ImGuiCol_Text, cCueRangeAlpha));
+        }
+
+        draw->AddLine(ImVec2(x, origin.y), ImVec2(x, bottom), GetColorU32(ImGuiCol_Text, ImLerp(cCueLineAlpha, 1.0f, lit)), 1.0f);
+
+        if (!cue.label)
+            continue;
+
+        const float labelWidth = CalcTextSize(cue.label).x + cCueLabelPadX * 2.0f;
+        const float labelLeft = x + labelWidth > right ? std::max(origin.x, x - labelWidth) : x;
+        const int row = FindCueLabelRow(rowRight, labelLeft);
+
+        if (row < 0)
+            continue;
+
+        const ImVec2 labelMin(labelLeft, origin.y + labelHeight * static_cast<float>(row));
+        const ImVec2 labelMax(labelLeft + labelWidth, labelMin.y + labelHeight);
+
+        rowRight[row] = labelMax.x + 1.0f;
+        state.cueLabels[i] = { labelMin.x - origin.x, labelMin.y - origin.y, labelMax.x - origin.x, labelMax.y - origin.y };
+
+        draw->AddRectFilled(labelMin, labelMax, ColorConvertFloat4ToU32(ImLerp(idleFill, ink, lit)));
+        draw->AddText(ImVec2(labelMin.x + cCueLabelPadX, labelMin.y), ColorConvertFloat4ToU32(ImLerp(ink, canvas, lit)), cue.label);
+    }
+
+    draw->PopClipRect();
+}
+
 static void DrawPlayhead(const WaveformDraw& ctx, const LoopWaveformState& state, float playheadSample)
 {
     ImDrawList* draw = ctx.draw;
@@ -400,6 +480,8 @@ void DrawWaveform(ImDrawList* draw, ImVec2 origin, float width, float height,
 
     if (state.showCurve)
         DrawCurve(draw, origin, width, height, state);
+
+    DrawCues(ctx, state);
 
     if (showLoop)
         DrawLoopHandles(ctx, state, loopStartX, loopEndX);

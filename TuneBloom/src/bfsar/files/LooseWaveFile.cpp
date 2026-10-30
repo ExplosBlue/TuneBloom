@@ -3,7 +3,6 @@
 #include <core/TestHooks.h>
 
 #include <aal/AudioAsset.h>
-#include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
 
 #include <ui/Messages.h>
@@ -80,16 +79,9 @@ SaveResult LooseWaveFile::saveAs(const sead::SafeString& path, sead::BufferedSaf
 {
     const u64 signature = mWave->computeStateSignature();
     const bool isUnchanged = signature == mSavedSignature && !testhooks::IsStreamRewriteForced(path.cstr());
-    const bool isSamePath = path == mFilePath;
+    const bool isCopied = isUnchanged && packfile::CopyFileOver(mFilePath.cstr(), path.cstr());
 
-    bool written = false;
-
-    if (isUnchanged && isSamePath)
-        written = true;
-    else if (isUnchanged && !packfile::IsPackPath(mFilePath.cstr()))
-        written = fileio::CopyFileOver(mFilePath.cstr(), path.cstr());
-
-    if (!written && !writeTo(path))
+    if (!isCopied && !writeTo(path))
     {
         sead::FixedSafeString<256> fileName;
         sead::Path::getFileName(&fileName, path);
@@ -100,7 +92,7 @@ SaveResult LooseWaveFile::saveAs(const sead::SafeString& path, sead::BufferedSaf
 
     setPath(path);
     mWave->getName().copy(mFileName);
-    mSavedSignature = signature;
+    mSavedSignature = mWave->computeStateSignature();
 
     return SaveResult::Saved;
 }

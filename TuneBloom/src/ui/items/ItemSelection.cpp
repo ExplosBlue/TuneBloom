@@ -1,16 +1,19 @@
 #include <ui/items/ItemListInternal.h>
 
+#include <bfsar/files/BankFile.h>
+#include <bfsar/model/Group.h>
+#include <bfsar/model/Sound.h>
+
 #include <ui/file/Document.h>
 #include <ui/file/DocumentState.h>
 #include <ui/app/PopupMgr.h>
+#include <ui/project/References.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/widgets/RowSelection.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/Workspace.h>
 
 #include <algorithm>
-
-static constexpr s32 cItemPageRows = 20;
 
 bool IsItemMultiSelected(const Item* item)
 {
@@ -25,25 +28,20 @@ void SetSelectionInSubWindow(bool isSubWindow)
         sSubSelectedItem = nullptr;
 }
 
-void PruneFilteredSelection(const std::vector<Item*>& listItems, ItemFilterCallback filterCallback)
+void PruneFilteredSelection(const Item::List& list, ItemFilterCallback filterCallback)
 {
     if (!filterCallback || sMultiSelectedItems.empty())
         return;
 
-    std::vector<Item*>& selection = sMultiSelectedItems;
-
-    for (Item* item : listItems)
+    const auto isFilteredOut = [&list, filterCallback](const Item* item)
     {
-        if (!item || filterCallback(item))
-            continue;
+        return item && item->list() == &list && !filterCallback(item);
+    };
 
-        auto it = std::find(selection.begin(), selection.end(), item);
-        if (it != selection.end())
-            selection.erase(it);
+    std::erase_if(sMultiSelectedItems, isFilteredOut);
 
-        if (sMultiSelectAnchor == item)
-            sMultiSelectAnchor = nullptr;
-    }
+    if (isFilteredOut(sMultiSelectAnchor))
+        sMultiSelectAnchor = nullptr;
 }
 
 void HandleItemListKeys(ItemListContext& ctx)
@@ -62,9 +60,9 @@ void HandleItemListKeys(ItemListContext& ctx)
     else if (shortcuts::Pressed(shortcuts::Action::SelectNext))
         target += 1;
     else if (shortcuts::Pressed(shortcuts::Action::SelectPageUp))
-        target -= cItemPageRows;
+        target -= cRowSelectionPageStep;
     else if (shortcuts::Pressed(shortcuts::Action::SelectPageDown))
-        target += cItemPageRows;
+        target += cRowSelectionPageStep;
     else if (shortcuts::Pressed(shortcuts::Action::SelectFirst))
         target = 0;
     else if (shortcuts::Pressed(shortcuts::Action::SelectLast))
@@ -112,7 +110,7 @@ void HandleItemListKeys(ItemListContext& ctx)
 
     if (shortcuts::Pressed(shortcuts::Action::DeleteSelection) && ctx.removable && sSubSelectedItem == nullptr && sSelectedItemIsSubWindow == false)
     {
-        if (!sMultiSelectedItems.empty())
+        if (!sMultiSelectedItems.empty() && sMultiSelectedItems.front()->list() == &ctx.list)
             RequestItemsDelete(sMultiSelectedItems);
         else if (current < ctx.rowNum)
             RequestItemDelete(selectedItem);
@@ -145,14 +143,63 @@ void SelectItemListRow(ItemListContext& ctx, Item* item)
     SetSelectionInSubWindow(ctx.isSubWindow);
 }
 
-void ForgetRemovedItems(const std::vector<Item*>& removed)
+static void AppendRemovedItem(Item* item, std::vector<Item*>* out);
+
+static void AppendRemovedChildren(Item::List& children, std::vector<Item*>* out)
 {
-    if (removed.empty())
+    for (auto it = children.robustBegin(); it != children.robustEnd(); ++it)
+        AppendRemovedItem((*it).val(), out);
+}
+
+static void AppendRemovedItem(Item* item, std::vector<Item*>* out)
+{
+    if (!item)
         return;
+
+    out->push_back(item);
+
+    switch (item->getItemType())
+    {
+        case Item::ItemType::Sound:
+            AppendRemovedChildren(static_cast<Sound*>(item)->getStreamSoundInfo().getTrackList(), out);
+            break;
+
+        case Item::ItemType::Group:
+            AppendRemovedChildren(static_cast<Group*>(item)->getItemInfoList(), out);
+            break;
+
+        case Item::ItemType::BankFile:
+            AppendRemovedChildren(static_cast<BankFile*>(item)->getInstrumentList(), out);
+            break;
+
+        case Item::ItemType::BankFileInstrument:
+            AppendRemovedChildren(static_cast<BankFile::Instrument*>(item)->getKeyRegionList(), out);
+            break;
+
+        case Item::ItemType::BankFileKeyRegion:
+            AppendRemovedChildren(static_cast<BankFile::KeyRegion*>(item)->getVelocityRegionList(), out);
+            break;
+
+        default:
+            break;
+    }
+}
+
+void ForgetRemovedItems(const std::vector<Item*>& removedItems)
+{
+    if (removedItems.empty())
+        return;
+
+    std::vector<Item*> removed;
+
+    for (Item* item : removedItems)
+        AppendRemovedItem(item, &removed);
+
+    std::sort(removed.begin(), removed.end());
 
     auto isRemoved = [&removed](Item* item)
     {
-        return item && std::find(removed.begin(), removed.end(), item) != removed.end();
+        return item && std::binary_search(removed.begin(), removed.end(), item);
     };
 
     for (SelectionState& selection : ActiveDocumentState().selections)
@@ -174,6 +221,7 @@ void ForgetRemovedItems(const std::vector<Item*>& removed)
         ScrollItemListTo(nullptr);
 
     ForgetItemListRequests(removed);
+    ForgetReferenceEntries();
 
     for (Item* item : removed)
     {
@@ -261,6 +309,8 @@ void SelectItem(Item* item)
     selection.selectedItem = item;
     selection.subSelectedItem = nullptr;
     selection.selectedItemIsSubWindow = false;
+    selection.multiSelectedItems.clear();
+    selection.multiSelectAnchor = item;
 
     SetUITab(tab);
 

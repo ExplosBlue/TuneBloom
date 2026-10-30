@@ -4,6 +4,7 @@
 #include <aal/Bwav.h>
 #include <core/ByteBuilder.h>
 #include <core/ByteView.h>
+#include <core/NwFile.h>
 #include <ui/Messages.h>
 
 #include <codec/seadHashCRC32.h>
@@ -24,9 +25,6 @@ static constexpr u32 cOffsetPairSize      = 0x08;
 static constexpr u32 cAssetAlignment      = 0x40;
 static constexpr u32 cNoOffset            = 0xFFFFFFFF;
 static constexpr u16 cByteOrderMark       = 0xFEFF;
-static constexpr u32 cNwHeaderByteOrder   = 0x04;
-static constexpr u32 cNwHeaderFileSize    = 0x0C;
-static constexpr u32 cNwHeaderSize        = 0x14;
 
 static constexpr char cBarsMagic[] = "BARS";
 static constexpr char cFwavMagic[] = "FWAV";
@@ -45,12 +43,12 @@ static bool HasMagic(const void* data, u64 size, const char* magic)
 
 static u64 MeasureNwFile(const void* data, u64 size)
 {
-    if (size < cNwHeaderSize || !ByteView::IsByteOrderMark(data, size, cNwHeaderByteOrder))
+    if (size < nwfile::cHeaderSize || !ByteView::IsByteOrderMark(data, size, nwfile::cHeaderByteOrder))
         return size;
 
-    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, cNwHeaderByteOrder));
+    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, nwfile::cHeaderByteOrder));
 
-    return std::min<u64>(view.readU32(cNwHeaderFileSize), size);
+    return std::min<u64>(view.readU32(nwfile::cHeaderFileSize), size);
 }
 
 static u64 MeasureBarsAsset(const void* data, u64 size)
@@ -192,7 +190,8 @@ bool ReadBars(const void* data, u64 size, BarsFile* out, const char** outError)
     if (bars.version == cBarsVersion12 && !ReadResetTable(view, count, &resetTable))
         return false;
 
-    u64 end = cHeaderSize;
+    const u64 resetTableSize = bars.version == cBarsVersion12 ? sizeof(u32) + resetTable.size() * sizeof(u32) : 0;
+    u64 end = cHeaderSize + static_cast<u64>(count) * (sizeof(u32) + cOffsetPairSize) + resetTableSize;
 
     std::vector<u32> assetOffsets;
     if (!ReadAssets(view, offsets, &bars, &assetOffsets, &end, outError))
@@ -218,8 +217,6 @@ bool ReadBars(const void* data, u64 size, BarsFile* out, const char** outError)
 
         if (offsets[i].asset != cNoOffset)
             entry.assetIndex = static_cast<s32>(std::lower_bound(assetOffsets.begin(), assetOffsets.end(), offsets[i].asset) - assetOffsets.begin());
-
-        entry.isInResetTable = std::find(resetTable.begin(), resetTable.end(), HashBarsName(name)) != resetTable.end();
     }
 
     bars.trailing.assign(view.at(end), view.at(size));
@@ -270,7 +267,7 @@ bool WriteBars(const BarsFile& bars, std::vector<u8>* out, const char** outError
     {
         for (u32 index : order)
         {
-            if (bars.entries[index].isInResetTable)
+            if (IsAmtaLoop(bars.entries[index].meta))
                 resetTable.push_back(hashes[index]);
         }
     }

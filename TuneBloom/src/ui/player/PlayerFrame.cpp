@@ -329,6 +329,12 @@ void NotifyPlayerFrameOpen(const openqueue::Request& request, Document* previous
         RequestCloseDocument(previous);
 }
 
+void ForgetPlayerFrameDocument(const Document* document)
+{
+    if (sAutoplayDocument == document)
+        sAutoplayDocument = nullptr;
+}
+
 void RequestFullEditor()
 {
     if (sIsShown)

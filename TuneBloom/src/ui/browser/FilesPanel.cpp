@@ -8,7 +8,6 @@
 #include <ui/file/FileFlow.h>
 #include <ui/browser/FilesPanelInternal.h>
 #include <ui/items/ItemColumns.h>
-#include <ui/widgets/ListFilter.h>
 #include <ui/widgets/RowSelection.h>
 #include <ui/Messages.h>
 #include <ui/items/Selection.h>
@@ -20,6 +19,7 @@
 #include <imgui/imgui_internal.h>
 
 #include <algorithm>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -37,9 +37,10 @@ struct KindFilterInfo
 
 static const KindFilterInfo cKindFilters[cKindFilterCount] = {
     { messages::common::cArchives,     { BrowserFileKind::SoundArchive,  BrowserFileKind::SoundArchive },   1 },
-    { messages::files::cKindResources, { BrowserFileKind::AudioResource, BrowserFileKind::AudioResource },  1 },
+    { messages::files::cKindResources, { BrowserFileKind::AudioResource, BrowserFileKind::ResourceList },   2 },
     { messages::common::cWaves,        { BrowserFileKind::Wave,          BrowserFileKind::Wave },           1 },
     { messages::common::cStreams,      { BrowserFileKind::Stream,        BrowserFileKind::StreamPrefetch }, 2 },
+    { messages::common::cWav,          { BrowserFileKind::Wav,           BrowserFileKind::Wav },            1 },
 };
 
 KindFilter FilesPanel::getKindFilter(BrowserFileKind kind)
@@ -66,8 +67,14 @@ const char* GetFileKindIcon(BrowserFileKind kind)
         case BrowserFileKind::AudioResource:
             return ICON_LC_FILE_ARCHIVE;
 
+        case BrowserFileKind::ResourceList:
+            return ICON_LC_LIST_MUSIC;
+
         case BrowserFileKind::Wave:
             return ICON_LC_FILE_AUDIO;
+
+        case BrowserFileKind::Wav:
+            return ICON_LC_AUDIO_WAVEFORM;
 
         default:
             break;
@@ -83,7 +90,12 @@ ImVec4 GetFileKindColor(BrowserFileKind kind)
 
 bool FilesPanel::isPreviewable(const FileProbe& probe)
 {
-    return probe.kind == BrowserFileKind::Wave || probe.kind == BrowserFileKind::Stream;
+    return probe.kind == BrowserFileKind::Wave || probe.kind == BrowserFileKind::Stream || probe.kind == BrowserFileKind::Wav;
+}
+
+bool FilesPanel::isOpenable(const FileProbe& probe)
+{
+    return probe.kind != BrowserFileKind::Wav;
 }
 
 static void SelectOpenedSound(const std::string& name)
@@ -110,7 +122,7 @@ static std::mutex sRequestedRootMutex;
 struct RootRequest
 {
     std::string path;
-    bool isPinned = false;
+    bool isAnnounced = false;
 };
 
 struct DropTarget
@@ -194,6 +206,16 @@ void FilesPanel::drawKindMenu()
         saveConfig();
     }
 
+    if (!mSections.empty())
+    {
+        const bool isAnyOpen = std::any_of(mSections.begin(), mSections.end(), [](const FilesSection& section) { return !section.isFolded; });
+
+        ContextMenuSeparator();
+
+        if (ContextMenuItem(isAnyOpen ? ICON_LC_CHEVRONS_DOWN_UP : ICON_LC_CHEVRONS_UP_DOWN, isAnyOpen ? messages::files::cFoldAll : messages::files::cUnfoldAll))
+            foldAllSections(isAnyOpen);
+    }
+
     EndContextMenu();
 }
 
@@ -208,17 +230,25 @@ bool FilesPanel::isAnyKindHidden() const
     return false;
 }
 
+static f32 CalcFooterHeight(bool hasRoots)
+{
+    return hasRoots ? ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y : 0.0f;
+}
+
 void FilesPanel::drawEmptyState(const char* text)
 {
     const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const f32 areaHeight = avail.y - CalcFooterHeight(!mRoots.empty());
+    const f32 areaEndY = ImGui::GetCursorPosY() + areaHeight + ImGui::GetStyle().ItemSpacing.y;
 
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + sead::Mathf::max(ImFloor((avail.y - ImGui::GetFontSize()) * 0.5f), 0.0f));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + sead::Mathf::max(ImFloor((areaHeight - ImGui::GetFontSize()) * 0.5f), 0.0f));
     CenteredTextWrapped(text, avail.x);
+    ImGui::SetCursorPosY(sead::Mathf::max(areaEndY, ImGui::GetCursorPosY()));
 }
 
 void FilesPanel::drawTable(FrameContext& ctx)
 {
-    const f32 footerHeight = mRoots.empty() ? 0.0f : ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    const f32 footerHeight = CalcFooterHeight(!mRoots.empty());
     const ImGuiTableFlags flags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings;
 
     ctx.tableWidth = sead::Mathf::max(ImGui::GetContentRegionAvail().x, 1.0f);
@@ -274,12 +304,17 @@ void FilesPanel::drawTable(FrameContext& ctx)
 
     mScrollToSelected = false;
 
+    drawDropLine(ctx);
+    drawAreaMenu();
+
     ImGui::EndTable();
     ImGui::PopStyleVar();
 }
 
 void FilesPanel::drawRow(FrameContext& ctx, const FilesRow& row)
 {
+    recordDropRow(ctx, row);
+
     switch (row.kind)
     {
         case FilesRowKind::Root:
@@ -306,8 +341,8 @@ void FilesPanel::drawRow(FrameContext& ctx, const FilesRow& row)
             drawStatusRow(ctx, row);
             break;
 
-        case FilesRowKind::Group:
-            drawGroupRow(row);
+        case FilesRowKind::Section:
+            drawSectionRow(ctx, row);
             break;
 
         case FilesRowKind::AddFolder:
@@ -376,7 +411,7 @@ bool FilesPanel::drawSelectionSummary()
 
 static bool IsSelectableRow(const FilesRow& row)
 {
-    return row.kind != FilesRowKind::Status && row.kind != FilesRowKind::Group && row.kind != FilesRowKind::AddFolder;
+    return row.kind != FilesRowKind::Status && row.kind != FilesRowKind::AddFolder;
 }
 
 static s32 SkipInertRows(const std::vector<FilesRow>& rows, s32 index, s32 step)
@@ -418,6 +453,15 @@ void FilesPanel::handleKeys(FrameContext& ctx)
         next = current - 1;
         step = -1;
     }
+    else if (shortcuts::Pressed(shortcuts::Action::SelectPageDown))
+    {
+        next = current + cRowSelectionPageStep;
+    }
+    else if (shortcuts::Pressed(shortcuts::Action::SelectPageUp))
+    {
+        next = current - cRowSelectionPageStep;
+        step = -1;
+    }
     else if (shortcuts::Pressed(shortcuts::Action::SelectFirst))
     {
         next = 0;
@@ -438,13 +482,22 @@ void FilesPanel::handleKeys(FrameContext& ctx)
     }
 
     if (next != current)
-        next = SkipInertRows(ctx.rows, std::clamp(next, 0, static_cast<s32>(ctx.rows.size()) - 1), step);
+    {
+        const s32 target = std::clamp(next, 0, static_cast<s32>(ctx.rows.size()) - 1);
+        next = SkipInertRows(ctx.rows, target, step);
+
+        if (next < 0)
+            next = SkipInertRows(ctx.rows, target, -step);
+    }
 
     if (next >= 0 && next != current)
     {
-        select(ctx, ctx.rows[next]);
+        select(ctx.rows[next]);
         mScrollToSelected = true;
     }
+
+    if (current >= 0 && shortcuts::Pressed(shortcuts::Action::ScrollToSelection))
+        mScrollToSelected = true;
 
     if (shortcuts::Pressed(shortcuts::Action::SelectAll))
         selectAll(ctx);
@@ -453,11 +506,50 @@ void FilesPanel::handleKeys(FrameContext& ctx)
         clearMultiSelection();
 
     if (current >= 0 && shortcuts::Pressed(shortcuts::Action::ConfirmSelection))
+        confirmSelection(ctx);
+
+    if (current < 0 || mSelectedSorted.size() > 1)
+        return;
+
+    const FilesRow& row = ctx.rows[current];
+    const bool isSection = row.kind == FilesRowKind::Section;
+
+    if (shortcuts::Pressed(shortcuts::Action::DeleteSelection))
+    {
+        if (isSection)
+            requestAction(RootAction::RemoveSection, -1, std::string(), mSections[row.index].id);
+        else if (row.kind == FilesRowKind::Root)
+            requestAction(RootAction::Remove, row.root);
+    }
+
+    if (isSection && shortcuts::Pressed(shortcuts::Action::RenameSelection))
+        mRenameRequest = mSections[row.index].id;
+}
+
+void FilesPanel::confirmSelection(const FrameContext& ctx)
+{
+    const BrowserFile* file = getRowFile(mSelected);
+
+    if (file && mSelectedSorted.size() >= 2 && isPathSelected(file->path))
+        openSelectedFiles();
+    else
         confirmRow(ctx, mSelected);
+}
+
+void FilesPanel::openSelectedFiles()
+{
+    for (const BrowserFile* file : collectSelectedFiles())
+    {
+        if (isOpenable(file->probe))
+            openFile(*file);
+    }
 }
 
 bool FilesPanel::isExpandable(const FilesRow& row) const
 {
+    if (row.kind == FilesRowKind::Section)
+        return !isSearching();
+
     if (isSearching())
         return row.childCount > 0;
 
@@ -478,25 +570,13 @@ const BrowserFile* FilesPanel::getRowFile(const FilesRow& row) const
     return row.kind == FilesRowKind::Root ? getRootFile(row.root) : nullptr;
 }
 
-bool FilesPanel::isSearching() const
-{
-    return mSearch[0] != '\0';
-}
-
-const std::string& FilesPanel::getSearchKey(const FilesRow& row) const
-{
-    return row.kind == FilesRowKind::Root ? mRoots[row.root].path : getFile(row).path;
-}
-
-bool FilesPanel::isSearchClosed(const std::string& key) const
-{
-    return std::find(mSearchClosed.begin(), mSearchClosed.end(), key) != mSearchClosed.end();
-}
-
 bool FilesPanel::isRowOpen(const FilesRow& row) const
 {
+    if (row.kind == FilesRowKind::Section)
+        return isSearching() || !mSections[row.index].isFolded;
+
     if (isSearching())
-        return isExpandable(row) && !isSearchClosed(getSearchKey(row));
+        return isSearchRowOpen(row);
 
     if (row.kind == FilesRowKind::Root)
         return mRoots[row.root].isOpen && isExpandable(row);
@@ -515,15 +595,17 @@ void FilesPanel::setRowOpen(const FilesRow& row, bool isOpen)
 {
     invalidateRows();
 
+    if (row.kind == FilesRowKind::Section)
+    {
+        if (!isSearching())
+            setSectionFolded(mSections[row.index].id, !isOpen);
+
+        return;
+    }
+
     if (isSearching())
     {
-        const std::string& key = getSearchKey(row);
-
-        std::erase(mSearchClosed, key);
-
-        if (!isOpen)
-            mSearchClosed.push_back(key);
-
+        setSearchRowOpen(row, isOpen);
         return;
     }
 
@@ -602,6 +684,7 @@ void FilesPanel::confirmRow(const FrameContext& ctx, const FilesRow& row)
 
     switch (row.kind)
     {
+        case FilesRowKind::Section:
         case FilesRowKind::Root:
         case FilesRowKind::Folder:
         case FilesRowKind::Prefix:
@@ -618,7 +701,7 @@ void FilesPanel::confirmRow(const FrameContext& ctx, const FilesRow& row)
     }
 }
 
-void FilesPanel::select(const FrameContext& ctx, const FilesRow& row)
+void FilesPanel::select(const FilesRow& row, bool reportsReadFailure)
 {
     const BrowserFile* file = getRowFile(row);
 
@@ -630,7 +713,7 @@ void FilesPanel::select(const FrameContext& ctx, const FilesRow& row)
         return;
 
     if (file)
-        previewFile(*file);
+        previewFile(*file, reportsReadFailure);
     else
         mPreview.stop();
 }
@@ -752,22 +835,26 @@ void FilesPanel::setAutoPlay(bool isOn)
         mPreview.stop();
 }
 
-void FilesPanel::previewFile(const BrowserFile& file)
+void FilesPanel::previewFile(const BrowserFile& file, bool reportsReadFailure)
 {
     if (isPreviewable(file.probe))
-        mPreview.play(file.path, file.stem);
+        mPreview.play(file.path, file.stem, reportsReadFailure);
     else
         mPreview.stop();
 }
 
 void FilesPanel::openFile(const BrowserFile& file)
 {
-    RequestOpenFile(file.path.c_str(), openqueue::Origin::Browser);
+    if (isOpenable(file.probe))
+        RequestOpenFile(file.path.c_str(), openqueue::Origin::Browser);
+    else
+        previewFile(file);
 }
 
 void FilesPanel::showFile(const BrowserFile& file)
 {
-    RequestPreviewFile(file.path.c_str());
+    if (isOpenable(file.probe))
+        RequestPreviewFile(file.path.c_str());
 }
 
 void FilesPanel::openSound(const FrameContext& ctx, const BrowserFile& file, const ArchiveSound& sound)
@@ -827,6 +914,7 @@ void FilesPanel::draw()
 {
     applyUndo();
     applyPendingAction();
+    applyPendingDrop();
     updateScans();
     mPreview.update();
 
@@ -837,24 +925,21 @@ void FilesPanel::draw()
     ctx.chevronWidth = ImGui::CalcTextSize(ICON_LC_CHEVRON_RIGHT).x + ImFloor(ctx.em * cIconGapEm * 0.5f);
 
     collectOpenFiles(ctx);
+    beginDrop(ctx);
 
     selectPendingSound(ctx);
 
-    if (mRoots.empty())
+    if (mRoots.empty() && mSections.empty())
     {
         updateRows(ctx);
         drawTable(ctx);
+        drawDropTarget(ctx);
         return;
     }
 
-    bool menuPressed = false;
+    const bool menuPressed = drawSearchField();
 
-    SearchFieldExtra searchExtra;
-    searchExtra.hint = messages::files::cSearchHint;
-    searchExtra.menuPressed = &menuPressed;
-    searchExtra.menuActive = isAnyKindHidden();
-
-    SearchField("##FilesSearch", mSearch, sizeof(mSearch), 0.0f, nullptr, false, &searchExtra);
+    drawAddButton();
 
     if (menuPressed)
         ImGui::OpenPopup(cKindMenuId);
@@ -870,6 +955,7 @@ void FilesPanel::draw()
         drawTable(ctx);
 
     drawFooter(ctx);
+    drawDropTarget(ctx);
 }
 
 void LoadFilesPanelConfig()
@@ -877,11 +963,11 @@ void LoadFilesPanelConfig()
     sFilesPanel.loadConfig();
 }
 
-void RequestFilesPanelRoot(const char* path, bool isPinned)
+void RequestFilesPanelRoot(const char* path, bool isAnnounced)
 {
     const std::lock_guard<std::mutex> lock(sRequestedRootMutex);
 
-    sRequestedRoots.push_back({ path, isPinned });
+    sRequestedRoots.push_back({ path, isAnnounced });
 }
 
 bool IsFilesPanelDropTarget(f32 x, f32 y)
@@ -891,7 +977,7 @@ bool IsFilesPanelDropTarget(f32 x, f32 y)
     return sDropTarget.frame >= ImGui::GetFrameCount() - 1 && x >= sDropTarget.min.x && y >= sDropTarget.min.y && x < sDropTarget.max.x && y < sDropTarget.max.y;
 }
 
-void UndoFilesPanelUnpin(u32 token)
+void UndoFilesPanelRemove(u32 token)
 {
     sFilesPanel.requestUndo(token);
 }
@@ -905,19 +991,19 @@ bool TakeFilesPanelRequests()
 {
     bool isShown = false;
 
-    std::vector<std::string> pinPaths;
+    std::vector<std::string> announcedPaths;
 
     for (const RootRequest& request : TakeRequestedRoots())
     {
-        if (request.isPinned)
-            pinPaths.push_back(request.path);
+        if (request.isAnnounced)
+            announcedPaths.push_back(request.path);
         else
             sFilesPanel.addPath(request.path);
 
         isShown = true;
     }
 
-    sFilesPanel.pinPaths(pinPaths);
+    sFilesPanel.addPaths(announcedPaths);
 
     if (sIsFolderDialogRequested)
     {

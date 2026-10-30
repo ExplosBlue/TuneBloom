@@ -86,21 +86,17 @@ void Bfsar::writeStreamTrackInfoTable_(BfsarSaveContext& ctx, const Sound::Strea
                 }
 
                 ctx.writer.closeReference("GlobalChannelIndexTable", nw::snd::internal::ElementType_Table_EmbeddingTable);
-                ctx.stream.writeU32(track.getChannelCount(strmInfo.getStreamType()));
+                const bool writesWaveChannels = strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary && track.getWaveFileRef().isAttached();
+                const u32 channelCount = writesWaveChannels ? track.getChannelCount() : track.getChannels_().size();
 
-                if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary && track.getWaveFileRef().isAttached())
+                ctx.stream.writeU32(channelCount);
+
+                for (u32 j = 0; j < channelCount; j++)
                 {
-                    for (u32 j = 0; j < track.getChannelCount(); j++)
-                    {
+                    if (writesWaveChannels)
                         ctx.stream.writeU8(channelIdxStart + j);
-                    }
-                }
-                else
-                {
-                    for (u32 j = 0; j < track.getChannelCount(strmInfo.getStreamType()); j++)
-                    {
+                    else
                         ctx.stream.writeU8(*track.getChannels_().nth(j));
-                    }
                 }
 
                 ctx.writer.align(0x4);
@@ -776,16 +772,19 @@ static std::vector<u32> GetPrefetchFileGroupIds(const BfsarSaveContext& ctx, con
 {
     std::vector<u32> groupIds;
 
-    const auto sound = ctx.filesItems.find(file.id);
-    SEAD_ASSERT(sound != ctx.filesItems.end());
+    const auto sounds = ctx.filesItems.find(file.id);
+    SEAD_ASSERT(sounds != ctx.filesItems.end());
 
-    const auto groups = ctx.itemAttachedGroups.find(sound->second.front());
+    for (const Item* sound : sounds->second)
+    {
+        const auto groups = ctx.itemAttachedGroups.find(sound);
 
-    if (groups == ctx.itemAttachedGroups.end())
-        return groupIds;
+        if (groups == ctx.itemAttachedGroups.end())
+            continue;
 
-    for (const Group* group : groups->second)
-        groupIds.push_back(nw::snd::internal::Util::GetMaskedItemId(group->getId(), nw::snd::internal::ItemType_Group));
+        for (const Group* group : groups->second)
+            groupIds.push_back(nw::snd::internal::Util::GetMaskedItemId(group->getId(), nw::snd::internal::ItemType_Group));
+    }
 
     return groupIds;
 }

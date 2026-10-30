@@ -78,7 +78,7 @@ static bool DrawLoopField(const char* label, const char* id, f32 labelWidth, f32
     SplitSampleTime(*frame, sampleRate, &minutes, &seconds);
     KnobTooltip(messages::wavefile::cTimeFormat, minutes, seconds);
 
-    *outCommit = ImGui::IsItemDeactivatedAfterEdit() || (changed && !ImGui::IsItemActive());
+    *outCommit = IsItemEditCommitted(changed);
 
     return changed;
 }

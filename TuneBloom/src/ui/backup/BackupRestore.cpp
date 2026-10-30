@@ -72,28 +72,13 @@ static bool ReadSnapshotFile(const std::string& path, Document::File* outFile)
 
 static bool CheckSnapshotFile(const Document::File& file, bool untitled)
 {
-    const char* error = nullptr;
-
-    if (!Document::Check(file, &error))
-    {
-        if (error)
-            PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
-
-        return false;
-    }
-
     if (untitled && file.kind != Document::Kind::SoundArchive)
     {
         PopupMgr::instance()->addPopup({messages::backup::cRestoreReadFailed, nullptr});
         return false;
     }
 
-    sead::Endian::Types endian = sead::Endian::eBig;
-
-    if (Document::PeekEndian(file, &endian))
-        PrepareParseEndian(endian);
-
-    return true;
+    return Document::CheckBeforeOpen(file, messages::backup::cRestoreReadFailed);
 }
 
 bool RestoreSnapshot(const Snapshot& snapshot)

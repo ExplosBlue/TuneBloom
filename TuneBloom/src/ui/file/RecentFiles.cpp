@@ -1,10 +1,12 @@
 #include <ui/file/RecentFiles.h>
 
+#include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
 
 #include <ui/settings/Config.h>
 #include <ui/settings/ConfigFile.h>
 #include <ui/widgets/ContextMenu.h>
+#include <ui/file/FileDrag.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/app/MenuBar.h>
 #include <ui/Messages.h>
@@ -123,23 +125,6 @@ static void RemovePath(std::vector<std::string>* files, const std::string& path)
     files->erase(std::remove_if(files->begin(), files->end(), [&path](const std::string& file) { return IsSamePath(file, path); }), files->end());
 }
 
-static std::string NormalizePath(const char* path)
-{
-    if (path[0] == '\0')
-        return std::string();
-
-    std::error_code ec;
-    const std::filesystem::path absolute = std::filesystem::absolute(std::filesystem::path(path), ec);
-
-    std::string normalized = ec ? std::string(path) : absolute.lexically_normal().string();
-
-#if defined(SEAD_PLATFORM_WINDOWS)
-    std::replace(normalized.begin(), normalized.end(), '/', '\\');
-#endif
-
-    return normalized;
-}
-
 static bool IsFileMissing(const std::string& path)
 {
     return !packfile::IsOnDisk(path);
@@ -167,7 +152,7 @@ static void ReadPathList(const json::Value& section, const char* key, std::vecto
         if (!item.isString())
             continue;
 
-        const std::string file = NormalizePath(item.string.c_str());
+        const std::string file = fileio::NormalizePath(item.string.c_str());
 
         if (!file.empty() && !ContainsPath(*files, file))
             files->push_back(file);
@@ -252,7 +237,7 @@ void AddRecentFile(const char* path)
     if (testhooks::IsEnabled())
         return;
 
-    const std::string file = NormalizePath(path);
+    const std::string file = fileio::NormalizePath(path);
 
     if (file.empty())
         return;
@@ -471,9 +456,32 @@ static void DrawRecentFileName(const std::string& path, const ImVec2& pos, f32 r
     ImGui::RenderTextEllipsis(drawList, ImVec2(nameLeft, pos.y), ImVec2(right, pos.y + ImGui::GetFontSize()), right, right, pathtext::FileName(path.c_str()), nullptr, nullptr);
 }
 
+static void DrawRecentDragSource(const std::string& path)
+{
+    FileDragSource([&path]()
+    {
+        FileDrag drag;
+        drag.paths.push_back(path);
+        drag.name = pathtext::FileName(path.c_str());
+        drag.icon = ICON_LC_FILE_MUSIC;
+        drag.iconColor = ImGui::GetColorU32(GetItemValueColor());
+        drag.origin = FileDragOrigin::Recent;
+
+        return drag;
+    });
+}
+
 static void SetRecentFileTooltip(const std::string& path)
 {
-    ImGui::SetTooltip("%s", path.c_str());
+    if (!ImGui::BeginTooltip())
+        return;
+
+    const char* name = pathtext::FileName(path.c_str());
+
+    ImGui::TextUnformatted(name);
+    pathtext::DrawTooltipFolder(path, ImGui::CalcTextSize(name).x);
+
+    ImGui::EndTooltip();
 }
 
 static void SetRecentDateTooltip(const RecentFileInfo& info)
@@ -499,7 +507,7 @@ static RecentAction DrawRecentRowMenu(const std::string& path)
 
     ContextMenuSeparator();
 
-    if (ContextMenuItem(ICON_LC_X, messages::recent::cRemove))
+    if (ContextMenuItem(ICON_LC_X, messages::common::cRemoveFromList))
         action = RecentAction::Remove;
 
     EndContextMenu();
@@ -558,7 +566,7 @@ static RecentAction DrawRecentRow(const std::string& path, f32 width, f32 nameWi
 
     // Buttons
     ImGui::SetCursorScreenPos(ImVec2(buttonLeft, min.y));
-    if (DrawRowHoverButton("##remove", ICON_LC_X, false, rowHovered, messages::recent::cRemove, ImVec2(buttonSize, buttonSize), buttonSize))
+    if (DrawRowHoverButton("##remove", ICON_LC_X, rowHovered, messages::common::cRemoveFromList, ImVec2(buttonSize, buttonSize), buttonSize))
         action = RecentAction::Remove;
 
     const RecentAction menuAction = DrawRecentRowMenu(path);
@@ -724,7 +732,9 @@ static void DrawRecentTableEmpty()
     const ImVec2 boxMin = ImGui::GetCursorScreenPos();
     const f32 gap = ImFloor(em * cRecentEmptyGapEm);
 
-    ImGui::GetWindowDrawList()->AddRect(boxMin, boxMin + avail + ImVec2(1.0f, 0.0f), ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(boxMin, boxMin + avail, ImGui::GetColorU32(ImGuiCol_ChildBg));
+    drawList->AddRect(boxMin, boxMin + avail + ImVec2(1.0f, 0.0f), ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
     ImGui::SetCursorPosY(start.y + ImFloor((avail.y - em * 2.0f - gap) * 0.5f));
 
     CenteredTextWrapped(messages::recent::cEmpty, avail.x);
@@ -753,6 +763,8 @@ static RecentAction DrawRecentTableRow(const std::string& path)
     bool selectableHovered = false;
     const bool pressed = DrawTableRowSelectable("##row", false, &selectableHovered);
     const bool detailHovered = IsItemHoveredForDetail();
+
+    DrawRecentDragSource(path);
 
     ImGui::OpenPopupOnItemClick("##menu", ImGuiPopupFlags_MouseButtonRight);
 
@@ -785,6 +797,32 @@ static RecentAction DrawRecentTableRow(const std::string& path)
     ImGui::PopID();
 
     return action;
+}
+
+static const char* GetRecentDateGroup(const RecentFileInfo& info)
+{
+    if (info.time == 0)
+        return messages::recent::cGroupOlder;
+
+    const s32 days = timeutil::CalcDaysAgo(info.time);
+
+    if (days <= 0)
+        return messages::recent::cGroupToday;
+
+    if (days < 7)
+        return messages::recent::cGroupWeek;
+
+    if (days < 30)
+        return messages::recent::cGroupMonth;
+
+    return messages::recent::cGroupOlder;
+}
+
+static void DrawRecentGroupRow(const char* title)
+{
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(static_cast<s32>(RecentColumn::Name));
+    DrawTableGroupRow(title);
 }
 
 static RecentSort GetRecentTableSort(const ImGuiTableSortSpecs* specs, bool* outDescending)
@@ -875,16 +913,12 @@ static bool BeginRecentTable(ItemColumn* columns, std::string* samples, f32* wid
     const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_SizingFixedFit |
                                   ImGuiTableFlags_ScrollY | ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate;
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, uicolors::cTransparentU32);
-    const bool open = ImGui::BeginTable("##RecentFiles", static_cast<s32>(RecentColumn::Num), flags);
-    ImGui::PopStyleColor();
-
-    if (!open)
+    if (!ImGui::BeginTable("##RecentFiles", static_cast<s32>(RecentColumn::Num), flags))
         return false;
 
     ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide, 0.0f, static_cast<ImGuiID>(ItemColumnId::Name));
     ImGui::TableSetupColumn(columns[0].title, columnFlags(0, ImGuiTableColumnFlags_WidthFixed), widths[0]);
-    ImGui::TableSetupColumn(columns[1].title, columnFlags(1, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending), widths[1]);
+    ImGui::TableSetupColumn(columns[1].title, columnFlags(1, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending | ImGuiTableColumnFlags_DefaultSort), widths[1]);
     ImGui::TableSetupColumn(columns[2].title, columnFlags(2, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_PreferSortDescending), widths[2]);
     ImGui::TableSetupScrollFreeze(0, 1);
 
@@ -936,9 +970,20 @@ bool DrawRecentFilesTable(std::string* outPath)
 
     RecentAction action = RecentAction::None;
     std::string actionPath;
+    const char* group = nullptr;
 
     for (const std::string* path : rows)
     {
+        if (sort == RecentSort::Modified)
+        {
+            const char* rowGroup = GetRecentDateGroup(GetRecentFileInfo(*path));
+
+            if (rowGroup != group)
+                DrawRecentGroupRow(rowGroup);
+
+            group = rowGroup;
+        }
+
         const RecentAction rowAction = DrawRecentTableRow(*path);
 
         if (rowAction == RecentAction::None)

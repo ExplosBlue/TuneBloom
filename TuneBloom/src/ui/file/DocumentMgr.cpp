@@ -400,6 +400,7 @@ static void RemoveDocument(Document* document)
 
     PopupMgr::instance()->forgetAllItems();
     ForgetDocumentRequests(document);
+    ForgetPlayerFrameDocument(document);
     ReleasePlayback(*document);
 
     if (document->isLoaded())

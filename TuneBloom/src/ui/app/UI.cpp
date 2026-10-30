@@ -8,6 +8,7 @@
 #include <ui/file/DocumentTabs.h>
 #include <ui/export/Export.h>
 #include <ui/file/File.h>
+#include <ui/file/FileDrag.h>
 #include <ui/file/FileFlow.h>
 #include <ui/project/FileLists.h>
 #include <ui/file/FileWindow.h>
@@ -26,6 +27,8 @@
 #include <ui/project/ProjectViews.h>
 #include <ui/project/Sidebar.h>
 #include <ui/project/References.h>
+#include <aal/BarsListFile.h>
+#include <ui/resource/BarsListViews.h>
 #include <ui/resource/ResourceViews.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
@@ -523,6 +526,10 @@ static void DrawSelectedItemPropertiesUI()
             DrawAudioAssetPropertiesUI(static_cast<AudioAsset*>(sSelectedItem));
             break;
 
+        case Item::ItemType::BarsListEntry:
+            DrawBarsListEntryPropertiesUI(static_cast<BarsListEntry*>(sSelectedItem));
+            break;
+
         default:
             break;
     }
@@ -556,6 +563,13 @@ static void DrawSelectedItemReferencesUI()
 
 static void DrawPropertiesUI()
 {
+    if (!ActiveDocument())
+    {
+        ReleaseWaveFileView();
+        ReleaseAudioAssetView();
+        return;
+    }
+
     static bool sStart = true;
     if (sStart)
     {
@@ -628,6 +642,7 @@ void DrawUI()
         DrawOutputMeterWindow();
 
     DrawAppDialogs();
+    UpdateFileDropElsewhere();
 }
 
 void DrawAppDialogs()

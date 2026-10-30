@@ -150,17 +150,9 @@ static std::string FormatTimeName(std::time_t time)
     return text;
 }
 
-static std::string NormalizePath(const char* path)
-{
-    std::error_code ec;
-    const fs::path absolute = fs::absolute(path, ec);
-
-    return ec ? std::string(path) : absolute.lexically_normal().string();
-}
-
 static std::string GetArchivePath()
 {
-    return GetDocumentPath().isEmpty() ? std::string() : NormalizePath(GetDocumentPath().cstr());
+    return GetDocumentPath().isEmpty() ? std::string() : fileio::NormalizePath(GetDocumentPath().cstr());
 }
 
 static std::string GetKeyForPath(const std::string& archivePath)
@@ -1038,7 +1030,7 @@ void KeepPreviousVersion(const char* destPath)
     if (!sAutoBackupEnabled || !IsActive() || !document)
         return;
 
-    const std::string sourcePath = destPath ? NormalizePath(destPath) : GetArchivePath();
+    const std::string sourcePath = destPath ? fileio::NormalizePath(destPath) : GetArchivePath();
 
     if (sourcePath.empty())
         return;

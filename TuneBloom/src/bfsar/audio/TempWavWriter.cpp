@@ -1,6 +1,7 @@
 #include <bfsar/audio/TempWavWriter.h>
 
 #include <bfsar/audio/AudioProcessing.h>
+#include <bfsar/io/FileIo.h>
 
 #include <cstdio>
 
@@ -109,6 +110,24 @@ std::string write(const std::vector<std::vector<float>>& channels, u32 sampleRat
     fclose(f);
 
     return tempPath;
+}
+
+bool writeInfo(const std::vector<std::vector<float>>& channels, u32 sampleRate, const std::string& tempPath, WaveFile::RiffWaveInfo* out)
+{
+    const std::string written = write(channels, sampleRate, false, 0, 0, tempPath);
+
+    out->clear();
+
+    if (written.empty())
+        return false;
+
+    out->path.copy(written.c_str());
+
+    if (WaveFile::readRiffWavInfo(out))
+        return true;
+
+    fileio::RemoveFile(written.c_str());
+    return false;
 }
 
 }

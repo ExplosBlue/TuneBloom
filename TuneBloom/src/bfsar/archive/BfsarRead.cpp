@@ -7,6 +7,7 @@
 #include <bfsar/files/BfstpFile.h>
 #include <bfsar/files/BfwsdFile.h>
 #include <bfsar/files/OpusStream.h>
+#include <bfsar/io/PackFile.h>
 
 #include <ui/file/LoadProgress.h>
 #include <ui/Messages.h>
@@ -32,9 +33,8 @@ using nw::snd::internal::WaveSoundFile;
 namespace
 {
 
-constexpr u32 cPathBufferSize    = 512;
-constexpr u32 cNameBufferSize    = 256;
-constexpr u32 cTrimmedPaddingMax = 0x20;
+constexpr u32 cPathBufferSize = 512;
+constexpr u32 cNameBufferSize = 256;
 
 enum class StreamFileState
 {
@@ -50,7 +50,7 @@ static ByteRange RestoreTrimmedPadding(const u8* data, u32 size)
 {
     const u32 declaredSize = ReadDeclaredFileSize(data, size);
 
-    if (declaredSize <= size || declaredSize - size >= cTrimmedPaddingMax)
+    if (!IsTrimmedPadding(declaredSize, size))
         return ByteRange(data, size);
 
     u8* padded = new u8[declaredSize];
@@ -62,8 +62,24 @@ static ByteRange RestoreTrimmedPadding(const u8* data, u32 size)
     return ByteRange(padded, declaredSize);
 }
 
+static ByteRange LoadPackFileBytes(const sead::SafeString& path)
+{
+    std::vector<u8> bytes;
+
+    if (!packfile::ReadFile(path.cstr(), &bytes) || bytes.empty() || bytes.size() > UINT32_MAX)
+        return ByteRange();
+
+    u8* data = new u8[bytes.size()];
+    std::memcpy(data, bytes.data(), bytes.size());
+
+    return RestoreTrimmedPadding(data, static_cast<u32>(bytes.size()));
+}
+
 ByteRange LoadFileBytes(const sead::SafeString& path)
 {
+    if (packfile::IsPackPath(path.cstr()))
+        return LoadPackFileBytes(path);
+
     sead::FileDevice* device = sead::FileDeviceMgr::instance() ? sead::FileDeviceMgr::instance()->findDevice("native") : nullptr;
 
     if (!device || path.isEmpty())
@@ -629,6 +645,8 @@ void Bfsar::readStreamPrefetch_(BfsarOpenContext& ctx, Sound* sound, const Sound
     if (fileId == nw::snd::SoundArchive::INVALID_ID)
         return;
 
+    sound->mStreamSoundInfo.mPrefetchOrigFileId = fileId;
+
     const ByteRange file = fileId < ctx.soundArchive.detail_GetFileCount() ? FindArchiveFile(ctx, fileId) : ByteRange();
 
     if (!file.data() || !BfstpFile::CheckLayout(file.data(), file.size()))
@@ -674,6 +692,10 @@ void Bfsar::readStreamSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const Soun
     else if (fileState == StreamFileState::Complete)
     {
         isFileReadable = readStreamFileTracks_(ctx, sound, strmFile.bytes);
+    }
+    else if (fileState == StreamFileState::Opus)
+    {
+        stream.setOriginalOpusChannelBitrate(opusstream::ReadChannelBitrate(strmFile.bytes.data(), static_cast<u32>(strmFile.bytes.size())));
     }
 
     if (isStreamTrackInfoAvailable())
@@ -865,7 +887,10 @@ void Bfsar::readSoundInfo_(BfsarOpenContext& ctx, Sound* sound, const SoundArchi
 
     sound->mPlayerRef.attach(getItem(soundInfo.playerId, getPlayerList()));
 
-    if (!sound->mPlayerRef.isAttached())
+    if (!sound->mPlayerRef.isAttached() && Util::GetItemType(soundInfo.playerId) == nw::snd::internal::ItemType_Player)
+        sound->mUnresolvedPlayerId = Util::GetItemIndex(soundInfo.playerId);
+
+    if (!sound->mPlayerRef.isAttached() && !getPlayerList().isEmpty())
         PopupMgr::instance()->pushCurrentItemError(messages::archive::cInvalidPlayerReference);
 
     sound->mVolume = soundInfo.volume;

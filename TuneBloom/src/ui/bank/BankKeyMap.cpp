@@ -1,11 +1,13 @@
 #include <ui/bank/BankFileEditor.h>
 
 #include <ui/widgets/ContextMenu.h>
+#include <ui/file/FileDrag.h>
 #include <ui/Messages.h>
 #include <ui/bank/PianoRollPalette.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
+#include <ui/widgets/Widgets.h>
 #include <ui/widgets/ZoomScrollBar.h>
 
 #include <imgui/imgui_custom.h>
@@ -744,17 +746,7 @@ static void DrawVelocityRegionName(const KeyMapFrame& frame, BankFile::VelocityR
 
         if (ImGui::CalcTextSize(name).x > avail)
         {
-            const f32 ellW = ImGui::CalcTextSize("...").x;
-            s32 len = 0;
-            while (name[len] != '\0') len++;
-
-            s32 best = len;
-            for (s32 s = len; s >= 0; s--)
-            {
-                if (ellW + ImGui::CalcTextSize(name + s).x <= avail) best = s;
-                else break;
-            }
-            truncated.format("...%s", name + best);
+            truncated.format("...%s", FindTextTailStart(name, avail - ImGui::CalcTextSize("...").x));
             shown = truncated.cstr();
         }
 
@@ -768,6 +760,33 @@ static void DrawVelocityRegionName(const KeyMapFrame& frame, BankFile::VelocityR
         frame.draw->AddText(tp, nameColor, shown);
         frame.draw->PopClipRect();
     }
+}
+
+static void DrawRegionDropMark(KeyMapFrame& frame, const ImVec2& min, const ImVec2& max)
+{
+    frame.draw->AddRect(min, max, ImGui::ColorConvertFloat4ToU32(uicolors::Success()), 0.0f, 0, 2.5f);
+}
+
+static void DrawRegionWavDrop(KeyMapFrame& frame, BankFile::VelocityRegion* velRegion, const ImVec2& min, const ImVec2& max)
+{
+    const FileDrag* drag = GetFileDrag();
+    const std::string* path = drag ? FindDraggedWav(*drag) : nullptr;
+
+    if (!path || !ImGui::BeginDragDropTarget())
+        return;
+
+    bool isPreview = false;
+
+    if (AcceptFileDrop(messages::import::cWaveRegionDrop, ImGuiDragDropFlags_AcceptNoDrawDefaultRect, &isPreview))
+    {
+        sDroppedWavPath = path->c_str();
+        sWavDropTargetVel = velRegion;
+    }
+
+    if (isPreview)
+        DrawRegionDropMark(frame, min, max);
+
+    ImGui::EndDragDropTarget();
 }
 
 static void DrawVelocityRegion(KeyMapFrame& frame, const KeyRegionSpan& span, BankFile::VelocityRegion* velRegion)
@@ -786,11 +805,12 @@ static void DrawVelocityRegion(KeyMapFrame& frame, const KeyRegionSpan& span, Ba
     ImVec2 ip0 = ImVec2(p0.x, std::max(p0.y, frame.canvasPos.y));
     ImVec2 ip1 = ImVec2(p1.x, std::min(p1.y, frame.canvasPos.y + frame.regionHeight));
     ImGui::ItemAdd(ImRect(ip0, ip1), ImGui::GetID(velRegion));
+    DrawRegionWavDrop(frame, velRegion, ip0, ip1);
 
     if (!sDroppedWavPath.isEmpty() && !sWavDropTargetVel && frame.mouse.x >= ip0.x && frame.mouse.x <= ip1.x && frame.mouse.y >= ip0.y && frame.mouse.y <= ip1.y)
     {
         sWavDropTargetVel = velRegion;
-        frame.draw->AddRect(ip0, ip1, ImGui::ColorConvertFloat4ToU32(uicolors::Success()), 0.0f, 0, 2.5f);
+        DrawRegionDropMark(frame, ip0, ip1);
     }
 
     if (ImGui::IsItemHovered())

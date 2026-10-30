@@ -2,10 +2,13 @@
 
 #include <imgui/imgui.h>
 
+#include <algorithm>
+
 namespace pathtext
 {
 
-static constexpr const char* cLeadingCut = "...";
+static constexpr const char* cLeadingCut         = "...";
+static constexpr f32         cTooltipFolderMinEm = 22.0f;
 
 static bool IsSeparator(char c)
 {
@@ -28,13 +31,14 @@ const char* FileName(const char* path)
 std::string Folder(const std::string& path)
 {
     const char* name = FileName(path.c_str());
+
     if (name == path.c_str())
         return std::string();
 
     return std::string(path.c_str(), name - 1);
 }
 
-std::string FitToWidth(const std::string& path, float width)
+std::string FitToWidth(const std::string& path, f32 width)
 {
     if (ImGui::CalcTextSize(path.c_str()).x <= width)
         return path;
@@ -53,6 +57,18 @@ std::string FitToWidth(const std::string& path, float width)
     }
 
     return fitted.empty() ? path : fitted;
+}
+
+void DrawTooltipFolder(const std::string& path, f32 contentWidth)
+{
+    const std::string folder = Folder(path);
+
+    if (folder.empty())
+        return;
+
+    const f32 width = std::max(contentWidth, ImGui::GetFontSize() * cTooltipFolderMinEm);
+
+    ImGui::TextDisabled("%s", FitToWidth(folder, width).c_str());
 }
 
 }

@@ -6,6 +6,7 @@
 #include <bfsar/archive/BfsarLayoutCheck.h>
 #include <bfsar/archive/Cmpbin.h>
 #include <bfsar/io/FileIo.h>
+#include <bfsar/io/PackFile.h>
 #include <bfsar/archive/SaveReport.h>
 
 #include <ui/file/LoadProgress.h>
@@ -216,7 +217,7 @@ static bool ForceOverwriteFile_(const sead::SafeString &stagedPath, const sead::
     if (!fileio::ReadWholeFile(stagedPath.cstr(), &raw))
         return false;
 
-    if (fileio::WriteWholeFile(destPath.cstr(), raw.data(), raw.size()) != fileio::WriteResult::Ok)
+    if (fileio::WriteWholeFile(packfile::GetDiskPath(destPath.cstr()).c_str(), raw.data(), raw.size()) != fileio::WriteResult::Ok)
         return false;
 
     fileio::RemoveFile(stagedPath.cstr());
@@ -269,7 +270,7 @@ static bool HasPathExtension(const sead::SafeString &path, const char *extension
 
 static bool IsWrappedArchivePath(const sead::SafeString &path)
 {
-    return HasPathExtension(path, cCmpbinExtension) || HasPathExtension(path, cBeaExtension);
+    return HasPathExtension(path, cCmpbinExtension) || HasPathExtension(path, cBeaExtension) || packfile::IsPackPath(path.cstr());
 }
 
 static bool VerifyArchiveFile_(const sead::SafeString &path, const char *magic)
@@ -298,12 +299,19 @@ enum class WrapResult
     ReadFailed,
     CompressFailed,
     PackFailed,
+    SarcFailed,
     OpenFailed,
     WriteFailed
 };
 
 static WrapResult PackArchive(const std::vector<u8> &raw, const sead::SafeString &destPath, bool preferZstd, const bea::Source &beaSource, std::vector<u8> *out)
 {
+    std::string packPath;
+    std::string innerName;
+
+    if (packfile::Split(destPath.cstr(), &packPath, &innerName))
+        return packfile::MakePackWithFile(packPath, innerName, raw.data(), raw.size(), out) ? WrapResult::Ok : WrapResult::SarcFailed;
+
     if (HasPathExtension(destPath, cBeaExtension))
         return beaSource.isSet() && bea::ReplaceAsset(beaSource, raw.data(), raw.size(), out) ? WrapResult::Ok : WrapResult::PackFailed;
 
@@ -352,6 +360,9 @@ static const char* GetWrapErrorText(WrapResult result)
         case WrapResult::PackFailed:
             return messages::archive::cBeaPackFailed;
 
+        case WrapResult::SarcFailed:
+            return messages::resource::cPackWriteFailed;
+
         case WrapResult::OpenFailed:
             return messages::archive::cCmpbinOpenFailed;
 
@@ -374,8 +385,10 @@ bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
         return false;
     }
 
+    const std::string diskPath = packfile::GetDiskPath(path.cstr());
+
     sead::FixedSafeString<560> tmpPath;
-    tmpPath.format("%s.savetmp", path.cstr());
+    tmpPath.format("%s.savetmp", diskPath.c_str());
 
     std::vector<GroupFileSave> groupFileSaves = planGroupFileSaves_(path);
     std::vector<SkippedStream> skippedStreams;
@@ -412,7 +425,7 @@ bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
 
     if (IsWrappedArchivePath(path))
     {
-        stagedPath.format("%s.cmptmp", path.cstr());
+        stagedPath.format("%s.cmptmp", diskPath.c_str());
 
         const WrapResult wrapped = WrapToTempFile(tmpPath, path, mCmpbinPreferZstd, mBeaSource, stagedPath);
 
@@ -448,7 +461,7 @@ bool Bfsar::saveArchiveFile_(const sead::SafeString &path)
 
 bool Bfsar::finalizeSavedFile_(const sead::SafeString &stagedPath, const sead::SafeString &destPath)
 {
-    if (fileio::RenameOver(stagedPath.cstr(), destPath.cstr()))
+    if (fileio::RenameOver(stagedPath.cstr(), packfile::GetDiskPath(destPath.cstr()).c_str()))
         return true;
 
     if (sForceSaveWhenInUse)
@@ -497,7 +510,7 @@ bool Bfsar::retryPendingSaveFinalize()
     if (!replaceGroupFiles_(mPendingGroupFileSaves))
         return false;
 
-    if (!fileio::RenameOver(mPendingSaveFinalizeStaged.cstr(), mPendingSaveFinalizeDest.cstr()))
+    if (!fileio::RenameOver(mPendingSaveFinalizeStaged.cstr(), packfile::GetDiskPath(mPendingSaveFinalizeDest.cstr()).c_str()))
     {
         rollBackGroupFiles_(mPendingGroupFileSaves);
         return false;
@@ -933,12 +946,13 @@ void Bfsar::close_()
     mFileOriginalIncludeInBfsar.clear();
     mFileOriginalHasData.clear();
     mFileOriginalHomeGroup.clear();
+    mFileOriginalOwnWarc.clear();
     mStreamFileOrder = StreamFileOrder::ByVersion;
     mLoadedGroupFilePaths.clear();
     mDeletedGroupFiles.clear();
     mStreamSoundInfoSize = 0;
     mArchiveNameHash = 0;
-    forgetReadFileVersions();
+    forgetReadConverterTraits();
 
     FreeLoadedFiles(mExternalGroupBuffers);
 }

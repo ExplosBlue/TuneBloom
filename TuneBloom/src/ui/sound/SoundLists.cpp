@@ -158,7 +158,8 @@ void DrawAllSoundsUI()
     SetNextItemListAction(&SoundRowActionFunc);
 
     DrawAllItemsUI("Sound", messages::common::cSound, ActiveSoundArchive().getSoundList(),
-        &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback()
+        &CreateSoundFunc, &SoundNamePrefixFunc, &SoundContextMenuFunc, GetItemFilterCallback(),
+        false, &InsertSoundHook, &RemoveSoundHook
     );
 }
 
@@ -177,26 +178,54 @@ void DrawStreamSoundsUI()
             const Sound* sound = static_cast<const Sound*>(item);
             return sound->getSoundType() == Sound::SoundType::Strm && ItemMatchesFilter(sound);
         },
-        false, &InsertSoundAtHook, &RemoveSoundWithCascade
+        false, &InsertSoundHook, &RemoveSoundHook
     );
 }
 
-static bool SoundIsInAnySet(const Sound *sound)
+struct SoundSetRange
 {
-    Bfsar& archive = ActiveSoundArchive();
+    u32 start;
+    u32 coverEnd;
+};
 
-    u32 id = sound->getId();
+static void CollectSoundSetRanges(Bfsar& archive, std::vector<SoundSetRange>* out)
+{
+    out->clear();
+
     for (auto it = archive.getSoundSetList().robustBegin(); it != archive.getSoundSetList().robustEnd(); ++it)
     {
-        const SoundSet *set = static_cast<const SoundSet *>(it->val());
-        if (set->getIsEmpty())
-            continue;
+        const SoundSet* set = static_cast<const SoundSet*>(it->val());
 
-        if (id >= set->getStartId() && id <= set->getEndId())
-            return true;
+        if (!set->getIsEmpty())
+            out->push_back({ set->getStartId(), set->getEndId() });
     }
 
-    return false;
+    std::sort(out->begin(), out->end(), [](const SoundSetRange& a, const SoundSetRange& b) { return a.start < b.start; });
+
+    for (size_t i = 1; i < out->size(); i++)
+        (*out)[i].coverEnd = std::max((*out)[i].coverEnd, (*out)[i - 1].coverEnd);
+}
+
+static bool SoundIsInAnySet(const Sound* sound)
+{
+    static std::vector<SoundSetRange> sRanges;
+    static s32 sRangesFrame = -1;
+    static const Bfsar* sRangesArchive = nullptr;
+
+    Bfsar& archive = ActiveSoundArchive();
+    const s32 frame = ImGui::GetFrameCount();
+
+    if (sRangesFrame != frame || sRangesArchive != &archive)
+    {
+        CollectSoundSetRanges(archive, &sRanges);
+        sRangesFrame = frame;
+        sRangesArchive = &archive;
+    }
+
+    const u32 id = sound->getId();
+    const auto after = std::upper_bound(sRanges.begin(), sRanges.end(), id, [](u32 value, const SoundSetRange& range) { return value < range.start; });
+
+    return after != sRanges.begin() && std::prev(after)->coverEnd >= id;
 }
 
 template <Sound::SoundType Type>
@@ -230,7 +259,7 @@ static void DrawTypedSoundsUI(const char* id, const char* title, CreateItemCallb
 
             return sIncludeInSet || !SoundIsInAnySet(sound);
         },
-        false, &InsertSoundAtHook, &RemoveSoundWithCascade
+        false, &InsertSoundHook, &RemoveSoundHook
     );
 }
 
@@ -552,9 +581,9 @@ static bool SoundInScopedSetFilter(const Item* item)
     return id >= sScopedSoundsViewedSet->getStartId() && id <= sScopedSoundsViewedSet->getEndId() && ItemMatchesDetailFilter(sound);
 }
 
-static void ScopedSoundInsertHook(Item* afterItem, Item* newItem)
+static bool ScopedSoundInsertHook(Item* afterItem, Item* newItem)
 {
-    InsertSoundIntoSet(sScopedSoundsViewedSet, static_cast<Sound*>(newItem), afterItem);
+    return InsertSoundIntoSetHook(sScopedSoundsViewedSet, afterItem, newItem);
 }
 
 static bool ValidateViewedSet(SoundSet** viewedSet)
@@ -638,7 +667,7 @@ static void DrawSoundSetScopedSoundsUI(SoundSet* viewedSet)
 
     DrawAllItemsUI("Sound", messages::common::cSound, ActiveSoundArchive().getSoundList(), create, nullptr, &SoundContextMenuFunc,
         &SoundInScopedSetFilter,
-        false, &ScopedSoundInsertHook, &RemoveSoundWithCascade
+        false, &ScopedSoundInsertHook, &RemoveSoundHook
     );
 }
 
@@ -658,10 +687,10 @@ static void DrawSoundSetSplitView(
     const char* id,
     const char* listName,
     CreateItemCallback createFunc,
-    ItemNamePrefixCallback namePrefix, 
-    ContextMenuCallback contextMenu, 
+    ItemNamePrefixCallback namePrefix,
+    ContextMenuCallback contextMenu,
     ItemFilterCallback listFilter,
-    bool filterByType, 
+    bool filterByType,
     SoundSet::SoundSetType type,
     SoundSet*& viewedSet
 )

@@ -4,6 +4,7 @@
 #include <ui/file/File.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
+#include <ui/sound/SoundViews.h>
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveImportPanel.h>
@@ -145,21 +146,49 @@ static bool HasRealReferences(const Item* item)
     return false;
 }
 
+static bool InsertListItem(ItemListContext& ctx, Item* afterItem, Item* newItem)
+{
+    if (ctx.onInsert)
+        return ctx.onInsert(afterItem, newItem);
+
+    if (afterItem)
+        afterItem->insertBack(newItem);
+    else
+        ctx.list.pushBack(newItem);
+
+    RenumberDocumentList(ctx.list);
+    SetUnsavedChanges(true);
+
+    return true;
+}
+
+static bool RemoveListItem(ItemListContext& ctx, Item* item)
+{
+    ForgetRemovedItems({item});
+
+    if (ctx.onRemove)
+        return ctx.onRemove(item);
+
+    delete item;
+
+    return true;
+}
+
 static void DeleteListItems(ItemListContext& ctx, const std::vector<Item*>& items)
 {
-    Item*& selectedItem = *ctx.selection;
+    bool removed = false;
 
     for (Item* itemToDelete : items)
     {
-        ForgetRemovedItems({itemToDelete});
+        if (!RemoveListItem(ctx, itemToDelete))
+            break;
 
-        if (ctx.onRemove)
-            ctx.onRemove(itemToDelete);
-        else
-            delete itemToDelete;
-
-        selectedItem = nullptr;
+        *ctx.selection = nullptr;
+        removed = true;
     }
+
+    if (!removed)
+        return;
 
     RenumberDocumentList(ctx.list);
     SetUnsavedChanges(true);
@@ -208,10 +237,25 @@ static void HandleDeleteRequests(ItemListContext& ctx)
     }
 }
 
+static void AddCreatedItem(ItemListContext& ctx, Item* item)
+{
+    Item* insertAfter = sInsertAfterItem;
+    sInsertAfterItem = nullptr;
+
+    if (!InsertListItem(ctx, insertAfter, item))
+    {
+        delete item;
+        return;
+    }
+
+    ScrollItemListTo(item);
+    *ctx.selection = item;
+    sMultiSelectedItems.clear();
+    SetSelectionInSubWindow(ctx.isSubWindow);
+}
+
 static void DrawAddItemDialog(ItemListContext& ctx, const ImVec2& center)
 {
-    Item*& selectedItem = *ctx.selection;
-
     ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
     const ImGuiWindowFlags addFlags = ImGuiWindowFlags_AlwaysAutoResize;
@@ -243,30 +287,7 @@ static void DrawAddItemDialog(ItemListContext& ctx, const ImVec2& center)
 
                 if (addedItem)
                 {
-                    ScrollItemListTo(addedItem);
-                    selectedItem = addedItem;
-                    sMultiSelectedItems.clear();
-                    SetSelectionInSubWindow(ctx.isSubWindow);
-
-                    Item *insertAfter = sInsertAfterItem;
-                    sInsertAfterItem = nullptr;
-
-                    if (ctx.onInsert)
-                    {
-                        ctx.onInsert(insertAfter, addedItem);
-                    }
-                    else
-                    {
-                        if (insertAfter)
-                            insertAfter->insertBack(addedItem);
-                        else
-                            ctx.list.pushBack(addedItem);
-
-                        RenumberDocumentList(ctx.list);
-                    }
-
-                    SetUnsavedChanges(true);
-
+                    AddCreatedItem(ctx, addedItem);
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -319,36 +340,51 @@ static void DrawReferencesDialog(ItemListContext& ctx, const ImVec2& center)
     }
 }
 
+static std::vector<Item*> CollectReorderedItems(const ItemListContext& ctx)
+{
+    if (!IsItemMultiSelected(ctx.reorderSource))
+    {
+        if (ctx.reorderTarget->next() == ctx.reorderSource)
+            return {};
+
+        return { ctx.reorderSource };
+    }
+
+    if (IsItemMultiSelected(ctx.reorderTarget))
+        return {};
+
+    std::vector<Item*> items(sMultiSelectedItems.begin(), sMultiSelectedItems.end());
+    std::sort(items.begin(), items.end(), [](Item* a, Item* b) { return a->getId() < b->getId(); });
+
+    return items;
+}
+
+static void MoveListItemsAfter(ItemListContext& ctx, const std::vector<Item*>& items)
+{
+    for (Item* item : items)
+        item->erase();
+
+    for (auto it = items.rbegin(); it != items.rend(); ++it)
+        ctx.reorderTarget->insertBack(*it);
+
+    RenumberDocumentList(ctx.list);
+    SetUnsavedChanges(true);
+}
+
 static void ApplyItemReorder(ItemListContext& ctx)
 {
     if (!ctx.reorder)
         return;
 
-    const bool isMultiReorder = IsItemMultiSelected(ctx.reorderSource);
+    const std::vector<Item*> items = CollectReorderedItems(ctx);
 
-    if (isMultiReorder && !IsItemMultiSelected(ctx.reorderTarget))
-    {
-        std::vector<Item*> itemsToMove(sMultiSelectedItems.begin(), sMultiSelectedItems.end());
-        std::sort(itemsToMove.begin(), itemsToMove.end(),
-            [](Item* a, Item* b) { return a->getId() < b->getId(); });
+    if (items.empty())
+        return;
 
-        for (Item* mi : itemsToMove)
-            mi->erase();
-
-        for (auto it = itemsToMove.rbegin(); it != itemsToMove.rend(); ++it)
-            ctx.reorderTarget->insertBack(*it);
-
-        RenumberDocumentList(ctx.list);
-        SetUnsavedChanges(true);
-    }
-    else if (!isMultiReorder && ctx.reorderTarget->next() != ctx.reorderSource)
-    {
-        ctx.reorderSource->erase();
-        ctx.reorderTarget->insertBack(ctx.reorderSource);
-
-        RenumberDocumentList(ctx.list);
-        SetUnsavedChanges(true);
-    }
+    if (ctx.reorderTarget->getItemType() == Item::ItemType::Sound)
+        MoveSoundsHook(ctx.reorderTarget, items);
+    else
+        MoveListItemsAfter(ctx, items);
 }
 
 static void DuplicateSelectedAssets(ItemListContext& ctx)
@@ -397,24 +433,50 @@ static void DuplicateSelectedSound(ItemListContext& ctx)
     if (!sDuplicateItem || sDuplicateItem->list() != &ctx.list)
         return;
 
-    Item*& selectedItem = *ctx.selection;
-
     Sound* src = static_cast<Sound*>(sDuplicateItem);
     Sound* dup = CloneSound(src);
 
-    if (ctx.onInsert)
-        ctx.onInsert(src, dup);
-    else
-    {
-        src->insertBack(dup);
-        RenumberDocumentList(ctx.list);
-    }
-    SetUnsavedChanges(true);
-
-    selectedItem = dup;
-    SetSelectionInSubWindow(ctx.isSubWindow);
-
     sDuplicateItem = nullptr;
+
+    if (!InsertListItem(ctx, src, dup))
+    {
+        delete dup;
+        return;
+    }
+
+    *ctx.selection = dup;
+    SetSelectionInSubWindow(ctx.isSubWindow);
+}
+
+static size_t FindSoundBlockEnd(const ItemListContext& ctx, const std::vector<Sound*>& sources, size_t first)
+{
+    size_t last = first;
+
+    while (last + 1 < sources.size() && static_cast<Item*>(ctx.list.next(sources[last])) == sources[last + 1])
+        ++last;
+
+    return last;
+}
+
+static bool DuplicateSoundBlock(ItemListContext& ctx, const std::vector<Sound*>& sources, size_t first, size_t last, std::vector<Item*>* copies)
+{
+    Item* insertPoint = sources[last];
+
+    for (size_t index = first; index <= last; ++index)
+    {
+        Sound* dup = CloneSound(sources[index]);
+
+        if (!InsertListItem(ctx, insertPoint, dup))
+        {
+            delete dup;
+            return false;
+        }
+
+        insertPoint = dup;
+        copies->push_back(dup);
+    }
+
+    return true;
 }
 
 static void DuplicateSelectedSounds(ItemListContext& ctx)
@@ -422,60 +484,42 @@ static void DuplicateSelectedSounds(ItemListContext& ctx)
     if (sDuplicateItems.empty())
         return;
 
-    Item*& selectedItem = *ctx.selection;
+    std::vector<Sound*> sources;
 
-    std::vector<Sound*> orderedSrcs;
     for (auto it = ctx.list.robustBegin(); it != ctx.list.robustEnd(); ++it)
     {
-        Item* cur = static_cast<Item*>((*it).val());
-        if (std::find(sDuplicateItems.begin(), sDuplicateItems.end(), cur) != sDuplicateItems.end())
-            orderedSrcs.push_back(static_cast<Sound*>(cur));
+        Item* item = (*it).val();
+
+        if (std::find(sDuplicateItems.begin(), sDuplicateItems.end(), item) != sDuplicateItems.end())
+            sources.push_back(static_cast<Sound*>(item));
     }
 
-    std::vector<Item*> newDups;
-    size_t i = 0;
-    while (i < orderedSrcs.size())
+    if (sources.empty())
+        return;
+
+    sDuplicateItems.clear();
+
+    std::vector<Item*> copies;
+
+    for (size_t first = 0; first < sources.size();)
     {
-        // Contiguous block
-        size_t blockEnd = i;
-        while (blockEnd + 1 < orderedSrcs.size())
-        {
-            Item* after = static_cast<Item*>(ctx.list.next(orderedSrcs[blockEnd]));
-            if (after == orderedSrcs[blockEnd + 1])
-                ++blockEnd;
-            else
-                break;
-        }
+        const size_t last = FindSoundBlockEnd(ctx, sources, first);
 
-        Item *insertPoint = orderedSrcs[blockEnd];
-        for (size_t j = i; j <= blockEnd; ++j)
-        {
-            Sound *dup = CloneSound(orderedSrcs[j]);
+        if (!DuplicateSoundBlock(ctx, sources, first, last, &copies))
+            break;
 
-            if (ctx.onInsert)
-                ctx.onInsert(insertPoint, dup);
-            else
-                insertPoint->insertBack(dup);
-
-            insertPoint = dup;
-            newDups.push_back(dup);
-        }
-
-        i = blockEnd + 1;
+        first = last + 1;
     }
 
-    if (!orderedSrcs.empty())
-    {
-        RenumberDocumentList(ctx.list);
-        SetUnsavedChanges(true);
-        if (!newDups.empty())
-        {
-            selectedItem = newDups.back();
-            sMultiSelectedItems = newDups;
-            sMultiSelectAnchor = newDups.front();
-        }
-        sDuplicateItems.clear();
-    }
+    if (copies.empty())
+        return;
+
+    RenumberDocumentList(ctx.list);
+    SetUnsavedChanges(true);
+
+    *ctx.selection = copies.back();
+    sMultiSelectedItems = copies;
+    sMultiSelectAnchor = copies.front();
 }
 
 void ApplyItemListEdits(ItemListContext& ctx)

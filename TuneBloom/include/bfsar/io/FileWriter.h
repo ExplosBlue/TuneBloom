@@ -248,6 +248,7 @@ public:
 
 private:
     void patchReference_(u32 pos, u16 typeId, s32 offset, const u32* size);
+    void writeZeros(u32 count);
 
 public:
 

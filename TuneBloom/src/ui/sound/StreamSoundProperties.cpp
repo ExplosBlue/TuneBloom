@@ -3,7 +3,7 @@
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/app/UI.h>
-
+#include <ui/stream/OpusBitrate.h>
 
 #include <filesystem>
 
@@ -123,8 +123,8 @@ static void DrawStreamReloadSummary(const Sound* sound, const Sound::StreamSound
     const u32 trackCount = sStreamReloadResult.trackCount;
     const u32 channelCount = sStreamReloadResult.channelCount;
 
-    const sead::FormatFixedSafeString<32> tracks(trackCount == 1 ? messages::stream::cReloadedTracksOneFormat : messages::stream::cReloadedTracksFormat, trackCount);
-    const sead::FormatFixedSafeString<32> channels(channelCount == 1 ? messages::stream::cReloadedChannelsOneFormat : messages::stream::cReloadedChannelsFormat, channelCount);
+    const sead::FormatFixedSafeString<32> tracks(trackCount == 1 ? messages::common::cTrackCountOneFormat : messages::common::cTrackCountFormat, trackCount);
+    const sead::FormatFixedSafeString<32> channels(channelCount == 1 ? messages::common::cChannelCountOneFormat : messages::common::cChannelCountFormat, channelCount);
 
     ImGui::TextDisabled(messages::stream::cReloadedSummaryFormat, tracks.cstr(), channels.cstr(), sStreamReloadResult.sampleRate);
 
@@ -275,9 +275,10 @@ static void DrawStreamLoopRows(Sound::StreamSoundInfo& strmSoundInfo)
     ImGui::EndDisabled();
 }
 
-void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
+void DrawStreamExtensionUI(Sound* sound)
 {
     Bfsar& archive = ActiveSoundArchive();
+    Sound::StreamSoundInfo& strmSoundInfo = sound->getStreamSoundInfo();
 
     bool enableStreamSoundExtension = strmSoundInfo.isEnableStreamSoundExtension();
     bool changed = false;
@@ -307,6 +308,9 @@ void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo)
             SetUnsavedChanges(true);
         }
     }
+
+    if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus)
+        DrawOpusBitrateRow(archive.getStreamSource(sound));
 
     DrawStreamLoopRows(strmSoundInfo);
 

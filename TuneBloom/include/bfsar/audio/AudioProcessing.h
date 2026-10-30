@@ -14,14 +14,6 @@ inline float fromPcm16(s16 value)
 
 inline s16 toPcm16(float value)
 {
-    value = value < -1.0f ? -1.0f : (value > 1.0f ? 1.0f : value);
-
-    const float scaled = value * (value < 0.0f ? 32768.0f : 32767.0f);
-    return static_cast<s16>(static_cast<double>(scaled) + (scaled < 0.0f ? -0.5 : 0.5));
-}
-
-inline s16 restorePcm16(float value)
-{
     const double scaled = static_cast<double>(value) * 32768.0;
     const double rounded = scaled < 0.0 ? scaled - 0.5 : scaled + 0.5;
 
@@ -31,6 +23,10 @@ inline s16 restorePcm16(float value)
 std::vector<float> resample(const std::vector<float>& data, u32 fromRate, u32 toRate);
 
 void mixToMono(const std::vector<std::vector<float>>& channels, std::vector<float>& out);
+std::vector<std::vector<float>> mixToStereo(const std::vector<std::vector<float>>& channels);
+
+void decodeMidSide(std::vector<s16>& mid, std::vector<s16>& side);
+void encodeMidSide(std::vector<s16>& left, std::vector<s16>& right);
 
 enum class ChannelMode { Stereo, Left, Right, MonoMix };
 std::vector<std::vector<float>> selectChannels(const std::vector<std::vector<float>>& channels, ChannelMode mode);

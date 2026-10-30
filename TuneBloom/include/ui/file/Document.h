@@ -44,7 +44,8 @@ public:
         SoundArchive,
         AudioResource,
         StreamFile,
-        WaveFile
+        WaveFile,
+        BarsList
     };
 
     struct File
@@ -78,6 +79,7 @@ public:
     static const char* Load(const sead::SafeString& path, File* outFile);
     static void Free(File* file);
     static bool Check(const File& file, const char** outError);
+    static bool CheckBeforeOpen(const File& file, const char* failMessage = nullptr);
     static bool PeekEndian(const File& file, sead::Endian::Types* outEndian);
     static bool IsCompleteFile(const u8* header, u64 fileSize);
     static Document* Open(File* file, const sead::SafeString& path, const sead::SafeString* metadataSource = nullptr);
@@ -136,6 +138,9 @@ public:
     }
 
     virtual bool isValidName(const sead::SafeString& name) const = 0;
+
+    virtual const char* getNameRuleDetail() const;
+
     virtual bool isUniqueName(const sead::SafeString& name, const Item* ignoreItem) const = 0;
     virtual void renumber(Item::List& list) = 0;
     virtual void forEachItemList(const std::function<void(Item::List&)>& visit) = 0;
@@ -144,27 +149,71 @@ public:
     virtual bool ownsItem(const Item& item) const = 0;
 
     virtual ParseContext parseContext() const = 0;
-    virtual u64 estimateMemory() const = 0;
-    virtual bool isLoaded() const = 0;
-    virtual bool canUnload() const = 0;
-    virtual void unload() = 0;
-    virtual bool reload() = 0;
 
-    virtual bool prepareSave() = 0;
-    virtual bool prepareSaveAs() = 0;
+    virtual u64 estimateMemory() const
+    {
+        return 0;
+    }
+
+    virtual bool isLoaded() const
+    {
+        return true;
+    }
+
+    virtual bool canUnload() const
+    {
+        return false;
+    }
+
+    virtual void unload()
+    {
+    }
+
+    virtual bool reload()
+    {
+        return true;
+    }
+
+    virtual bool prepareSave()
+    {
+        return true;
+    }
+
+    virtual bool prepareSaveAs()
+    {
+        return true;
+    }
+
     virtual bool chooseSaveAsPath(sead::BufferedSafeString* outPath) const = 0;
     virtual SaveResult save(const char** outError) = 0;
     virtual SaveResult saveAs(const sead::SafeString& path, const char** outError) = 0;
-    virtual void finishSave() = 0;
 
-    virtual s32 getBackupNamesSetting() const = 0;
+    virtual void finishSave()
+    {
+    }
+
+    virtual s32 getBackupNamesSetting() const
+    {
+        return -1;
+    }
+
     virtual bool writeBackup(const BackupWrite& write, backup::Snapshot* snapshot, Bfsar::BackupResult* outResult) = 0;
-    virtual void copyPreviousSidecars(const std::string& sourcePath, const std::string& destDir, backup::Snapshot* snapshot) = 0;
-    virtual void restoreSidecars(const backup::Snapshot& snapshot) = 0;
-    virtual void applyRestoredSnapshot(const backup::Snapshot& snapshot, bool untitled) = 0;
+
+    virtual void copyPreviousSidecars(const std::string&, const std::string&, backup::Snapshot*)
+    {
+    }
+
+    virtual void restoreSidecars(const backup::Snapshot&)
+    {
+    }
+
+    virtual void applyRestoredSnapshot(const backup::Snapshot&, bool)
+    {
+    }
 
 protected:
     void closeWindows();
+    bool showSaveAsDialog(sead::BufferedSafeString* outPath, const char* formatName, const char* fileExtension, const char* compressedExtension) const;
 
     static void AddInnerExtension(sead::BufferedSafeString* path, const char* innerExtension, const char* outerExtension);
 

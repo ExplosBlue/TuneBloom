@@ -315,7 +315,7 @@ static void WriteBundledWave(sead::FileDeviceWriteStream* stream, sead::FileDevi
         stream->writeU32(0);
     }
 
-    ::remove(tempPath.cstr());
+    fileio::RemoveFile(tempPath.cstr());
 }
 
 static void WriteBundledKeyRegions(sead::FileDeviceWriteStream* stream, const BankFile::Instrument* instr, const std::unordered_map<const WaveFile*, std::string>& waveExportNames)

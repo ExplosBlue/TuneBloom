@@ -69,6 +69,25 @@ static float DecodeRiffSample(const u8* raw, u16 format, u32 bytesPerSample)
     return static_cast<float>(static_cast<double>(static_cast<s32>(bits)) / 2147483648.0);
 }
 
+static void DecodeRiffFrames(const WaveFile::RiffWaveInfo& info, const u8* raw, std::vector<std::vector<float>>* out)
+{
+    const u32 numChannels = info.numChannels;
+    const u32 bytesPerSample = info.bitsPerSample / 8;
+
+    out->assign(numChannels, std::vector<float>(info.sampleCount, 0.0f));
+
+    for (u32 i = 0; i < info.sampleCount; i++)
+    {
+        for (u32 ch = 0; ch < numChannels; ch++)
+            (*out)[ch][i] = DecodeRiffSample(raw + (static_cast<size_t>(i) * numChannels + ch) * bytesPerSample, info.format, bytesPerSample);
+    }
+}
+
+bool IsPlainPcm(const WaveFile::RiffWaveInfo& info)
+{
+    return info.format == cRiffFormatPcm && info.bitsPerSample <= 16 && info.numChannels <= snd::cWaveChannelMax;
+}
+
 bool decodeRiffChannels(const WaveFile::RiffWaveInfo& info, std::vector<std::vector<float>>* out)
 {
     out->clear();
@@ -81,16 +100,30 @@ bool decodeRiffChannels(const WaveFile::RiffWaveInfo& info, std::vector<std::vec
     if (!ReadRiffSampleData(info, &raw))
         return false;
 
-    const u32 numChannels = info.numChannels;
-    const u32 bytesPerSample = info.bitsPerSample / 8;
+    DecodeRiffFrames(info, raw.data(), out);
 
-    out->assign(numChannels, std::vector<float>(info.sampleCount, 0.0f));
+    return true;
+}
 
-    for (u32 i = 0; i < info.sampleCount; i++)
-    {
-        for (u32 ch = 0; ch < numChannels; ch++)
-            (*out)[ch][i] = DecodeRiffSample(raw.data() + (static_cast<size_t>(i) * numChannels + ch) * bytesPerSample, info.format, bytesPerSample);
-    }
+bool decodeRiffBytes(const u8* data, size_t size, DecodedPcm* out)
+{
+    *out = DecodedPcm();
+
+    WaveFile::RiffWaveInfo info;
+
+    if (!WaveFile::readRiffWavBytes(data, static_cast<u32>(size), static_cast<u32>(size), &info, true) || info.sampleCount == 0)
+        return false;
+
+    if (static_cast<u64>(info.dataStart) + info.sampleBytes > size)
+        return false;
+
+    DecodeRiffFrames(info, data + info.dataStart, &out->channels);
+
+    out->sampleRate = info.sampleRate;
+    out->sampleCount = info.sampleCount;
+    out->isLoop = info.isLoop;
+    out->loopStartFrame = info.loopStartFrame;
+    out->loopEndFrame = info.loopEndFrame;
 
     return true;
 }

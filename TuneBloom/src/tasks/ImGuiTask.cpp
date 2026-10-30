@@ -123,7 +123,7 @@ void ImGuiTask::prepare()
 
 #if !defined(SEAD_PLATFORM_LINUX)
     if (!testhooks::IsEnabled() || testhooks::IsViewportsOn())
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;     // Enable Multi-Viewport / Platform Windows
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 #endif
 
     // Setup Dear ImGui style

@@ -2,27 +2,14 @@
 
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/ByteView.h>
+#include <core/NwFile.h>
 #include <snd/snd_ElementType.h>
-#include <snd/snd_Util.h>
 
 #include <algorithm>
 #include <cstring>
 
-using nw::snd::internal::Util;
-
-static constexpr u64 cHeaderByteOrder   = 0x04;
-static constexpr u64 cHeaderVersion     = 0x08;
-static constexpr u64 cHeaderBlockCount  = 0x10;
-static constexpr u64 cHeaderBlockRefs   = 0x14;
-static constexpr u64 cBlockRefSize      = 0x0C;
-static constexpr u64 cBlockRefOffset    = 0x04;
-static constexpr u64 cBlockRefLength    = 0x08;
-static constexpr u64 cBlockBody         = 0x08;
-static constexpr u64 cReferenceSize     = 0x08;
-static constexpr u64 cReferenceOffset   = 0x04;
 static constexpr u64 cStringEntrySize   = 0x0C;
 static constexpr u64 cStringEntryLength = 0x08;
-static constexpr u32 cAbsentBlock       = 0xFFFFFFFF;
 static constexpr u32 cItemCountMax      = 0x00FFFFFF;
 static constexpr u32 cStringIdFlag      = 0x01;
 static constexpr u32 cV3MajorVersion    = 3;
@@ -31,6 +18,9 @@ static constexpr u64 cSoundDetailOffset   = 0x0C;
 static constexpr u64 cSoundOptionOffset   = 0x14;
 static constexpr u64 cSoundDetailOffsetV3 = 0x2C;
 static constexpr u64 cSoundOptionOffsetV3 = 0x34;
+
+namespace
+{
 
 enum class InfoTable
 {
@@ -42,16 +32,10 @@ enum class InfoTable
     Player
 };
 
-struct ArchiveBlock
-{
-    u64 offset = 0;
-    u64 size = 0;
-};
-
 struct ArchiveLayout
 {
-    ArchiveBlock strings;
-    ArchiveBlock info;
+    nwfile::Block strings;
+    nwfile::Block info;
     bool isV3 = false;
 };
 
@@ -61,54 +45,38 @@ struct StringTable
     u32 count = 0;
 };
 
-static bool FindBlock(const ByteView& view, u16 type, ArchiveBlock* out)
+}
+
+static bool FindArchiveBlock(const ByteView& view, u16 type, nwfile::Block* out)
 {
-    const u32 blockCount = view.readU16(cHeaderBlockCount);
+    nwfile::Block block;
 
-    for (u32 i = 0; i < blockCount; i++)
-    {
-        const u64 ref = cHeaderBlockRefs + static_cast<u64>(i) * cBlockRefSize;
+    if (!nwfile::FindBlock(view, type, &block) || block.size == nwfile::cNullOffset)
+        return false;
 
-        if (!view.has(ref, cBlockRefSize))
-            return false;
-
-        if (view.readU16(ref) != type)
-            continue;
-
-        const u32 offset = view.readU32(ref + cBlockRefOffset);
-        const u32 size = view.readU32(ref + cBlockRefLength);
-
-        if (offset == cAbsentBlock || size == cAbsentBlock || size < cBlockBody)
-            return false;
-
-        out->offset = offset;
-        out->size = size;
-
-        return true;
-    }
-
-    return false;
+    *out = block;
+    return true;
 }
 
 static bool ReadLayout(const void* data, u64 size, ArchiveLayout* out)
 {
-    if (size < cHeaderBlockRefs)
+    if (size < nwfile::cHeaderBlockRefs)
         return false;
 
     const InnerFileFormatInfo* format = FindInnerFileFormat(data, InnerFileKind::SoundArchive);
 
-    if (!format || !ByteView::IsByteOrderMark(data, size, cHeaderByteOrder))
+    if (!format || !ByteView::IsByteOrderMark(data, size, nwfile::cHeaderByteOrder))
         return false;
 
-    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, cHeaderByteOrder));
+    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, nwfile::cHeaderByteOrder));
 
-    if (!FindBlock(view, nw::snd::internal::ElementType_SoundArchiveFile_InfoBlock, &out->info))
+    if (!FindArchiveBlock(view, nw::snd::internal::ElementType_SoundArchiveFile_InfoBlock, &out->info))
         return false;
 
-    FindBlock(view, nw::snd::internal::ElementType_SoundArchiveFile_StringBlock, &out->strings);
+    FindArchiveBlock(view, nw::snd::internal::ElementType_SoundArchiveFile_StringBlock, &out->strings);
 
-    const u32 version = view.readU32(cHeaderVersion);
-    const u32 majorShift = Util::IsHighByteMajorVersion(version) ? 24 : 16;
+    const u32 version = view.readU32(nwfile::cHeaderVersion);
+    const u32 majorShift = nwfile::GetVersionMajorShift(version);
 
     out->isV3 = format->format == ArchiveFormat::BFSAR && ((version >> majorShift) & 0xFF) >= cV3MajorVersion;
 
@@ -127,17 +95,17 @@ u64 GetArchiveHeadSize(const void* data, u64 size)
 
 static bool ReadTable(const ByteView& view, u64 base, u64 reference, u64* outTable, u32* outCount)
 {
-    if (!view.has(reference, cReferenceSize))
+    if (!view.has(reference, nwfile::cReferenceSize))
         return false;
 
-    const u64 table = base + view.readU32(reference + cReferenceOffset);
+    const u64 table = base + view.readU32(reference + nwfile::cReferenceOffset);
 
     if (!view.has(table, sizeof(u32)))
         return false;
 
     const u32 count = view.readU32(table);
 
-    if (count > cItemCountMax || !view.has(table + sizeof(u32), static_cast<u64>(count) * cReferenceSize))
+    if (count > cItemCountMax || !view.has(table + sizeof(u32), static_cast<u64>(count) * nwfile::cReferenceSize))
         return false;
 
     *outTable = table;
@@ -151,20 +119,20 @@ static u32 CountInfoTable(const ByteView& view, u64 infoBody, InfoTable table)
     u64 offset = 0;
     u32 count = 0;
 
-    ReadTable(view, infoBody, infoBody + static_cast<u64>(table) * cReferenceSize, &offset, &count);
+    ReadTable(view, infoBody, infoBody + static_cast<u64>(table) * nwfile::cReferenceSize, &offset, &count);
 
     return count;
 }
 
-static StringTable ReadStringTable(const ByteView& view, const ArchiveBlock& strings)
+static StringTable ReadStringTable(const ByteView& view, const nwfile::Block& strings)
 {
     StringTable table;
-    const u64 body = strings.offset + cBlockBody;
+    const u64 body = strings.offset + nwfile::cBlockHeaderSize;
 
-    if (strings.size == 0 || !view.has(body, cReferenceSize))
+    if (strings.size == 0 || !view.has(body, nwfile::cReferenceSize))
         return table;
 
-    const u64 offset = body + view.readU32(body + cReferenceOffset);
+    const u64 offset = body + view.readU32(body + nwfile::cReferenceOffset);
 
     if (!view.has(offset, sizeof(u32)))
         return table;
@@ -185,7 +153,7 @@ static const char* FindString(const ByteView& view, const StringTable& table, u3
     if (!view.has(entry, cStringEntrySize))
         return nullptr;
 
-    const u64 text = table.offset + view.readU32(entry + cReferenceOffset);
+    const u64 text = table.offset + view.readU32(entry + nwfile::cReferenceOffset);
     const u32 length = view.readU32(entry + cStringEntryLength);
 
     if (length == 0 || !view.has(text, length) || std::memchr(view.at(text), '\0', length) == nullptr)
@@ -219,7 +187,7 @@ static void ReadSound(const ByteView& view, const ArchiveLayout& layout, const S
     const u64 detail = info + (layout.isV3 ? cSoundDetailOffsetV3 : cSoundDetailOffset);
     const u64 option = info + (layout.isV3 ? cSoundOptionOffsetV3 : cSoundOptionOffset);
 
-    if (view.has(detail, cReferenceSize))
+    if (view.has(detail, nwfile::cReferenceSize))
         out->type = ToSoundType(view.readU16(detail));
 
     if (!view.has(option, sizeof(u32) * 2) || (view.readU32(option) & cStringIdFlag) == 0)
@@ -234,7 +202,7 @@ static void ReadSounds(const ByteView& view, const ArchiveLayout& layout, u64 in
     u64 table = 0;
     u32 count = 0;
 
-    if (!ReadTable(view, infoBody, infoBody + static_cast<u64>(InfoTable::Sound) * cReferenceSize, &table, &count))
+    if (!ReadTable(view, infoBody, infoBody + static_cast<u64>(InfoTable::Sound) * nwfile::cReferenceSize, &table, &count))
         return;
 
     const StringTable strings = ReadStringTable(view, layout.strings);
@@ -244,7 +212,7 @@ static void ReadSounds(const ByteView& view, const ArchiveLayout& layout, u64 in
 
     for (u32 i = 0; i < count; i++)
     {
-        const u64 info = table + view.readU32(table + sizeof(u32) + static_cast<u64>(i) * cReferenceSize + cReferenceOffset);
+        const u64 info = table + view.readU32(table + sizeof(u32) + static_cast<u64>(i) * nwfile::cReferenceSize + nwfile::cReferenceOffset);
 
         ReadSound(view, layout, strings, info, &out->sounds[i]);
         out->soundTypeCounts[static_cast<s32>(out->sounds[i].type)]++;
@@ -260,8 +228,8 @@ bool ProbeArchiveContents(const void* data, u64 size, ArchiveContents* out)
     if (!ReadLayout(data, size, &layout))
         return false;
 
-    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, cHeaderByteOrder));
-    const u64 infoBody = layout.info.offset + cBlockBody;
+    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, nwfile::cHeaderByteOrder));
+    const u64 infoBody = layout.info.offset + nwfile::cBlockHeaderSize;
 
     if (!view.has(layout.info.offset, layout.info.size))
         return false;

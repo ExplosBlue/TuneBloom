@@ -40,12 +40,34 @@ bool Bfsar::validName(const sead::SafeString& name)
     return true;
 }
 
+struct BfsarNameCounts
+{
+    std::unordered_map<std::string, u32> counts;
+};
+
+std::array<const Item::List*, 6> Bfsar::getNamedLists() const
+{
+    return { &mSoundList, &mSoundSetList, &mBankList, &mWaveArchiveList, &mGroupList, &mPlayerList };
+}
+
+static u32 CountOtherNames(const BfsarNameCounts& names, const std::array<const Item::List*, 6>& lists, const sead::SafeString& name, const Item* ignoreItem)
+{
+    const auto it = names.counts.find(name.cstr());
+    const u32 count = it != names.counts.end() ? it->second : 0;
+    const bool countsIgnoreItem = ignoreItem && name == ignoreItem->getName() && std::find(lists.begin(), lists.end(), ignoreItem->list()) != lists.end();
+
+    return countsIgnoreItem ? count - 1 : count;
+}
+
 bool Bfsar::validateName(const sead::SafeString& name, const Item* ignoreItem) const
 {
     if (name.isEmpty())
         return false;
 
-    const Item::List* lists[] = {&mSoundList, &mSoundSetList, &mBankList, &mWaveArchiveList, &mGroupList, &mPlayerList};
+    const std::array<const Item::List*, 6> lists = getNamedLists();
+
+    if (mValidateNameCounts)
+        return CountOtherNames(*mValidateNameCounts, lists, name, ignoreItem) == 0;
 
     for (const Item::List* list : lists)
     {
@@ -246,14 +268,28 @@ bool Bfsar::validate(bool showErrors)
     ctx.showErrors = showErrors;
     ctx.toStderr = mCliMode;
 
-    return validateSounds_(ctx) &&
-           ValidateItems(ctx, mSoundSetList) &&
-           validateWaveSoundOwners_(ctx) &&
-           ValidateItems(ctx, mBankList) &&
-           ValidateItems(ctx, mWaveArchiveList) &&
-           ValidateItems(ctx, mGroupList) &&
-           ValidateItems(ctx, mPlayerList) &&
-           ValidateItems(ctx, mWaveFileList) &&
-           ValidateItems(ctx, mSequenceFileList) &&
-           ValidateItems(ctx, mBankFileList);
+    BfsarNameCounts names;
+
+    for (const Item::List* list : getNamedLists())
+    {
+        for (auto it = list->robustBegin(); it != list->robustEnd(); ++it)
+            names.counts[(*it).val()->getName().cstr()]++;
+    }
+
+    mValidateNameCounts = &names;
+
+    const bool isValid = validateSounds_(ctx) &&
+                         ValidateItems(ctx, mSoundSetList) &&
+                         validateWaveSoundOwners_(ctx) &&
+                         ValidateItems(ctx, mBankList) &&
+                         ValidateItems(ctx, mWaveArchiveList) &&
+                         ValidateItems(ctx, mGroupList) &&
+                         ValidateItems(ctx, mPlayerList) &&
+                         ValidateItems(ctx, mWaveFileList) &&
+                         ValidateItems(ctx, mSequenceFileList) &&
+                         ValidateItems(ctx, mBankFileList);
+
+    mValidateNameCounts = nullptr;
+
+    return isValid;
 }

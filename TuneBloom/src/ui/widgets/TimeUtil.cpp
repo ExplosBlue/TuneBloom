@@ -85,6 +85,17 @@ static int CalcDaysAgo(const std::tm& day, const std::tm& today)
     return static_cast<int>(std::floor(days + 0.5));
 }
 
+int CalcDaysAgo(int64_t time)
+{
+    std::tm day;
+    std::tm today;
+
+    if (!GetLocalDay(time, &day) || !GetLocalDay(static_cast<int64_t>(std::time(nullptr)), &today))
+        return -1;
+
+    return CalcDaysAgo(day, today);
+}
+
 static void FormatCount(char* buffer, size_t bufferSize, int count, const char* one, const char* manyFormat)
 {
     if (count == 1)

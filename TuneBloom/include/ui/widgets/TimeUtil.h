@@ -16,5 +16,6 @@ void FormatTimeOfDay(char* buffer, size_t bufferSize, int64_t time, bool twelveH
 void FormatDate(char* buffer, size_t bufferSize, int64_t time);
 void FormatFullDate(char* buffer, size_t bufferSize, int64_t time);
 void FormatRelativeDate(char* buffer, size_t bufferSize, int64_t time);
+int CalcDaysAgo(int64_t time);
 
 }

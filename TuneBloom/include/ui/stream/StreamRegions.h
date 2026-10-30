@@ -35,6 +35,7 @@ void DrawStreamRegionImportDialog();
 
 void KeepStreamRegions(WaveFile* mainWave, WaveFile* oldMainWave);
 u32 RemoveStreamRegionsPastEnd(WaveFile* wave);
+void ClearStreamRegions(WaveFile* wave);
 
 void DrawStreamRegionLane(WaveFile* wave, ImGui::LoopWaveformState& state);
 

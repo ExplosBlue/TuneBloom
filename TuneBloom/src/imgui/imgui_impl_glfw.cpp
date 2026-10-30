@@ -862,7 +862,7 @@ static void ImGui_ImplGlfw_UpdateMonitors()
     GLFWmonitor** glfw_monitors = glfwGetMonitors(&monitors_count);
     if (monitors_count == 0) // Preserve existing monitor list if there are none. Happens on macOS sleeping (#5683)
     {
-        // TuneBloom: a locked macOS screen reports no monitors at startup; fall back to the main window's area.
+        // TuneBloom: no monitor fallback
         if (platform_io.Monitors.Size == 0)
         {
             int w = 0, h = 0;

@@ -10,6 +10,10 @@ struct SearchFieldExtra
     const char* icon = nullptr;
     bool* wholeWord = nullptr;
     bool* enterPressed = nullptr;
+    const char* scope = nullptr;
+    const char* scopeClearTooltip = nullptr;
+    bool* scopeCleared = nullptr;
+    bool* scopeHovered = nullptr;
 };
 
 bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width = 0.0f, bool* caseSensitive = nullptr, bool setFocus = false, const SearchFieldExtra* extra = nullptr);
@@ -19,6 +23,7 @@ f32 BeginListRow();
 void CloseFilter();
 void SetItemTextFilterEnabled(bool enabled);
 
+bool ItemMatchesQuery(const Item* item, const char* query, bool caseSensitive);
 bool ItemMatchesFilter(const Item *item);
 ItemFilterCallback GetItemFilterCallback();
 void DrawTabFilterBar(const SearchFieldExtra* extra = nullptr);

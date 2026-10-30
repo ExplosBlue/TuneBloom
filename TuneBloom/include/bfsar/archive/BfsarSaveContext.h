@@ -29,12 +29,19 @@ struct BfsarSaveContext
 
     u32 getStringId(const sead::SafeString& str) const
     {
-        auto it = std::find(strings.begin(), strings.end(), str.cstr());
+        const auto it = stringIds.find(str.cstr());
 
-        if (it != strings.end())
-            return it - strings.begin();
-        else
-            return nw::snd::internal::DEFAULT_STRING_ID;
+        return it != stringIds.end() ? it->second : nw::snd::internal::DEFAULT_STRING_ID;
+    }
+
+    bool addString(const sead::SafeString& str)
+    {
+        if (!stringIds.try_emplace(str.cstr(), static_cast<u32>(strings.size())).second)
+            return false;
+
+        strings.push_back(str.cstr());
+
+        return true;
     }
 
     bool isGeneratedWaveArchive(const WaveArchive* warc) const
@@ -69,6 +76,7 @@ struct BfsarSaveContext
     FileWriter writer;
 
     std::vector<std::string> strings;
+    std::unordered_map<std::string, u32> stringIds;
 
     std::unordered_map<const Item*, VectorSet<const Group*>> itemAttachedGroups;
     std::unordered_map<const WaveArchive*, VectorSet<const WaveFile*>> warcWaveFiles;
@@ -80,6 +88,7 @@ struct BfsarSaveContext
     std::unordered_map<const Sound*, u32> wsdIndexes;
 
     std::vector<const WaveArchive*> generatedWarcs;
+    std::unordered_map<const Item*, const Item*> generatedWarcOwners;
     std::unordered_map<const Group*, const WaveArchive*> groupTargetWarcs;
 
     std::unordered_map<const Item*, File> itemFileIds;

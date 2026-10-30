@@ -12,6 +12,7 @@ bool BeginTableContextMenu();
 void EndContextMenu();
 
 bool ContextMenuItem(const char* icon, const char* label, bool enabled = true, const char* disabledReason = nullptr);
+bool ContextMenuHintItem(const char* icon, const char* label, const char* hint);
 bool ContextMenuDangerItem(const char* icon, const char* label);
 bool ContextMenuCheckItem(const char* label, bool checked, bool enabled = true);
 void ContextMenuSeparator();

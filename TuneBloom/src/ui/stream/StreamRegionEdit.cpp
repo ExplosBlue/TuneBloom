@@ -346,6 +346,14 @@ u32 RemoveStreamRegionsPastEnd(WaveFile* wave)
     return removedCount;
 }
 
+void ClearStreamRegions(WaveFile* wave)
+{
+    wave->getStreamFileLayout().regions.clear();
+
+    if (sSelectedRegionWave == wave)
+        sSelectedRegionNo = -1;
+}
+
 static void TrimStreamRegions(WaveFile* wave)
 {
     const u32 removedCount = RemoveStreamRegionsPastEnd(wave);

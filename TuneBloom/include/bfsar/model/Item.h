@@ -166,7 +166,9 @@ public:
 
         StreamTrack,
 
-        AudioAsset
+        AudioAsset,
+
+        BarsListEntry
     };
 
     static const u32 cInvalidId = nw::snd::SoundArchive::INVALID_ID;
@@ -273,7 +275,7 @@ public:
 
     u32 getIdWithTypeAll() const
     {
-        SEAD_ASSERT(ItemType::Invalid < mItemType && mItemType <= ItemType::AudioAsset);
+        SEAD_ASSERT(ItemType::Invalid < mItemType && mItemType <= ItemType::BarsListEntry);
 
         switch (mItemType)
         {
@@ -321,6 +323,9 @@ public:
 
             case ItemType::AudioAsset:
                 return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(15));
+
+            case ItemType::BarsListEntry:
+                return nw::snd::internal::Util::GetMaskedItemId(mId, nw::snd::internal::ItemType(16));
 
             default:
                 break;

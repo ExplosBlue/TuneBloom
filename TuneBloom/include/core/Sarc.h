@@ -8,6 +8,7 @@
 namespace sarc
 {
 
+inline constexpr u32 cHeaderSize       = 0x14;
 inline constexpr u32 cDefaultHashKey   = 0x65;
 inline constexpr u32 cDefaultAlignment = 0x20;
 
@@ -61,5 +62,6 @@ std::vector<u8> Write(const File& file);
 u32 HashName(const std::string& name, u32 key);
 const Entry* FindEntry(const File& file, const std::string& name);
 Entry* FindEntry(File& file, const std::string& name);
+const IndexEntry* FindIndexEntry(const Index& index, const std::string& name);
 
 }

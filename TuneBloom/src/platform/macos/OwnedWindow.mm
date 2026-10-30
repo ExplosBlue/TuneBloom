@@ -1,7 +1,8 @@
 #import <Cocoa/Cocoa.h>
 #include <platform/OwnedWindow.h>
 
-namespace ownedwindow {
+namespace ownedwindow
+{
 
 void prepare(void* window)
 {

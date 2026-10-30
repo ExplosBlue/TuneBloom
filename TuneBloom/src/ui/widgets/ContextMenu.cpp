@@ -84,7 +84,7 @@ void EndContextMenu()
     ImGui::EndPopup();
 }
 
-static bool DrawMenuRow(const char* icon, const char* label, bool checked, bool enabled)
+static bool DrawMenuRow(const char* icon, const char* label, bool checked, bool enabled, const char* hint = nullptr)
 {
     if (sMenuSeparatorPending)
         ImGui::Separator();
@@ -93,7 +93,7 @@ static bool DrawMenuRow(const char* icon, const char* label, bool checked, bool 
     sMenuItemCount++;
 
     ImDrawList* drawList = BeginMenuHighlight();
-    const bool pressed = ImGui::MenuItemEx(label, icon, nullptr, checked, enabled);
+    const bool pressed = ImGui::MenuItemEx(label, icon, hint, checked, enabled);
     EndMenuHighlight(drawList, false);
 
     return pressed;
@@ -107,6 +107,11 @@ bool ContextMenuItem(const char* icon, const char* label, bool enabled, const ch
         ImGui::SetItemTooltip("%s", disabledReason);
 
     return pressed;
+}
+
+bool ContextMenuHintItem(const char* icon, const char* label, const char* hint)
+{
+    return DrawMenuRow(icon, label, false, true, hint);
 }
 
 bool ContextMenuDangerItem(const char* icon, const char* label)

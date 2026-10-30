@@ -44,24 +44,14 @@ static s32 sLabelSelected = 0;
 static bool sLabelFocus = false;
 static bool sLabelScroll = false;
 
-static std::string FitText(std::string text, f32 width)
+static std::string FitText(const std::string& text, f32 width)
 {
     if (ImGui::CalcTextSize(text.c_str()).x <= width)
         return text;
 
-    while (!text.empty() && ImGui::CalcTextSize((text + "...").c_str()).x > width)
-    {
-        while (!text.empty())
-        {
-            const u8 c = static_cast<u8>(text.back());
-            text.pop_back();
+    const char* end = FindTextHeadEnd(text.c_str(), width - ImGui::CalcTextSize("...").x);
 
-            if ((c & 0xC0) != 0x80)
-                break;
-        }
-    }
-
-    return text + "...";
+    return std::string(text.c_str(), end) + "...";
 }
 
 static bool BarButton(const char* label, const char* tooltip, bool enabled = true)

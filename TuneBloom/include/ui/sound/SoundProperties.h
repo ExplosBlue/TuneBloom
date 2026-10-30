@@ -42,7 +42,7 @@ void DrawSequenceSoundUI(Sound::SequenceSoundInfo& seqSoundInfo);
 void DrawSequenceStartLabelPanel(Sound::SequenceSoundInfo& seqSoundInfo);
 
 void DrawStreamSoundUI(Sound* sound, Sound::StreamSoundInfo& strmSoundInfo);
-void DrawStreamExtensionUI(Sound::StreamSoundInfo& strmSoundInfo);
+void DrawStreamExtensionUI(Sound* sound);
 
 void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo);
 void DrawWaveEnvelopeSection(Sound::WaveSoundInfo& waveSoundInfo);

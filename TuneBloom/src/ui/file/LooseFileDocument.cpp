@@ -1,11 +1,8 @@
 #include <ui/file/LooseFileDocument.h>
 
+#include <ui/app/PopupMgr.h>
 #include <ui/backup/Backup.h>
-#include <ui/file/File.h>
-#include <ui/file/FileDialogs.h>
 #include <ui/Messages.h>
-
-#include <bfsar/io/PackFile.h>
 
 #include <filesystem>
 
@@ -18,7 +15,7 @@ const sead::SafeString& LooseFileDocument::loadedPath() const
 
 const char* LooseFileDocument::extension() const
 {
-    return GetInnerFileExtension(fileTarget().format, innerFileKind());
+    return fileFormat().extension;
 }
 
 UIType LooseFileDocument::defaultTab() const
@@ -48,66 +45,40 @@ void LooseFileDocument::captureItemBaselines()
 Document::ParseContext LooseFileDocument::parseContext() const
 {
     ParseContext context = CurrentParseContext();
-    context.endian = fileTarget().endian;
+    context.endian = fileFormat().endian;
 
     return context;
 }
 
-u64 LooseFileDocument::estimateMemory() const
-{
-    return 0;
-}
-
-bool LooseFileDocument::isLoaded() const
-{
-    return true;
-}
-
-bool LooseFileDocument::canUnload() const
-{
-    return false;
-}
-
-void LooseFileDocument::unload()
-{
-}
-
-bool LooseFileDocument::reload()
-{
-    return true;
-}
-
-bool LooseFileDocument::prepareSave()
-{
-    return true;
-}
-
-bool LooseFileDocument::prepareSaveAs()
-{
-    return true;
-}
-
 bool LooseFileDocument::chooseSaveAsPath(sead::BufferedSafeString* outPath) const
 {
-    const char* fileExtension = extension();
-    const char* displayName = GetInnerFileDisplayName(fileTarget().format, innerFileKind());
+    const LooseFileFormat format = fileFormat();
 
-    const sead::FormatFixedSafeString<32> pattern("*.%s", fileExtension);
-    const sead::FormatFixedSafeString<64> filterName("%s (%s)", displayName, pattern.cstr());
-
-    FileFilter filters[] = {
-        { filterName.cstr(), pattern.cstr() }
-    };
-
-    const fs::path documentPath(filePath().isEmpty() ? this->displayName() : std::string(filePath().cstr()));
-    const std::string defaultPath = (fs::path(packfile::GetDiskPath(documentPath.string())).parent_path() / documentPath.filename()).string();
-
-    return SaveFileDialog(outPath, nullptr, IM_ARRAYSIZE(filters), filters, fileExtension, defaultPath.c_str());
+    return showSaveAsDialog(outPath, format.name, format.extension, nullptr);
 }
 
-sead::FixedSafeString<64> LooseFileDocument::MakeUntitledName(const InnerFileTarget& target, InnerFileKind kind)
+Document* LooseFileDocument::OpenAs(LooseFileDocument* document, File* file, const sead::SafeString& path)
 {
-    return sead::FormatFixedSafeString<64>(messages::archive::cUntitledFileNameFormat, GetInnerFileExtension(target.format, kind));
+    sead::FixedSafeString<512> error;
+
+    const bool opened = document->openFile(*file, path, &error);
+    Free(file);
+
+    if (opened)
+    {
+        document->mLoadedPath = path;
+        return document;
+    }
+
+    PopupMgr::instance()->addPopup({ error, nullptr });
+
+    delete document;
+    return nullptr;
+}
+
+sead::FixedSafeString<64> LooseFileDocument::MakeUntitledName(const char* extension)
+{
+    return sead::FormatFixedSafeString<64>(messages::archive::cUntitledFileNameFormat, extension);
 }
 
 SaveResult LooseFileDocument::reportSave(SaveResult result, const char** outError)
@@ -117,21 +88,9 @@ SaveResult LooseFileDocument::reportSave(SaveResult result, const char** outErro
     return result;
 }
 
-SaveResult LooseFileDocument::saveUntitled(const char** outError)
-{
-    *outError = nullptr;
-
-    return SaveFileAs() ? SaveResult::Saved : SaveResult::Failed;
-}
-
 void LooseFileDocument::finishSave()
 {
     mLoadedPath = filePath();
-}
-
-s32 LooseFileDocument::getBackupNamesSetting() const
-{
-    return -1;
 }
 
 bool LooseFileDocument::writeBackup(const BackupWrite& write, backup::Snapshot* snapshot, Bfsar::BackupResult* outResult)
@@ -142,16 +101,4 @@ bool LooseFileDocument::writeBackup(const BackupWrite& write, backup::Snapshot* 
     *outResult = written ? Bfsar::BackupResult::Ok : Bfsar::BackupResult::WriteFailed;
 
     return written;
-}
-
-void LooseFileDocument::copyPreviousSidecars(const std::string&, const std::string&, backup::Snapshot*)
-{
-}
-
-void LooseFileDocument::restoreSidecars(const backup::Snapshot&)
-{
-}
-
-void LooseFileDocument::applyRestoredSnapshot(const backup::Snapshot&, bool)
-{
 }

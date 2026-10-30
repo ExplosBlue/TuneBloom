@@ -35,6 +35,7 @@ bool CanRenameItem(const Item* item)
         case Item::ItemType::WaveArchive:
         case Item::ItemType::Group:
         case Item::ItemType::Player:
+        case Item::ItemType::BarsListEntry:
             return item->isEnableName();
 
         case Item::ItemType::AudioAsset:
@@ -114,7 +115,7 @@ void OpenRenamePopup(ItemRenameResult result)
 
 void DrawRenamePopups()
 {
-    WarningPopup("###InvalidName", messages::item::cNameInvalidDetail);
+    WarningPopup("###InvalidName", GetDocumentNameRuleDetail());
     WarningPopup("###EmptyName", messages::item::cNameEmpty);
     DupeNamePopup();
 }

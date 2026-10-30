@@ -1,111 +1,24 @@
 #include <aal/Amta.h>
 
+#include <aal/AmtaInternal.h>
 #include <core/ByteBuilder.h>
-#include <core/ByteView.h>
 
-#include <codec/seadHashCRC32.h>
-#include <math/seadMathCalcCommon.h>
-
+#include <algorithm>
 #include <cstring>
 
 namespace aal
 {
 
-static constexpr u32 cHeaderByteOrder      = 0x04;
-static constexpr u32 cHeaderVersion        = 0x06;
-static constexpr u32 cHeaderFileSize       = 0x08;
-static constexpr u32 cHeaderDataOffset     = 0x0C;
-static constexpr u32 cHeaderMarkOffset     = 0x10;
-static constexpr u32 cHeaderExtOffset      = 0x14;
-static constexpr u32 cHeaderStringsV1      = 0x14;
-static constexpr u32 cHeaderStringsV3      = 0x18;
-static constexpr u32 cHeaderMinSize        = 0x1C;
-static constexpr u32 cHeaderNamePointerV5  = 0x24;
-static constexpr u32 cHeaderNameHashV5     = 0x28;
-static constexpr u32 cHeaderMinSizeV5      = 0x34;
-static constexpr u32 cHeaderFlagsV5        = 0x2C;
-static constexpr u32 cHeaderChannelsV5     = 0x30;
-static constexpr u32 cHeaderInfoOffsetV5   = 0x10;
-static constexpr u32 cHeaderOffsetFirstV5  = 0x0C;
-static constexpr u32 cHeaderOffsetLastV5   = 0x20;
-static constexpr u32 cInfoPeak             = 0x04;
-static constexpr u32 cInfoRms300           = 0x08;
-static constexpr u32 cInfoMomentaryMax     = 0x0C;
-static constexpr u32 cInfoIntegrated       = 0x10;
-static constexpr u32 cInfoEnvelopeCount    = 0x14;
-static constexpr u32 cInfoLoudnessRange    = 0x18;
-static constexpr u32 cInfoFixedSize        = 0x1C;
-static constexpr u32 cEnvelopePointSize    = 0x08;
-static constexpr u8 cFlagsLoopV5           = 0x04;
-static constexpr u8 cFlagsSpreadV5         = 0x80;
-static constexpr u8 cChannelTableVersion   = 0x01;
-static constexpr u8 cMonoPosition          = 0x04;
-static constexpr u32 cDataRms300           = 0x0C;
-static constexpr u32 cDataLoudness         = 0x1C;
-static constexpr u32 cDataPeak             = 0x60;
-static constexpr u32 cSectionHeaderSize    = 0x08;
-static constexpr u32 cSectionBodySize      = 0x04;
-static constexpr u32 cDataName             = 0x00;
-static constexpr u32 cDataStoredSamples    = 0x04;
-static constexpr u32 cDataChannelCount     = 0x09;
-static constexpr u32 cDataFlags            = 0x0B;
-static constexpr u32 cDataSampleRate       = 0x10;
-static constexpr u32 cDataLoopStart        = 0x14;
-static constexpr u32 cDataSampleCount      = 0x18;
-static constexpr u32 cDataMinSize          = 0x1C;
-static constexpr u32 cMarkEntrySize        = 0x10;
-static constexpr u32 cMarkEntryName        = 0x04;
-static constexpr u32 cExtEntrySize         = 0x08;
-static constexpr u32 cExtEntryName         = 0x00;
-static constexpr u32 cEntryListStart       = 0x04;
-static constexpr u32 cFileAlignment        = 4;
-static constexpr u8 cDataLoopFlag          = 0x04;
-static constexpr u32 cVersion3             = 0x0300;
+using namespace amta;
 
-static constexpr char cAmtaMagic[] = "AMTA";
+static constexpr const char* cExtStringNames[] = { "Lang", "VCT" };
 
-struct Amta5Parts
-{
-    bool isBigEndian = false;
-    std::vector<u8> header;
-    std::vector<u8> channelTable;
-    std::vector<u8> info;
-    std::vector<u8> envelope;
-    std::vector<u8> tail;
-    u32 infoOffset = 0;
-    u32 tailOffset = 0;
-    u32 nameOffset = 0;
-};
-
-struct StringTableLayout
-{
-    u32 dataBody = 0;
-    u32 strings = 0;
-    u32 stringsBody = 0;
-    u32 stringsBodySize = 0;
-};
-
-static ByteView MakeView(const std::vector<u8>& meta)
+ByteView MakeView(const std::vector<u8>& meta)
 {
     return ByteView(meta.data(), meta.size(), ByteView::IsBigEndianMark(meta.data(), meta.size(), cHeaderByteOrder));
 }
 
-static bool ReadCString(const ByteView& view, u64 offset, std::string* out)
-{
-    if (offset >= view.size())
-        return false;
-
-    const u8* start = view.at(offset);
-    const void* end = std::memchr(start, 0, view.size() - offset);
-
-    if (!end)
-        return false;
-
-    out->assign(reinterpret_cast<const char*>(start), static_cast<const u8*>(end) - start);
-    return true;
-}
-
-static bool ReadStringTableLayout(const ByteView& view, u16 version, StringTableLayout* out)
+bool ReadStringTableLayout(const ByteView& view, u16 version, StringTableLayout* out)
 {
     const u32 dataOffset = view.readU32(cHeaderDataOffset);
     const u32 stringsOffset = view.readU32(version >= cVersion3 ? cHeaderStringsV3 : cHeaderStringsV1);
@@ -121,108 +34,12 @@ static bool ReadStringTableLayout(const ByteView& view, u16 version, StringTable
     return view.has(out->stringsBody, out->stringsBodySize);
 }
 
-static void CollectEntryNameOffsets(const ByteView& view, u32 sectionOffset, u32 entrySize, u32 nameField, std::vector<u64>* out)
+bool IsAmtaTextKey(const std::string& name)
 {
-    if (sectionOffset == 0 || !view.has(sectionOffset, cSectionHeaderSize + sizeof(u32)))
-        return;
-
-    const u64 body = sectionOffset + cSectionHeaderSize;
-    const u32 count = view.readU32(body);
-
-    for (u32 i = 0; i < count; i++)
-    {
-        const u64 field = body + cEntryListStart + static_cast<u64>(i) * entrySize + nameField;
-
-        if (!view.has(field, sizeof(u32)))
-            break;
-
-        out->push_back(field);
-    }
+    return std::find(std::begin(cExtStringNames), std::end(cExtStringNames), name) != std::end(cExtStringNames);
 }
 
-static bool RenameAmtaV5(std::vector<u8>* meta, const std::string& name)
-{
-    const ByteView view = MakeView(*meta);
-    const u64 nameStart = cHeaderNamePointerV5 + static_cast<u64>(view.readU32(cHeaderNamePointerV5));
-
-    if (nameStart < cHeaderMinSizeV5 || nameStart > meta->size())
-        return false;
-
-    ByteBuilder builder(std::move(*meta), view.isBigEndian());
-    builder.resize(nameStart);
-    builder.appendBytes(name.data(), name.size());
-    builder.appendU8(0);
-    builder.alignTo(cFileAlignment);
-    builder.putU32(cHeaderFileSize, static_cast<u32>(builder.size()));
-    builder.putU32(cHeaderNameHashV5, sead::HashCRC32::calcHash(name.data(), static_cast<u32>(name.size())));
-
-    *meta = builder.take();
-    return true;
-}
-
-static bool RenameAmtaWithStringTable(std::vector<u8>* meta, u16 version, const std::string& name)
-{
-    const ByteView view = MakeView(*meta);
-
-    StringTableLayout layout;
-    if (!ReadStringTableLayout(view, version, &layout))
-        return false;
-
-    const u64 stringsEnd = static_cast<u64>(layout.stringsBody) + layout.stringsBodySize;
-    if (sead::Mathu::roundUpPow2(static_cast<u32>(stringsEnd), cFileAlignment) != meta->size())
-        return false;
-
-    const u64 nameField = layout.dataBody + cDataName;
-    const u32 nameOffset = view.readU32(nameField);
-
-    const u64 nameStart = static_cast<u64>(layout.stringsBody) + nameOffset;
-
-    std::string oldName;
-    if (!ReadCString(view, nameStart, &oldName) || nameStart + oldName.size() >= stringsEnd)
-        return false;
-
-    std::vector<u64> otherFields;
-    CollectEntryNameOffsets(view, view.readU32(cHeaderMarkOffset), cMarkEntrySize, cMarkEntryName, &otherFields);
-
-    if (version >= cVersion3)
-        CollectEntryNameOffsets(view, view.readU32(cHeaderExtOffset), cExtEntrySize, cExtEntryName, &otherFields);
-
-    std::vector<u32> otherOffsets;
-    otherOffsets.reserve(otherFields.size());
-
-    for (u64 field : otherFields)
-    {
-        const u32 offset = view.readU32(field);
-
-        if (offset == nameOffset || field + sizeof(u32) > layout.strings)
-            return false;
-
-        otherOffsets.push_back(offset);
-    }
-
-    const s64 delta = static_cast<s64>(name.size()) - static_cast<s64>(oldName.size());
-    const std::vector<u8> tail(meta->begin() + nameStart + oldName.size(), meta->begin() + stringsEnd);
-
-    ByteBuilder builder(std::move(*meta), view.isBigEndian());
-    builder.resize(nameStart);
-    builder.appendBytes(name.data(), name.size());
-    builder.appendBytes(tail.data(), tail.size());
-    builder.alignTo(cFileAlignment);
-
-    for (u32 i = 0; i < otherFields.size(); i++)
-    {
-        if (otherOffsets[i] > nameOffset)
-            builder.putU32(otherFields[i], static_cast<u32>(otherOffsets[i] + delta));
-    }
-
-    builder.putU32(layout.strings + cSectionBodySize, static_cast<u32>(layout.stringsBodySize + delta));
-    builder.putU32(cHeaderFileSize, static_cast<u32>(builder.size()));
-
-    *meta = builder.take();
-    return true;
-}
-
-static u32 FloatBits(f32 value)
+u32 FloatBits(f32 value)
 {
     u32 bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
@@ -230,146 +47,44 @@ static u32 FloatBits(f32 value)
     return bits;
 }
 
-static bool ReadAmta5Parts(const std::vector<u8>& meta, Amta5Parts* out)
+f32 FloatFromBits(u32 bits)
 {
-    const ByteView view = MakeView(meta);
-    const u32 infoOffset = view.readU32(cHeaderInfoOffsetV5);
-    const u64 nameOffset = cHeaderNamePointerV5 + static_cast<u64>(view.readU32(cHeaderNamePointerV5));
+    f32 value = 0.0f;
+    std::memcpy(&value, &bits, sizeof(value));
 
-    if (infoOffset < cHeaderMinSizeV5 || !view.has(infoOffset, cInfoFixedSize))
+    return value;
+}
+
+bool ReadAmtaMarkerList(const ByteView& view, u64 body, u64 stringsBase, std::vector<AmtaMarker>* out)
+{
+    if (!view.has(body, sizeof(u32)))
         return false;
 
-    const u64 envelopeEnd = infoOffset + cInfoFixedSize + static_cast<u64>(view.readU16(infoOffset + cInfoEnvelopeCount)) * cEnvelopePointSize;
+    const u32 count = view.readU32(body);
+    const u64 entries = body + cEntryListStart;
 
-    if (envelopeEnd > nameOffset || nameOffset > meta.size())
+    if (!view.has(entries, static_cast<u64>(count) * cMarkEntrySize))
         return false;
 
-    out->isBigEndian = view.isBigEndian();
-    out->header.assign(meta.begin(), meta.begin() + cHeaderChannelsV5);
-    out->channelTable.assign(meta.begin() + cHeaderChannelsV5, meta.begin() + infoOffset);
-    out->info.assign(meta.begin() + infoOffset, meta.begin() + infoOffset + cInfoFixedSize);
-    out->envelope.assign(meta.begin() + infoOffset + cInfoFixedSize, meta.begin() + envelopeEnd);
-    out->tail.assign(meta.begin() + envelopeEnd, meta.end());
-    out->infoOffset = infoOffset;
-    out->tailOffset = static_cast<u32>(envelopeEnd);
-    out->nameOffset = static_cast<u32>(nameOffset);
+    out->resize(count);
+
+    for (u32 i = 0; i < count; i++)
+    {
+        const u64 entry = entries + static_cast<u64>(i) * cMarkEntrySize;
+        const u64 nameField = entry + cMarkEntryName;
+        AmtaMarker& marker = (*out)[i];
+
+        if (!view.readCString((stringsBase != 0 ? stringsBase : nameField) + view.readU32(nameField), &marker.name))
+            return false;
+
+        marker.startFrame = view.readU32(entry + cMarkEntryStart);
+        marker.frameCount = view.readU32(entry + cMarkEntryLength);
+    }
 
     return true;
 }
 
-static u32 MapAmta5Offset(const Amta5Parts& parts, u32 newInfoOffset, u32 newTailOffset, u32 offset)
-{
-    if (offset >= parts.tailOffset)
-        return newTailOffset + (offset - parts.tailOffset);
-
-    if (offset >= parts.infoOffset)
-        return newInfoOffset + (offset - parts.infoOffset);
-
-    return offset;
-}
-
-static std::vector<u8> WriteAmta5Parts(const Amta5Parts& parts)
-{
-    const u32 newInfoOffset = cHeaderChannelsV5 + static_cast<u32>(parts.channelTable.size());
-    const u32 newTailOffset = newInfoOffset + cInfoFixedSize + static_cast<u32>(parts.envelope.size());
-
-    ByteBuilder builder(parts.isBigEndian);
-    builder.appendBytes(parts.header.data(), parts.header.size());
-    builder.appendBytes(parts.channelTable.data(), parts.channelTable.size());
-    builder.appendBytes(parts.info.data(), parts.info.size());
-    builder.appendBytes(parts.envelope.data(), parts.envelope.size());
-    builder.appendBytes(parts.tail.data(), parts.tail.size());
-
-    const ByteView view(parts.header.data(), parts.header.size(), parts.isBigEndian);
-
-    for (u32 field = cHeaderOffsetFirstV5; field <= cHeaderOffsetLastV5; field += sizeof(u32))
-    {
-        const u32 offset = view.readU32(field);
-
-        if (offset != 0)
-            builder.putU32(field, MapAmta5Offset(parts, newInfoOffset, newTailOffset, offset));
-    }
-
-    builder.putU32(cHeaderNamePointerV5, MapAmta5Offset(parts, newInfoOffset, newTailOffset, parts.nameOffset) - cHeaderNamePointerV5);
-    builder.putU32(cHeaderFileSize, static_cast<u32>(builder.size()));
-
-    return builder.take();
-}
-
-static std::vector<u8> MakeAmta5ChannelTable(u32 channelCount, bool isBigEndian)
-{
-    ByteBuilder builder(isBigEndian);
-    builder.appendU8(cChannelTableVersion);
-    builder.appendU8(static_cast<u8>(channelCount));
-
-    for (u32 i = 0; i < channelCount; i++)
-    {
-        builder.appendU8(static_cast<u8>(i));
-        builder.appendU8(channelCount == 1 ? cMonoPosition : static_cast<u8>(i));
-    }
-
-    builder.alignTo(cFileAlignment);
-    return builder.take();
-}
-
-static bool UpdateAmta5WaveFields(std::vector<u8>* meta, const AmtaWaveFields& fields)
-{
-    Amta5Parts parts;
-
-    if (!ReadAmta5Parts(*meta, &parts))
-        return false;
-
-    ByteBuilder header(std::move(parts.header), parts.isBigEndian);
-    u8 flags = header.bytes()[cHeaderFlagsV5];
-
-    flags = fields.isLoop ? flags | cFlagsLoopV5 : flags & ~cFlagsLoopV5;
-
-    const u32 currentChannels = parts.channelTable.size() >= 2 ? parts.channelTable[1] : 0;
-
-    if (fields.channelCount != currentChannels && (fields.channelCount == 1 || fields.channelCount == 2))
-    {
-        parts.channelTable = MakeAmta5ChannelTable(fields.channelCount, parts.isBigEndian);
-        flags &= ~cFlagsSpreadV5;
-    }
-
-    header.putU8(cHeaderFlagsV5, flags);
-    parts.header = header.take();
-
-    *meta = WriteAmta5Parts(parts);
-    return true;
-}
-
-static bool WriteAmta5Loudness(std::vector<u8>* meta, const AmtaLoudness& loudness)
-{
-    Amta5Parts parts;
-
-    if (!ReadAmta5Parts(*meta, &parts) || loudness.envelope.size() > 0xFFFF)
-        return false;
-
-    ByteBuilder info(std::move(parts.info), parts.isBigEndian);
-    info.putU32(cInfoPeak, FloatBits(loudness.peak));
-    info.putU32(cInfoRms300, FloatBits(loudness.rms300));
-    info.putU32(cInfoMomentaryMax, FloatBits(loudness.momentaryMax));
-    info.putU32(cInfoIntegrated, FloatBits(loudness.integrated));
-    info.putU16(cInfoEnvelopeCount, static_cast<u16>(loudness.envelope.size()));
-    info.putU32(cInfoLoudnessRange, FloatBits(loudness.loudnessRange));
-    parts.info = info.take();
-
-    ByteBuilder envelope(parts.isBigEndian);
-
-    for (const AmtaEnvelopePoint& point : loudness.envelope)
-    {
-        envelope.appendU32(point.position);
-        envelope.appendU32(FloatBits(point.power));
-    }
-
-    parts.envelope = envelope.take();
-
-    *meta = WriteAmta5Parts(parts);
-    return true;
-}
-
-static bool FindAmta4Data(const ByteView& view, u64* outBody, u32* outBodySize)
+bool FindAmta4Data(const ByteView& view, u64* outBody, u32* outBodySize)
 {
     const u32 dataOffset = view.readU32(cHeaderDataOffset);
 
@@ -402,9 +117,30 @@ u32 MeasureAmta(const void* data, u64 size)
     return fileSize;
 }
 
-static bool IsCompleteAmta(const std::vector<u8>& meta)
+bool IsCompleteAmta(const std::vector<u8>& meta)
 {
     return !meta.empty() && MeasureAmta(meta.data(), meta.size()) == meta.size();
+}
+
+bool IsAmta4Layout(u16 version)
+{
+    return version == cAmtaVersion4 || version == cAmtaVersion1;
+}
+
+bool ReadAmtaData(const std::vector<u8>& meta, AmtaData* out)
+{
+    if (!IsCompleteAmta(meta))
+        return false;
+
+    out->view = MakeView(meta);
+    out->version = out->view.readU16(cHeaderVersion);
+
+    return out->version >= cAmtaVersion5 || (IsAmta4Layout(out->version) && FindAmta4Data(out->view, &out->body, &out->bodySize));
+}
+
+static bool ReadAmta4WaveData(const std::vector<u8>& meta, AmtaData* out)
+{
+    return ReadAmtaData(meta, out) && out->version == cAmtaVersion4 && out->bodySize >= cDataMinSize;
 }
 
 u16 GetAmtaVersion(const std::vector<u8>& meta)
@@ -413,6 +149,11 @@ u16 GetAmtaVersion(const std::vector<u8>& meta)
         return 0;
 
     return MakeView(meta).readU16(cHeaderVersion);
+}
+
+bool IsAmtaBigEndian(const std::vector<u8>& meta)
+{
+    return IsAmta(meta.data(), meta.size()) && MakeView(meta).isBigEndian();
 }
 
 bool ReadAmtaName(const std::vector<u8>& meta, std::string* outName)
@@ -424,13 +165,84 @@ bool ReadAmtaName(const std::vector<u8>& meta, std::string* outName)
     const u16 version = view.readU16(cHeaderVersion);
 
     if (version >= cAmtaVersion5)
-        return ReadCString(view, cHeaderNamePointerV5 + static_cast<u64>(view.readU32(cHeaderNamePointerV5)), outName);
+        return view.readCString(cHeaderNamePointerV5 + static_cast<u64>(view.readU32(cHeaderNamePointerV5)), outName);
 
     StringTableLayout layout;
     if (!ReadStringTableLayout(view, version, &layout))
         return false;
 
-    return ReadCString(view, static_cast<u64>(layout.stringsBody) + view.readU32(layout.dataBody + cDataName), outName);
+    return view.readCString(static_cast<u64>(layout.stringsBody) + view.readU32(layout.dataBody + cDataName), outName);
+}
+
+void AppendAmtaHeader(ByteBuilder* builder, u16 version, u32 size)
+{
+    builder->appendBytes(cAmtaMagic, sizeof(u32));
+    builder->appendU16(cByteOrderMark);
+    builder->appendU16(version);
+    builder->appendZeros(size - builder->size());
+}
+
+bool ReadAmtaLabels(const std::vector<u8>& meta, AmtaLabels* out)
+{
+    *out = AmtaLabels();
+
+    if (!IsCompleteAmta(meta))
+        return false;
+
+    const u16 version = GetAmtaVersion(meta);
+
+    if (IsAmta4Layout(version))
+        return ReadAmta4Labels(meta, version, out);
+
+    if (version < cAmtaVersion5)
+        return false;
+
+    Amta5Parts parts;
+
+    if (!ParseAmta5Parts(meta, &parts))
+        return false;
+
+    *out = std::move(parts.labels);
+    return true;
+}
+
+bool CanAddAmtaKeys(const std::vector<u8>& meta)
+{
+    const u16 version = GetAmtaVersion(meta);
+
+    return version == cAmtaVersion4 || version >= cAmtaVersion5;
+}
+
+bool CanWriteAmtaLabels(const std::vector<u8>& meta)
+{
+    if (!IsCompleteAmta(meta))
+        return false;
+
+    const u16 version = GetAmtaVersion(meta);
+    Amta5Parts amta5;
+
+    return IsAmta4Layout(version) ? CanWriteAmta4Labels(meta) : version >= cAmtaVersion5 && ReadAmta5Parts(meta, &amta5);
+}
+
+bool WriteAmtaLabels(std::vector<u8>* meta, const AmtaLabels& labels)
+{
+    if (!IsCompleteAmta(*meta))
+        return false;
+
+    const u16 version = GetAmtaVersion(*meta);
+
+    if (IsAmta4Layout(version))
+        return WriteAmta4Labels(meta, labels);
+
+    Amta5Parts parts;
+
+    if (version < cAmtaVersion5 || !ReadAmta5Parts(*meta, &parts))
+        return false;
+
+    parts.labels = labels;
+    *meta = WriteAmta5Parts(parts);
+
+    return true;
 }
 
 bool RenameAmta(std::vector<u8>* meta, const std::string& name)
@@ -444,6 +256,17 @@ bool RenameAmta(std::vector<u8>* meta, const std::string& name)
         return RenameAmtaV5(meta, name);
 
     return RenameAmtaWithStringTable(meta, version, name);
+}
+
+bool CanRenameAmta(const std::vector<u8>& meta)
+{
+    if (meta.empty())
+        return true;
+
+    std::string name;
+    std::vector<u8> renamed = meta;
+
+    return ReadAmtaName(meta, &name) && RenameAmta(&renamed, name);
 }
 
 bool UpdateAmtaWaveFields(std::vector<u8>* meta, const AmtaWaveFields& fields)
@@ -483,44 +306,181 @@ bool UpdateAmtaWaveFields(std::vector<u8>* meta, const AmtaWaveFields& fields)
     return true;
 }
 
+static u32 ScaleFramesToRate(u32 frames, u32 fromRate, u32 toRate)
+{
+    return static_cast<u32>((static_cast<u64>(frames) * toRate + fromRate / 2) / fromRate);
+}
+
+bool HasAmtaSourceRate(const std::vector<u8>& meta, u32 audioSampleRate)
+{
+    AmtaData data;
+
+    return ReadAmta4WaveData(meta, &data) && data.view.readU32(data.body + cDataSampleRate) != audioSampleRate;
+}
+
+static u32 ChooseSourceSampleCount(u32 scaledCount, const AmtaSourceAudio& source, u32 audioSampleRate)
+{
+    const u32 tolerance = (source.sampleRate + audioSampleRate - 1) / audioSampleRate;
+    const u32 distance = scaledCount > source.sampleCount ? scaledCount - source.sampleCount : source.sampleCount - scaledCount;
+
+    return distance <= tolerance ? source.sampleCount : scaledCount;
+}
+
+static u32 CalcSourceSampleCount(const AmtaSourceAudio& source, u32 audioSampleRate, u32 audioSampleCount)
+{
+    return ChooseSourceSampleCount(ScaleFramesToRate(audioSampleCount, audioSampleRate, source.sampleRate), source, audioSampleRate);
+}
+
+u32 CalcAmtaMarkerLimit(bool keepsSourceRate, const AmtaSourceAudio& source, u32 audioSampleRate, u32 audioSampleCount)
+{
+    if (!keepsSourceRate || source.sampleRate == 0 || audioSampleRate == 0)
+        return audioSampleCount;
+
+    return CalcSourceSampleCount(source, audioSampleRate, audioSampleCount);
+}
+
+bool WriteAmtaSourceRate(std::vector<u8>* meta, const AmtaSourceAudio& source)
+{
+    AmtaData data;
+
+    if (source.sampleRate == 0 || !ReadAmta4WaveData(*meta, &data))
+        return false;
+
+    const ByteView& view = data.view;
+    const u64 body = data.body;
+    const u32 audioSampleRate = view.readU32(body + cDataSampleRate);
+
+    if (audioSampleRate == 0)
+        return false;
+
+    const u32 loopStartFrame = ScaleFramesToRate(view.readU32(body + cDataLoopStart), audioSampleRate, source.sampleRate);
+    const u32 sampleCount = CalcSourceSampleCount(source, audioSampleRate, view.readU32(body + cDataSampleCount));
+
+    ByteBuilder builder(std::move(*meta), view.isBigEndian());
+    builder.putU32(body + cDataSampleRate, source.sampleRate);
+    builder.putU32(body + cDataLoopStart, loopStartFrame);
+    builder.putU32(body + cDataSampleCount, sampleCount);
+
+    *meta = builder.take();
+    return true;
+}
+
+bool ClearAmtaMarkers(std::vector<u8>* meta)
+{
+    AmtaLabels labels;
+
+    if (!ReadAmtaLabels(*meta, &labels) || labels.markers.empty())
+        return false;
+
+    labels.markers.clear();
+
+    return WriteAmtaLabels(meta, labels);
+}
+
+bool ClampAmtaMarkers(std::vector<u8>* meta, u32 sampleCount)
+{
+    AmtaLabels labels;
+
+    if (!ReadAmtaLabels(*meta, &labels))
+        return false;
+
+    bool isChanged = false;
+
+    for (AmtaMarker& marker : labels.markers)
+    {
+        if (!marker.endsAfter(sampleCount))
+            continue;
+
+        marker.startFrame = std::min(marker.startFrame, sampleCount);
+        marker.frameCount = std::min(marker.frameCount, sampleCount - marker.startFrame);
+        isChanged = true;
+    }
+
+    return isChanged && WriteAmtaLabels(meta, labels);
+}
+
+bool IsAmtaLoop(const std::vector<u8>& meta)
+{
+    AmtaData data;
+
+    if (!ReadAmtaData(meta, &data))
+        return false;
+
+    if (data.version >= cAmtaVersion5)
+        return (data.view.readU8(cHeaderFlagsV5) & cFlagsLoopV5) != 0;
+
+    return (data.view.readU8(data.body + cDataFlags) & cDataLoopFlag) != 0;
+}
+
+bool ReadAmtaLength(const std::vector<u8>& meta, AmtaSourceAudio* out)
+{
+    AmtaData data;
+
+    if (!ReadAmtaData(meta, &data))
+        return false;
+
+    if (data.version >= cAmtaVersion5)
+        return ReadMinfLength(data.view, out);
+
+    out->sampleRate = data.view.readU32(data.body + cDataSampleRate);
+    out->sampleCount = data.view.readU32(data.body + cDataSampleCount);
+
+    return out->sampleRate != 0;
+}
+
+bool IsAmtaStream(const std::vector<u8>& meta, AmtaAudioKind* outKind)
+{
+    AmtaData data;
+    *outKind = AmtaAudioKind::Bwav;
+
+    if (!ReadAmtaData(meta, &data))
+        return false;
+
+    if (data.version >= cAmtaVersion5)
+        return (data.view.readU8(cHeaderFlagsV5) & cFlagsStreamV5) != 0;
+
+    if (data.version != cAmtaVersion4 || data.bodySize <= cDataFlags)
+        return false;
+
+    *outKind = (data.view.readU8(data.body + cDataFlags) & cDataFlagBwavAudio) != 0 ? AmtaAudioKind::Bwav : AmtaAudioKind::Bfwav;
+    return data.view.readU8(data.body + cDataIsStream) != 0;
+}
+
 bool HasAmtaLoudness(const std::vector<u8>& meta)
 {
-    if (!IsCompleteAmta(meta))
+    AmtaData data;
+
+    if (!ReadAmtaData(meta, &data))
         return false;
 
-    const ByteView view = MakeView(meta);
-    const u16 version = view.readU16(cHeaderVersion);
-
-    if (version >= cAmtaVersion5)
+    if (data.version >= cAmtaVersion5)
         return true;
 
-    u64 body = 0;
-    u32 bodySize = 0;
-
-    if (version != cAmtaVersion4 || !FindAmta4Data(view, &body, &bodySize) || bodySize < cDataLoudness + sizeof(f32))
+    if (data.version != cAmtaVersion4 || data.bodySize < cDataLoudness + sizeof(f32))
         return false;
 
-    const bool hasPeak = bodySize >= cDataPeak + sizeof(f32) && view.readU32(body + cDataPeak) != 0;
+    const bool hasPeak = data.bodySize >= cDataPeak + sizeof(f32) && data.view.readU32(data.body + cDataPeak) != 0;
 
-    return view.readU32(body + cDataRms300) != 0 || view.readU32(body + cDataLoudness) != 0 || hasPeak;
+    return data.view.readU32(data.body + cDataRms300) != 0 || data.view.readU32(data.body + cDataLoudness) != 0 || hasPeak;
 }
 
 bool WriteAmtaLoudness(std::vector<u8>* meta, const AmtaLoudness& loudness)
 {
-    if (!HasAmtaLoudness(*meta))
+    AmtaData data;
+
+    if (!ReadAmtaData(*meta, &data))
         return false;
 
-    const ByteView view = MakeView(*meta);
-
-    if (view.readU16(cHeaderVersion) >= cAmtaVersion5)
+    if (data.version >= cAmtaVersion5)
         return WriteAmta5Loudness(meta, loudness);
 
-    u64 body = 0;
-    u32 bodySize = 0;
+    if (data.version != cAmtaVersion4 || data.bodySize < cDataLoudness + sizeof(f32))
+        return false;
 
-    FindAmta4Data(view, &body, &bodySize);
+    const u64 body = data.body;
+    const u32 bodySize = data.bodySize;
 
-    ByteBuilder builder(std::move(*meta), view.isBigEndian());
+    ByteBuilder builder(std::move(*meta), data.view.isBigEndian());
     builder.putU32(body + cDataRms300, FloatBits(loudness.rms300));
     builder.putU32(body + cDataLoudness, FloatBits(loudness.momentaryMax));
 

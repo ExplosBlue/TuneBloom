@@ -5,9 +5,9 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/items/ItemSelector.h>
-#include <ui/widgets/Knob.h>
 #include <ui/Messages.h>
 #include <ui/player/PlayerViews.h>
+#include <ui/widgets/RangeCell.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/stream/StreamPanelFold.h>
@@ -26,14 +26,10 @@
 
 static constexpr f32 cRegionPlayingAlpha = 0.20f;
 static constexpr f32 cRegionNextGapEm    = 0.5f;
-static constexpr f32 cRegionFieldPadY    = 2.0f;
-static constexpr f32 cRegionDragRange    = 2000.0f;
 static constexpr s32 cRegionToolNum      = 2;
 static constexpr f32 cRegionNameWeight   = 1.0f;
 static constexpr f32 cRegionRangeWeight  = 1.5f;
 static constexpr f32 cRegionRangeHeight  = 12.0f;
-static constexpr f32 cRegionRangeLine    = 2.0f;
-static constexpr f32 cRegionRangeAlpha   = 0.35f;
 static constexpr f32 cRegionRangeTableEm = 34.0f;
 
 static const char* cRegionNumberWidest   = "000";
@@ -109,7 +105,7 @@ static void SetupRegionColumns(f32 edgeInset)
     SetupItemActionColumn();
     ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, ImGui::CalcTextSize(cRegionNumberWidest).x);
     ImGui::TableSetupColumn(messages::common::cName, ImGuiTableColumnFlags_WidthStretch, cRegionNameWeight);
-    ImGui::TableSetupColumn(messages::stream::cRegionRange, ImGuiTableColumnFlags_WidthStretch | (showRange ? 0 : ImGuiTableColumnFlags_Disabled), cRegionRangeWeight);
+    ImGui::TableSetupColumn(messages::common::cRange, ImGuiTableColumnFlags_WidthStretch | (showRange ? 0 : ImGuiTableColumnFlags_Disabled), cRegionRangeWeight);
     ImGui::TableSetupColumn(messages::common::cStart, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
     ImGui::TableSetupColumn(messages::common::cEnd, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
     ImGui::TableSetupColumn(messages::common::cLength, ImGuiTableColumnFlags_WidthFixed, positionWidth + edgeInset);
@@ -149,31 +145,13 @@ static void DrawRegionField(const RegionTable& view, s32 regionNo, s32 column, c
         return;
 
     const StreamRegion& region = view.layout->regions[regionNo];
-    const ImGuiStyle& style = ImGui::GetStyle();
 
     u32 value = isStart ? region.start : region.end;
-    u32 min = isStart ? 0 : region.start + 1;
-    u32 max = isStart ? region.end - 1 : view.sampleCount;
+    const u32 min = isStart ? 0 : region.start + 1;
+    const u32 max = isStart ? region.end - 1 : view.sampleCount;
 
-    sead::FixedSafeString<24> time;
-    FormatSampleTime(&time, value, view.sampleRate);
-
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + style.FramePadding.y - cRegionFieldPadY);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, cRegionFieldPadY));
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, uicolors::cTransparent);
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ImGui::BeginDisabled(view.editReason != nullptr);
-
-    SetNextKnobText(time.cstr());
-
-    const bool changed = DragField(id, ImGuiDataType_U32, &value, sead::Mathf::max(1.0f, static_cast<f32>(view.sampleCount) / cRegionDragRange), &min, &max);
-    const bool commit = ImGui::IsItemDeactivatedAfterEdit() || (changed && !ImGui::IsItemActive());
-
-    ImGui::EndDisabled();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar();
-
-    KnobTooltip(messages::wavefile::cSamplesFormat, value);
+    const bool changed = DrawCellTimeField(id, &value, min, max, view.sampleCount, view.sampleRate, view.editReason != nullptr);
+    const bool commit = IsItemEditCommitted(changed);
 
     if (changed)
         SetStreamRegionRange(view.wave, regionNo, isStart ? value : region.start, isStart ? region.end : value);
@@ -206,13 +184,8 @@ static void DrawRegionRange(const RegionTable& view, s32 regionNo)
     if (!ImGui::TableSetColumnIndex(cRegionColumn_Range))
         return;
 
-    const ImVec2 cursor = ImGui::GetCursorScreenPos();
-    const f32 right = cursor.x + ImGui::GetContentRegionAvail().x;
-    const f32 centerY = ImFloor(cursor.y + ImGui::GetFrameHeight() * 0.5f);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-
-    draw->AddRectFilled(ImVec2(cursor.x, centerY - cRegionRangeLine * 0.5f), ImVec2(right, centerY + cRegionRangeLine * 0.5f), ImGui::GetColorU32(ImGuiCol_TextDisabled, cRegionRangeAlpha), cRegionRangeLine * 0.5f);
-    DrawStreamRegionMarks(draw, ImVec2(cursor.x, centerY - cRegionRangeHeight * 0.5f), ImVec2(right, centerY + cRegionRangeHeight * 0.5f), view.wave, regionNo);
+    const RangeCell cell = BeginRangeCell(cRegionRangeHeight);
+    DrawStreamRegionMarks(cell.draw, cell.min, cell.max, view.wave, regionNo);
 }
 
 static void DrawRegionName(const RegionTable& view, s32 regionNo, ImGuiID rowId, bool rowHovered, RegionEdit* edit)
@@ -231,13 +204,9 @@ static void DrawRegionName(const RegionTable& view, s32 regionNo, ImGuiID rowId,
 
     if (GetRenamedRow(view.tableId) == &region)
     {
-        const f32 framePadding = ImGui::GetStyle().FramePadding.x;
         sead::FixedSafeString<256> name;
 
-        ImGui::SetCursorScreenPos(ImVec2(cursor.x - framePadding, cursor.y));
-        ImGui::SetNextItemWidth(cellRight - cursor.x + framePadding);
-
-        if (DrawRowRenameField("", &name) && !RenameStreamRegion(view.wave, regionNo, name))
+        if (DrawRowRenameFieldAt(cursor, cellRight - cursor.x, &name) && !RenameStreamRegion(view.wave, regionNo, name))
             edit->invalidName = true;
 
         return;

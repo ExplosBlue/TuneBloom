@@ -7,6 +7,7 @@
 #include <ui/export/ExportInternal.h>
 #include <ui/file/File.h>
 #include <ui/file/FileDialogs.h>
+#include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/ListFilter.h>
 #include <ui/Messages.h>
@@ -14,15 +15,23 @@
 #include <ui/app/PopupMgr.h>
 #include <ui/items/Selection.h>
 #include <ui/file/UnsavedChanges.h>
+#include <ui/wave/WaveFormatUI.h>
 #include <ui/wave/WaveImportPanel.h>
 #include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
 
+#include <aal/Bwav.h>
+#include <bfsar/audio/DecodedPcm.h>
+#include <bfsar/audio/NxOpus.h>
 #include <bfsar/io/FileIo.h>
 
 #include <string>
 #include <vector>
+
+static constexpr f32 cStreamStartSeconds = 10.0f;
+
+static const char* const cOpusOffReasons[cBwavCodecCount] = { nullptr, nullptr, messages::import::cWaveOpusStreamTip };
 
 namespace
 {
@@ -32,6 +41,12 @@ struct AssetAudioImport
     AudioAsset* target = nullptr;
     WaveFile::RiffWaveInfo info;
     WaveFile::Encoding encoding = WaveFile::Encoding::DspAdpcm;
+    s32 bwavCodec = static_cast<s32>(aal::BwavCodec::DspAdpcm);
+    u32 opusBitrate = aal::cBwavOpusChannelBitrate;
+    u32 originalOpusBitrate = 0;
+    bool isStream = false;
+    OldAudioData oldData;
+    OldAudioClear cleared;
     sead::FixedSafeString<512> fileName;
 };
 
@@ -39,7 +54,6 @@ struct AssetAudioImport
 
 static AssetAudioImport sReplaceImport;
 static AssetAudioImport sCreateImport;
-static const AudioAsset* sCreateTemplate = nullptr;
 static bool sCreateNeedsFile = true;
 
 static std::vector<AudioAsset*> sPendingWavExports;
@@ -61,53 +75,129 @@ static bool IsResourceAsset(const AudioAsset* asset)
     return false;
 }
 
-static WaveFile::Encoding* GetImportEncoding(AssetAudioImport& import, const AudioAsset& asset)
+static bool OffersOpus(const AudioAsset* target)
 {
-    return asset.getInfo().kind == AudioAssetKind::Fwav ? &import.encoding : nullptr;
+    aal::BwavCodec codec = aal::BwavCodec::DspAdpcm;
+
+    if (!target)
+        return false;
+
+    const AudioResource* resource = target->getResource();
+    const bool isLooseBwav = resource && resource->getContainer() == AudioResource::Container::Bwav;
+
+    return isLooseBwav || target->isStream() || (GetAudioAssetBwavCodec(*target, &codec) && codec == aal::BwavCodec::Opus);
 }
 
-static bool AskForWav(AssetAudioImport* import)
+static WaveImportEncoding GetImportEncoding(AssetAudioImport& import, AudioAssetKind kind, const AudioAsset* target)
+{
+    if (kind != AudioAssetKind::Bwav)
+        return MakeWaveImportEncoding(kind == AudioAssetKind::Fwav ? &import.encoding : nullptr);
+
+    WaveImportEncoding choice;
+    choice.value = &import.bwavCodec;
+    choice.names = cBwavCodecNames;
+    choice.details = cBwavCodecDetails;
+    choice.count = static_cast<s32>(cBwavCodecCount);
+    choice.reasons = (target ? OffersOpus(target) : import.isStream) ? nullptr : cOpusOffReasons;
+    choice.acceptsSampleRate = &AcceptsBwavCodecSampleRate;
+    choice.sampleRateReason = messages::import::cWaveOpusRateTip;
+    choice.bitrate = &import.opusBitrate;
+    choice.bitrateValue = static_cast<s32>(aal::BwavCodec::Opus);
+    choice.originalBitrate = import.originalOpusBitrate;
+
+    return choice;
+}
+
+static void SetStartFormat(AssetAudioImport* import, AudioAsset* asset)
+{
+    aal::BwavCodec codec = aal::BwavCodec::DspAdpcm;
+    const WaveFile* wave = asset && asset->getInfo().kind == AudioAssetKind::Fwav ? asset->getPreviewWave() : nullptr;
+
+    if (asset)
+        GetAudioAssetBwavCodec(*asset, &codec);
+
+    import->bwavCodec = static_cast<s32>(codec);
+    import->encoding = wave ? wave->getEncoding() : WaveFile::Encoding::DspAdpcm;
+
+    const u32 bitrate = asset ? nxopus::SnapChannelBitrate(GetAudioAssetOpusBitrate(*asset)) : 0;
+
+    import->opusBitrate = bitrate != 0 ? nxopus::FindNearestChannelBitrate(bitrate) : aal::cBwavOpusChannelBitrate;
+    import->originalOpusBitrate = nxopus::IsChannelBitratePreset(bitrate) ? bitrate : 0;
+}
+
+static bool AcceptsAnyWav(AudioAssetKind kind)
+{
+    return kind != AudioAssetKind::Fwav;
+}
+
+static AudioAssetKind GetCreateKind()
+{
+    return ActiveAudioResource().getNewAssetKind();
+}
+
+static bool AskForWav(AssetAudioImport* import, bool acceptsAnyWav, AudioAsset* formatSource)
 {
     import->info.clear();
     import->fileName.clear();
-    import->encoding = WaveFile::Encoding::DspAdpcm;
+    SetStartFormat(import, formatSource);
 
     FileFilter filters[] = {
         { messages::filedialog::cFilterWave, "*.wav" }
     };
 
-    if (!OpenFileDialog(&import->info.path, nullptr, IM_ARRAYSIZE(filters), filters) || !WaveFile::readRiffWavInfo(&import->info))
+    if (!OpenFileDialog(&import->info.path, nullptr, IM_ARRAYSIZE(filters), filters) || !WaveFile::readRiffWavInfo(&import->info, acceptsAnyWav))
         return false;
 
     fileio::GetFileStem(&import->fileName, import->info.path);
     return true;
 }
 
-static bool CommitAudioImport(AssetAudioImport* import, AudioAsset* asset, Item* popupItem)
+static AudioAsset* CommitAudioImport(AssetAudioImport* import, AudioAsset* asset, Item* popupItem)
 {
+    const aal::AmtaSourceAudio source = { import->info.sampleRate, import->info.sampleCount };
     const std::string tempPath = FinalizeImportInfoForCommit(&import->info);
 
     if (!import->info.isLoop)
         import->info.loopStartFrame = 0;
 
+    AudioResource& resource = ActiveAudioResource();
     const char* error = nullptr;
-    const bool replaced = ActiveAudioResource().replaceAudio(asset, import->info, import->encoding, &error);
+    AudioAsset* result = nullptr;
+
+    AudioAssetEncoding encoding;
+    encoding.fwavEncoding = import->encoding;
+    encoding.bwavCodec = static_cast<aal::BwavCodec>(import->bwavCodec);
+    encoding.opusChannelBitrate = import->opusBitrate;
+
+    if (!asset)
+        result = resource.createNewAsset(import->info, encoding, import->isStream, &error);
+    else if (resource.replaceAudio(asset, import->info, source, encoding, import->cleared, &error))
+        result = asset;
 
     if (!tempPath.empty())
         fileio::RemoveFile(tempPath.c_str());
 
-    if (!replaced)
+    if (!result)
         PopupMgr::instance()->addPopup({ error, popupItem });
 
-    return replaced;
+    return result;
 }
 
 void RequestAudioAssetReplace(AudioAsset* asset)
 {
     sReplaceImport.target = nullptr;
 
-    if (AskForWav(&sReplaceImport))
-        sReplaceImport.target = asset;
+    if (!AskForWav(&sReplaceImport, AcceptsAnyWav(asset->getInfo().kind), asset))
+        return;
+
+    sReplaceImport.target = asset;
+    sReplaceImport.oldData = ActiveAudioResource().findOldAudioData(*asset);
+    sReplaceImport.cleared = OldAudioClear();
+}
+
+bool IsAudioAssetReplacePending(const AudioAsset* asset)
+{
+    return asset && sReplaceImport.target == asset;
 }
 
 static void ImportAssetFile(AudioAsset* asset)
@@ -184,9 +274,9 @@ static bool CanExportFiles(const std::vector<AudioAsset*>& assets, const char** 
 
     for (const AudioAsset* asset : assets)
     {
-        if (!GetAudioAssetKindExtension(asset->getCompleteFileKind()) || !asset->getFile())
+        if (!GetAudioAssetKindExtension(asset->getCompleteFileKind()))
         {
-            *outReason = messages::resource::cNoAudioFile;
+            *outReason = asset->getNoAudioReason();
             return false;
         }
 
@@ -277,23 +367,71 @@ static void AudioAssetContextMenuFunc(Item* item)
 
 static Item* InstanciateAudioAsset()
 {
-    if (!sCreateTemplate || !IsResourceAsset(sCreateTemplate))
-        return nullptr;
+    return CommitAudioImport(&sCreateImport, nullptr, nullptr);
+}
 
-    AudioAsset* asset = ActiveAudioResource().createAsset(*sCreateTemplate);
+static bool NeedsStream(const WaveFile::RiffWaveInfo& info)
+{
+    return ActiveAudioResource().canCreateStreamAsset() && GetCreateKind() == AudioAssetKind::Fwav && !IsPlainPcm(info);
+}
 
-    if (!CommitAudioImport(&sCreateImport, asset, nullptr))
-    {
-        delete asset;
-        return nullptr;
-    }
+static bool StartsAsStream(const WaveFile::RiffWaveInfo& info)
+{
+    const bool isLong = info.sampleRate != 0 && info.sampleCount > cStreamStartSeconds * info.sampleRate;
 
-    return asset;
+    return NeedsStream(info) || (ActiveAudioResource().canCreateStreamAsset() && isLong);
+}
+
+static void SetCreateStream(AssetAudioImport* import, bool isStream)
+{
+    import->isStream = isStream;
+
+    if (!isStream && import->bwavCodec == static_cast<s32>(aal::BwavCodec::Opus))
+        import->bwavCodec = static_cast<s32>(aal::BwavCodec::DspAdpcm);
+}
+
+static void DrawCreateFormatRow(AssetAudioImport* import)
+{
+    AudioResource& resource = ActiveAudioResource();
+
+    if (!resource.canChooseNewAssetKind())
+        return;
+
+    AudioAssetKind kind = resource.getNewAssetKind();
+    const char* bfwavReason = IsPlainPcm(import->info) ? nullptr : messages::resource::cAudioFormatBfwavWavReason;
+
+    if (!DrawBarsAudioFormatRow(&kind, nullptr, bfwavReason))
+        return;
+
+    resource.setNewAssetKind(kind);
+    SetCreateStream(import, StartsAsStream(import->info));
+}
+
+static void DrawStreamRow(AssetAudioImport* import)
+{
+    if (!ActiveAudioResource().canCreateStreamAsset())
+        return;
+
+    const bool needsStream = NeedsStream(import->info);
+
+    DialogRow(messages::common::cStream);
+    DetailTooltip(messages::resource::cNewStreamDetail);
+    ImGui::BeginDisabled(needsStream);
+
+    if (ImGui::Checkbox("##Stream", &import->isStream))
+        SetCreateStream(import, import->isStream);
+
+    ImGui::EndDisabled();
+
+    if (needsStream)
+        ImGui::SetItemTooltip("%s", messages::resource::cAudioFormatBfwavWavReason);
+    else
+        DetailTooltip(messages::resource::cNewStreamDetail);
 }
 
 static void AudioAssetCreateProperties(bool clear, Item* item, bool* validate)
 {
-    if (item || clear || !sCreateTemplate)
+    if (item || clear)
         return;
 
     if (validate)
@@ -302,7 +440,9 @@ static void AudioAssetCreateProperties(bool clear, Item* item, bool* validate)
         return;
     }
 
-    DrawWaveImportInfo(GetImportEncoding(sCreateImport, *sCreateTemplate), &sCreateImport.info, sead::FormatFixedSafeString<560>(messages::import::cWaveHeaderFormat, sCreateImport.fileName.cstr()).cstr());
+    DrawCreateFormatRow(&sCreateImport);
+    DrawStreamRow(&sCreateImport);
+    DrawWaveImportInfo(GetImportEncoding(sCreateImport, GetCreateKind(), nullptr), &sCreateImport.info, sead::FormatFixedSafeString<560>(messages::import::cWaveHeaderFormat, sCreateImport.fileName.cstr()).cstr());
 }
 
 static InstanciateItemCallback CreateAudioAssetFunc(bool clear)
@@ -310,7 +450,6 @@ static InstanciateItemCallback CreateAudioAssetFunc(bool clear)
     if (clear)
     {
         ResetWaveImport();
-        sCreateTemplate = ActiveAudioResource().findTemplateAsset(sSelectedItem);
         sCreateNeedsFile = true;
     }
 
@@ -320,8 +459,16 @@ static InstanciateItemCallback CreateAudioAssetFunc(bool clear)
     {
         sCreateNeedsFile = false;
 
-        if (!sCreateTemplate || !AskForWav(&sCreateImport))
+        AudioResource& resource = ActiveAudioResource();
+        const bool canChooseKind = resource.canChooseNewAssetKind();
+
+        if (!resource.canAddAssets() || !AskForWav(&sCreateImport, canChooseKind || resource.canCreateStreamAsset() || AcceptsAnyWav(GetCreateKind()), nullptr))
             return nullptr;
+
+        if (canChooseKind && !IsPlainPcm(sCreateImport.info))
+            resource.setNewAssetKind(AudioAssetKind::Bwav);
+
+        sCreateImport.isStream = StartsAsStream(sCreateImport.info);
     }
 
     if (!sCreateImport.info.isValid)
@@ -356,7 +503,8 @@ static void DrawAssetReplacePopup()
     {
         const sead::FormatFixedSafeString<560> header(messages::import::cWaveReplaceHeaderFormat, sReplaceImport.fileName.cstr());
 
-        result = DrawWaveImportBody(header.cstr(), GetImportEncoding(sReplaceImport, *asset), &sReplaceImport.info, messages::common::cReplace);
+        SetNextWaveImportOldData(&sReplaceImport.oldData, &sReplaceImport.cleared);
+        result = DrawWaveImportBody(header.cstr(), GetImportEncoding(sReplaceImport, asset->getInfo().kind, asset), &sReplaceImport.info, messages::common::cReplace);
     }
 
     if (result == WaveImportResult::Commit && CommitAudioImport(&sReplaceImport, asset, asset))
@@ -375,6 +523,10 @@ void DrawAudioAssetsUI()
 {
     AudioResource& resource = ActiveAudioResource();
 
+    u32 columnCount = 0;
+    const ItemColumn* columns = GetItemColumns(Item::ItemType::AudioAsset, &columnCount);
+
+    SetNextItemListColumns(columns, columnCount);
     SetNextItemListAction(&AudioAssetRowActionFunc);
     SetNextItemListAddDialogWidth(CalcWaveImportWidth());
     SetNextItemListFixedOrder();
@@ -396,7 +548,6 @@ void DrawAudioResourceDialogs()
 void CancelAudioResourceRequests()
 {
     sReplaceImport.target = nullptr;
-    sCreateTemplate = nullptr;
     sPendingWavExports.clear();
     sPendingFileExports.clear();
 }

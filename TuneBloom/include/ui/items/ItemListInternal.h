@@ -42,7 +42,11 @@ struct ItemListContext
     const char* listNote = nullptr;
     ItemRemoveText removeText;
     ItemRowActionCallback actionCallback = nullptr;
+    ItemRowActionCallback openCallback = nullptr;
     ItemListFooterCallback footerCallback = nullptr;
+    ItemListFileDropCallback fileDropCallback = nullptr;
+    const char* fileDropAction = nullptr;
+    bool fileDropOpensAdd = false;
     f32 footerWidth = 0.0f;
     f32 addDialogWidth = 0.0f;
     bool fixedOrder = false;
@@ -98,7 +102,7 @@ void ScrollItemListTo(Item* item);
 Item* GetItemListScrollTarget();
 
 void SetSelectionInSubWindow(bool isSubWindow);
-void PruneFilteredSelection(const std::vector<Item*>& listItems, ItemFilterCallback filterCallback);
+void PruneFilteredSelection(const Item::List& list, ItemFilterCallback filterCallback);
 void HandleItemListKeys(ItemListContext& ctx);
 void SelectItemListRow(ItemListContext& ctx, Item* item);
 void ClearItemListSelection(ItemListContext& ctx);

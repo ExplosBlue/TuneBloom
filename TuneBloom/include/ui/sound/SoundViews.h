@@ -37,9 +37,10 @@ InstanciateItemCallback CreateWaveSoundFunc(bool clear);
 InstanciateItemCallback CreateSequenceSoundFunc(bool clear);
 
 void DrawSoundSetPropertiesUI();
-void InsertSoundIntoSet(SoundSet* targetSet, Sound* newSound, Item* afterItem);
-void InsertSoundAtHook(Item *afterItem, Item *newItem);
-void RemoveSoundWithCascade(Item *item);
+bool InsertSoundHook(Item* afterItem, Item* newItem);
+bool InsertSoundIntoSetHook(SoundSet* soundSet, Item* afterItem, Item* newItem);
+bool RemoveSoundHook(Item* item);
+void MoveSoundsHook(Item* target, const std::vector<Item*>& items);
 
 void DrawStreamTracksUI(const StreamSource& source);
 bool DrawStreamTracksTabRow(const StreamSource& source);

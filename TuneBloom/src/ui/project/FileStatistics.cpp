@@ -281,7 +281,7 @@ static void CollectGroups(StatGroup* groups, u64* totalSize, u32* fileNum)
         if (!sShowStreamWaves && wave->getIsStreamExtended())
             continue;
 
-        if (sQuery[0] != '\0' && !ImGui::TextMatchesQuery(wave->getFormattedName().cstr(), sQuery, sCaseSensitive))
+        if (sQuery[0] != '\0' && !ItemMatchesQuery(wave, sQuery, sCaseSensitive))
             continue;
 
         StatBlock block;

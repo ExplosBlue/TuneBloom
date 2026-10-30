@@ -14,6 +14,8 @@ Sound* CloneSound(Sound* src)
 
     if (src->getPlayerRef().isAttached())
         dup->getPlayerRef().attach(src->getPlayerRef().getItem());
+    else
+        dup->setUnresolvedPlayerId(src->getPlayerId());
 
     dup->setVolume(src->getVolume());
     dup->setRemoteFilter(src->getRemoteFilter());
@@ -62,6 +64,7 @@ Sound* CloneSound(Sound* src)
         dstSeq.setEnableStartOffset(srcSeq.isEnableStartOffset());
         dstSeq.getStartLabel() = srcSeq.getStartLabel();
         dstSeq.setEnablePriority(srcSeq.isEnablePriority());
+        dstSeq.setChannelPriority(srcSeq.getChannelPriority());
         dstSeq.setIsReleasePriorityFix(srcSeq.getIsReleasePriorityFix());
     }
 
@@ -77,11 +80,13 @@ Sound* CloneSound(Sound* src)
             dstStrm.setFxSend(i, srcStrm.getFxSend(i));
         dstStrm.setEnableStreamSoundExtension(srcStrm.isEnableStreamSoundExtension());
         dstStrm.setStreamType(srcStrm.getStreamType());
+        dstStrm.setStreamTypeInfoUpper(srcStrm.getStreamTypeInfoUpper());
         dstStrm.setIsLoop(srcStrm.getIsLoop());
         dstStrm.setLoopStartFrame(srcStrm.getLoopStartFrame());
         dstStrm.setLoopEndFrame(srcStrm.getLoopEndFrame());
 
         dstStrm.setHasPrefetch(srcStrm.hasPrefetch());
+        dstStrm.copyOpusChannelBitrateFrom(srcStrm);
 
         u32 trackIdx = 0;
         for (auto it = srcStrm.getTrackList().begin(); it != srcStrm.getTrackList().end(); ++it, ++trackIdx)
@@ -139,9 +144,11 @@ Sound* CloneSound(Sound* src)
         dstWave.setLpfFreq(srcWave.getLpfFreq());
         dstWave.setBiquadType(srcWave.getBiquadType());
         dstWave.setBiquadValue(srcWave.getBiquadValue());
+        dstWave.getExtraOptions() = srcWave.getExtraOptions();
     }
 
     dup->copyStreamFileBaselineFrom(*src);
+    dup->copyUnmodeledFieldsFrom(*src);
 
     return dup;
 }

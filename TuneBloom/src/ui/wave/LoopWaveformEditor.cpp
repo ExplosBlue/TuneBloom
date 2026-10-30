@@ -153,6 +153,49 @@ static bool DragLoopEdge(LoopWaveformState& state, const WaveformCanvas& canvas,
     return true;
 }
 
+static int FindCueHover(const LoopWaveformState& state, const WaveformCanvas& canvas)
+{
+    for (int i = static_cast<int>(state.cues.size()) - 1; i >= 0; i--)
+    {
+        const LoopWaveformState::CueLabel label = i < static_cast<int>(state.cueLabels.size()) ? state.cueLabels[i] : LoopWaveformState::CueLabel();
+        const bool onLabel = canvas.mouse.x >= label.minX && canvas.mouse.x < label.maxX && canvas.mouse.y >= label.minY && canvas.mouse.y < label.maxY;
+        const bool onLine = std::fabs(canvas.mouseX - SampleToX(state, state.cues[i].start, canvas.width)) <= cMarkerGrabPx;
+
+        if (onLabel || onLine)
+            return i;
+    }
+
+    return -1;
+}
+
+static void BeginCueDrag(LoopWaveformState& state, const WaveformCanvas& canvas)
+{
+    state.cueSelected = state.cueHover;
+
+    if (!state.cuesEditable)
+        return;
+
+    state.dragging = Dragging::Cue;
+    state.cueDragIndex = state.cueHover;
+    state.dragAnchorMouseX = canvas.mouseX - SampleToX(state, state.cues[state.cueHover].start, canvas.width);
+}
+
+static void DragCue(LoopWaveformState& state, const WaveformCanvas& canvas)
+{
+    if (!IsMouseDown(ImGuiMouseButton_Left) || state.cueDragIndex < 0 || state.cueDragIndex >= static_cast<int>(state.cues.size()))
+    {
+        state.dragging = Dragging::None;
+        state.cueDragIndex = -1;
+        return;
+    }
+
+    LoopWaveformState::Cue& cue = state.cues[state.cueDragIndex];
+    const double sample = std::max(0.0, std::round(XToSample(state, canvas.mouseX - state.dragAnchorMouseX, canvas.width)));
+    const u32 maxStart = canvas.sampleCount > cue.length ? canvas.sampleCount - cue.length : 0;
+
+    cue.start = std::min(static_cast<u32>(sample), maxStart);
+}
+
 static bool HandleInteraction(LoopWaveformState& state, const WaveformCanvas& canvas, u32& loopStart, u32& loopEnd, bool editable)
 {
     bool changed = false;
@@ -183,13 +226,26 @@ static bool HandleInteraction(LoopWaveformState& state, const WaveformCanvas& ca
     if (state.grabMarkers && (IsLoopDrag(state.dragging) || (markerHover != Dragging::None && state.dragging == Dragging::None)))
         SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
+    if (state.dragging == Dragging::None)
+        state.cueHover = canvas.hovered && markerHover == Dragging::None && cropHover == Dragging::None ? FindCueHover(state, canvas) : -1;
+
+    if (state.cuesEditable && (state.dragging == Dragging::Cue || (state.cueHover >= 0 && state.dragging == Dragging::None)))
+        SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
     const ImGuiMouseButton endButton = state.grabMarkers ? ImGuiMouseButton_Left : ImGuiMouseButton_Right;
     const bool curveEdit = state.showCurve && canvas.hovered && state.dragging == Dragging::None && BeginCurveEdit(state, canvas.mouse, canvas.width, canvas.height, &changed);
+    const bool canBegin = canvas.hovered && !curveEdit && state.dragging == Dragging::None;
 
-    if (canvas.hovered && !curveEdit && state.dragging == Dragging::None)
+    if (canBegin && state.cueHover >= 0 && IsMouseClicked(ImGuiMouseButton_Left))
+        BeginCueDrag(state, canvas);
+    else if (canBegin)
         BeginDrag(state, cropHover, markerHover, endButton, editable);
 
-    if (state.dragging == Dragging::Pan)
+    if (state.dragging == Dragging::Cue)
+    {
+        DragCue(state, canvas);
+    }
+    else if (state.dragging == Dragging::Pan)
     {
         DragViewPan(state, canvas);
     }

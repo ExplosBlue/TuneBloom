@@ -3,7 +3,8 @@
 
 #include <platform/macos/defaultApp.h>
 
-namespace {
+namespace
+{
 
 constexpr int64_t cChangeTimeout = 10 * NSEC_PER_SEC;
 
@@ -58,7 +59,8 @@ bool setDefaultApp(NSURL* app, UTType* type)
 
 }
 
-namespace macos {
+namespace macos
+{
 
 std::string getDefaultAppName(const char* extension)
 {

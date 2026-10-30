@@ -6,6 +6,7 @@
 #include <bfsar/files/BfstmFile.h>
 #include <bfsar/files/BfstpFile.h>
 #include <bfsar/io/FileIo.h>
+#include <bfsar/io/PackFile.h>
 #include <bfsar/files/OpusStream.h>
 #include <bfsar/archive/SaveReport.h>
 
@@ -29,6 +30,12 @@
 
 bool Bfsar::GetStreamFolder(const sead::SafeString& archivePath, sead::BufferedSafeString* outFolder)
 {
+    if (packfile::IsPackPath(archivePath.cstr()))
+    {
+        outFolder->copy(packfile::GetFolderOnDisk(archivePath.cstr()).c_str());
+        return !outFolder->isEmpty();
+    }
+
     if (!sead::Path::getDirectoryName(outFolder, archivePath))
         return false;
 
@@ -543,6 +550,7 @@ void Bfsar::commitStreamReload_(StreamReloadContext& ctx, StreamReloadResult* re
     }
 
     MoveStreamWaves(&stagedInfo, &strmSoundInfo);
+    strmSoundInfo.copyOpusChannelBitrateFrom(stagedInfo);
 
     ForgetRemovedItems({staged});
     delete staged;
@@ -571,7 +579,7 @@ void Bfsar::commitStreamReload_(StreamReloadContext& ctx, StreamReloadResult* re
     strmSoundInfo.mAllocateChannelCount = ctx.isOpus ? static_cast<u16>(result->channelCount) : strmSoundInfo.getAllocateChannelCount();
 
     if (ctx.isOpus)
-        sound->mStreamFileSignature = opusstream::ComputeContentSignature(*sound);
+        sound->mStreamFileSignature = opusstream::ComputeContentSignature(strmSoundInfo);
     else
         sound->mStreamFileSignature = BfstmFile::ComputeContentSignature(strmSoundInfo, getStreamFileTarget());
 
@@ -649,6 +657,7 @@ u32 Bfsar::shareStreamWavesWithSiblings(Sound* source, bool tracksFromFile)
             siblingInfo.setLoopEndFrame(sourceInfo.getLoopEndFrame());
         }
 
+        siblingInfo.copyOpusChannelBitrateFrom(sourceInfo);
         sibling->copyStreamFileBaselineFrom(*source);
         sharedSoundCount++;
     }
@@ -722,7 +731,7 @@ void Bfsar::planNonStreamBinarySave(const Sound *sound, const sead::SafeString &
     {
         if (HasAttachedStreamWaves(strmSoundInfo))
         {
-            u64 sig = opusstream::ComputeContentSignature(*sound);
+            u64 sig = opusstream::ComputeContentSignature(strmSoundInfo);
 
             if (!sound->mHasStreamFileBaseline || sig != sound->mStreamFileSignature)
             {
@@ -865,7 +874,7 @@ bool Bfsar::writeStreamFile_(const Sound *sound, const sead::SafeString &path, b
 
     if (strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus)
     {
-        if (!opusstream::WriteStreamFile(handle, sound))
+        if (!opusstream::WriteStreamFile(handle, strmSoundInfo, const_cast<Sound *>(sound)))
         {
             *outReported = true;
             return false;
@@ -945,8 +954,6 @@ bool Bfsar::buildStreamPrefetch_(const Sound *sound, const std::vector<StreamSav
 
 void Bfsar::executeStreamSave(const StreamSaveJob &job) const
 {
-    extern bool CreateDirectoryRecursively(const std::string &directory);
-
     Sound *sound = const_cast<Sound *>(job.sound);
 
     if (!job.copyOnly && sound->getStreamSoundInfo().getTrackList().size() == 0)
@@ -959,7 +966,7 @@ void Bfsar::executeStreamSave(const StreamSaveJob &job) const
     const sead::FormatFixedSafeString<1024> writeFailed(messages::stream::cWriteFailedFormat, CutPathForMessage(job.savePath).c_str());
     const std::string dir = std::filesystem::path(job.savePath).parent_path().string();
 
-    if (job.savePath.size() > fileio::cPathLengthMax || (!dir.empty() && !CreateDirectoryRecursively(dir)))
+    if (job.savePath.size() > fileio::cPathLengthMax || (!dir.empty() && !fileio::CreateDirectoryRecursively(dir)))
     {
         ReportArchiveError(mCliMode, {writeFailed, sound});
         return;
@@ -1040,7 +1047,7 @@ bool Bfsar::saveBackupStreams(const std::string &dir, const std::string &previou
             continue;
 
         const bool isOpus = strmSoundInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus;
-        const u64 signature = isOpus ? opusstream::ComputeContentSignature(*sound)
+        const u64 signature = isOpus ? opusstream::ComputeContentSignature(strmSoundInfo)
                                      : BfstmFile::ComputeContentSignature(strmSoundInfo, getStreamFileTarget());
 
         if (sound->mHasStreamFileBaseline && signature == sound->mStreamFileSignature)

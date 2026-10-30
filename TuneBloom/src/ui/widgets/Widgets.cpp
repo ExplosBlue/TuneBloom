@@ -15,6 +15,7 @@
 
 #include <snd/snd_Util.h>
 
+#include <cstdlib>
 #include <cstring>
 
 void NormalizePathSlashes(sead::BufferedSafeString* path)
@@ -31,6 +32,8 @@ static constexpr f32 cIconButtonBorderSize     = 1.0f;
 static constexpr f32 cIconButtonBorderHoverMix = 0.8f;
 static constexpr f32 cVersionFieldEm           = 2.0f;
 static constexpr f32 cDetailTooltipWrapEm      = 32.0f;
+static constexpr f32 cInsertLineAlpha          = 0.86f;
+static constexpr f32 cInsertLineHeight         = 3.0f;
 
 static constexpr uicolors::Themed<f32> cIconButtonBorderIdleMix   = { 0.25f, 0.20f };
 static constexpr uicolors::Themed<f32> cIconButtonBorderIdleAlpha = { 0.40f, 0.55f };
@@ -324,6 +327,13 @@ bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing)
     return pressed;
 }
 
+void DrawInsertLine(ImDrawList* drawList, f32 left, f32 right, f32 centerY)
+{
+    const f32 top = ImFloor(centerY - cInsertLineHeight * 0.5f);
+
+    drawList->AddRectFilled(ImVec2(left, top), ImVec2(right, top + cInsertLineHeight), ImGui::GetColorU32(ImGuiCol_CheckMark, cInsertLineAlpha));
+}
+
 bool DrawTableRowSelectable(const char* id, bool selected, bool* outHovered)
 {
     const ImU32 rowColor        = ImGui::GetColorU32(ImGuiCol_Header);
@@ -352,7 +362,12 @@ bool DrawTableRowSelectable(const char* id, bool selected, bool* outHovered)
     return rowPressed;
 }
 
-bool DrawRowHoverButton(const char* id, const char* icon, bool lit, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size)
+bool IsItemEditCommitted(bool changed)
+{
+    return ImGui::IsItemDeactivatedAfterEdit() || (changed && !ImGui::IsItemActive());
+}
+
+bool DrawRowHoverButton(const char* id, const char* icon, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size)
 {
     const ImVec2 hitPos = ImGui::GetCursorScreenPos();
     const ImVec2 pos = hitPos + ImFloor((hitSize - ImVec2(size, size)) * 0.5f);
@@ -374,7 +389,7 @@ bool DrawRowHoverButton(const char* id, const char* icon, bool lit, bool visible
         drawList->AddRectFilled(pos, pos + ImVec2(size, size), ImGui::GetColorU32(held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered, hoverRatio), ImGui::GetStyle().FrameRounding);
 
     const ImVec2 iconSize = ImGui::CalcTextSize(icon);
-    const ImGuiCol color = lit ? ImGuiCol_CheckMark : hovered || held ? ImGuiCol_Text : ImGuiCol_TextDisabled;
+    const ImGuiCol color = hovered || held ? ImGuiCol_Text : ImGuiCol_TextDisabled;
 
     drawList->AddText(pos + ImFloor((ImVec2(size, size) - iconSize) * 0.5f), ImGui::GetColorU32(color), icon);
 
@@ -443,22 +458,54 @@ bool ComboScroll(const char *label, int *current_item, const char *const items[]
     return *current_item != oldItem;
 }
 
+static s32 StepToEnabledItem(s32 current, s32 steps, const char* const reasons[], s32 itemNum)
+{
+    const s32 direction = steps > 0 ? 1 : -1;
+
+    for (s32 left = std::abs(steps); left > 0; left--)
+    {
+        s32 next = current + direction;
+
+        while (next >= 0 && next < itemNum && reasons && reasons[next])
+            next += direction;
+
+        if (next < 0 || next >= itemNum)
+            break;
+
+        current = next;
+    }
+
+    return current;
+}
+
 bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], s32 itemNum, const char* detail)
+{
+    return ComboScroll(label, current, items, details, nullptr, itemNum, detail);
+}
+
+bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], const char* const reasons[], s32 itemNum, const char* detail)
 {
     const s32 oldItem = *current;
     const bool valid = *current >= 0 && *current < itemNum;
+    const ListOpener opener = GetNextListOpener();
 
     if (ImGui::BeginCombo(label, valid ? items[*current] : ""))
     {
         for (s32 i = 0; i < itemNum; i++)
         {
+            const char* reason = reasons ? reasons[i] : nullptr;
+
+            ImGui::BeginDisabled(reason != nullptr);
+
             if (ImGui::Selectable(items[i], i == *current))
                 *current = i;
+
+            ImGui::EndDisabled();
 
             if (i == *current)
                 ImGui::SetItemDefaultFocus();
 
-            ListItemDetailTooltip(details[i]);
+            ListItemDetailTooltip(reason ? reason : details[i], opener);
         }
 
         ImGui::EndCombo();
@@ -468,7 +515,7 @@ bool ComboScroll(const char* label, s32* current, const char* const items[], con
 
     const s32 wheelSteps = GetItemWheelSteps();
     if (wheelSteps != 0)
-        *current = sead::MathCalcCommon<s32>::clamp2(0, *current + wheelSteps, itemNum - 1);
+        *current = StepToEnabledItem(*current, wheelSteps, reasons, itemNum);
 
     return *current != oldItem;
 }
@@ -655,6 +702,73 @@ void CenteredTextWrapped(const char* text, f32 width)
     }
 }
 
+static bool IsUtf8Continuation(char c)
+{
+    return (static_cast<u8>(c) & 0xC0) == 0x80;
+}
+
+static const char* NextUtf8Char(const char* text)
+{
+    text++;
+
+    while (IsUtf8Continuation(*text))
+        text++;
+
+    return text;
+}
+
+static const char* FindUtf8CharStart(const char* text, const char* min)
+{
+    while (text > min && IsUtf8Continuation(*text))
+        text--;
+
+    return text;
+}
+
+const char* FindTextTailStart(const char* text, f32 width)
+{
+    const char* first = text;
+    const char* last = text + strlen(text);
+
+    while (first < last)
+    {
+        const char* middle = FindUtf8CharStart(first + (last - first) / 2, first);
+
+        if (ImGui::CalcTextSize(middle).x <= width)
+            last = middle;
+        else
+            first = NextUtf8Char(middle);
+    }
+
+    return last;
+}
+
+const char* FindTextHeadEnd(const char* text, f32 width)
+{
+    const char* end = text + strlen(text);
+
+    if (ImGui::CalcTextSize(text).x <= width)
+        return end;
+
+    const char* first = text;
+    const char* last = end;
+
+    while (first < last && NextUtf8Char(first) < last)
+    {
+        const char* middle = FindUtf8CharStart(first + (last - first) / 2, first);
+
+        if (middle == first)
+            middle = NextUtf8Char(first);
+
+        if (ImGui::CalcTextSize(text, middle).x <= width)
+            first = middle;
+        else
+            last = middle;
+    }
+
+    return first;
+}
+
 std::string CutPathStart(const std::string& path, size_t maxLength)
 {
     const size_t markLength = strlen(messages::backup::cPathCutMark);
@@ -707,17 +821,28 @@ void DetailTooltip(const char* detail)
     ShowDetailTooltip(detail, nullptr, ImVec2(0.0f, 0.0f));
 }
 
-void ListItemDetailTooltip(const char* detail)
+ListOpener GetNextListOpener()
+{
+    ListOpener opener;
+    opener.top = ImGui::GetCursorScreenPos().y;
+    opener.bottom = opener.top + ImGui::GetFrameHeight();
+
+    return opener;
+}
+
+void ListItemDetailTooltip(const char* detail, const ListOpener& opener)
 {
     const ImGuiWindow* list = ImGui::GetCurrentWindow();
     const ImGuiViewport* viewport = list->Viewport;
     const f32 gap = ImGui::GetStyle().ItemSpacing.y;
-    const f32 spaceBelow = viewport->Pos.y + viewport->Size.y - (list->Pos.y + list->Size.y);
-    const f32 spaceAbove = list->Pos.y - viewport->Pos.y;
+    const f32 top = sead::Mathf::min(list->Pos.y, opener.top);
+    const f32 bottom = sead::Mathf::max(list->Pos.y + list->Size.y, opener.bottom);
+    const f32 spaceBelow = viewport->Pos.y + viewport->Size.y - bottom;
+    const f32 spaceAbove = top - viewport->Pos.y;
     const bool right = list->Pos.x + list->Size.x * 0.5f > viewport->Pos.x + viewport->Size.x * 0.5f;
     const bool below = spaceBelow >= spaceAbove;
 
-    const ImVec2 pos(right ? list->Pos.x + list->Size.x : list->Pos.x, below ? list->Pos.y + list->Size.y + gap : list->Pos.y - gap);
+    const ImVec2 pos(right ? list->Pos.x + list->Size.x : list->Pos.x, below ? bottom + gap : top - gap);
     ShowDetailTooltip(detail, &pos, ImVec2(right ? 1.0f : 0.0f, below ? 0.0f : 1.0f));
 }
 

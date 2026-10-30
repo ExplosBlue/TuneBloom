@@ -1,16 +1,19 @@
 #include <platform/OwnedWindow.h>
 
-#if defined(SEAD_PLATFORM_MACOSX)
+#if !defined(SEAD_PLATFORM_MACOSX)
 
-#elif defined(SEAD_PLATFORM_WINDOWS)
-
+#if defined(SEAD_PLATFORM_WINDOWS)
 #include <basis/win/seadWindows.h>
+#endif
 
-namespace ownedwindow {
+namespace ownedwindow
+{
 
 void prepare(void*)
 {
 }
+
+#if defined(SEAD_PLATFORM_WINDOWS)
 
 void attach(void* window, void* owner)
 {
@@ -20,23 +23,13 @@ void attach(void* window, void* owner)
     SetWindowLongPtrW(static_cast<HWND>(window), GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(owner));
 }
 
-void detach(void*)
-{
-}
-
-}
-
 #else
-
-namespace ownedwindow {
-
-void prepare(void*)
-{
-}
 
 void attach(void*, void*)
 {
 }
+
+#endif
 
 void detach(void*)
 {

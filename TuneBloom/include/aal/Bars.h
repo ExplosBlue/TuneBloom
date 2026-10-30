@@ -16,7 +16,6 @@ struct BarsEntry
 {
     std::vector<u8> meta;
     s32 assetIndex = cBarsNoAsset;
-    bool isInResetTable = false;
 };
 
 struct BarsFile

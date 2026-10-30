@@ -1,19 +1,23 @@
 #include <ui/file/AudioResourceDocument.h>
 
 #include <ui/backup/BackupInternal.h>
-#include <ui/file/FileDialogs.h>
 #include <ui/file/LooseFileInfo.h>
 #include <ui/Messages.h>
 #include <ui/app/PopupMgr.h>
 #include <ui/resource/ResourceViews.h>
 
 #include <bfsar/io/FileIo.h>
-#include <bfsar/io/PackFile.h>
 #include <browser/FileProbe.h>
 
 #include <filesystem>
 
 namespace fs = std::filesystem;
+
+static void AddSnapshotStreams(backup::Snapshot* snapshot, const std::vector<std::string>& paths)
+{
+    for (const std::string& path : paths)
+        snapshot->streams.push_back({ path, 0 });
+}
 
 Document* AudioResourceDocument::Open(File* file, const sead::SafeString& path)
 {
@@ -30,6 +34,32 @@ Document* AudioResourceDocument::Open(File* file, const sead::SafeString& path)
 
     delete document;
     return nullptr;
+}
+
+Document* AudioResourceDocument::CreateBwav()
+{
+    const sead::FormatFixedSafeString<64> fileName(messages::archive::cUntitledFileNameFormat, GetResourceFormatInfo(ResourceFormat::Bwav).extension);
+
+    AudioResourceDocument* document = new AudioResourceDocument();
+    document->mResource.createBwav(fileName);
+
+    return document;
+}
+
+Document* AudioResourceDocument::CreateBars(u16 version, AudioAssetKind newAssetKind)
+{
+    AudioResourceDocument* document = new AudioResourceDocument();
+    document->mResource.createBars(version, newAssetKind);
+
+    return document;
+}
+
+Document* AudioResourceDocument::CreateSarc(bool hasMeta)
+{
+    AudioResourceDocument* document = new AudioResourceDocument();
+    document->mResource.createSarc(hasMeta);
+
+    return document;
 }
 
 AudioResourceDocument::~AudioResourceDocument()
@@ -59,6 +89,9 @@ const sead::SafeString& AudioResourceDocument::loadedPath() const
 
 std::string AudioResourceDocument::displayName() const
 {
+    if (mResource.getFilePath().isEmpty())
+        return archiveName();
+
     return fs::path(mResource.getFilePath().cstr()).filename().string();
 }
 
@@ -131,6 +164,11 @@ bool AudioResourceDocument::isValidName(const sead::SafeString& name) const
     return mResource.validName(name);
 }
 
+const char* AudioResourceDocument::getNameRuleDetail() const
+{
+    return messages::resource::cNameInvalidDetail;
+}
+
 bool AudioResourceDocument::isUniqueName(const sead::SafeString& name, const Item* ignoreItem) const
 {
     return mResource.validateName(name, ignoreItem);
@@ -171,30 +209,6 @@ Document::ParseContext AudioResourceDocument::parseContext() const
     return CurrentParseContext();
 }
 
-u64 AudioResourceDocument::estimateMemory() const
-{
-    return 0;
-}
-
-bool AudioResourceDocument::isLoaded() const
-{
-    return true;
-}
-
-bool AudioResourceDocument::canUnload() const
-{
-    return false;
-}
-
-void AudioResourceDocument::unload()
-{
-}
-
-bool AudioResourceDocument::reload()
-{
-    return true;
-}
-
 bool AudioResourceDocument::prepareSave()
 {
     sead::FixedSafeString<256> error;
@@ -216,25 +230,7 @@ bool AudioResourceDocument::chooseSaveAsPath(sead::BufferedSafeString* outPath) 
 {
     const ResourceFormatInfo& format = GetResourceFormatInfo(mResource.getFormat());
 
-    const sead::FormatFixedSafeString<32> pattern("*.%s", format.extension);
-    const sead::FormatFixedSafeString<64> filterName("%s (%s)", format.displayName, pattern.cstr());
-    const sead::FormatFixedSafeString<32> compressedPattern("*.%s", cZstdExtension);
-    const sead::FormatFixedSafeString<96> compressedName(messages::common::cCompressedFilterFormat, format.displayName, format.extension, cZstdExtension);
-
-    FileFilter filters[] = {
-        { filterName.cstr(), pattern.cstr() },
-        { compressedName.cstr(), compressedPattern.cstr() }
-    };
-
-    const fs::path documentPath(mResource.getFilePath().cstr());
-    const std::string defaultPath = (fs::path(packfile::GetDiskPath(documentPath.string())).parent_path() / documentPath.filename()).string();
-
-    if (!SaveFileDialog(outPath, nullptr, IM_ARRAYSIZE(filters), filters, format.extension, defaultPath.c_str()))
-        return false;
-
-    AddInnerExtension(outPath, format.extension, cZstdExtension);
-
-    return true;
+    return showSaveAsDialog(outPath, format.displayName, format.extension, cZstdExtension);
 }
 
 SaveResult AudioResourceDocument::save(const char** outError)
@@ -245,15 +241,6 @@ SaveResult AudioResourceDocument::save(const char** outError)
 SaveResult AudioResourceDocument::saveAs(const sead::SafeString& path, const char** outError)
 {
     return mResource.saveAs(path, outError);
-}
-
-void AudioResourceDocument::finishSave()
-{
-}
-
-s32 AudioResourceDocument::getBackupNamesSetting() const
-{
-    return -1;
 }
 
 bool AudioResourceDocument::writeBackup(const BackupWrite& write, backup::Snapshot* snapshot, Bfsar::BackupResult* outResult)
@@ -275,8 +262,7 @@ bool AudioResourceDocument::writeBackup(const BackupWrite& write, backup::Snapsh
         return false;
     }
 
-    for (const std::string& path : streamPaths)
-        snapshot->streams.push_back({ path, 0 });
+    AddSnapshotStreams(snapshot, streamPaths);
 
     *outResult = Bfsar::BackupResult::Ok;
     return true;
@@ -284,22 +270,9 @@ bool AudioResourceDocument::writeBackup(const BackupWrite& write, backup::Snapsh
 
 void AudioResourceDocument::copyPreviousSidecars(const std::string& sourcePath, const std::string& destDir, backup::Snapshot* snapshot)
 {
-    const fs::path sourceDir = fs::path(sourcePath).parent_path();
-
-    for (const std::string& relativePath : mResource.getStreamWritePaths(sead::FixedSafeString<512>(sourcePath.c_str())))
-    {
-        const fs::path dest = fs::path(destDir) / relativePath;
-        std::error_code error;
-
-        if (!fs::is_regular_file(sourceDir / relativePath, error))
-            continue;
-
-        fs::create_directories(dest.parent_path(), error);
-        fs::copy_file(sourceDir / relativePath, dest, error);
-
-        if (!error)
-            snapshot->streams.push_back({ relativePath, 0 });
-    }
+    std::vector<std::string> streamPaths;
+    mResource.copyPreviousStreamFiles(sead::FixedSafeString<512>(sourcePath.c_str()), destDir, &streamPaths);
+    AddSnapshotStreams(snapshot, streamPaths);
 }
 
 void AudioResourceDocument::restoreSidecars(const backup::Snapshot& snapshot)
@@ -316,8 +289,4 @@ void AudioResourceDocument::restoreSidecars(const backup::Snapshot& snapshot)
         const sead::FormatFixedSafeString<1024> message(messages::backup::cRestoreStreamFormat, stream.path.c_str());
         PopupMgr::instance()->addPopup({ message, nullptr });
     }
-}
-
-void AudioResourceDocument::applyRestoredSnapshot(const backup::Snapshot&, bool)
-{
 }

@@ -66,6 +66,12 @@ f32 CalcLabelWidth(std::initializer_list<const char*> labels)
     return width + ImFloor(ImGui::GetFontSize() * cLabelGapEm);
 }
 
+f32 CalcLeftLabelWidth()
+{
+    return CalcLabelWidth({ messages::common::cEncoding, messages::common::cBitrate, messages::common::cSampleRate, messages::common::cChannels,
+                            messages::resource::cMarkers, messages::common::cRegions, messages::import::cWaveBeatGrid, messages::import::cWaveMidSide });
+}
+
 void RowLabel(const char* label, f32 labelWidth, const char* detail)
 {
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(ImGui::GetFontSize() * cRowGapEm));
@@ -151,17 +157,41 @@ void WaveImportPanel::drawSourceHeader(const char* header, u32 sampleRate, u32 c
     ImGui::TextColored(GetItemValueColor(), "%s", summary.cstr());
 }
 
-void WaveImportPanel::drawUndecodableSource(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info)
+static bool AcceptsSampleRate(const WaveImportEncoding& encoding, u32 sampleRate)
+{
+    return !encoding.value || !encoding.acceptsSampleRate || encoding.acceptsSampleRate(*encoding.value, sampleRate);
+}
+
+static WaveImportEncoding LimitToSampleRate(const WaveImportEncoding& encoding, u32 sampleRate)
+{
+    WaveImportEncoding limited = encoding;
+
+    if (!encoding.value || !encoding.acceptsSampleRate)
+        return limited;
+
+    while (limited.count > 1 && !encoding.acceptsSampleRate(limited.count - 1, sampleRate))
+        limited.count--;
+
+    if (*limited.value >= limited.count)
+        *limited.value = limited.count - 1;
+
+    return limited;
+}
+
+void WaveImportPanel::drawUndecodableSource(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
 {
     drawSourceHeader(header, info->sampleRate, info->numChannels, info->sampleCount);
 
     ImGui::TextDisabled("%s", messages::import::cWaveNoPreview);
 
-    const f32 labelWidth = CalcLabelWidth({ messages::common::cEncoding, messages::common::cStart, messages::common::cEnd });
+    const f32 labelWidth = CalcLabelWidth({ messages::common::cEncoding, messages::common::cBitrate, messages::common::cStart, messages::common::cEnd });
 
-    if (encoding && BeginGroupBox(messages::common::cFormat))
+    if (encoding.value && BeginGroupBox(messages::common::cFormat))
     {
-        drawEncodingField(encoding, labelWidth);
+        const WaveImportEncoding limited = LimitToSampleRate(encoding, info->sampleRate);
+
+        drawEncodingField(limited, labelWidth);
+        drawBitrateField(limited, labelWidth);
         EndGroupBox();
     }
 
@@ -196,6 +226,7 @@ void WaveImportPanel::drawUndecodableSource(const char* header, WaveFile::Encodi
     }
 
     EndGroupBox();
+    drawOldDataBox(*info);
 }
 
 void WaveImportPanel::drawColumns(FrameContext& ctx)
@@ -239,10 +270,11 @@ void WaveImportPanel::drawFormatBox(FrameContext& ctx)
 
     EndBoxTools();
 
-    const f32 labelWidth = CalcLabelWidth({ messages::common::cEncoding, messages::common::cSampleRate, messages::common::cChannels });
+    const f32 labelWidth = CalcLeftLabelWidth();
 
     drawEncodingField(ctx.encoding, labelWidth);
-    drawSampleRateField(labelWidth);
+    drawBitrateField(ctx.encoding, labelWidth);
+    drawSampleRateField(ctx.encoding, labelWidth);
     drawChannelsField(labelWidth);
 
     EndGroupBox();
@@ -318,21 +350,83 @@ void WaveImportPanel::drawProcessingPanels(f32 fill)
     GroupBoxGap();
 }
 
-void WaveImportPanel::drawEncodingField(WaveFile::Encoding* encoding, f32 labelWidth)
+void WaveImportPanel::drawEncodingField(const WaveImportEncoding& encoding, f32 labelWidth)
 {
-    if (!encoding)
+    if (!encoding.value)
         return;
 
     RowLabel(messages::common::cEncoding, labelWidth);
 
-    if (ComboScroll("##Encoding", reinterpret_cast<s32*>(encoding), WaveFile::sEncodingTypes, cWaveEncodingDetails, IM_ARRAYSIZE(cWaveEncodingDetails)))
-        mTouched = true;
+    if (!ComboScroll("##Encoding", encoding.value, encoding.names, encoding.details, encoding.reasons, encoding.count))
+        return;
+
+    mTouched = true;
+    fitSampleRateToEncoding(encoding);
 }
 
-void WaveImportPanel::drawSampleRateField(f32 labelWidth)
+void WaveImportPanel::drawBitrateField(const WaveImportEncoding& encoding, f32 labelWidth)
+{
+    if (!encoding.value || !encoding.bitrate)
+        return;
+
+    const bool isUsed = *encoding.value == encoding.bitrateValue;
+
+    RowLabel(messages::common::cBitrate, labelWidth, messages::import::cWaveBitrateTip);
+
+    if (DrawOpusBitrateCombo("##Bitrate", encoding.bitrate, encoding.originalBitrate, isUsed))
+        mTouched = true;
+
+    if (isUsed)
+        return;
+
+    const bool hasCodecReason = encoding.reasons && encoding.bitrateValue >= 0 && encoding.bitrateValue < encoding.count && encoding.reasons[encoding.bitrateValue];
+
+    ImGui::SetItemTooltip("%s", hasCodecReason ? encoding.reasons[encoding.bitrateValue] : messages::import::cWaveBitrateOpusTip);
+}
+
+void WaveImportPanel::fitSampleRateToEncoding(const WaveImportEncoding& encoding)
+{
+    if (!mSettings.pcm.isValid())
+        return;
+
+    if (mRateBeforeFit != 0 && AcceptsSampleRate(encoding, mRateBeforeFit))
+    {
+        selectSampleRate(mRateBeforeFit);
+        return;
+    }
+
+    if (AcceptsSampleRate(encoding, mSettings.targetSampleRate))
+        return;
+
+    u32 fitted = 0;
+
+    for (u32 preset : cImportSampleRates)
+    {
+        if (!AcceptsSampleRate(encoding, preset))
+            continue;
+
+        fitted = preset;
+
+        if (preset >= mSettings.targetSampleRate)
+            break;
+    }
+
+    if (fitted == 0)
+        return;
+
+    if (mRateBeforeFit == 0)
+        mRateBeforeFit = mSettings.targetSampleRate;
+
+    mSettings.targetSampleRate = fitted;
+    mSettings.markShapeDirty();
+}
+
+void WaveImportPanel::drawSampleRateField(const WaveImportEncoding& encoding, f32 labelWidth)
 {
     u32 rates[1 + IM_ARRAYSIZE(cImportSampleRates)];
     int rateCount = 0;
+    int acceptedCount = 0;
+    int current = 0;
 
     rates[rateCount++] = mSettings.pcm.sampleRate;
 
@@ -340,14 +434,21 @@ void WaveImportPanel::drawSampleRateField(f32 labelWidth)
         if (preset != mSettings.pcm.sampleRate)
             rates[rateCount++] = preset;
 
-    int current = 0;
+    u32 accepted[IM_ARRAYSIZE(rates)];
 
     for (int i = 0; i < rateCount; i++)
+    {
+        if (!AcceptsSampleRate(encoding, rates[i]))
+            continue;
+
         if (rates[i] == mSettings.targetSampleRate)
-            current = i;
+            current = acceptedCount;
+
+        accepted[acceptedCount++] = rates[i];
+    }
 
     char preview[40];
-    FormatRate(preview, sizeof(preview), mSettings.targetSampleRate, current == 0);
+    FormatRate(preview, sizeof(preview), mSettings.targetSampleRate, mSettings.targetSampleRate == mSettings.pcm.sampleRate);
 
     RowLabel(messages::common::cSampleRate, labelWidth, messages::import::cWaveSampleRateTip);
 
@@ -356,23 +457,33 @@ void WaveImportPanel::drawSampleRateField(f32 labelWidth)
         for (int i = 0; i < rateCount; i++)
         {
             char label[40];
-            FormatRate(label, sizeof(label), rates[i], i == 0);
+            FormatRate(label, sizeof(label), rates[i], rates[i] == mSettings.pcm.sampleRate);
 
-            if (ImGui::Selectable(label, i == current))
-            {
-                mSettings.targetSampleRate = rates[i];
-                mSettings.markShapeDirty();
-            }
+            const bool isAccepted = AcceptsSampleRate(encoding, rates[i]);
+
+            ImGui::BeginDisabled(!isAccepted);
+
+            if (ImGui::Selectable(label, rates[i] == mSettings.targetSampleRate))
+                selectSampleRate(rates[i]);
+
+            ImGui::EndDisabled();
+
+            if (!isAccepted && encoding.sampleRateReason)
+                ImGui::SetItemTooltip("%s", encoding.sampleRateReason);
         }
 
         ImGui::EndCombo();
     }
 
-    if (WheelAdjustIndex(&current, rateCount))
-    {
-        mSettings.targetSampleRate = rates[current];
-        mSettings.markShapeDirty();
-    }
+    if (WheelAdjustIndex(&current, acceptedCount))
+        selectSampleRate(accepted[current]);
+}
+
+void WaveImportPanel::selectSampleRate(u32 sampleRate)
+{
+    mSettings.targetSampleRate = sampleRate;
+    mSettings.markShapeDirty();
+    mRateBeforeFit = 0;
 }
 
 void WaveImportPanel::drawChannelsField(f32 labelWidth)

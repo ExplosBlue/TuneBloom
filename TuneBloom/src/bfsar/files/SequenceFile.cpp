@@ -424,5 +424,5 @@ void SequenceFile::refreshSerializedHash()
         device->unload(buf);
     }
 
-    ::remove(tempPath);
+    fileio::RemoveFile(tempPath);
 }

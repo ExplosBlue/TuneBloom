@@ -33,6 +33,11 @@ public:
         return version >= 0x00040000; // FSTM
     }
 
+    static bool IsRegionInfoAvailable(u32 version, ArchiveFormat format)
+    {
+        return format != ArchiveFormat::BCSAR || version >= makeVersion(2, 2, 0);
+    }
+
     static u32 GetFileVersion(const Sound::StreamSoundInfo &soundInfo, const InnerFileTarget &target);
 
     static bool WriteBfstmFile(sead::FileHandle &handle, const Sound::StreamSoundInfo &soundInfo, const InnerFileTarget &target);

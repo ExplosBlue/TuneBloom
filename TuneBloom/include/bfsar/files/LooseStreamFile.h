@@ -16,7 +16,7 @@ public:
     LooseStreamFile& operator=(const LooseStreamFile&) = delete;
 
     bool open(const void* data, u32 size, const sead::SafeString& path, sead::BufferedSafeString* outError);
-    void create(const InnerFileTarget& target, const sead::SafeString& fileName);
+    void create(const InnerFileTarget& target, Sound::StreamSoundInfo::StreamType streamType, const sead::SafeString& fileName);
     SaveResult save(sead::BufferedSafeString* outError);
     SaveResult saveAs(const sead::SafeString& path, sead::BufferedSafeString* outError);
 
@@ -47,8 +47,13 @@ public:
         return mFileName;
     }
 
+    bool isOpus() const;
     bool isModified() const;
     bool writeTo(const sead::SafeString& path) const;
+
+    bool setLoop(bool isLoop, u32 loopStartFrame, const char** outError);
+    bool replaceAudio(const WaveFile::RiffWaveInfo& info, const char** outError);
+    bool setAudio(const WaveFile::RiffWaveInfo& info, WaveFile::Encoding encoding, const char** outError);
 
     Item::List& getStreamWaveList() override
     {
@@ -59,6 +64,12 @@ public:
     void nameStreamWave(WaveFile* wave, const sead::SafeString& streamName, u32 trackNo, u32 trackCount) override;
 
 private:
+    void setStreamType(Sound::StreamSoundInfo::StreamType streamType);
+    bool openOpus(const void* data, u32 size, sead::BufferedSafeString* outError);
+    bool openStream(const void* data, u32 size, sead::BufferedSafeString* outError);
+    void setChannelCount(u32 channelCount);
+    u64 computeSignature() const;
+
     sead::FixedSafeString<512> mFilePath;
     sead::FixedSafeString<256> mFileName;
     InnerFileTarget mTarget;

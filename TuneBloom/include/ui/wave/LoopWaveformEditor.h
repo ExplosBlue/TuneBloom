@@ -23,6 +23,22 @@ struct LoopWaveformState
         CropEnd,
         CurvePoint,
         CurveTension,
+        Cue,
+    };
+
+    struct Cue
+    {
+        u32 start = 0;
+        u32 length = 0;
+        const char* label = nullptr;
+    };
+
+    struct CueLabel
+    {
+        float minX = 0.0f;
+        float minY = 0.0f;
+        float maxX = 0.0f;
+        float maxY = 0.0f;
     };
 
     enum class Focus
@@ -69,6 +85,13 @@ struct LoopWaveformState
 
     bool grabMarkers = false;
     bool lockEnd = false;
+
+    std::vector<Cue> cues;
+    std::vector<CueLabel> cueLabels;
+    bool cuesEditable = false;
+    int cueHover = -1;
+    int cueDragIndex = -1;
+    int cueSelected = -1;
 
     // Peak cache
     u32 dataRevision = 0;

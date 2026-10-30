@@ -4,6 +4,7 @@
 #include <ui/wave/LoopWaveformInternal.h>
 #include <ui/Messages.h>
 #include <ui/settings/Theme.h>
+#include <ui/widgets/RangeCell.h>
 
 #include <bfsar/files/StreamRegion.h>
 #include <bfsar/files/WaveFile.h>
@@ -26,8 +27,6 @@ static constexpr f32 cLaneFillMix       = 0.30f;
 static constexpr f32 cLaneHoverMix      = 0.42f;
 static constexpr f32 cLanePlayingMix    = 0.75f;
 static constexpr f32 cLaneBorderMix     = 0.60f;
-static constexpr f32 cMarkMinWidth      = 3.0f;
-static constexpr f32 cMarkRounding      = 1.0f;
 static constexpr f32 cMarkIdleAlpha     = 0.65f;
 
 namespace
@@ -278,22 +277,13 @@ void DrawStreamRegionLane(WaveFile* wave, ImGui::LoopWaveformState& state)
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() - ImGui::GetStyle().ItemSpacing.y);
 }
 
-static void DrawRegionMark(ImDrawList* draw, const ImVec2& min, const ImVec2& max, const StreamRegion& region, u32 sampleCount, ImU32 color)
-{
-    const f32 scale = (max.x - min.x) / static_cast<f32>(sampleCount);
-    const f32 right = sead::Mathf::max(min.x + cMarkMinWidth, ImFloor(min.x + sead::Mathf::min(region.end, sampleCount) * scale));
-    const f32 left = sead::Mathf::min(ImFloor(min.x + sead::Mathf::min(region.start, sampleCount) * scale), right - cMarkMinWidth);
-
-    draw->AddRectFilled(ImVec2(left, min.y), ImVec2(right, max.y), color, cMarkRounding);
-}
-
 void DrawStreamRegionMarks(ImDrawList* draw, const ImVec2& min, const ImVec2& max, const WaveFile* wave, s32 onlyNo)
 {
     const std::vector<StreamRegion>& regions = wave->getStreamFileLayout().regions;
     const u32 sampleCount = wave->getSampleCount();
     const s32 regionCount = static_cast<s32>(regions.size());
 
-    if (sampleCount == 0 || max.x - min.x < cMarkMinWidth)
+    if (sampleCount == 0)
         return;
 
     s32 playingNo = -1;
@@ -311,14 +301,14 @@ void DrawStreamRegionMarks(ImDrawList* draw, const ImVec2& min, const ImVec2& ma
         ImVec4 color = GetSeriesColor(regionNo);
         color.w *= cMarkIdleAlpha;
 
-        DrawRegionMark(draw, min, max, regions[regionNo], sampleCount, ImGui::GetColorU32(color));
+        DrawRangeMark(draw, min, max, regions[regionNo].start, regions[regionNo].end, sampleCount, ImGui::GetColorU32(color));
     }
 
     if (nextNo >= 0 && nextNo < regionCount && (onlyNo == -1 || nextNo == onlyNo))
-        DrawRegionMark(draw, min, max, regions[nextNo], sampleCount, ImGui::GetColorU32(ImGuiCol_Text));
+        DrawRangeMark(draw, min, max, regions[nextNo].start, regions[nextNo].end, sampleCount, ImGui::GetColorU32(ImGuiCol_Text));
 
     if (playingNo >= 0 && playingNo < regionCount && (onlyNo == -1 || playingNo == onlyNo))
-        DrawRegionMark(draw, min, max, regions[playingNo], sampleCount, ImGui::GetColorU32(GetSeriesColor(playingNo)));
+        DrawRangeMark(draw, min, max, regions[playingNo].start, regions[playingNo].end, sampleCount, ImGui::GetColorU32(GetSeriesColor(playingNo)));
 }
 
 s32 FindStreamRegionAt(const WaveFile* wave, u32 sample)

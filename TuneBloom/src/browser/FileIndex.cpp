@@ -14,6 +14,9 @@
 
 namespace fs = std::filesystem;
 
+namespace
+{
+
 struct ScannedFile
 {
     fs::path path;
@@ -26,11 +29,13 @@ struct ScannedFile
     FileProbe probe;
 };
 
-static bool IsHiddenName(const fs::path& path)
-{
-    const std::string name = path.filename().string();
+}
 
-    return !name.empty() && name[0] == '.';
+static bool IsSkippedName(const fs::path& path)
+{
+    std::string name;
+
+    return !fileio::GetNarrowPath(path.filename(), &name) || (!name.empty() && name[0] == '.');
 }
 
 static std::string MakeStem(const fs::path& path)
@@ -80,7 +85,7 @@ static std::vector<ScannedFile> CollectFiles(const fs::path& root, const std::at
     {
         const fs::directory_entry& entry = *it;
 
-        if (IsHiddenName(entry.path()))
+        if (IsSkippedName(entry.path()))
         {
             if (entry.is_directory(error))
                 it.disable_recursion_pending();
@@ -232,7 +237,7 @@ static void ProbePackFiles(const fs::path& packPath, std::vector<ScannedFile>* f
 {
     std::vector<u8> bytes;
 
-    if (!fileio::ReadWholeFile(packPath.string().c_str(), &bytes))
+    if (!packfile::ReadPackContents(packPath.string(), &bytes))
         return;
 
     ParallelFor(static_cast<u32>(files->size()), [&](u32 index)
@@ -247,19 +252,26 @@ static void ProbePackFiles(const fs::path& packPath, std::vector<ScannedFile>* f
     });
 }
 
+static size_t GetFolderLength(const std::string& name, size_t last)
+{
+    const size_t slash = name.rfind('/', last);
+
+    return slash == std::string::npos ? 0 : slash + 1;
+}
+
 static size_t GetSharedFolderLength(const std::vector<packfile::Resource>& resources)
 {
     if (resources.empty())
         return 0;
 
     const std::string& first = resources.front().name;
-    size_t length = first.rfind('/') == std::string::npos ? 0 : first.rfind('/') + 1;
+    size_t length = GetFolderLength(first, std::string::npos);
 
     for (const packfile::Resource& resource : resources)
     {
         const size_t common = std::mismatch(first.begin(), first.begin() + std::min(length, resource.name.size()), resource.name.begin()).first - first.begin();
 
-        length = common == 0 ? 0 : first.rfind('/', common - 1) + 1;
+        length = common == 0 ? 0 : GetFolderLength(first, common - 1);
     }
 
     return length;

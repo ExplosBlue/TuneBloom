@@ -5,6 +5,7 @@
 #include <ui/items/Selection.h>
 #include <ui/Messages.h>
 #include <ui/sound/SoundViews.h>
+#include <ui/stream/OpusBitrate.h>
 #include <ui/stream/StreamRegions.h>
 #include <ui/stream/StreamTracks.h>
 #include <ui/widgets/Knob.h>
@@ -17,18 +18,33 @@
 
 static constexpr f32 cRegionsSectionEm = 11.0f;
 
+static bool sPopupWasOpen = false;
+
+LooseFileFormat GetLooseStreamFormat(const LooseStreamFile& file)
+{
+    if (!file.isOpus())
+        return GetLooseFileFormat(file.getTarget(), InnerFileKind::Stream);
+
+    LooseFileFormat format;
+    format.name = messages::stream::cTypeOpus;
+    format.extension = cOpusExtension;
+    format.endian = sead::Endian::eLittle;
+
+    return format;
+}
+
 static void DrawStreamFileBox(const LooseStreamFile& file)
 {
     if (!BeginPropertyBox("StreamFile"))
         return;
 
     RegionHeader(messages::common::cFile);
-    DrawLooseFileRows(file.getTarget(), InnerFileKind::Stream);
+    DrawLooseFileRows(GetLooseStreamFormat(file));
 
     EndPropertyBox();
 }
 
-static void DrawStreamContentBox(const LooseStreamFile& file)
+static void DrawStreamContentBox(LooseStreamFile& file)
 {
     const Sound::StreamSoundInfo& stream = file.getStream();
 
@@ -43,10 +59,13 @@ static void DrawStreamContentBox(const LooseStreamFile& file)
     PropertyRow(messages::common::cChannels);
     ImGui::Text("%u", static_cast<u32>(stream.getAllocateChannelCount()));
 
+    if (file.isOpus())
+        DrawOpusBitrateRow(file.getStreamSource());
+
     EndPropertyBox();
 }
 
-void DrawLooseStreamInfoUI(const LooseStreamFile& file)
+void DrawLooseStreamInfoUI(LooseStreamFile& file)
 {
     DrawStreamFileBox(file);
     DrawStreamContentBox(file);
@@ -97,8 +116,6 @@ static void SelectHighlightedTrackWave(const Item* previousTrack)
 
 static void HandleClearSelection()
 {
-    static bool sPopupWasOpen = false;
-
     const bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput;
     const bool onItem = ImGui::IsAnyItemHovered() || GImGui->HoveredIdDisabled;
     const bool emptyClick = !sPopupWasOpen && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && !onItem;

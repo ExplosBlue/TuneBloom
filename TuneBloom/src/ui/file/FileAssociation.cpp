@@ -134,20 +134,34 @@ static constexpr const wchar_t* cOpenWithKey   = L"\\OpenWithProgids";
 
 static std::wstring ToWide(const std::string& text)
 {
-    wchar_t wide[128];
+    const int length = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
 
-    if (MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wide, static_cast<int>(std::size(wide))) == 0)
+    if (length <= 0)
         return std::wstring();
+
+    std::wstring wide(static_cast<size_t>(length), L'\0');
+
+    if (MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wide.data(), length) == 0)
+        return std::wstring();
+
+    wide.resize(static_cast<size_t>(length - 1));
 
     return wide;
 }
 
 static std::string ToUtf8(const std::wstring& text)
 {
-    char utf8[512];
+    const int length = WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, nullptr, 0, nullptr, nullptr);
 
-    if (WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, utf8, static_cast<int>(std::size(utf8)), nullptr, nullptr) == 0)
+    if (length <= 0)
         return std::string();
+
+    std::string utf8(static_cast<size_t>(length), '\0');
+
+    if (WideCharToMultiByte(CP_UTF8, 0, text.c_str(), -1, utf8.data(), length, nullptr, nullptr) == 0)
+        return std::string();
+
+    utf8.resize(static_cast<size_t>(length - 1));
 
     return utf8;
 }

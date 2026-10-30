@@ -10,8 +10,6 @@
 
 #include <cctype>
 
-static constexpr f32 cCreateDialogWidthEm = 24.0f;
-
 static sead::FixedSafeString<256> sName;
 static bool sEnableName = true;
 static InstanciateItemCallback sInstanciateItemCallback = nullptr;
@@ -108,7 +106,7 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
 
     const f32 em = ImGui::GetFontSize();
 
-    ImGui::Dummy(ImVec2(ImFloor(em * cCreateDialogWidthEm), 0.0f));
+    ImGui::Dummy(ImVec2(ImFloor(em * cDialogFormWidthEm), 0.0f));
 
     DialogRow(messages::common::cName);
 
@@ -120,7 +118,7 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
     if (!sEnableName)
         ImGui::EndDisabled();
 
-    WarningPopup("###InvalidName", messages::item::cNameInvalidDetail);
+    WarningPopup("###InvalidName", GetDocumentNameRuleDetail());
     WarningPopup("###EmptyName", messages::item::cNameEmpty);
     DupeNamePopup();
 

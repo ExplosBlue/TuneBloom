@@ -28,7 +28,7 @@ static void DrawWaveFileBox(LooseWaveFile& file)
     BeginTitleRowTools(messages::common::cFile, buttonSize);
     DrawReplaceButton(file.getWave(), buttonSize);
 
-    DrawLooseFileRows(file.getTarget(), InnerFileKind::Wave);
+    DrawLooseFileRows(GetLooseFileFormat(file.getTarget(), InnerFileKind::Wave));
 
     EndPropertyBox();
 }

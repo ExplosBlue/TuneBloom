@@ -19,7 +19,7 @@ struct DecodedPcm;
 
 namespace opusstream
 {
-    bool AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
+    class WaveBuilder;
 }
 
 void FillAdpcmInfo(ADPCMINFO* adpcmInfo, const snd::DspAdpcmParam& param, const snd::internal::DspAdpcmLoopParam& loopParam);
@@ -269,7 +269,7 @@ public:
         friend class Bfsar;
         friend class WaveFile;
         friend class StreamWaveReader;
-        friend bool opusstream::AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
+        friend class opusstream::WaveBuilder;
     };
 
     struct RiffWaveInfo
@@ -332,6 +332,7 @@ public:
     static constexpr u32 cStreamLoopStartAlignmentFramesAdpcm = 0x3800;
     static constexpr u32 cCtrLoopStartAlignmentBytes          = 512;
     static constexpr u32 cStreamMinimumLoopFrames             = 0x480;
+    static constexpr u32 cCtrStreamMinimumLoopFrames          = 0x7000;
 
 public:
     WaveFile()
@@ -352,6 +353,7 @@ public:
 
         , mIsStreamExtended(false)
         , mIsFromStreamFile(false)
+        , mHasCtrStreamLoop(false)
 
         , mUseOriginalData(false)
         , mOriginalData(nullptr)
@@ -413,6 +415,7 @@ private:
 
 public:
     static bool readRiffWavInfo(RiffWaveInfo* out, bool acceptAnyPcm = false);
+    static bool readRiffWavBytes(const void* data, u32 size, u32 fileSize, RiffWaveInfo* out, bool acceptAnyPcm = false);
 
     bool readWavFile(const RiffWaveInfo& info, Encoding encoding);
     bool writeWavFile(const sead::SafeString& path, s32 channelIdx = -1);
@@ -460,7 +463,10 @@ public:
         if (!forStream && mDataSpoolFrames)
             return *mDataSpoolFrames;
 
-        return getSpoolFrames(getLoopStartAlignmentFrames(forStream));
+        if (forStream && getIsLoop())
+            return getStreamSpoolFrames(getOriginalLoopStartFrame());
+
+        return getSpoolFrames(getOriginalLoopStartFrame(), getLoopStartAlignmentFrames(forStream));
     }
 
     u32 getLoopEndFrame(bool forStream) const
@@ -468,10 +474,30 @@ public:
         u32 loopFrames = getLoopFrames();
         u32 endFrame = getLoopStartFrame(forStream) + loopFrames;
 
-        if (forStream && getIsLoop() && cStreamMinimumLoopFrames > loopFrames && loopFrames != 0)
-            endFrame += loopFrames * (cStreamMinimumLoopFrames / loopFrames);
+        if (forStream && getIsLoop())
+            endFrame += getStreamLoopRepeatFrames(loopFrames);
 
         return endFrame;
+    }
+
+    u32 getStreamSpoolFrames(u32 loopStartFrame) const
+    {
+        const u32 alignmentFrames = getLoopStartAlignmentFrames(true);
+        const u32 spoolFrames = getSpoolFrames(loopStartFrame, alignmentFrames);
+
+        return mHasCtrStreamLoop && spoolFrames == 0 ? alignmentFrames : spoolFrames;
+    }
+
+    u32 getStreamLoopRepeatFrames(u32 loopFrames) const
+    {
+        const u32 minimumLoopFrames = mHasCtrStreamLoop ? cCtrStreamMinimumLoopFrames : cStreamMinimumLoopFrames;
+
+        return loopFrames != 0 && loopFrames < minimumLoopFrames ? loopFrames * (minimumLoopFrames / loopFrames) : 0;
+    }
+
+    bool needsStreamLoopLayout(u32 loopStartFrame, u32 loopEndFrame) const
+    {
+        return getStreamSpoolFrames(loopStartFrame) != 0 || getStreamLoopRepeatFrames(loopEndFrame - loopStartFrame) != 0;
     }
 
     u32 getOriginalLoopStartFrame() const
@@ -492,11 +518,11 @@ public:
         return getOriginalLoopEndFrame() - getOriginalLoopStartFrame();
     }
 
-    u32 getSpoolFrames(u32 loopStartAlignmentFrames) const
+    static u32 getSpoolFrames(u32 loopStartFrame, u32 loopStartAlignmentFrames)
     {
         if (loopStartAlignmentFrames > 0)
         {
-            u32 skipped = getOriginalLoopStartFrame() % loopStartAlignmentFrames;
+            u32 skipped = loopStartFrame % loopStartAlignmentFrames;
             if (skipped > 0)
                 return loopStartAlignmentFrames - skipped;
         }
@@ -517,6 +543,8 @@ public:
     }
     
     bool setupPreviewPcm16(const DecodedPcm& pcm, bool isLoop, u32 loopStartFrame, u32 loopEndFrame);
+
+    void setStreamTarget(const InnerFileTarget& streamTarget);
 
     bool getIsStreamExtended() const
     {
@@ -596,7 +624,7 @@ private:
     void writeChannelSamples_(sead::WriteStream* stream, const Channel& channel, u32 sampleBytes) const;
 
     void disposeChannels_();
-    void updateLoopInfo_(bool update, bool updateStream);
+    void updateLoopInfo_();
     void rebuildSpooledData_();
     void reencodeChannels_(Encoding fromEncoding);
     void* convertOwnChannel_(Channel& channel, const void* data, sead::Endian::Types dataEndian, Encoding from, u32* outSize, u32* outSizeMin) const;
@@ -618,6 +646,7 @@ private:
 
     bool mIsStreamExtended; //? If data already accounts for Stream Sounds
     bool mIsFromStreamFile;
+    bool mHasCtrStreamLoop;
     StreamFileLayout mStreamFileLayout;
 
     bool mUseOriginalData;
@@ -647,5 +676,5 @@ private:
 
     friend class StreamWaveReader;
     friend class StreamLoopInfoBatch;
-    friend bool opusstream::AttachStreamWaves(Bfsar &archive, Sound *sound, const sead::SafeString *filePathOverride);
+    friend class opusstream::WaveBuilder;
 };

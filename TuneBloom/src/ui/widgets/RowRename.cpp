@@ -82,3 +82,13 @@ bool DrawRowRenameField(const char* hint, sead::FixedSafeString<256>* outText, I
 
     return true;
 }
+
+bool DrawRowRenameFieldAt(const ImVec2& textPos, f32 textWidth, sead::FixedSafeString<256>* outText)
+{
+    const f32 framePadding = ImGui::GetStyle().FramePadding.x;
+
+    ImGui::SetCursorScreenPos(ImVec2(textPos.x - framePadding, textPos.y));
+    ImGui::SetNextItemWidth(textWidth + framePadding);
+
+    return DrawRowRenameField("", outText);
+}

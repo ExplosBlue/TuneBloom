@@ -4,7 +4,7 @@
 
 #include <bfsar/files/LooseWaveFile.h>
 
-class LooseWaveDocument : public LooseFileDocument
+class LooseWaveDocument : public LooseFileDocumentOf<LooseWaveFile>
 {
 public:
     static Document* Open(File* file, const sead::SafeString& path);
@@ -12,11 +12,7 @@ public:
 
     ~LooseWaveDocument() override;
 
-    LooseWaveFile& file();
-
     Kind kind() const override;
-    const sead::SafeString& filePath() const override;
-    std::string displayName() const override;
     BrowserFileKind fileKind() const override;
     void drawInfo(UIType tab) override;
     bool drawFileProperties() override;
@@ -27,17 +23,8 @@ public:
     Item* defaultSelection() override;
 
     void forEachItemList(const std::function<void(Item::List&)>& visit) override;
-    bool isInfoModified() const override;
     bool ownsItem(const Item& item) const override;
 
-    SaveResult save(const char** outError) override;
-    SaveResult saveAs(const sead::SafeString& path, const char** outError) override;
-
 protected:
-    InnerFileTarget fileTarget() const override;
-    InnerFileKind innerFileKind() const override;
-    bool writeTo(const sead::SafeString& path) const override;
-
-private:
-    LooseWaveFile mFile;
+    LooseFileFormat fileFormat() const override;
 };

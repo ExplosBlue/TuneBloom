@@ -2,6 +2,8 @@
 
 #include <aal/AudioAsset.h>
 #include <browser/FileProbe.h>
+#include <ui/Messages.h>
+#include <ui/app/Notifications.h>
 #include <ui/player/PlayerViews.h>
 #include <bfsar/player/SoundPlayer.h>
 #include <bfsar/files/LooseStreamFile.h>
@@ -28,14 +30,27 @@ void DecodeAudioBytes(DecodedAudioFile* file)
         return;
     }
 
+    if (decodeRiffBytes(file->bytes.data(), file->bytes.size(), &file->pcm))
+    {
+        file->isDecoded = true;
+        return;
+    }
+
     const AudioAssetFile data = std::make_shared<const std::vector<u8>>(std::move(file->bytes));
     file->isDecoded = DecodeAudioFile(data, &file->pcm);
+}
+
+static void ShowPreviewFailure(const char* reason)
+{
+    notify::Add(notify::Kind::Warning, messages::files::cPreviewFailedTitle, reason);
 }
 
 static void ReadPreviewFileAt(DecodedAudioFile* file)
 {
     if (!ReadFileContents(file->path, &file->bytes))
         return;
+
+    file->isRead = true;
 
     if (LooseStreamFile::IsStreamFile(file->bytes.data(), static_cast<u32>(file->bytes.size())))
     {
@@ -65,9 +80,12 @@ WaveFile* BuildDecodedWave(const DecodedAudioFile& file)
 
 FilePreview::FilePreview() = default;
 
-FilePreview::~FilePreview() = default;
+FilePreview::~FilePreview()
+{
+    mJob.wait();
+}
 
-void FilePreview::play(const std::string& path, const std::string& name)
+void FilePreview::play(const std::string& path, const std::string& name, bool reportsReadFailure)
 {
     releaseWave();
 
@@ -76,6 +94,7 @@ void FilePreview::play(const std::string& path, const std::string& name)
 
     mRequestedPath = path;
     mRequestedName = name;
+    mReportsReadFailure = reportsReadFailure;
 }
 
 void FilePreview::stop()
@@ -132,6 +151,14 @@ void FilePreview::startDecode()
 
 void FilePreview::startPlayback(DecodedAudioFile& decoded)
 {
+    if (!decoded.isRead)
+    {
+        if (mReportsReadFailure)
+            ShowPreviewFailure(messages::common::cFileUnreadable);
+
+        return;
+    }
+
     if (decoded.isStream)
     {
         if (startStream(decoded))
@@ -155,7 +182,10 @@ bool FilePreview::startStream(const DecodedAudioFile& decoded)
     sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
 
     if (SoundPlayer::GetStreamPlaybackError(stream->getStreamSource(), &playbackError))
+    {
+        ShowPreviewFailure(playbackError.cstr());
         return true;
+    }
 
     mStream = std::move(stream);
     mWavePath = decoded.path;
@@ -171,12 +201,18 @@ void FilePreview::startWave(const DecodedAudioFile& decoded)
     WaveFile* wave = BuildDecodedWave(decoded);
 
     if (!wave)
+    {
+        if (mReportsReadFailure)
+            ShowPreviewFailure(messages::files::cPreviewUndecodableText);
+
         return;
+    }
 
     sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> error;
 
     if (SoundPlayer::GetWaveFilePlaybackError(*wave, &error))
     {
+        ShowPreviewFailure(error.cstr());
         delete wave;
         return;
     }

@@ -6,6 +6,7 @@
 #include <bfsar/io/FileIo.h>
 #include <bfsar/model/Sound.h>
 #include <bfsar/model/SoundSet.h>
+#include <core/FileName.h>
 
 #include <cstring>
 
@@ -16,13 +17,11 @@ bool WriteExportFile(const char* path, const std::vector<u8>& data)
 
 void SanitizeFileName(sead::BufferedSafeString* name)
 {
-    static constexpr char cInvalidChars[] = "/\\:*?\"<>|";
-
     for (s32 i = 0; i < name->calcLength(); i++)
     {
         char& c = name->getBuffer()[i];
 
-        if (static_cast<u8>(c) < 0x20 || std::strchr(cInvalidChars, c))
+        if (static_cast<u8>(c) < 0x20 || std::strchr(filename::cInvalidCharacters, c))
             c = '_';
     }
 }

@@ -5,6 +5,7 @@
 #include <snd/snd_WaveSoundFile.h>
 
 #include <bit>
+#include <vector>
 
 struct ByteRange
 {
@@ -86,6 +87,8 @@ struct ArchiveLayoutVersion
 };
 
 u32 ReadDeclaredFileSize(const void* data, u64 size);
+bool IsTrimmedPadding(u32 declaredSize, u64 size);
+bool KeepTrimmedTail(const void* source, u64 sourceSize, std::vector<u8>* written);
 bool CheckSoundArchiveHeader(const void* data, u32 size);
 bool CheckSoundArchiveLayout(const nw::snd::MemorySoundArchive& archive, u32 size, const ArchiveLayoutVersion& version);
 const char* FindArchiveString(const nw::snd::MemorySoundArchive& archive, const ByteRange& file, u32 stringId);

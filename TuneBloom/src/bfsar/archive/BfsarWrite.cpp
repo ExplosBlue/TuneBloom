@@ -84,17 +84,10 @@ void Bfsar::collectStrings_(BfsarSaveContext& ctx)
         for (const Item* item : list)
         {
             if (!item->isNameValid())
-            {
                 continue;
-            }
 
-            if (ctx.getStringId(item->getName()) != nw::snd::internal::DEFAULT_STRING_ID)
-            {
+            if (!ctx.addString(item->getName()))
                 SEAD_ASSERT_MSG(false, "name(%s) is duped", item->getName().cstr());
-                continue;
-            }
-
-            ctx.strings.push_back(item->getName().cstr());
         }
     };
 

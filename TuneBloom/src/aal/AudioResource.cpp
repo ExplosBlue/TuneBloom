@@ -1,188 +1,32 @@
 #include <aal/AudioResource.h>
 
 #include <aal/Amta.h>
-#include <bfsar/audio/AudioProcessing.h>
 #include <aal/Bars.h>
 #include <aal/BarsSarc.h>
 #include <aal/Bfstm.h>
-#include <bfsar/files/BfstpFile.h>
 #include <aal/Bwav.h>
 #include <bfsar/archive/Cmpbin.h>
-#include <bfsar/audio/DecodedPcm.h>
+#include <bfsar/files/BfstpFile.h>
 #include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
+#include <bfsar/io/TitleFolder.h>
+#include <core/FileName.h>
 #include <ui/Messages.h>
-
-#include <stream/seadFileDeviceStream.h>
 
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
-#include <memory>
 #include <unordered_map>
 
 namespace fs = std::filesystem;
 
-static constexpr char cInvalidNameCharacters[] = "/\\:*?\"<>|";
 static constexpr char cFirstNameCharacter      = '!';
 static constexpr char cLastNameCharacter       = '~';
+static constexpr char cInnerNameSpace          = ' ';
 static constexpr s32 cLoadedNameLengthMax      = 255;
 static constexpr char cStagedFileSuffix[]      = ".savetmp";
-
-static AudioAssetFile MakeAssetFile(std::vector<u8> bytes)
-{
-    return std::make_shared<const std::vector<u8>>(std::move(bytes));
-}
-
-static void UpdateMetaLoudness(AudioAsset* asset, std::vector<u8>* meta)
-{
-    AudioAssetPcm pcm;
-
-    if (!aal::HasAmtaLoudness(*meta) || !asset->decodePcm16(&pcm))
-        return;
-
-    const bool isAmta5 = aal::GetAmtaVersion(*meta) >= aal::cAmtaVersion5;
-    const bool hasIntegerMeanSquare = asset->getInfo().kind != AudioAssetKind::Bwav;
-    const aal::AmtaLoudness loudness = isAmta5 ? aal::MeasureAmta5Loudness(pcm.channels, pcm.sampleRate, pcm.isLoop, pcm.loopStartFrame, false)
-                                               : aal::MeasureAmta4Loudness(pcm.channels, pcm.sampleRate, hasIntegerMeanSquare);
-
-    aal::WriteAmtaLoudness(meta, loudness);
-}
-
-static void UpdateMetaFromInfo(AudioAsset* asset)
-{
-    const AudioAssetInfo& info = asset->getInfo();
-    std::vector<u8> meta = asset->getMeta();
-
-    if (meta.empty())
-        return;
-
-    aal::AmtaWaveFields fields;
-    fields.sampleRate = info.sampleRate;
-    fields.storedSampleCount = info.kind == AudioAssetKind::Bwav ? info.sampleCount : info.storedSampleCount;
-    fields.sampleCount = info.sampleCount;
-    fields.channelCount = info.channelCount;
-    fields.isLoop = info.isLoop;
-    fields.loopStartFrame = info.loopStartFrame;
-
-    if (!aal::UpdateAmtaWaveFields(&meta, fields))
-        return;
-
-    UpdateMetaLoudness(asset, &meta);
-    asset->setMeta(std::move(meta));
-}
-
-static bool WriteWaveFileBytes(const WaveFile& wave, std::vector<u8>* out)
-{
-    const sead::FormatFixedSafeString<fileio::cPathLengthMax> tempPath("%s/tunebloom_resource_wave_%p.bin", fileio::GetTempFolder(), static_cast<const void*>(&wave));
-
-    if (!wave.writeFile(tempPath))
-        return false;
-
-    const bool isRead = fileio::ReadWholeFile(tempPath.cstr(), out);
-    fileio::RemoveFile(tempPath.cstr());
-
-    return isRead && !out->empty();
-}
-
-static bool StoreWaveFile(AudioAsset* asset, const WaveFile& wave, const char** outError)
-{
-    std::vector<u8> bytes;
-
-    if (!WriteWaveFileBytes(wave, &bytes))
-    {
-        *outError = messages::resource::cEncodeFailed;
-        return false;
-    }
-
-    asset->setFile(MakeAssetFile(std::move(bytes)));
-    UpdateMetaFromInfo(asset);
-
-    return true;
-}
-
-static bool SetWaveFileLoop(AudioAsset* asset, bool isLoop, u32 loopStartFrame, const char** outError)
-{
-    const AudioAssetFile file = asset->getFile();
-    std::unique_ptr<WaveFile> wave(ReadFwavFile(*file));
-
-    if (!wave)
-    {
-        *outError = messages::resource::cAudioDamaged;
-        return false;
-    }
-
-    const u32 sampleCount = wave->getSampleCount();
-
-    if (isLoop && loopStartFrame >= sampleCount)
-    {
-        *outError = messages::wavefile::cInvalidLoopRange;
-        return false;
-    }
-
-    const InnerFileTarget target = wave->getTarget();
-    const u32 alignment = WaveFile::isOriginalLoopAvailable(target.format, target.version) ? 0 : wave->getLoopStartAlignmentFrames(false);
-
-    if (alignment > 1)
-        loopStartFrame -= loopStartFrame % alignment;
-
-    wave->setLoop(isLoop, isLoop ? loopStartFrame : 0, sampleCount);
-    wave->updateLoop();
-
-    return StoreWaveFile(asset, *wave, outError);
-}
-
-static bool ReadWavPcm(const WaveFile::RiffWaveInfo& info, std::vector<std::vector<s16>>* out, u32* outLoopStartFrame, const char** outError)
-{
-    std::vector<std::vector<float>> channels;
-
-    if (!decodeRiffChannels(info, &channels))
-    {
-        *outError = messages::import::cWaveReadFailed;
-        return false;
-    }
-
-    const u32 sampleCount = info.isLoop ? std::min(info.loopEndFrame, info.sampleCount) : info.sampleCount;
-    *outLoopStartFrame = info.isLoop ? info.loopStartFrame : 0;
-
-    if (sampleCount == 0 || (info.isLoop && *outLoopStartFrame >= sampleCount))
-    {
-        *outError = messages::wavefile::cInvalidLoopRange;
-        return false;
-    }
-
-    out->assign(std::min<size_t>(channels.size(), snd::cWaveChannelMax), std::vector<s16>(sampleCount, 0));
-
-    for (u32 i = 0; i < out->size(); i++)
-    {
-        for (u32 j = 0; j < sampleCount; j++)
-            (*out)[i][j] = AudioProcessing::toPcm16(channels[i][j]);
-    }
-
-    return true;
-}
-
-static void SetStreamAudio(AudioAsset* asset, const aal::Bwav& full)
-{
-    aal::Bwav current;
-    ReadAudioAssetBwav(asset->getFile(), &current);
-
-    const u32 prefetchSamples = current.channels.empty() ? aal::cBwavPrefetchSampleCount : current.channels.front().sampleCount;
-    const u16 prefetchFlag = current.channels.empty() ? 1 : current.prefetchFlag;
-
-    asset->setStreamFile(MakeAssetFile(aal::WriteBwav(full)), StreamFileState::Loaded, true);
-    asset->setFile(MakeAssetFile(aal::WriteBwav(aal::MakeBwavPrefetch(full, prefetchSamples, prefetchFlag))));
-}
-
-static void SetStreamLoop(AudioAsset* asset, const aal::Bwav& full)
-{
-    aal::Bwav prefetch;
-    ReadAudioAssetBwav(asset->getFile(), &prefetch);
-    aal::CopyBwavLoop(full, &prefetch);
-
-    asset->setStreamFile(MakeAssetFile(aal::WriteBwav(full)), StreamFileState::Loaded, true);
-    asset->setFile(MakeAssetFile(aal::WriteBwav(prefetch)));
-}
+static constexpr char cParentFolderPrefix[]    = "../";
+static constexpr u32 cNewBwavSampleRate        = 48000;
 
 static bool DoesStreamMatchPrefetch(const aal::Bwav& stream, const aal::Bwav& prefetch)
 {
@@ -194,23 +38,6 @@ static bool DoesStreamMatchPrefetch(const aal::Bwav& stream, const aal::Bwav& pr
         if (stream.channels[i].sampleRate != prefetch.channels[i].sampleRate || stream.channels[i].sampleCount != prefetch.channels[i].fullSampleCount)
             return false;
     }
-
-    return true;
-}
-
-static bool SetBfstmStreamAudio(AudioAsset* asset, std::vector<u8> stream, const char** outError)
-{
-    const std::vector<u8>& current = *asset->getFile();
-    std::vector<u8> prefetch;
-
-    if (!BfstpFile::Rebuild(&prefetch, stream.data(), stream.size(), current.data(), current.size()))
-    {
-        *outError = messages::resource::cPrefetchBuildFailed;
-        return false;
-    }
-
-    asset->setStreamFile(MakeAssetFile(std::move(stream)), StreamFileState::Loaded, true);
-    asset->setFile(MakeAssetFile(std::move(prefetch)));
 
     return true;
 }
@@ -241,50 +68,198 @@ static StreamFileState CheckBwavStreamFile(const AudioAsset& asset, const std::v
     return ReadAudioAssetBwav(asset.getFile(), &prefetch) && DoesStreamMatchPrefetch(stream, prefetch) ? StreamFileState::Loaded : StreamFileState::Mismatched;
 }
 
+static StreamFileState CheckStreamFileAlone(const AudioAsset& asset, const std::vector<u8>& bytes)
+{
+    aal::Bfstm bfstm;
+    aal::Bwav bwav;
+    const char* error = nullptr;
+
+    if (asset.getStreamFileKind() == AudioAssetKind::Stream)
+        return aal::ReadBfstm(bytes.data(), bytes.size(), &bfstm, &error) ? StreamFileState::Loaded : StreamFileState::Damaged;
+
+    return aal::ReadBwav(bytes.data(), bytes.size(), &bwav, &error) && aal::IsBwavComplete(bwav) ? StreamFileState::Loaded : StreamFileState::Damaged;
+}
+
 static StreamFileState CheckStreamFile(const AudioAsset& asset, const std::vector<u8>& bytes)
 {
     if (!asset.getFile())
-        return StreamFileState::Mismatched;
+        return CheckStreamFileAlone(asset, bytes);
 
     return asset.getInfo().kind == AudioAssetKind::StreamPrefetch ? CheckBfstmStreamFile(asset, bytes) : CheckBwavStreamFile(asset, bytes);
 }
 
-static const char* GetStreamFileExtension(const AudioAsset& asset)
+static std::string GetArchiveStem(const sead::SafeString& archivePath)
 {
-    return GetAudioAssetKindExtension(asset.getInfo().kind == AudioAssetKind::StreamPrefetch ? AudioAssetKind::Stream : AudioAssetKind::Bwav);
+    fs::path name = fs::path(archivePath.cstr()).filename();
+
+    if (IsZstdPath(archivePath.cstr()))
+        name = name.stem();
+
+    return name.stem().string();
 }
 
-static fs::path MakeStreamRelativePath(const AudioAsset& asset)
+static std::string GetStreamFolderName(const sead::SafeString& archivePath, StreamFolderName name)
 {
-    return fs::path(cResourceStreamFolder) / (std::string(asset.getName().cstr()) + "." + GetStreamFileExtension(asset));
+    switch (name)
+    {
+        case StreamFolderName::StemSuffix:
+            return GetArchiveStem(archivePath) + cResourceNamedStreamSuffix;
+
+        case StreamFolderName::StemPrefix:
+            return cResourceNamedStreamPrefix + GetArchiveStem(archivePath);
+
+        default:
+            break;
+    }
+
+    return cResourceStreamFolder;
 }
 
-static std::string MakeStreamFilePath(const sead::SafeString& archivePath, const AudioAsset& asset)
+static fs::path MakeStreamFolderPath(const fs::path& archiveFolder, const sead::SafeString& archivePath, const StreamFolder& folder)
 {
-    return (fs::path(packfile::GetFolderOnDisk(archivePath.cstr())) / MakeStreamRelativePath(asset)).string();
+    const fs::path parent = folder.parent.empty() ? archiveFolder : (archiveFolder / folder.parent).lexically_normal();
+
+    return parent / GetStreamFolderName(archivePath, folder.name);
 }
 
-static bool IsSameFolder(const sead::SafeString& left, const sead::SafeString& right)
+static fs::path GetArchiveFolder(const sead::SafeString& archivePath)
+{
+    return fs::path(packfile::GetFolderOnDisk(archivePath.cstr()));
+}
+
+static std::string MakeStreamFileName(const AudioAsset& asset)
+{
+    return std::string(asset.getName().cstr()) + "." + GetAudioAssetKindExtension(asset.getStreamFileKind());
+}
+
+static std::string MakeStreamFilePath(const fs::path& archiveFolder, const sead::SafeString& archivePath, const StreamFolder& folder, const AudioAsset& asset)
+{
+    return (MakeStreamFolderPath(archiveFolder, archivePath, folder) / MakeStreamFileName(asset)).string();
+}
+
+static std::string FindStreamFileOnDisk(const sead::SafeString& archivePath, const StreamFolder& folder, const std::string& baseFolder, const StreamFolder& baseForm, const AudioAsset& asset)
 {
     std::error_code error;
-    const fs::path leftFolder = fs::absolute(left.cstr(), error).lexically_normal().parent_path();
-    const fs::path rightFolder = fs::absolute(right.cstr(), error).lexically_normal().parent_path();
+    const std::string path = MakeStreamFilePath(GetArchiveFolder(archivePath), archivePath, folder, asset);
+
+    if (baseFolder.empty() || fs::is_regular_file(path, error))
+        return path;
+
+    const std::string basePath = MakeStreamFilePath(fs::path(baseFolder), archivePath, baseForm, asset);
+
+    return fs::is_regular_file(basePath, error) ? basePath : path;
+}
+
+static bool IsSameStreamFolder(const sead::SafeString& left, const StreamFolder& leftForm, const sead::SafeString& right, const StreamFolder& rightForm)
+{
+    std::error_code error;
+    const fs::path leftFolder = fs::absolute(MakeStreamFolderPath(GetArchiveFolder(left), left, leftForm), error).lexically_normal();
+    const fs::path rightFolder = fs::absolute(MakeStreamFolderPath(GetArchiveFolder(right), right, rightForm), error).lexically_normal();
 
     return leftFolder == rightFolder;
 }
 
-static bool StripExtension(const std::string& name, const char* extension, std::string* outStem)
+static StreamFolder GetStreamFolderAt(const sead::SafeString& archivePath, const StreamFolder& folder)
 {
-    if (!extension)
-        return false;
+    std::error_code error;
 
-    const size_t length = std::strlen(extension);
+    if (folder.parent.empty() || fs::is_directory(GetArchiveFolder(archivePath) / folder.parent, error))
+        return folder;
 
-    if (name.size() <= length + 1 || name[name.size() - length - 1] != '.' || name.compare(name.size() - length, length, extension) != 0)
-        return false;
+    return { std::string(), folder.name };
+}
 
-    *outStem = name.substr(0, name.size() - length - 1);
-    return true;
+static u32 CountStreamFiles(const fs::path& streamFolder, const std::vector<const AudioAsset*>& streams)
+{
+    std::error_code error;
+    u32 count = 0;
+
+    if (!fs::is_directory(streamFolder, error))
+        return 0;
+
+    for (const AudioAsset* asset : streams)
+        count += fs::is_regular_file(streamFolder / MakeStreamFileName(*asset), error) ? 1 : 0;
+
+    return count;
+}
+
+static std::vector<StreamFolder> ListNearStreamFolders()
+{
+    return { { std::string(), StreamFolderName::StemSuffix }, { std::string(), StreamFolderName::StemPrefix }, { std::string(), StreamFolderName::Plain } };
+}
+
+static std::vector<StreamFolder> ListSiblingStreamFolders(const fs::path& archiveFolder)
+{
+    std::vector<StreamFolder> folders;
+    std::error_code error;
+
+    for (const fs::directory_entry& entry : fs::directory_iterator(archiveFolder.parent_path(), error))
+    {
+        std::string name;
+
+        if (entry.path().filename() == archiveFolder.filename() || !fs::is_directory(entry.path() / cResourceStreamFolder, error) || !fileio::GetNarrowPath(entry.path().filename(), &name))
+            continue;
+
+        folders.push_back({ cParentFolderPrefix + name, StreamFolderName::Plain });
+    }
+
+    std::sort(folders.begin(), folders.end(), [](const StreamFolder& left, const StreamFolder& right) { return left.parent < right.parent; });
+
+    return folders;
+}
+
+static bool FindFullestStreamFolder(const fs::path& archiveFolder, const sead::SafeString& archivePath, const std::vector<StreamFolder>& candidates, const std::vector<const AudioAsset*>& streams, u32 countMin, StreamFolder* out)
+{
+    u32 bestCount = 0;
+
+    for (const StreamFolder& candidate : candidates)
+    {
+        const u32 count = CountStreamFiles(MakeStreamFolderPath(archiveFolder, archivePath, candidate), streams);
+
+        if (count <= bestCount || count < countMin)
+            continue;
+
+        bestCount = count;
+        *out = candidate;
+    }
+
+    return bestCount > 0;
+}
+
+static bool FindHoldingStreamFolder(const fs::path& archiveFolder, const sead::SafeString& archivePath, const std::vector<const AudioAsset*>& streams, StreamFolder* out)
+{
+    const u32 siblingCountMin = static_cast<u32>(streams.size() / 2 + 1);
+
+    return FindFullestStreamFolder(archiveFolder, archivePath, ListNearStreamFolders(), streams, 1, out) ||
+           FindFullestStreamFolder(archiveFolder, archivePath, ListSiblingStreamFolders(archiveFolder), streams, siblingCountMin, out);
+}
+
+static std::vector<const AudioAsset*> CollectStreamAssets(const Item::List& assets)
+{
+    std::vector<const AudioAsset*> streams;
+
+    for (const Item* item : assets)
+    {
+        const AudioAsset* asset = static_cast<const AudioAsset*>(item);
+
+        if (asset->isStream())
+            streams.push_back(asset);
+    }
+
+    return streams;
+}
+
+static StreamFolder FindExistingStreamFolder(const fs::path& archiveFolder, const sead::SafeString& archivePath)
+{
+    std::error_code error;
+
+    for (const StreamFolder& candidate : ListNearStreamFolders())
+    {
+        if (fs::is_directory(MakeStreamFolderPath(archiveFolder, archivePath, candidate), error))
+            return candidate;
+    }
+
+    return StreamFolder();
 }
 
 static bool ReadSarcAudioName(const sarc::Entry& entry, std::string* outName)
@@ -292,7 +267,7 @@ static bool ReadSarcAudioName(const sarc::Entry& entry, std::string* outName)
     const AudioAssetKind kind = DetectAudioAssetKind(entry.data);
     const bool isAsset = kind == AudioAssetKind::Bwav || kind == AudioAssetKind::Fwav || kind == AudioAssetKind::StreamPrefetch;
 
-    return entry.hasName && isAsset && StripExtension(entry.name, GetAudioAssetKindExtension(kind), outName);
+    return entry.hasName && isAsset && filename::StripExactExtension(entry.name, GetAudioAssetKindExtension(kind), outName);
 }
 
 static bool AttachSarcMeta(const AudioResource& resource, sarc::Entry* entry, std::vector<AudioAsset*>* assets, std::unordered_map<std::string, AudioAsset*>* assetsByName)
@@ -300,7 +275,7 @@ static bool AttachSarcMeta(const AudioResource& resource, sarc::Entry* entry, st
     std::string name;
     std::string metaName;
 
-    if (!entry->hasName || !StripExtension(entry->name, aal::cAmtaFileExtension, &name) || !resource.validName(sead::SafeString(name.c_str())))
+    if (!entry->hasName || !filename::StripExactExtension(entry->name, aal::cAmtaFileExtension, &name) || !resource.validName(sead::SafeString(name.c_str())))
         return false;
 
     if (!aal::ReadAmtaName(entry->data, &metaName) || metaName != name)
@@ -322,6 +297,24 @@ static bool AttachSarcMeta(const AudioResource& resource, sarc::Entry* entry, st
 
     asset->setMeta(std::move(entry->data));
     return true;
+}
+
+static void MakeAssetCopyName(const AudioResource& resource, const sead::SafeString& name, bool keepsExtensions, sead::BufferedSafeString* out)
+{
+    const std::string text = name.cstr();
+    const size_t dot = keepsExtensions ? text.find('.') : std::string::npos;
+    const std::string stem = text.substr(0, dot);
+    const std::string extensions = dot == std::string::npos ? std::string() : text.substr(dot);
+
+    sead::FixedSafeString<AudioResource::cNameLengthMax + 1> fullName;
+
+    MakeCopyName(sead::SafeString(stem.c_str()), [&resource, &extensions, &fullName](const sead::SafeString& candidate)
+    {
+        fullName.format("%s%s", candidate.cstr(), extensions.c_str());
+        return resource.validateName(fullName, nullptr);
+    }, out);
+
+    out->append(extensions.c_str());
 }
 
 static void AddAssetsByName(Item::List* list, std::vector<AudioAsset*> assets)
@@ -360,7 +353,14 @@ AudioResource::AudioResource()
     , mContainer(Container::Bars)
     , mIsCompressed(false)
     , mIsBigEndian(false)
+    , mStreamFolder()
+    , mBaseTitleFolder()
+    , mBaseStreamFolder()
     , mVersion(0)
+    , mNewAssetKind(AudioAssetKind::Bwav)
+    , mNewAssetHasMeta(true)
+    , mLastSampleDrop(-1)
+    , mQuietTailLevel(-1)
     , mTrailing()
     , mFilePath()
     , mAssets()
@@ -431,11 +431,38 @@ bool AudioResource::open(std::vector<u8> bytes, const sead::SafeString& path, co
     mIsOpen = true;
 
     renumberAssets();
+    findStreamFolders();
 
     for (Item* item : mAssets)
         probeStreamFile(static_cast<AudioAsset*>(item));
 
     return true;
+}
+
+void AudioResource::findStreamFolders()
+{
+    if (!holdsStreams())
+        return;
+
+    const std::vector<const AudioAsset*> streams = CollectStreamAssets(mAssets);
+    std::error_code error;
+    const fs::path archiveFolder = fs::absolute(GetArchiveFolder(mFilePath), error);
+    const bool isInBaseTitle = findBaseStreamFolder(streams);
+
+    if (!streams.empty() && FindHoldingStreamFolder(archiveFolder, mFilePath, streams, &mStreamFolder))
+        return;
+
+    mStreamFolder = isInBaseTitle ? GetStreamFolderAt(mFilePath, mBaseStreamFolder) : FindExistingStreamFolder(archiveFolder, mFilePath);
+}
+
+bool AudioResource::findBaseStreamFolder(const std::vector<const AudioAsset*>& streams)
+{
+    std::error_code error;
+
+    mBaseTitleFolder = streams.empty() ? std::string() : titlefolder::FindBaseFolder(fs::absolute(GetArchiveFolder(mFilePath), error).string());
+    mBaseStreamFolder = StreamFolder();
+
+    return !mBaseTitleFolder.empty() && FindHoldingStreamFolder(fs::path(mBaseTitleFolder), mFilePath, streams, &mBaseStreamFolder);
 }
 
 bool AudioResource::openBars(std::vector<u8> bytes, const char** outError)
@@ -448,13 +475,14 @@ bool AudioResource::openBars(std::vector<u8> bytes, const char** outError)
     mContainer = Container::Bars;
     mIsBigEndian = bars.isBigEndian;
     mVersion = bars.version;
+    mNewAssetKind = bars.version == aal::cBarsVersion11 ? AudioAssetKind::Fwav : AudioAssetKind::Bwav;
     mTrailing = std::move(bars.trailing);
 
     std::vector<AudioAssetFile> files;
     files.reserve(bars.assets.size());
 
     for (std::vector<u8>& asset : bars.assets)
-        files.push_back(MakeAssetFile(std::move(asset)));
+        files.push_back(MakeAudioAssetFile(std::move(asset)));
 
     std::vector<AudioAsset*> assets;
     assets.reserve(bars.entries.size());
@@ -475,7 +503,6 @@ bool AudioResource::openBars(std::vector<u8> bytes, const char** outError)
         AudioAsset* asset = new AudioAsset();
         asset->getName() = name.c_str();
         asset->setMeta(std::move(entry.meta));
-        asset->setInResetTable(entry.isInResetTable);
 
         if (entry.assetIndex != aal::cBarsNoAsset)
             asset->setFile(files[entry.assetIndex]);
@@ -513,7 +540,7 @@ bool AudioResource::openSarc(std::vector<u8> bytes, const char** outError)
 
         AudioAsset* asset = new AudioAsset();
         asset->getName() = name.c_str();
-        asset->setFile(MakeAssetFile(std::move(entry.data)));
+        asset->setFile(MakeAudioAssetFile(std::move(entry.data)));
 
         assets.push_back(asset);
         assetsByName.emplace(name, asset);
@@ -530,11 +557,14 @@ bool AudioResource::openSarc(std::vector<u8> bytes, const char** outError)
     mContainer = Container::Sarc;
     mIsBigEndian = file.isBigEndian;
     mVersion = file.version;
+    mNewAssetKind = AudioAssetKind::Fwav;
+
+    AddAssetsByName(&mAssets, std::move(assets));
+    openSarcParam(&otherFiles);
 
     file.entries = std::move(otherFiles);
     mSarcFiles = std::move(file);
 
-    AddAssetsByName(&mAssets, std::move(assets));
     return true;
 }
 
@@ -561,7 +591,7 @@ bool AudioResource::openBwav(std::vector<u8> bytes, const sead::SafeString& path
 
     AudioAsset* asset = new AudioAsset();
     asset->getName() = name.c_str();
-    asset->setFile(MakeAssetFile(std::move(bytes)));
+    asset->setFile(MakeAudioAssetFile(std::move(bytes)));
     mAssets.pushBack(asset);
 
     return true;
@@ -575,16 +605,71 @@ void AudioResource::renumberAssets()
         item->setId(id++);
 }
 
+static std::vector<u8> MakeEmptyBwav(bool isBigEndian)
+{
+    aal::BwavFormat format;
+    format.sampleRate = cNewBwavSampleRate;
+    format.isBigEndian = isBigEndian;
+
+    aal::Bwav bwav;
+    const char* error = nullptr;
+    aal::EncodeBwav({ std::vector<s16>() }, format, &bwav, &error);
+
+    return aal::WriteBwav(bwav);
+}
+
+void AudioResource::createBwav(const sead::SafeString& fileName)
+{
+    close();
+
+    const char* error = nullptr;
+
+    mIsOpen = openBwav(MakeEmptyBwav(false), fileName, &error);
+    SEAD_ASSERT_MSG(mIsOpen, "%s", error);
+
+    renumberAssets();
+}
+
+void AudioResource::createBars(u16 version, AudioAssetKind newAssetKind)
+{
+    close();
+
+    mContainer = Container::Bars;
+    mVersion = version;
+    mNewAssetKind = version == aal::cBarsVersion11 ? newAssetKind : AudioAssetKind::Bwav;
+    mIsOpen = true;
+}
+
+void AudioResource::createSarc(bool hasMeta)
+{
+    close();
+
+    mContainer = Container::Sarc;
+    mIsBigEndian = mSarcFiles.isBigEndian;
+    mVersion = mSarcFiles.version;
+    mNewAssetKind = AudioAssetKind::Fwav;
+    mNewAssetHasMeta = hasMeta;
+    mIsOpen = true;
+}
+
 void AudioResource::close()
 {
     mAssets.clear();
     mTrailing.clear();
     mSarcFiles = sarc::File();
+    mSarcParam = SarcParam();
     mFilePath.clear();
     mIsOpen = false;
     mIsCompressed = false;
     mIsBigEndian = false;
+    mStreamFolder = StreamFolder();
+    mBaseTitleFolder.clear();
+    mBaseStreamFolder = StreamFolder();
     mVersion = 0;
+    mNewAssetKind = AudioAssetKind::Bwav;
+    mNewAssetHasMeta = true;
+    mLastSampleDrop = -1;
+    mQuietTailLevel = -1;
 }
 
 bool AudioResource::isOpen() const
@@ -641,14 +726,17 @@ bool AudioResource::validName(const sead::SafeString& name) const
 {
     const s32 length = name.calcLength();
 
-    if (length == 0 || length > cNameLengthMax)
+    if (length == 0 || length > cNameLengthMax || name[0] == cInnerNameSpace || name[length - 1] == cInnerNameSpace)
         return false;
 
     for (s32 i = 0; i < length; i++)
     {
         const char character = name[i];
 
-        if (character < cFirstNameCharacter || character > cLastNameCharacter || std::strchr(cInvalidNameCharacters, character))
+        if (character == cInnerNameSpace)
+            continue;
+
+        if (character < cFirstNameCharacter || character > cLastNameCharacter || std::strchr(filename::cInvalidCharacters, character))
             return false;
     }
 
@@ -691,7 +779,7 @@ bool AudioResource::validate(sead::BufferedSafeString* outError, const Item** ou
 
         if (!validName(asset->getName()))
         {
-            outError->copy(messages::item::cNameInvalidDetail);
+            outError->copy(messages::resource::cNameInvalidDetail);
             return false;
         }
 
@@ -702,7 +790,7 @@ bool AudioResource::validate(sead::BufferedSafeString* outError, const Item** ou
         }
 
         std::string metaName;
-        std::vector<u8> meta = asset->getMeta();
+        const std::vector<u8>& meta = asset->getMeta();
 
         if (mContainer == Container::Sarc && meta.empty())
             continue;
@@ -713,9 +801,12 @@ bool AudioResource::validate(sead::BufferedSafeString* outError, const Item** ou
             return false;
         }
 
-        if (metaName != asset->getName().cstr() && !aal::RenameAmta(&meta, asset->getName().cstr()))
+        std::vector<u8> renamedMeta;
+        const char* renameError = nullptr;
+
+        if (!MakeEntryMeta(*asset, &renamedMeta, &renameError))
         {
-            outError->copy(messages::resource::cRenameFailed);
+            outError->copy(renameError);
             return false;
         }
 
@@ -810,6 +901,8 @@ bool AudioResource::buildSarc(std::vector<u8>* out, const char** outError) const
         file.entries.push_back(std::move(entry));
     }
 
+    buildSarcParam(&file);
+
     *out = sarc::Write(file);
     return true;
 }
@@ -828,7 +921,6 @@ bool AudioResource::buildBars(std::vector<u8>* out, const char** outError) const
         const AudioAsset* asset = static_cast<const AudioAsset*>(item);
 
         aal::BarsEntry entry;
-        entry.isInResetTable = asset->isInResetTable();
 
         if (!MakeEntryMeta(*asset, &entry.meta, outError))
             return false;
@@ -849,12 +941,12 @@ bool AudioResource::buildBars(std::vector<u8>* out, const char** outError) const
     return aal::WriteBars(bars, out, outError);
 }
 
-bool AudioResource::stageStreamFiles(const sead::SafeString& previousPath, std::vector<StreamWrite>* out, const char** outError) const
+bool AudioResource::stageStreamFiles(const sead::SafeString& previousPath, const StreamFolder& previousFolder, std::vector<StreamWrite>* out, const char** outError) const
 {
     if (!holdsStreams())
         return true;
 
-    const bool isNewLocation = !IsSameFolder(previousPath, mFilePath);
+    const bool isNewLocation = !IsSameStreamFolder(previousPath, previousFolder, mFilePath, mStreamFolder);
     std::vector<std::string> stagedPaths;
 
     for (Item* item : mAssets)
@@ -867,14 +959,14 @@ bool AudioResource::stageStreamFiles(const sead::SafeString& previousPath, std::
 
         StreamWrite write;
         write.asset = asset;
-        write.path = getStreamFilePath(*asset);
+        write.path = getStreamWritePath(*asset);
         write.tempPath = write.path + cStagedFileSuffix;
 
         std::error_code error;
         fs::create_directories(fs::path(write.path).parent_path(), error);
 
         const bool isStaged = copiesFile
-            ? fileio::CopyFileOver(MakeStreamFilePath(previousPath, *asset).c_str(), write.tempPath.c_str())
+            ? fileio::CopyFileOver(FindStreamFileOnDisk(previousPath, previousFolder, mBaseTitleFolder, mBaseStreamFolder, *asset).c_str(), write.tempPath.c_str())
             : fileio::WriteWholeFile(write.tempPath.c_str(), asset->getStreamFile()->data(), asset->getStreamFile()->size()) == fileio::WriteResult::Ok;
 
         if (!isStaged)
@@ -950,11 +1042,11 @@ bool AudioResource::writeArchive(const char** outError)
     return true;
 }
 
-SaveResult AudioResource::writeAll(const sead::SafeString& previousPath, const char** outError)
+SaveResult AudioResource::writeAll(const sead::SafeString& previousPath, const StreamFolder& previousFolder, const char** outError)
 {
     std::vector<StreamWrite> writes;
 
-    if (!stageStreamFiles(previousPath, &writes, outError))
+    if (!stageStreamFiles(previousPath, previousFolder, &writes, outError))
         return SaveResult::Failed;
 
     if (!writeArchive(outError))
@@ -976,24 +1068,30 @@ SaveResult AudioResource::writeAll(const sead::SafeString& previousPath, const c
 
 SaveResult AudioResource::save(const char** outError)
 {
-    return writeAll(mFilePath, outError);
+    return writeAll(mFilePath, mStreamFolder, outError);
 }
 
 SaveResult AudioResource::saveAs(const sead::SafeString& path, const char** outError)
 {
     const sead::FixedSafeString<512> previousPath(mFilePath);
+    const StreamFolder previousFolder = mStreamFolder;
     const bool previousCompressed = mIsCompressed;
 
     mFilePath = path;
+    mStreamFolder = GetStreamFolderAt(path, previousFolder);
     mIsCompressed = IsZstdPath(path.cstr());
 
-    const SaveResult result = writeAll(previousPath, outError);
+    const SaveResult result = writeAll(previousPath, previousFolder, outError);
 
     if (result == SaveResult::Failed)
     {
         mFilePath = previousPath;
+        mStreamFolder = previousFolder;
         mIsCompressed = previousCompressed;
+        return result;
     }
+
+    findBaseStreamFolder(CollectStreamAssets(mAssets));
 
     return result;
 }
@@ -1021,29 +1119,33 @@ bool AudioResource::copiesStreamFile(const AudioAsset& asset, bool isNewLocation
     return holdsStreams() && isNewLocation && !asset.getStreamFile() && isOnDisk;
 }
 
+bool AudioResource::usesStreamFile(const AudioAsset& asset) const
+{
+    return holdsStreams() && asset.isStream();
+}
+
 bool AudioResource::canEditStreamAudio(const AudioAsset& asset, const char** outReason) const
 {
-    if (!asset.isStream())
+    if (!usesStreamFile(asset))
         return true;
 
-    if (!holdsStreams())
+    if (asset.getStreamFileState() != StreamFileState::Loaded && (asset.getInfo().kind == AudioAssetKind::StreamPrefetch || !asset.getFile()))
     {
-        *outReason = messages::resource::cStreamNeedsArchive;
-        return false;
-    }
-
-    if (asset.getStreamFileState() != StreamFileState::Loaded && asset.getInfo().kind == AudioAssetKind::StreamPrefetch)
-    {
-        *outReason = asset.getStreamFileState() == StreamFileState::Mismatched ? messages::resource::cStreamMismatched : messages::resource::cStreamNotLoaded;
+        *outReason = GetStreamFileStateError(asset.getStreamFileState());
         return false;
     }
 
     return true;
 }
 
+static bool HasLoadedStream(const AudioAsset& asset)
+{
+    return !asset.isStream() || asset.getStreamFileState() == StreamFileState::Loaded;
+}
+
 bool AudioResource::canRenameAsset(const AudioAsset& asset) const
 {
-    return canEditAssetList() && (!asset.isStream() || asset.getStreamFileState() == StreamFileState::Loaded);
+    return canEditAssetList() && HasLoadedStream(asset) && aal::CanRenameAmta(asset.getMeta());
 }
 
 bool AudioResource::canRemoveAssets() const
@@ -1058,7 +1160,7 @@ bool AudioResource::canDuplicateAsset(const AudioAsset& asset, const char** outR
 
     if (!canRemoveAssets() || (asset.isStream() && !hasStream))
     {
-        *outReason = state == StreamFileState::Mismatched ? messages::resource::cStreamMismatched : messages::resource::cStreamNotLoaded;
+        *outReason = GetStreamFileStateError(state);
         return false;
     }
 
@@ -1067,28 +1169,7 @@ bool AudioResource::canDuplicateAsset(const AudioAsset& asset, const char** outR
 
 bool AudioResource::canAddAssets() const
 {
-    return canEditAssetList() && findTemplateAsset(nullptr) != nullptr;
-}
-
-const AudioAsset* AudioResource::findTemplateAsset(const Item* preferred) const
-{
-    const auto canReplace = [this](const AudioAsset& asset)
-    {
-        const char* reason = nullptr;
-
-        return !asset.isStream() && canReplaceAudio(asset, &reason);
-    };
-
-    if (preferred && preferred->getItemType() == Item::ItemType::AudioAsset && canReplace(*static_cast<const AudioAsset*>(preferred)))
-        return static_cast<const AudioAsset*>(preferred);
-
-    for (const Item* item : mAssets)
-    {
-        if (canReplace(*static_cast<const AudioAsset*>(item)))
-            return static_cast<const AudioAsset*>(item);
-    }
-
-    return nullptr;
+    return canEditAssetList() && canCreateNewAsset();
 }
 
 AudioAsset* AudioResource::createAsset(const AudioAsset& source) const
@@ -1096,7 +1177,6 @@ AudioAsset* AudioResource::createAsset(const AudioAsset& source) const
     AudioAsset* asset = new AudioAsset();
     asset->getName() = source.getName();
     asset->setMeta(source.getMeta());
-    asset->setInResetTable(source.isInResetTable());
     asset->setFile(source.getFile());
 
     if (source.getStreamFile())
@@ -1112,14 +1192,14 @@ AudioAsset* AudioResource::duplicateAsset(AudioAsset* source, const char** outEr
 
     loadStreamFile(source);
 
-    if (!canRenameAsset(*source))
+    if (!HasLoadedStream(*source))
     {
-        *outError = source->getStreamFileState() == StreamFileState::Mismatched ? messages::resource::cStreamMismatched : messages::resource::cStreamNotLoaded;
+        *outError = GetStreamFileStateError(source->getStreamFileState());
         return nullptr;
     }
 
     AudioAsset* asset = createAsset(*source);
-    MakeCopyName(source->getName(), [this](const sead::SafeString& candidate) { return validateName(candidate, nullptr); }, &asset->getName());
+    MakeAssetCopyName(*this, source->getName(), mContainer == Container::Sarc, &asset->getName());
 
     std::vector<u8> meta = asset->getMeta();
 
@@ -1137,255 +1217,47 @@ AudioAsset* AudioResource::duplicateAsset(AudioAsset* source, const char** outEr
     return asset;
 }
 
-bool AudioResource::canReplaceAudio(const AudioAsset& asset, const char** outReason) const
-{
-    const AudioAssetKind kind = asset.getInfo().kind;
-
-    if (kind != AudioAssetKind::Bwav && kind != AudioAssetKind::Fwav && kind != AudioAssetKind::StreamPrefetch)
-    {
-        *outReason = messages::resource::cReplaceUnsupported;
-        return false;
-    }
-
-    if (asset.getInfo().channelCount == 0)
-    {
-        *outReason = messages::resource::cAudioDamaged;
-        return false;
-    }
-
-    if (!canEditStreamAudio(asset, outReason))
-        return false;
-
-    if (kind != AudioAssetKind::StreamPrefetch)
-        return true;
-
-    aal::Bfstm stream;
-    const AudioAssetFile& file = asset.getStreamFile();
-
-    if (!aal::ReadBfstmInfo(file->data(), file->size(), &stream))
-    {
-        *outReason = messages::resource::cAudioDamaged;
-        return false;
-    }
-
-    return aal::CanWriteBfstm(stream, outReason);
-}
-
-bool AudioResource::canSetLoop(const AudioAsset& asset, const char** outReason) const
-{
-    const AudioAssetKind kind = asset.getInfo().kind;
-
-    if (kind != AudioAssetKind::Bwav && kind != AudioAssetKind::Fwav)
-    {
-        *outReason = messages::resource::cLoopUnsupported;
-        return false;
-    }
-
-    if (asset.getInfo().channelCount == 0)
-    {
-        *outReason = messages::resource::cAudioDamaged;
-        return false;
-    }
-
-    if (!canEditStreamAudio(asset, outReason))
-        return false;
-
-    if (asset.isStream() && asset.getStreamFileState() != StreamFileState::Loaded)
-    {
-        *outReason = asset.getStreamFileState() == StreamFileState::Mismatched ? messages::resource::cStreamMismatched : messages::resource::cStreamNotLoaded;
-        return false;
-    }
-
-    return true;
-}
-
-bool AudioResource::replaceAudio(AudioAsset* asset, const WaveFile::RiffWaveInfo& info, WaveFile::Encoding encoding, const char** outError)
-{
-    if (!canReplaceAudio(*asset, outError))
-        return false;
-
-    if (asset->getInfo().kind == AudioAssetKind::Fwav)
-    {
-        const WaveFile* current = asset->getPreviewWave();
-
-        if (!current)
-        {
-            *outError = messages::resource::cAudioDamaged;
-            return false;
-        }
-
-        WaveFile wave;
-        wave.setStandaloneTarget(current->getTarget());
-
-        if (!wave.readWavFile(info, encoding))
-        {
-            *outError = messages::import::cWaveImportFailed;
-            return false;
-        }
-
-        wave.updateLoop();
-
-        return StoreWaveFile(asset, wave, outError);
-    }
-
-    std::vector<std::vector<s16>> pcm;
-    u32 loopStartFrame = 0;
-
-    if (!ReadWavPcm(info, &pcm, &loopStartFrame, outError))
-        return false;
-
-    if (asset->getInfo().kind == AudioAssetKind::StreamPrefetch)
-    {
-        aal::Bfstm shape;
-        aal::Bfstm encoded;
-        std::vector<u8> bytes;
-        const AudioAssetFile& stream = asset->getStreamFile();
-
-        if (!aal::ReadBfstm(stream->data(), stream->size(), &shape, outError) ||
-            !aal::EncodeBfstm(shape, pcm, info.sampleRate, info.isLoop, loopStartFrame, &encoded, outError))
-            return false;
-
-        if (!aal::WriteBfstm(encoded, &bytes))
-        {
-            *outError = messages::resource::cEncodeFailed;
-            return false;
-        }
-
-        if (!SetBfstmStreamAudio(asset, std::move(bytes), outError))
-            return false;
-
-        UpdateMetaFromInfo(asset);
-        return true;
-    }
-
-    aal::Bwav current;
-    ReadAudioAssetBwav(asset->getFile(), &current);
-
-    aal::Bwav full = aal::EncodeBwav(pcm, info.sampleRate, info.isLoop, loopStartFrame);
-    full.isBigEndian = current.isBigEndian;
-
-    if (asset->isStream())
-        SetStreamAudio(asset, full);
-    else
-        asset->setFile(MakeAssetFile(aal::WriteBwav(full)));
-
-    UpdateMetaFromInfo(asset);
-
-    return true;
-}
-
-bool AudioResource::replaceFile(AudioAsset* asset, std::vector<u8> file, const char** outError)
-{
-    const AudioAssetKind kind = DetectAudioAssetKind(file);
-
-    if (!canReplaceAudio(*asset, outError))
-        return false;
-
-    if (kind != asset->getCompleteFileKind())
-    {
-        *outError = kind == AudioAssetKind::Bwav || kind == AudioAssetKind::Fwav || kind == AudioAssetKind::Stream ? messages::resource::cImportKindMismatch : messages::resource::cImportUnsupported;
-        return false;
-    }
-
-    if (kind == AudioAssetKind::Stream)
-    {
-        aal::Bfstm stream;
-
-        if (!aal::ReadBfstm(file.data(), file.size(), &stream, outError) || !SetBfstmStreamAudio(asset, std::move(file), outError))
-            return false;
-
-        UpdateMetaFromInfo(asset);
-        return true;
-    }
-
-    if (kind == AudioAssetKind::Fwav)
-    {
-        if (!IsReadableFwav(file))
-        {
-            *outError = messages::resource::cAudioDamaged;
-            return false;
-        }
-
-        asset->setFile(MakeAssetFile(std::move(file)));
-        UpdateMetaFromInfo(asset);
-
-        return true;
-    }
-
-    aal::Bwav bwav;
-
-    if (!aal::ReadBwav(file.data(), file.size(), &bwav, outError))
-        return false;
-
-    if (!aal::IsBwavComplete(bwav))
-    {
-        *outError = messages::resource::cImportNeedsCompleteBwav;
-        return false;
-    }
-
-    if (asset->isStream())
-        SetStreamAudio(asset, bwav);
-    else
-        asset->setFile(MakeAssetFile(std::move(file)));
-
-    UpdateMetaFromInfo(asset);
-
-    return true;
-}
-
-bool AudioResource::setLoop(AudioAsset* asset, bool isLoop, u32 loopStartFrame, const char** outError)
-{
-    if (!canSetLoop(*asset, outError))
-        return false;
-
-    if (asset->getInfo().kind == AudioAssetKind::Fwav)
-        return SetWaveFileLoop(asset, isLoop, loopStartFrame, outError);
-
-    aal::Bwav bwav;
-
-    if (!ReadAudioAssetBwav(asset->getCompleteFile(), &bwav))
-    {
-        *outError = messages::resource::cAudioDamaged;
-        return false;
-    }
-
-    if (!aal::CanSetBwavLoop(bwav, isLoop, loopStartFrame))
-    {
-        *outError = messages::wavefile::cInvalidLoopRange;
-        return false;
-    }
-
-    aal::SetBwavLoop(&bwav, isLoop, loopStartFrame);
-
-    if (asset->isStream())
-        SetStreamLoop(asset, bwav);
-    else
-        asset->setFile(MakeAssetFile(aal::WriteBwav(bwav)));
-
-    UpdateMetaFromInfo(asset);
-
-    return true;
-}
-
 std::string AudioResource::getStreamFilePath(const AudioAsset& asset) const
 {
-    return MakeStreamFilePath(mFilePath, asset);
+    return FindStreamFileOnDisk(mFilePath, mStreamFolder, mBaseTitleFolder, mBaseStreamFolder, asset);
 }
 
-std::vector<std::string> AudioResource::getStreamWritePaths(const sead::SafeString& destinationPath) const
+std::string AudioResource::getStreamWritePath(const AudioAsset& asset) const
 {
-    const bool isNewLocation = !IsSameFolder(destinationPath, mFilePath);
-    std::vector<std::string> paths;
+    return MakeStreamFilePath(GetArchiveFolder(mFilePath), mFilePath, mStreamFolder, asset);
+}
+
+std::string AudioResource::getStreamBackupPath(const sead::SafeString& archivePath, const AudioAsset& asset) const
+{
+    return (fs::path(GetStreamFolderName(archivePath, mStreamFolder.name)) / MakeStreamFileName(asset)).generic_string();
+}
+
+void AudioResource::copyPreviousStreamFiles(const sead::SafeString& destinationPath, const std::string& directory, std::vector<std::string>* outStreamPaths) const
+{
+    const StreamFolder destinationFolder = GetStreamFolderAt(destinationPath, mStreamFolder);
+    const bool isNewLocation = !IsSameStreamFolder(destinationPath, destinationFolder, mFilePath, mStreamFolder);
 
     for (const Item* item : mAssets)
     {
         const AudioAsset* asset = static_cast<const AudioAsset*>(item);
 
-        if (writesStreamFile(*asset, isNewLocation) || copiesStreamFile(*asset, isNewLocation))
-            paths.push_back(MakeStreamRelativePath(*asset).generic_string());
-    }
+        if (!writesStreamFile(*asset, isNewLocation) && !copiesStreamFile(*asset, isNewLocation))
+            continue;
 
-    return paths;
+        const fs::path source = MakeStreamFilePath(GetArchiveFolder(destinationPath), destinationPath, destinationFolder, *asset);
+        const std::string relativePath = getStreamBackupPath(destinationPath, *asset);
+        const fs::path dest = fs::path(directory) / relativePath;
+        std::error_code error;
+
+        if (!fs::is_regular_file(source, error))
+            continue;
+
+        fs::create_directories(dest.parent_path(), error);
+        fs::copy_file(source, dest, error);
+
+        if (!error)
+            outStreamPaths->push_back(relativePath);
+    }
 }
 
 bool AudioResource::writeBackup(const std::string& directory, const std::string& fileName, std::vector<std::string>* outStreamPaths) const
@@ -1403,7 +1275,7 @@ bool AudioResource::writeBackup(const std::string& directory, const std::string&
         if (!writesStreamFile(*asset, false))
             continue;
 
-        const std::string relativePath = MakeStreamRelativePath(*asset).generic_string();
+        const std::string relativePath = getStreamBackupPath(mFilePath, *asset);
         const fs::path path = fs::path(directory) / relativePath;
         std::error_code ec;
 
@@ -1424,13 +1296,13 @@ bool AudioResource::restoreStreamFile(const std::string& relativePath, std::vect
     {
         AudioAsset* asset = static_cast<AudioAsset*>(item);
 
-        if (!asset->isStream() || MakeStreamRelativePath(*asset).generic_string() != relativePath)
+        if (!asset->isStream() || getStreamBackupPath(mFilePath, *asset) != relativePath)
             continue;
 
         if (CheckStreamFile(*asset, bytes) != StreamFileState::Loaded)
             return false;
 
-        asset->setStreamFile(MakeAssetFile(std::move(bytes)), StreamFileState::Loaded, true);
+        asset->setStreamFile(MakeAudioAssetFile(std::move(bytes)), StreamFileState::Loaded, true);
         return true;
     }
 
@@ -1458,5 +1330,5 @@ void AudioResource::loadStreamFile(AudioAsset* asset)
     std::vector<u8> bytes;
     const StreamFileState state = fileio::ReadWholeFile(getStreamFilePath(*asset).c_str(), &bytes) ? CheckStreamFile(*asset, bytes) : StreamFileState::Damaged;
 
-    asset->setStreamFile(state == StreamFileState::Loaded ? MakeAssetFile(std::move(bytes)) : nullptr, state, false);
+    asset->setStreamFile(state == StreamFileState::Loaded ? MakeAudioAssetFile(std::move(bytes)) : nullptr, state, false);
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ui/wave/LoopWaveformEditor.h>
+#include <ui/wave/WaveImportPanel.h>
 #include <ui/wave/WaveImportSettings.h>
 
 #include <bfsar/player/SoundPlayer.h>
@@ -17,6 +18,7 @@ constexpr f32 cTitleGapEm = 0.3f;
 constexpr f32 cRowGapEm   = 0.4f;
 
 f32 CalcLabelWidth(std::initializer_list<const char*> labels);
+f32 CalcLeftLabelWidth();
 void RowLabel(const char* label, f32 labelWidth, const char* detail = nullptr);
 void BeginBoxTools(f32 width);
 void EndBoxTools();
@@ -26,13 +28,14 @@ bool SampleField(const char* id, u32* value, u32 min, u32 max, u32 reset, u32 ra
 class WaveImportPanel
 {
 public:
-    void draw(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info);
+    void draw(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
     void reset();
     void tick();
     bool confirmCancel(bool cancelClicked);
 
     std::string finalizeForCommit(WaveFile::RiffWaveInfo* info);
     u32 calcOutputLength(const WaveFile::RiffWaveInfo& info) const;
+    u32 calcOutputSampleRate(const WaveFile::RiffWaveInfo& info) const;
 
     f32 getBodyHeight() const
     {
@@ -44,10 +47,18 @@ public:
         return mTouched;
     }
 
+    void setOldData(const OldAudioData* data, OldAudioClear* cleared)
+    {
+        mOldData = data;
+        mOldClear = cleared;
+    }
+
+    const char* formatOldDataWarning(const WaveFile::RiffWaveInfo& info, sead::BufferedSafeString* out) const;
+
 private:
     struct FrameContext
     {
-        WaveFile::Encoding* encoding = nullptr;
+        WaveImportEncoding encoding;
         WaveFile::RiffWaveInfo* info = nullptr;
 
         u32 totalSamples = 0;
@@ -96,6 +107,7 @@ private:
     JobKind mJobKind = JobKind::None;
     ShapedAudio mShapedResult;
 
+    u32 mRateBeforeFit = 0;
     bool mTouched = false;
     bool mDrawnThisFrame = false;
     bool mPreviewBuilt = false;
@@ -108,6 +120,9 @@ private:
     f32 mBodyHeight = 0.0f;
     bool mBodyScroll = false;
     f32 mColumnFill[2] = {};
+
+    const OldAudioData* mOldData = nullptr;
+    OldAudioClear* mOldClear = nullptr;
 
     void ensureDecoded(const WaveFile::RiffWaveInfo& info);
     void rescaleWaveformView(u32 oldLength, u32 newLength);
@@ -132,12 +147,12 @@ private:
 
     bool beginBody();
     void endBody();
-    FrameContext beginFrame(WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info, bool passThrough);
+    FrameContext beginFrame(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info, bool passThrough);
     void constrainRanges(FrameContext& ctx);
     void commitLoop(FrameContext& ctx);
 
     void drawSourceHeader(const char* header, u32 sampleRate, u32 channelCount, u32 sampleCount);
-    void drawUndecodableSource(const char* header, WaveFile::Encoding* encoding, WaveFile::RiffWaveInfo* info);
+    void drawUndecodableSource(const char* header, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
 
     void drawWaveformBox(FrameContext& ctx);
     void drawWaveformTools(FrameContext& ctx, f32 groupGap);
@@ -149,9 +164,15 @@ private:
     void drawProcessingPanels(f32 fill);
     void drawPitchPanel();
     void drawNormalizePanel();
-    void drawEncodingField(WaveFile::Encoding* encoding, f32 labelWidth);
-    void drawSampleRateField(f32 labelWidth);
+    void drawEncodingField(const WaveImportEncoding& encoding, f32 labelWidth);
+    void drawBitrateField(const WaveImportEncoding& encoding, f32 labelWidth);
+    void drawSampleRateField(const WaveImportEncoding& encoding, f32 labelWidth);
+    void fitSampleRateToEncoding(const WaveImportEncoding& encoding);
+    void selectSampleRate(u32 sampleRate);
     void drawChannelsField(f32 labelWidth);
+    u32 calcOutputChannelCount(const WaveFile::RiffWaveInfo& info) const;
+    bool isOutputSource(const WaveFile::RiffWaveInfo& info) const;
+    void drawOldDataBox(const WaveFile::RiffWaveInfo& info);
     void drawTrimBox(FrameContext& ctx, f32 labelWidth);
     void drawLoopBox(FrameContext& ctx, f32 labelWidth, f32 fill);
     void drawLoopModeField(FrameContext& ctx, f32 width);

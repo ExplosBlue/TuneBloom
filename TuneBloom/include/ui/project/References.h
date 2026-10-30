@@ -7,4 +7,5 @@ class Sound;
 const char* GetSoundIcon(const Sound* sound);
 const char* GetItemIcon(const Item* item);
 bool DrawReferencesUI(Item* item, f32 reserveBelow = 0.0f);
+void ForgetReferenceEntries();
 void DrawArchiveInfoUI(Item::ItemType itemType);

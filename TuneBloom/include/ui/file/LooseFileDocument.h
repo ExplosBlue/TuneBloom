@@ -2,6 +2,8 @@
 
 #include <ui/file/Document.h>
 
+#include <ui/file/LooseFileInfo.h>
+
 #include <bfsar/files/InnerFile.h>
 
 class LooseFileDocument : public Document
@@ -17,33 +19,70 @@ public:
     void captureItemBaselines() override;
 
     ParseContext parseContext() const override;
-    u64 estimateMemory() const override;
-    bool isLoaded() const override;
-    bool canUnload() const override;
-    void unload() override;
-    bool reload() override;
 
-    bool prepareSave() override;
-    bool prepareSaveAs() override;
     bool chooseSaveAsPath(sead::BufferedSafeString* outPath) const override;
     void finishSave() override;
 
-    s32 getBackupNamesSetting() const override;
     bool writeBackup(const BackupWrite& write, backup::Snapshot* snapshot, Bfsar::BackupResult* outResult) override;
-    void copyPreviousSidecars(const std::string& sourcePath, const std::string& destDir, backup::Snapshot* snapshot) override;
-    void restoreSidecars(const backup::Snapshot& snapshot) override;
-    void applyRestoredSnapshot(const backup::Snapshot& snapshot, bool untitled) override;
 
 protected:
-    virtual InnerFileTarget fileTarget() const = 0;
-    virtual InnerFileKind innerFileKind() const = 0;
+    virtual LooseFileFormat fileFormat() const = 0;
+    virtual bool openFile(const File& file, const sead::SafeString& path, sead::BufferedSafeString* outError) = 0;
     virtual bool writeTo(const sead::SafeString& path) const = 0;
 
-    static sead::FixedSafeString<64> MakeUntitledName(const InnerFileTarget& target, InnerFileKind kind);
+    static Document* OpenAs(LooseFileDocument* document, File* file, const sead::SafeString& path);
+    static sead::FixedSafeString<64> MakeUntitledName(const char* extension);
 
     SaveResult reportSave(SaveResult result, const char** outError);
-    SaveResult saveUntitled(const char** outError);
 
     sead::FixedSafeString<512> mLoadedPath;
     sead::FixedSafeString<512> mSaveError;
+};
+
+template <typename LooseFile>
+class LooseFileDocumentOf : public LooseFileDocument
+{
+public:
+    LooseFile& file()
+    {
+        return mFile;
+    }
+
+    const sead::SafeString& filePath() const override
+    {
+        return mFile.getFilePath();
+    }
+
+    std::string displayName() const override
+    {
+        return mFile.getFileName().cstr();
+    }
+
+    bool isInfoModified() const override
+    {
+        return mFile.isModified();
+    }
+
+    SaveResult save(const char** outError) override
+    {
+        return reportSave(mFile.save(&mSaveError), outError);
+    }
+
+    SaveResult saveAs(const sead::SafeString& path, const char** outError) override
+    {
+        return reportSave(mFile.saveAs(path, &mSaveError), outError);
+    }
+
+protected:
+    bool openFile(const File& file, const sead::SafeString& path, sead::BufferedSafeString* outError) override
+    {
+        return mFile.open(file.data, file.size, path, outError);
+    }
+
+    bool writeTo(const sead::SafeString& path) const override
+    {
+        return mFile.writeTo(path);
+    }
+
+    LooseFile mFile;
 };

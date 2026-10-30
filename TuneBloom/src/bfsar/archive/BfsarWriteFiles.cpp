@@ -38,6 +38,7 @@ void Bfsar::setupPrefetchFiles_(BfsarSaveContext& ctx)
 
     std::vector<StreamSaveJob> jobs;
     std::vector<SkippedStream> skippedStreams;
+    std::unordered_map<u32, std::pair<u32, std::vector<u8>>> sharedPrefetchFiles;
     bool isPlanned = false;
 
     //? BFSTP
@@ -62,6 +63,19 @@ void Bfsar::setupPrefetchFiles_(BfsarSaveContext& ctx)
             ctx.skippedStreams.push_back({sound, messages::stream::cPrefetchNotSaved});
             continue;
         }
+
+        const u32 origFileId = sound->getStreamSoundInfo().getPrefetchOrigFileId();
+        const auto shared = sharedPrefetchFiles.find(origFileId);
+
+        if (shared != sharedPrefetchFiles.end() && shared->second.second == bytes)
+        {
+            ctx.prefetchFileIds.try_emplace(sound, shared->second.first);
+            ctx.filesItems[shared->second.first].insert(sound);
+            continue;
+        }
+
+        if (origFileId != nw::snd::SoundArchive::INVALID_ID && shared == sharedPrefetchFiles.end())
+            sharedPrefetchFiles.try_emplace(origFileId, static_cast<u32>(ctx.files.size()), bytes);
 
         InnerFile* innerFile = new BfstpFile(std::move(bytes), mEndian, mFormat);
         ctx.generatedInnerFiles.push_back(innerFile);
@@ -645,6 +659,46 @@ void Bfsar::attachExtraFilesToGroup_(BfsarSaveContext& ctx, const Group* group)
     }
 }
 
+u32 Bfsar::getGeneratedWarcOrigFileId_(const BfsarSaveContext& ctx, u32 fileId) const
+{
+    const auto items = ctx.filesItems.find(fileId);
+
+    if (items == ctx.filesItems.end() || items->second.size() != 1)
+        return nw::snd::SoundArchive::INVALID_ID;
+
+    const auto owner = ctx.generatedWarcOwners.find(*items->second.begin());
+
+    if (owner == ctx.generatedWarcOwners.end())
+        return nw::snd::SoundArchive::INVALID_ID;
+
+    const auto warcFileId = mFileOriginalOwnWarc.find(getItemOrigFileId_(owner->second));
+
+    return warcFileId != mFileOriginalOwnWarc.end() ? warcFileId->second : nw::snd::SoundArchive::INVALID_ID;
+}
+
+static u32 GetPrefetchOrigFileId(const BfsarSaveContext& ctx, const File& file)
+{
+    const auto items = ctx.filesItems.find(file.id);
+
+    if (!file.isPrefetch || items == ctx.filesItems.end() || items->second.empty())
+        return nw::snd::SoundArchive::INVALID_ID;
+
+    return static_cast<const Sound*>(*items->second.begin())->getStreamSoundInfo().getPrefetchOrigFileId();
+}
+
+u32 Bfsar::getFileOrderOrigId_(const BfsarSaveContext& ctx, u32 fileId) const
+{
+    const File& file = ctx.files[fileId];
+
+    if (file.origId != nw::snd::SoundArchive::INVALID_ID)
+        return file.origId;
+
+    if (file.isPrefetch)
+        return GetPrefetchOrigFileId(ctx, file);
+
+    return getGeneratedWarcOrigFileId_(ctx, fileId);
+}
+
 void Bfsar::restoreGroupFileOrder_(BfsarSaveContext& ctx, const Group* group)
 {
     const std::vector<u32>& originalOrder = group->getOriginalFileOrder();
@@ -663,9 +717,9 @@ void Bfsar::restoreGroupFileOrder_(BfsarSaveContext& ctx, const Group* group)
 
     for (u32 fileId : groupFiles->second)
     {
-        const auto place = originalPlaces.find(ctx.files[fileId].origId);
+        const auto place = originalPlaces.find(getFileOrderOrigId_(ctx, fileId));
 
-        if (place != originalPlaces.end())
+        if (place != originalPlaces.end() && orderedFileIds[place->second] == nw::snd::SoundArchive::INVALID_ID)
             orderedFileIds[place->second] = fileId;
         else
             generatedFileIds.push_back(fileId);

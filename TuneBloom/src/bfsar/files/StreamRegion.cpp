@@ -4,6 +4,8 @@
 
 #include <prim/seadMemUtil.h>
 
+#include <cstddef>
+
 using nw::snd::internal::StreamSoundFile;
 
 static constexpr u32 cSamplesPerFrame = 14;
@@ -20,6 +22,7 @@ void StreamFileLayout::mixInto(StateHash& hash) const
 {
     hash.mixValue<u32>(static_cast<u32>(regions.size()));
     hash.mixValue<u32>(regionRecordBytes);
+    hash.mixValue<u32>(hasRegionInfo ? 1u : 0u);
     hash.mixValue<u32>(hasUnknown4C ? 1u : 0u);
     hash.mixValue<u32>(unknown4C);
 
@@ -150,16 +153,6 @@ u32 StreamFileLayout::removeRegionsAfter(u32 sampleCount)
     return static_cast<u32>(countBefore - regions.size());
 }
 
-u32 StreamFileLayout::countRegionsAfter(u32 sampleCount) const
-{
-    u32 count = 0;
-
-    for (const StreamRegion& region : regions)
-        count += region.end > sampleCount ? 1 : 0;
-
-    return count;
-}
-
 bool StreamFileLayout::IsRegionNameValid(const sead::SafeString& name)
 {
     const s32 length = name.calcLength();
@@ -212,6 +205,7 @@ StreamRegionReadResult ReadStreamFileLayout(StreamFileLayout* layout, const nw::
     const StreamSoundFile::StreamSoundInfo& info = *reader.mInfoBlockBody->GetStreamSoundInfo();
 
     layout->version = header.version;
+    layout->hasRegionInfo = reader.GetStreamSoundInfoSize() >= offsetof(StreamSoundFile::StreamSoundInfo, originalLoopStart);
     layout->hasUnknown4C = reader.GetStreamSoundInfoSize() >= sizeof(StreamSoundFile::StreamSoundInfo);
     layout->unknown4C = layout->hasUnknown4C ? static_cast<u32>(info.unknown4C) : 0;
 

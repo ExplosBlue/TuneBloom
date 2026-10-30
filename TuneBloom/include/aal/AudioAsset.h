@@ -12,9 +12,16 @@ struct DecodedPcm;
 namespace aal
 {
 struct Bwav;
+struct AmtaSourceAudio;
+enum class BwavCodec : u16;
 }
 
 using AudioAssetFile = std::shared_ptr<const std::vector<u8>>;
+
+inline AudioAssetFile MakeAudioAssetFile(std::vector<u8> bytes)
+{
+    return std::make_shared<const std::vector<u8>>(std::move(bytes));
+}
 
 enum class AudioAssetKind
 {
@@ -87,12 +94,11 @@ public:
     bool needsStreamFileWrite() const;
     void markStreamFileWritten();
 
-    bool isInResetTable() const;
-    void setInResetTable(bool isInResetTable);
-
     const AudioAssetInfo& getInfo() const;
     bool isStream() const;
+    AudioAssetKind getStreamFileKind() const;
     bool getPlaybackError(sead::BufferedSafeString* outError) const;
+    const char* getNoAudioReason() const;
 
     bool decode(DecodedPcm* out);
     bool decodePcm16(AudioAssetPcm* out);
@@ -104,23 +110,30 @@ private:
     void refreshInfo();
     void releasePreviewWave();
     WaveFile* buildPreviewWave();
+    const char* findPlaybackError() const;
+    bool readsStreamFile() const;
 
     std::vector<u8> mMeta;
+    AudioAssetKind mMetaStreamKind;
     AudioAssetFile mFile;
     AudioAssetFile mStreamFile;
     StreamFileState mStreamFileState;
     std::string mStreamFileName;
     bool mIsStreamFileModified;
-    bool mIsInResetTable;
     u32 mRevision;
     AudioAssetInfo mInfo;
     WaveFile* mPreviewWave;
 };
 
+const char* GetStreamFileStateError(StreamFileState state);
 const char* GetAudioAssetKindName(AudioAssetKind kind);
 const char* GetAudioAssetKindExtension(AudioAssetKind kind);
 AudioAssetKind DetectAudioAssetKind(const std::vector<u8>& file);
 bool ReadAudioAssetBwav(const AudioAssetFile& file, aal::Bwav* out);
+bool GetAudioAssetBwavCodec(const AudioAsset& asset, aal::BwavCodec* out);
+u32 GetAudioAssetOpusBitrate(const AudioAsset& asset);
+aal::AmtaSourceAudio GetAudioAssetLength(const AudioAsset& asset);
+bool IsAudioAssetLoop(const AudioAsset& asset);
 bool IsReadableFwav(const std::vector<u8>& file);
 WaveFile* ReadFwavFile(const void* data, size_t size);
 

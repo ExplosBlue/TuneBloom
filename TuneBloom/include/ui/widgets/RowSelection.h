@@ -1,7 +1,11 @@
 #pragma once
 
+#include <basis/seadTypes.h>
+
 #include <algorithm>
 #include <vector>
+
+inline constexpr s32 cRowSelectionPageStep = 20;
 
 template <typename T>
 struct RowSelection

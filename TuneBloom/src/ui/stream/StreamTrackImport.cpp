@@ -122,11 +122,6 @@ static const WaveFile* FindMainWave(const Sound::StreamSoundInfo& stream)
     return nullptr;
 }
 
-bool IsPlainPcm(const WaveFile::RiffWaveInfo& info)
-{
-    return info.format == cRiffFormatPcm && info.bitsPerSample <= 16 && info.numChannels <= snd::cWaveChannelMax;
-}
-
 std::string MakeTempPath(u32 index)
 {
     char path[700];
@@ -314,9 +309,6 @@ void StreamTrackImport::togglePreview(u32 index)
     if (!decodeRiffChannels(files[index].info, &pcm.channels))
         return;
 
-    if (pcm.channels.size() > snd::cWaveChannelMax)
-        pcm.channels.resize(snd::cWaveChannelMax);
-
     pcm.sampleRate = files[index].info.sampleRate;
     pcm.sampleCount = static_cast<u32>(pcm.channels[0].size());
 
@@ -456,19 +448,10 @@ WaveFile* StreamTrackImport::createWave(const TrackPlan& plan, const ImportTarge
             channels.push_back(std::move(channel));
         }
 
-        tempPath = TempWavWriter::write(channels, target.sampleRate, false, 0, 0, MakeTempPath(tempIndex));
+        tempPath = MakeTempPath(tempIndex);
 
-        if (tempPath.empty())
+        if (!TempWavWriter::writeInfo(channels, target.sampleRate, tempPath, &info))
             return nullptr;
-
-        info.clear();
-        info.path.copy(tempPath.c_str());
-
-        if (!WaveFile::readRiffWavInfo(&info))
-        {
-            ::remove(tempPath.c_str());
-            return nullptr;
-        }
     }
 
     info.isLoop = target.isLoop;
@@ -483,7 +466,7 @@ WaveFile* StreamTrackImport::createWave(const TrackPlan& plan, const ImportTarge
     const bool success = wave->readWavFile(info, target.encoding);
 
     if (!tempPath.empty())
-        ::remove(tempPath.c_str());
+        fileio::RemoveFile(tempPath.c_str());
 
     if (!success)
     {

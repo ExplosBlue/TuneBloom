@@ -1,12 +1,15 @@
 #include <browser/FileProbe.h>
 
+#include <aal/BarsList.h>
 #include <aal/BarsSarc.h>
 #include <bfsar/archive/Bea.h>
 #include <bfsar/archive/Cmpbin.h>
+#include <bfsar/files/WaveFile.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <core/ByteView.h>
+#include <core/NwFile.h>
 #include <core/Sarc.h>
-#include <snd/snd_Util.h>
+#include <ui/Messages.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -19,19 +22,13 @@ static constexpr u64 cCompressedReadBytes  = 64 * 1024;
 static constexpr u64 cCompressedReadMax    = 8 * 1024 * 1024;
 static constexpr u64 cCompressedReadGrowth = 4;
 static constexpr u64 cArchiveHeadMax       = 64 * 1024 * 1024;
+static constexpr u64 cRiffHeadReadBytes    = 64 * 1024;
 static constexpr size_t cPeekBytes         = 4096;
 static constexpr u64 cBeaPeekReadBytes     = 132 * 1024;
 static constexpr size_t cBeaProbeAssetMax  = 16;
 static constexpr u32 cMagicLength          = 4;
 
-static constexpr u32 cNwHeaderByteOrder  = 0x04;
-static constexpr u32 cNwHeaderVersion    = 0x08;
-static constexpr u32 cNwHeaderBlockCount = 0x10;
-static constexpr u32 cNwHeaderBlockRefs  = 0x14;
-static constexpr u32 cNwBlockRefSize     = 0x0C;
-static constexpr u32 cNwBlockRefOffset   = 0x04;
-static constexpr u16 cNwInfoBlockType    = 0x7000;
-static constexpr u32 cNwBlockBody        = 0x08;
+static constexpr u16 cNwInfoBlockType = 0x7000;
 
 static constexpr u32 cWaveInfoIsLoop       = 0x01;
 static constexpr u32 cWaveInfoSampleRate   = 0x04;
@@ -41,6 +38,10 @@ static constexpr u32 cWaveInfoChannelCount = 0x14;
 static constexpr u32 cBarsByteOrder  = 0x08;
 static constexpr u32 cBarsVersion    = 0x0A;
 static constexpr u32 cBarsAssetCount = 0x0C;
+
+static constexpr u32 cBarsListByteOrder = 0x04;
+static constexpr u32 cBarsListVersion   = 0x06;
+static constexpr u32 cBarsListCount     = 0x0C;
 
 static constexpr u32 cBwavByteOrder      = 0x04;
 static constexpr u32 cBwavVersion        = 0x06;
@@ -55,7 +56,9 @@ static constexpr u32 cBwavNoLoop         = 0xFFFFFFFF;
 
 static constexpr const char* cBarsMagic = "BARS";
 static constexpr const char* cBwavMagic = "BWAV";
+static constexpr const char* cRiffMagic = "RIFF";
 static constexpr const char* cSarcFormatName = "SARC";
+static constexpr const char* cWavFormatName  = "WAV";
 
 static bool HasMagic(const void* data, u64 size, const char* magic)
 {
@@ -69,7 +72,7 @@ static void CopyFormatName(const char* name, FileProbe* out)
 
 static void FormatNwVersion(u32 version, u32 byteCount, char* out, size_t outSize)
 {
-    const u32 majorShift = nw::snd::internal::Util::IsHighByteMajorVersion(version) ? 24 : 16;
+    const u32 majorShift = nwfile::GetVersionMajorShift(version);
     const u32 major = (version >> majorShift) & 0xFF;
     const u32 minor = (version >> (majorShift - 8)) & 0xFF;
     const u32 micro = (version >> (majorShift - 16)) & 0xFF;
@@ -110,35 +113,14 @@ static BrowserFileKind ToBrowserKind(InnerFileKind kind, bool* outShown)
     return BrowserFileKind::SoundArchive;
 }
 
-static u64 FindNwInfoBlock(const ByteView& view)
-{
-    if (!view.has(cNwHeaderBlockCount, sizeof(u16)))
-        return 0;
-
-    const u32 blockCount = view.readU16(cNwHeaderBlockCount);
-
-    for (u32 i = 0; i < blockCount; i++)
-    {
-        const u64 ref = cNwHeaderBlockRefs + static_cast<u64>(i) * cNwBlockRefSize;
-
-        if (!view.has(ref, cNwBlockRefSize))
-            return 0;
-
-        if (view.readU16(ref) == cNwInfoBlockType)
-            return view.readU32(ref + cNwBlockRefOffset);
-    }
-
-    return 0;
-}
-
 static void ProbeNwWave(const ByteView& view, FileProbe* out)
 {
-    const u64 infoBlock = FindNwInfoBlock(view);
+    nwfile::Block info;
 
-    if (infoBlock == 0)
+    if (!nwfile::FindBlockRef(view, cNwInfoBlockType, &info) || info.offset == 0)
         return;
 
-    const u64 body = infoBlock + cNwBlockBody;
+    const u64 body = info.offset + nwfile::cBlockHeaderSize;
 
     if (!view.has(body, cWaveInfoChannelCount + sizeof(u32)))
         return;
@@ -153,7 +135,7 @@ static bool ProbeNwFile(const void* data, u64 size, FileProbe* out)
 {
     const InnerFileFormatInfo* format = FindInnerFileFormat(data);
 
-    if (!format || !ByteView::IsByteOrderMark(data, size, cNwHeaderByteOrder))
+    if (!format || !ByteView::IsByteOrderMark(data, size, nwfile::cHeaderByteOrder))
         return false;
 
     bool isShown = false;
@@ -162,15 +144,15 @@ static bool ProbeNwFile(const void* data, u64 size, FileProbe* out)
     if (!isShown)
         return false;
 
-    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, cNwHeaderByteOrder));
+    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, nwfile::cHeaderByteOrder));
 
-    if (!view.has(cNwHeaderVersion, sizeof(u32)))
+    if (!view.has(nwfile::cHeaderVersion, sizeof(u32)))
         return false;
 
     const u32 versionBytes = format->kind == InnerFileKind::SoundArchive ? GetArchiveVersionByteCount(format->format) : 3;
 
     CopyFormatName(format->displayName, out);
-    FormatNwVersion(view.readU32(cNwHeaderVersion), versionBytes, out->versionText, sizeof(out->versionText));
+    FormatNwVersion(view.readU32(nwfile::cHeaderVersion), versionBytes, out->versionText, sizeof(out->versionText));
 
     if (format->kind == InnerFileKind::Wave)
         ProbeNwWave(view, out);
@@ -233,6 +215,31 @@ static bool PeekCompressed(const void* data, u64 size, u64 limit, std::vector<u8
     return cmpbin::IsCompressed(data, size) && cmpbin::Peek(data, size, limit, *out);
 }
 
+static bool PeekCompressedHead(const void* data, u64 size, std::vector<u8>* out)
+{
+    if (!PeekCompressed(data, size, cPeekBytes, out))
+        return false;
+
+    const u64 sarcIndexSize = sarc::GetIndexSize(out->data(), out->size());
+
+    if (sarcIndexSize > out->size() && sarcIndexSize <= cArchiveHeadMax)
+        PeekCompressed(data, size, sarcIndexSize, out);
+
+    return true;
+}
+
+static bool IsSarcIndexRead(const void* data, u64 size)
+{
+    std::vector<u8> inner;
+
+    if (!PeekCompressedHead(data, size, &inner))
+        return false;
+
+    const u64 indexSize = sarc::GetIndexSize(inner.data(), inner.size());
+
+    return indexSize > 0 && inner.size() >= indexSize;
+}
+
 static bool ProbeSarc(const void* data, u64 size, FileProbe* out)
 {
     sarc::Index index;
@@ -256,9 +263,45 @@ static bool ProbeSarc(const void* data, u64 size, FileProbe* out)
     return true;
 }
 
+static bool ProbeRiff(const void* data, u64 size, u64 fileSize, FileProbe* out)
+{
+    if (!HasMagic(data, size, cRiffMagic) || fileSize > UINT32_MAX)
+        return false;
+
+    WaveFile::RiffWaveInfo info;
+
+    if (!WaveFile::readRiffWavBytes(data, static_cast<u32>(size), static_cast<u32>(fileSize), &info, true))
+        return false;
+
+    out->kind = BrowserFileKind::Wav;
+    CopyFormatName(cWavFormatName, out);
+    out->channelCount = info.numChannels;
+    out->sampleRate = info.sampleRate;
+    out->sampleCount = info.sampleCount;
+    out->isLoop = info.isLoop;
+
+    return true;
+}
+
+static bool ProbeBarsList(const void* data, u64 size, FileProbe* out)
+{
+    if (!aal::IsBarsList(data, size))
+        return false;
+
+    const ByteView view(data, size, ByteView::IsBigEndianMark(data, size, cBarsListByteOrder));
+
+    out->kind = BrowserFileKind::ResourceList;
+    CopyFormatName(messages::barslist::cFormatName, out);
+    out->hasItemCount = true;
+    out->itemCount = view.readU32(cBarsListCount);
+    snprintf(out->versionText, sizeof(out->versionText), "%u", view.readU16(cBarsListVersion));
+
+    return true;
+}
+
 static bool ProbeUncompressed(const void* data, u64 size, FileProbe* out)
 {
-    return ProbeNwFile(data, size, out) || ProbeBars(data, size, out) || ProbeBwav(data, size, out) || ProbeSarc(data, size, out);
+    return ProbeNwFile(data, size, out) || ProbeBars(data, size, out) || ProbeBarsList(data, size, out) || ProbeBwav(data, size, out) || ProbeSarc(data, size, out) || ProbeRiff(data, size, size, out);
 }
 
 bool ProbeFileBytes(const void* data, u64 size, FileProbe* out)
@@ -270,7 +313,7 @@ bool ProbeFileBytes(const void* data, u64 size, FileProbe* out)
 
     std::vector<u8> inner;
 
-    if (!PeekCompressed(data, size, cPeekBytes, &inner))
+    if (!PeekCompressedHead(data, size, &inner))
         return ProbeUncompressed(data, size, out);
 
     if (!ProbeUncompressed(inner.data(), inner.size(), out))
@@ -397,17 +440,24 @@ static void ProbeCompressedArchiveFile(std::ifstream& stream, u64 fileSize, File
     std::vector<u8> bytes;
     std::vector<u8> inner;
 
-    ReadPrefix(stream, fileSize, cArchiveHeadMax, &bytes);
+    for (u64 limit = cCompressedReadBytes; ; limit *= cCompressedReadGrowth)
+    {
+        ReadPrefix(stream, fileSize, std::min(limit, cArchiveHeadMax), &bytes);
 
-    if (!PeekCompressed(bytes.data(), bytes.size(), cPeekBytes, &inner))
-        return;
+        if (!PeekCompressed(bytes.data(), bytes.size(), cPeekBytes, &inner))
+            return;
 
-    const u64 headSize = GetArchiveHeadSize(inner.data(), inner.size());
+        const u64 headSize = GetArchiveHeadSize(inner.data(), inner.size());
 
-    if (headSize == 0 || headSize > cArchiveHeadMax || !PeekCompressed(bytes.data(), bytes.size(), headSize, &inner))
-        return;
+        if (headSize == 0 || headSize > cArchiveHeadMax || !PeekCompressed(bytes.data(), bytes.size(), headSize, &inner))
+            return;
 
-    ProbeArchiveContents(inner.data(), inner.size(), &out->contents);
+        if (inner.size() >= headSize || bytes.size() >= fileSize || limit >= cArchiveHeadMax)
+        {
+            ProbeArchiveContents(inner.data(), inner.size(), &out->contents);
+            return;
+        }
+    }
 }
 
 bool ProbeFile(const std::filesystem::path& path, u64 fileSize, ProbeDepth depth, FileProbe* out)
@@ -427,6 +477,12 @@ bool ProbeFile(const std::filesystem::path& path, u64 fileSize, ProbeDepth depth
 
     if (sarc::IsSarc(bytes.data(), bytes.size()))
         return ProbeSarcFile(stream, fileSize, &bytes, out);
+
+    if (HasMagic(bytes.data(), bytes.size(), cRiffMagic))
+    {
+        ReadPrefix(stream, fileSize, cRiffHeadReadBytes, &bytes);
+        return ProbeRiff(bytes.data(), bytes.size(), fileSize, out);
+    }
 
     const bool isCompressed = cmpbin::IsZstdFrame(bytes.data(), bytes.size()) || cmpbin::IsCompressed(bytes.data(), bytes.size());
     const bool isContentsRead = depth == ProbeDepth::Contents;
@@ -451,7 +507,7 @@ bool ProbeFile(const std::filesystem::path& path, u64 fileSize, ProbeDepth depth
         if (isProbed && isContentsRead && out->kind == BrowserFileKind::SoundArchive)
             ProbeCompressedArchiveFile(stream, fileSize, out);
 
-        if (isProbed || bytes.size() >= fileSize || limit >= cCompressedReadMax)
+        if (isProbed || bytes.size() >= fileSize || limit >= cCompressedReadMax || IsSarcIndexRead(bytes.data(), bytes.size()))
             return isProbed;
     }
 }

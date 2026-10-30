@@ -6,6 +6,8 @@
 
 #include <initializer_list>
 
+inline constexpr f32 cDialogFormWidthEm = 24.0f;
+
 void CenterNextDialog();
 void SetDetachedDialogArea(const ImVec2& size);
 bool AreDialogsDetached();

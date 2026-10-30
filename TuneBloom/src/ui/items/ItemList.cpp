@@ -1,6 +1,7 @@
 #include <ui/items/ItemListInternal.h>
 
 #include <ui/file/DocumentState.h>
+#include <ui/file/FileDrag.h>
 #include <ui/file/FileWindow.h>
 #include <ui/items/ItemSelector.h>
 #include <ui/widgets/ListFilter.h>
@@ -27,7 +28,6 @@ static constexpr f32 cItemNameEndMinEm    = 4.5f;
 static constexpr f32 cItemTextMinEm       = 5.0f;
 static constexpr f32 cItemScrollMinRatio  = 2.0f;
 static constexpr f32 cItemDimHeaderAlpha  = 0.55f;
-static constexpr f32 cInsertLineAlpha     = 0.86f;
 
 struct ItemRowName
 {
@@ -46,12 +46,16 @@ static const ItemColumn* sNextListColumns = nullptr;
 static u32 sNextListColumnCount = 0;
 static bool sNextListHideAll = false;
 static ItemRowActionCallback sNextListAction = nullptr;
+static ItemRowActionCallback sNextListOpen = nullptr;
 static constexpr ItemRemoveText cDefaultRemoveText = { messages::common::cDelete, messages::menu::cDeleteItemsFormat, true };
 
 static ItemRemoveText sNextListRemoveText = cDefaultRemoveText;
 static ItemListFooterCallback sNextListFooter = nullptr;
 static f32 sNextListFooterWidth = 0.0f;
 static f32 sNextListAddDialogWidth = 0.0f;
+static ItemListFileDropCallback sNextListFileDrop = nullptr;
+static const char* sNextListFileDropAction = nullptr;
+static bool sNextListFileDropOpensAdd = false;
 static bool sNextListFixedOrder = false;
 static bool sNextListRemovable = true;
 static bool sNextListDeselectable = false;
@@ -94,9 +98,21 @@ void SetNextItemListAction(ItemRowActionCallback callback)
     sNextListAction = callback;
 }
 
+void SetNextItemListOpen(ItemRowActionCallback callback)
+{
+    sNextListOpen = callback;
+}
+
 void SetNextItemListAddDialogWidth(f32 width)
 {
     sNextListAddDialogWidth = width;
+}
+
+void SetNextItemListFileDrop(ItemListFileDropCallback callback, const char* action, bool opensAddDialog)
+{
+    sNextListFileDrop = callback;
+    sNextListFileDropAction = action;
+    sNextListFileDropOpensAdd = opensAddDialog;
 }
 
 void SetNextItemListFixedOrder()
@@ -128,7 +144,9 @@ static void CollectItemListRows(ItemListContext& ctx)
     sNextListRemoveText = cDefaultRemoveText;
 
     ctx.actionCallback = sNextListAction;
+    ctx.openCallback = sNextListOpen;
     sNextListAction = nullptr;
+    sNextListOpen = nullptr;
 
     ctx.footerCallback = sNextListFooter;
     ctx.footerWidth = sNextListFooterWidth;
@@ -137,6 +155,13 @@ static void CollectItemListRows(ItemListContext& ctx)
 
     ctx.addDialogWidth = sNextListAddDialogWidth;
     sNextListAddDialogWidth = 0.0f;
+
+    ctx.fileDropCallback = sNextListFileDrop;
+    ctx.fileDropAction = sNextListFileDropAction;
+    ctx.fileDropOpensAdd = sNextListFileDropOpensAdd;
+    sNextListFileDrop = nullptr;
+    sNextListFileDropAction = nullptr;
+    sNextListFileDropOpensAdd = false;
 
     ctx.fixedOrder = sNextListFixedOrder;
     ctx.removable = sNextListRemovable;
@@ -151,7 +176,7 @@ static void CollectItemListRows(ItemListContext& ctx)
         if (it->val())
             ctx.listItems.push_back(it->val());
 
-    PruneFilteredSelection(ctx.listItems, ctx.filterCallback);
+    PruneFilteredSelection(ctx.list, ctx.filterCallback);
 
     ctx.rows.reserve(ctx.listItems.size());
 
@@ -445,7 +470,7 @@ static void BeginItemListTable(ItemListContext& ctx)
 
         DrawItemHeadersRow(ctx.columns, ctx.columnCount, ctx.columnWidths);
 
-        ctx.sorted = SortItemRows(&ctx.rows, ImGui::TableGetSortSpecs(), ctx.columns, ctx.columnCount);
+        ctx.sorted = SortItemRowsCached(ctx.tableId, &ctx.rows, ImGui::TableGetSortSpecs(), ctx.columns, ctx.columnCount);
 
         const f32 nameColumnWidth = table->Columns[ctx.nameColumn].WidthGiven;
         ctx.showNameEnd = nameColumnWidth >= ImGui::GetFontSize() * cItemNameEndMinEm && nameColumnWidth < ImGui::GetFontSize() * cItemNameComfortEm;
@@ -526,7 +551,7 @@ static bool IsMouseOverItemListColumn(s32 column)
 
 static void HandleItemRowDoubleClick(ItemListContext& ctx, Item* item, const sead::SafeString& selName, f32 nameLeft, f32 nameRight)
 {
-    const bool opensFile = item->getItemType() == Item::ItemType::SequenceFile || item->getItemType() == Item::ItemType::BankFile;
+    const bool opensFile = ctx.openCallback || item->getItemType() == Item::ItemType::SequenceFile || item->getItemType() == Item::ItemType::BankFile;
     const f32 nameEnd = opensFile ? sead::Mathf::min(nameRight, nameLeft + ImGui::CalcTextSize(selName.cstr()).x) : nameRight;
     const f32 mouseX = ImGui::GetMousePos().x;
     const bool onName = mouseX >= nameLeft && mouseX < nameEnd;
@@ -537,6 +562,8 @@ static void HandleItemRowDoubleClick(ItemListContext& ctx, Item* item, const sea
         BeginItemListIdEdit(item, ctx.tableId);
     else if (onName && !modifier && CanRenameItem(item))
         BeginItemRename(item, ctx.tableId);
+    else if (ctx.openCallback)
+        ctx.openCallback(item);
     else if (opensFile)
         OpenFileWindow(item);
 }
@@ -569,14 +596,13 @@ static void DrawItemRowDragDrop(ItemListContext& ctx, Item* item, const sead::Sa
 
         if (ImGui::BeginDragDropTarget())
         {
-            ImVec2 itemTL = ImGui::GetItemRectMin();
-            ImVec2 itemBR = ImGui::GetItemRectMax();
-            float offset = ImGui::GetStyle().ItemSpacing.y * 0.5f;
+            const ImVec2 itemMin = ImGui::GetItemRectMin();
+            const ImVec2 itemMax = ImGui::GetItemRectMax();
 
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                ImVec2(itemTL.x, itemBR.y + offset),
-                ImVec2(itemBR.x, itemBR.y + offset + 3.0f),
-                ImGui::GetColorU32(ImGuiCol_CheckMark, cInsertLineAlpha));
+            const ImGuiPayload* dragged = ImGui::GetDragDropPayload();
+
+            if (dragged && dragged->IsDataType("ITEM"))
+                DrawInsertLine(ImGui::GetWindowDrawList(), itemMin.x, itemMax.x, itemMax.y + ImGui::GetStyle().ItemSpacing.y * 0.5f + 1.5f);
 
             const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ITEM");
             if (payload)
@@ -833,6 +859,26 @@ static void EndItemListTable(ItemListContext& ctx)
     ctx.storage->SetFloat(ctx.nameOffsetId, ctx.nameOffset);
 }
 
+static bool DrawItemListFileDrop(const ItemListContext& ctx)
+{
+    const FileDrag* drag = GetFileDrag();
+
+    if (!ctx.fileDropCallback || !drag || !ctx.fileDropCallback(*drag, false))
+        return false;
+
+    const ImGuiWindow* window = ImGui::GetCurrentWindow();
+
+    if (!ImGui::BeginDragDropTargetCustom(window->Rect(), window->ID))
+        return false;
+
+    const FileDrag* dropped = AcceptFileDrop(ctx.fileDropAction);
+    const bool isAdded = dropped && ctx.fileDropCallback(*dropped, true);
+
+    ImGui::EndDragDropTarget();
+
+    return isAdded;
+}
+
 void DrawAllItemsUI(const char* id, const char *listName, Item::List &list, CreateItemCallback createCallback, ItemNamePrefixCallback nameCallback, ContextMenuCallback menuCallback, ItemFilterCallback filterCallback, bool disableAddWindow, ItemInsertCallback onInsert, ItemRemoveCallback onRemove, bool forceSubWindow, Item *highlightItem)
 {
     ItemListContext ctx{list};
@@ -866,6 +912,9 @@ void DrawAllItemsUI(const char* id, const char *listName, Item::List &list, Crea
         DrawItemListFooter(ctx);
 
     ImGui::PopStyleVar();
+
+    if (DrawItemListFileDrop(ctx) && ctx.fileDropOpensAdd)
+        ctx.add = true;
 
     OpenRenamePopup(ctx.renameResult);
     DrawRenamePopups();

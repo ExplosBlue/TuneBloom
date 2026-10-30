@@ -4,7 +4,8 @@
 #include <platform/macos/openFiles.h>
 #include <ui/file/File.h>
 
-namespace {
+namespace
+{
 
 void handleOpenURLs(id self, SEL cmd, NSApplication* app, NSArray<NSURL*>* urls)
 {
@@ -15,9 +16,10 @@ void handleOpenURLs(id self, SEL cmd, NSApplication* app, NSArray<NSURL*>* urls)
     }
 }
 
-} // namespace
+}
 
-namespace macos {
+namespace macos
+{
 
 void installOpenFileHandler()
 {
@@ -28,4 +30,4 @@ void installOpenFileHandler()
     class_addMethod(cls, @selector(application:openURLs:), reinterpret_cast<IMP>(handleOpenURLs), "v@:@@");
 }
 
-} // namespace macos
+}

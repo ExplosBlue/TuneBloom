@@ -31,17 +31,20 @@ bool DrawGlyphButton(const char* id, TransportGlyph glyph, const ImVec2& itemSiz
 bool TransportButton(TransportGlyph glyph, const char* id, const ImVec2& size = ImVec2(0.0f, 0.0f));
 bool PlayToggleButton(TransportGlyph glyph, const char* id, const ImVec2& size, bool playing);
 bool ToggleButton(const char* label, bool on, const ImVec2& size = ImVec2(0.0f, 0.0f));
+bool IsItemEditCommitted(bool changed);
 f32 GetRowButtonSize();
 bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing);
 bool DrawRowOpenButton(u32 id, const char* tooltip, const char* disabledReason = nullptr);
 bool DrawTableRowSelectable(const char* id, bool selected, bool* outHovered);
-bool DrawRowHoverButton(const char* id, const char* icon, bool lit, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size);
+void DrawInsertLine(ImDrawList* drawList, f32 left, f32 right, f32 centerY);
+bool DrawRowHoverButton(const char* id, const char* icon, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size);
 void DrawSpinner(const ImVec2& center, f32 radius, ImU32 color);
 void DrawProgressBar(const ImVec2& min, const ImVec2& max, f32 fraction);
 
 s32 GetItemWheelSteps();
 bool ComboScroll(const char *label, int *current_item, const char *const items[], int items_count, int popup_max_height_in_items = -1);
 bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], s32 itemNum, const char* detail = nullptr);
+bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], const char* const reasons[], s32 itemNum, const char* detail = nullptr);
 
 sead::FixedSafeString<24> FormatPanLabel(f32 pan);
 sead::FixedSafeString<24> FormatPanLabel(u8 pan, u8 min, u8 center, u8 max);
@@ -68,9 +71,18 @@ bool ResetItemOnRightClick(T* value, const T& reset)
     return true;
 }
 
+const char* FindTextTailStart(const char* text, f32 width);
+const char* FindTextHeadEnd(const char* text, f32 width);
 std::string CutPathStart(const std::string& path, size_t maxLength);
 
 void HelpMarker(const char* desc);
 bool IsItemHoveredForDetail();
 void DetailTooltip(const char* detail);
-void ListItemDetailTooltip(const char* detail);
+struct ListOpener
+{
+    f32 top = 0.0f;
+    f32 bottom = 0.0f;
+};
+
+ListOpener GetNextListOpener();
+void ListItemDetailTooltip(const char* detail, const ListOpener& opener);

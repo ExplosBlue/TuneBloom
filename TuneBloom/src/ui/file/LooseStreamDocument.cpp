@@ -1,6 +1,5 @@
 #include <ui/file/LooseStreamDocument.h>
 
-#include <ui/app/PopupMgr.h>
 #include <ui/file/LooseFileInfo.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/sound/SoundViews.h>
@@ -11,28 +10,16 @@
 
 Document* LooseStreamDocument::Open(File* file, const sead::SafeString& path)
 {
-    LooseStreamDocument* document = new LooseStreamDocument();
-    sead::FixedSafeString<512> error;
-
-    const bool opened = document->mFile.open(file->data, file->size, path, &error);
-    Free(file);
-
-    if (opened)
-    {
-        document->mLoadedPath = path;
-        return document;
-    }
-
-    PopupMgr::instance()->addPopup({ error, nullptr });
-
-    delete document;
-    return nullptr;
+    return OpenAs(new LooseStreamDocument(), file, path);
 }
 
-Document* LooseStreamDocument::Create(const InnerFileTarget& target)
+Document* LooseStreamDocument::Create(const InnerFileTarget& target, Sound::StreamSoundInfo::StreamType streamType)
 {
+    const bool isOpus = streamType == Sound::StreamSoundInfo::StreamType::Opus;
+    const char* fileExtension = isOpus ? cOpusExtension : GetInnerFileExtension(target.format, InnerFileKind::Stream);
+
     LooseStreamDocument* document = new LooseStreamDocument();
-    document->mFile.create(target, MakeUntitledName(target, InnerFileKind::Stream));
+    document->mFile.create(target, streamType, MakeUntitledName(fileExtension));
 
     return document;
 }
@@ -49,24 +36,9 @@ LooseStreamDocument::~LooseStreamDocument()
     closeWindows();
 }
 
-LooseStreamFile& LooseStreamDocument::file()
-{
-    return mFile;
-}
-
 Document::Kind LooseStreamDocument::kind() const
 {
     return Kind::StreamFile;
-}
-
-const sead::SafeString& LooseStreamDocument::filePath() const
-{
-    return mFile.getFilePath();
-}
-
-std::string LooseStreamDocument::displayName() const
-{
-    return mFile.getFileName().cstr();
 }
 
 BrowserFileKind LooseStreamDocument::fileKind() const
@@ -102,7 +74,7 @@ void LooseStreamDocument::formatFileFacts(sead::BufferedSafeString* out) const
 {
     const Sound::StreamSoundInfo& stream = mFile.getStream();
 
-    FormatLooseFileFacts(out, mFile.getTarget(), InnerFileKind::Stream);
+    FormatLooseFileFacts(out, fileFormat());
 
     if (const WaveFile* mainWave = stream.getMainWave())
         AppendWaveFacts(out, *mainWave);
@@ -117,11 +89,6 @@ void LooseStreamDocument::forEachItemList(const std::function<void(Item::List&)>
     visit(mFile.getStreamWaveList());
 }
 
-bool LooseStreamDocument::isInfoModified() const
-{
-    return mFile.isModified();
-}
-
 bool LooseStreamDocument::ownsItem(const Item& item) const
 {
     LooseStreamFile& file = const_cast<LooseStreamFile&>(mFile);
@@ -129,30 +96,7 @@ bool LooseStreamDocument::ownsItem(const Item& item) const
     return item.list() == &file.getStream().getTrackList() || item.list() == &file.getStreamWaveList();
 }
 
-SaveResult LooseStreamDocument::save(const char** outError)
+LooseFileFormat LooseStreamDocument::fileFormat() const
 {
-    if (mFile.getFilePath().isEmpty())
-        return saveUntitled(outError);
-
-    return reportSave(mFile.save(&mSaveError), outError);
-}
-
-SaveResult LooseStreamDocument::saveAs(const sead::SafeString& path, const char** outError)
-{
-    return reportSave(mFile.saveAs(path, &mSaveError), outError);
-}
-
-InnerFileTarget LooseStreamDocument::fileTarget() const
-{
-    return mFile.getTarget();
-}
-
-InnerFileKind LooseStreamDocument::innerFileKind() const
-{
-    return InnerFileKind::Stream;
-}
-
-bool LooseStreamDocument::writeTo(const sead::SafeString& path) const
-{
-    return mFile.writeTo(path);
+    return GetLooseStreamFormat(mFile);
 }

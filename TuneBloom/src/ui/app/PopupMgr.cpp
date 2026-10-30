@@ -249,8 +249,8 @@ void PopupMgr::update()
             Item* item = info.item;
             if (item)
             {
-                const char* name = info.super ? info.super->getFormattedName().cstr() : item->getFormattedName().cstr();
-                ImGui::Text(messages::popup::cItemInvalidFormat, name);
+                const sead::FixedSafeString<256> name = info.super ? info.super->getFormattedName() : item->getFormattedName();
+                ImGui::Text(messages::popup::cItemInvalidFormat, name.cstr());
                 ImGui::Separator();
             }
 

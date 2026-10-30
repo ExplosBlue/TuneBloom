@@ -94,7 +94,7 @@ static bool MatchesQuery(const Item* item)
     if (sQuery[0] == '\0')
         return true;
 
-    return ImGui::TextMatchesQuery(item->getFormattedName().cstr(), sQuery, sCaseSensitive);
+    return ItemMatchesQuery(item, sQuery, sCaseSensitive);
 }
 
 static void BuildRows(std::vector<Item*>& rows, const Item::List& list, const ImGuiTableSortSpecs* sortSpecs, const ItemColumn* columns, u32 columnCount)

@@ -21,6 +21,7 @@
 #include <ui/app/Workspace.h>
 
 #include <bfsar/files/InnerFile.h>
+#include <bfsar/io/FileIo.h>
 #include <bfsar/io/PackFile.h>
 #include <browser/FileProbe.h>
 #include <core/Debug.h>
@@ -35,28 +36,9 @@
 #include <string>
 #include <vector>
 
-bool CreateDirectoryRecursively(const std::string& directory)
-{
-    LOG_STR(directory.c_str());
-    namespace fs = std::filesystem;
-
-    std::error_code ec;
-    if (fs::exists(directory, ec))
-    {
-        return fs::is_directory(directory, ec);
-    }
-
-    return fs::create_directories(directory, ec);
-}
-
 bool IsDocumentOpen()
 {
     return ActiveDocument() != nullptr;
-}
-
-bool IsAudioResourceOpen()
-{
-    return FindActiveAudioResource() != nullptr;
 }
 
 const sead::SafeString& GetDocumentPath()
@@ -64,13 +46,6 @@ const sead::SafeString& GetDocumentPath()
     const Document* document = ActiveDocument();
 
     return document ? document->filePath() : sead::SafeString::cEmptyString;
-}
-
-const sead::SafeString& GetDocumentLoadedPath()
-{
-    const Document* document = ActiveDocument();
-
-    return document ? document->loadedPath() : sead::SafeString::cEmptyString;
 }
 
 const char* GetDocumentExtension()
@@ -95,7 +70,7 @@ std::string GetDocumentName()
     return document ? document->displayName() : backup::GetArchiveName();
 }
 
-static bool IsDocumentFile(const char* path)
+static bool ProbeFileKind(const char* path, BrowserFileKind* outKind)
 {
     std::error_code error;
     const u64 fileSize = std::filesystem::file_size(path, error);
@@ -105,14 +80,35 @@ static bool IsDocumentFile(const char* path)
     if (error || !ProbeFile(path, fileSize, ProbeDepth::Kind, &probe))
         return false;
 
-    return probe.kind == BrowserFileKind::SoundArchive || probe.kind == BrowserFileKind::AudioResource || probe.kind == BrowserFileKind::Stream || probe.kind == BrowserFileKind::Wave;
+    *outKind = probe.kind;
+
+    return true;
+}
+
+static bool IsDocumentKind(BrowserFileKind kind)
+{
+    return kind == BrowserFileKind::SoundArchive || kind == BrowserFileKind::AudioResource || kind == BrowserFileKind::ResourceList || kind == BrowserFileKind::Stream || kind == BrowserFileKind::Wave;
+}
+
+static bool IsDocumentFile(const char* path)
+{
+    BrowserFileKind kind;
+
+    return ProbeFileKind(path, &kind) && IsDocumentKind(kind);
+}
+
+static bool IsPinnableFile(const char* path)
+{
+    BrowserFileKind kind;
+
+    return ProbeFileKind(path, &kind) && (IsDocumentKind(kind) || kind == BrowserFileKind::Wav);
 }
 
 bool PinExternalPath(const char* path)
 {
     std::error_code error;
 
-    if (!std::filesystem::is_directory(path, error) && !IsDocumentFile(path))
+    if (!std::filesystem::is_directory(path, error) && !IsPinnableFile(path))
         return false;
 
     RequestFilesPanelRoot(path, true);
@@ -145,6 +141,13 @@ bool IsValidDocumentName(const sead::SafeString& name)
     return document && document->isValidName(name);
 }
 
+const char* GetDocumentNameRuleDetail()
+{
+    const Document* document = ActiveDocument();
+
+    return document ? document->getNameRuleDetail() : messages::item::cNameInvalidDetail;
+}
+
 bool IsUniqueDocumentName(const sead::SafeString& name, const Item* ignoreItem)
 {
     const Document* document = ActiveDocument();
@@ -152,21 +155,26 @@ bool IsUniqueDocumentName(const sead::SafeString& name, const Item* ignoreItem)
     return document && document->isUniqueName(name, ignoreItem);
 }
 
+void AddNewDocument(Document* document)
+{
+    AddDocument(document, false);
+    SetUnsavedChanges(true);
+    SetUITab(document->defaultTab());
+
+    if (Item* item = document->defaultSelection())
+        sSelectedItem = item;
+}
+
 bool NewFile(ArchiveFormat format, ArchivePlatform platform)
 {
-    Document* document = Document::Create(format, platform);
-
-    AddDocument(document, false);
+    AddNewDocument(Document::Create(format, platform));
 
     const Bfsar& archive = ActiveSoundArchive();
     const ArchiveFormatInfo* info = getFormatInfo(archive.getFormat(), archive.getPlatform());
 
     LOG_STR(sead::FormatFixedSafeString<64>("Creating new %s file", info->fmtName).cstr());
 
-    SetUnsavedChanges(true);
     ShowSidebarProject();
-
-    SetUITab(UIType::ProjectInfo);
     return true;
 }
 
@@ -184,20 +192,20 @@ void SetStartupFile(const char* path)
         sStartupFile = path;
 }
 
+static FileFilter sDocumentFilters[] = {
+    { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bea *.aras *.bars *.barslist *.bwav *.bfstm *.bcstm *.opus *.bfwav *.bcwav *.zs *.pack" },
+    { messages::archive::cOpenFilter, "*.bfsar *.bcsar *.cmpbin *.bea *.aras" },
+    { messages::resource::cOpenFilter, "*.bars *.bwav *.zs *.pack" },
+    { messages::barslist::cOpenFilter, "*.barslist" },
+    { messages::stream::cOpenFilter, "*.bfstm *.bcstm *.opus" },
+    { messages::wavefile::cOpenFilter, "*.bfwav *.bcwav" }
+};
+
 bool OpenFile()
 {
     sead::FixedSafeString<512> filePath;
 
-    const u32 filterCount = 5;
-    FileFilter filters[filterCount] = {
-        { messages::archive::cOpenFilterAll, "*.bfsar *.bcsar *.cmpbin *.bea *.bars *.bwav *.bfstm *.bcstm *.bfwav *.bcwav *.zs *.pack" },
-        { messages::archive::cOpenFilter, "*.bfsar *.bcsar *.cmpbin *.bea" },
-        { messages::resource::cOpenFilter, "*.bars *.bwav *.zs *.pack" },
-        { messages::stream::cOpenFilter, "*.bfstm *.bcstm" },
-        { messages::wavefile::cOpenFilter, "*.bfwav *.bcwav" }
-    };
-
-    if (!OpenFileDialog(&filePath, nullptr, filterCount, filters))
+    if (!OpenFileDialog(&filePath, nullptr, static_cast<u32>(std::size(sDocumentFilters)), sDocumentFilters))
         return false;
 
     openqueue::Push(filePath.cstr());
@@ -205,11 +213,15 @@ bool OpenFile()
     return true;
 }
 
-void MarkArchiveInSync()
+bool ChooseDocumentFiles(std::vector<std::string>* paths, const char* title)
+{
+    return OpenFilesDialog(paths, title, static_cast<u32>(std::size(sDocumentFilters)), sDocumentFilters);
+}
+
+static void RecordDocumentPath()
 {
     Document* document = ActiveDocument();
 
-    SetUnsavedChanges(false);
     RefreshWindowTitle();
 
     if (!document)
@@ -224,6 +236,12 @@ void MarkArchiveInSync()
         AddRecentFile(document->filePath().cstr());
 
     RecordDocumentSession();
+}
+
+void MarkArchiveInSync()
+{
+    SetUnsavedChanges(false);
+    RecordDocumentPath();
 }
 
 void RunStartupAction()
@@ -262,7 +280,7 @@ void RunStartupAction()
         openqueue::Push(settings.lastArchive.c_str());
 }
 
-static bool FinishSave(SaveResult result, const char* error)
+static bool FinishSave(Document* document, SaveResult result, const char* error)
 {
     if (result == SaveResult::Failed)
     {
@@ -272,36 +290,21 @@ static bool FinishSave(SaveResult result, const char* error)
         return false;
     }
 
-    PinDocument(ActiveDocument());
-    MarkArchiveInSync();
+    PinDocument(document);
 
-    if (result == SaveResult::Saved)
-        return true;
-
-    SetUnsavedChanges(true);
-    PopupMgr::instance()->addPopup({ error, nullptr });
-
-    return false;
-}
-
-static bool CheckDocumentFile(const Document::File& file)
-{
-    const char* error = nullptr;
-
-    if (Document::Check(file, &error))
+    if (result != SaveResult::Saved)
     {
-        sead::Endian::Types endian = sead::Endian::eBig;
-
-        if (Document::PeekEndian(file, &endian))
-            PrepareParseEndian(endian);
-
-        return true;
-    }
-
-    if (error)
+        SetUnsavedChanges(true);
+        RecordDocumentPath();
         PopupMgr::instance()->addPopup({ error, nullptr });
 
-    return false;
+        return false;
+    }
+
+    MarkArchiveInSync();
+    document->finishSave();
+
+    return true;
 }
 
 static bool LoadDocumentFile(const sead::SafeString& filePath, bool isPreview, Document* replaced)
@@ -315,7 +318,7 @@ static bool LoadDocumentFile(const sead::SafeString& filePath, bool isPreview, D
         return false;
     }
 
-    if (!CheckDocumentFile(file))
+    if (!Document::CheckBeforeOpen(file))
     {
         Document::Free(&file);
         return false;
@@ -357,8 +360,22 @@ static void ShowOpenedDocument(const openqueue::Request& request)
         ShowSidebarProject();
 }
 
-static void OpenRequestedFile(const openqueue::Request& request)
+static openqueue::Request ResolveSingleEntryPack(const openqueue::Request& request)
 {
+    std::vector<packfile::Resource> resources;
+
+    if (packfile::IsPackPath(request.path) || !packfile::ListResources(request.path, &resources) || resources.size() != 1)
+        return request;
+
+    openqueue::Request entryRequest = request;
+    entryRequest.path = packfile::MakePath(request.path, resources.front().name);
+
+    return entryRequest;
+}
+
+static void OpenRequestedFile(const openqueue::Request& queuedRequest)
+{
+    const openqueue::Request request = ResolveSingleEntryPack(queuedRequest);
     Document* previous = ActiveDocument();
     Document* openDocument = FindOpenDocument(request.path.c_str());
 
@@ -374,7 +391,7 @@ static void OpenRequestedFile(const openqueue::Request& request)
         return;
     }
 
-    if (request.path.size() >= static_cast<size_t>(sStartupFile.getBufferSize()))
+    if (request.path.size() > static_cast<size_t>(fileio::cPathLengthMax))
     {
         PopupMgr::instance()->addPopup({ messages::archive::cOpenFailed, nullptr });
         return;
@@ -448,22 +465,24 @@ bool SaveFile()
     if (!document || !document->prepareSave())
         return false;
 
+    if (document->filePath().isEmpty())
+        return SaveFileAs(document);
+
     backup::KeepPreviousVersion();
 
     const char* error = nullptr;
 
-    if (!FinishSave(document->save(&error), error))
-        return false;
-
-    document->finishSave();
-    return true;
+    return FinishSave(document, document->save(&error), error);
 }
 
-bool SaveFileAs()
+bool SaveFileAs(Document* document)
 {
-    Document* document = ActiveDocument();
+    if (!document)
+        return false;
 
-    if (!document || !document->prepareSaveAs())
+    DocumentFocus focus(document);
+
+    if (!document->prepareSaveAs())
         return false;
 
     sead::FixedSafeString<512> path;
@@ -471,19 +490,19 @@ bool SaveFileAs()
     if (!document->chooseSaveAsPath(&path))
         return false;
 
+    const Document* openDocument = FindOpenDocument(path.cstr());
+
+    if (openDocument && openDocument != document)
+    {
+        PopupMgr::instance()->addPopup({ messages::saving::cOpenInOtherTab, nullptr });
+        return false;
+    }
+
     backup::KeepPreviousVersion(path.cstr());
 
     const char* error = nullptr;
 
-    return FinishSave(document->saveAs(path, &error), error);
-}
-
-bool CloseFile()
-{
-    if (Document* document = ActiveDocument())
-        CloseDocument(document);
-
-    return true;
+    return FinishSave(document, document->saveAs(path, &error), error);
 }
 
 bool Exit()

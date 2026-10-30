@@ -62,6 +62,7 @@ static void MixStreamSoundInfo(StateHash& hash, const Sound::StreamSoundInfo& st
     hash.mixValue(strmInfo.getLoopEndFrame());
     hash.mixValue(strmInfo.getStreamTypeInfoUpper());
     hash.mixValue(strmInfo.hasPrefetch());
+    hash.mixValue(strmInfo.isOpusChannelBitrateChanged() ? strmInfo.getOpusChannelBitrate() : 0);
 
     const Sound::StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
 
@@ -303,7 +304,7 @@ const Item* Sound::validate(sead::BufferedSafeString& error) const
     if (!Item::validateName(error))
         return this;
 
-    if (!getPlayerRef().isAttached())
+    if (getPlayerId() == Item::cInvalidId)
     {
         error = messages::validation::cInvalidPlayer;
         return this;

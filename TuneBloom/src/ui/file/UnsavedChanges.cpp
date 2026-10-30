@@ -566,17 +566,6 @@ static bool DrawReviewFooter(bool* outGoTo)
     return close;
 }
 
-static bool IsAnyDocumentUnsaved()
-{
-    for (Document* document : GetOpenDocuments())
-    {
-        if (document->state().unsaved)
-            return true;
-    }
-
-    return false;
-}
-
 static void UpdateReopenAfterSave()
 {
     if (!sReopenAfterSave || IsSaveQueueBusy() || ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel))
@@ -584,7 +573,7 @@ static void UpdateReopenAfterSave()
 
     sReopenAfterSave = false;
 
-    if (IsAnyDocumentUnsaved())
+    if (HasUnsavedDocuments())
         sWantsOpen = true;
     else if (sIsExitPrompt && !GetOpenDocuments().empty())
         TryExit();
@@ -638,7 +627,6 @@ void DrawUnsavedChangesDialog()
     PushItemTablePadding();
 
     const f32 cellPadX = ImGui::GetStyle().CellPadding.x;
-
 
     if (ImGui::BeginTable("UnsavedTable", 4, tableFlags, ImVec2(0.0f, -(CalcDialogFooterHeight() + footerGap))))
     {

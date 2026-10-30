@@ -435,7 +435,7 @@ static void DrawList()
     {
         AnimateWindow(WindowAnimation::Menu);
 
-        const f32 clearWidth = ImGui::CalcTextSize(messages::notify::cClear).x + style.FramePadding.x * 2.0f;
+        const f32 clearWidth = ImGui::CalcTextSize(messages::common::cClear).x + style.FramePadding.x * 2.0f;
 
         RegionHeader(messages::notify::cTitle, clearWidth + style.ItemSpacing.x);
 
@@ -444,7 +444,7 @@ static void DrawList()
 
         ImGui::BeginDisabled(sEntryNum == 0);
 
-        if (ImGui::Button(messages::notify::cClear))
+        if (ImGui::Button(messages::common::cClear))
             sEntryNum = 0;
 
         ImGui::EndDisabled();

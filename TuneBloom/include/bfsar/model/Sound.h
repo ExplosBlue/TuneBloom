@@ -397,7 +397,7 @@ public:
 
             u16 getChannelCount(StreamType streamType = StreamType::NwStreamBinary) const
             {
-                if (streamType != StreamType::NwStreamBinary)
+                if (streamType != StreamType::NwStreamBinary && streamType != StreamType::Opus)
                 {
                     return mChannels.size(); //? For AAC streams (TEMP UNTIL PROPER SUPPORT)
                 }
@@ -536,7 +536,9 @@ public:
 
         u16 getAllocateChannelCount() const
         {
-            if (mStreamType != StreamType::NwStreamBinary || mTrackList.isEmpty())
+            const bool countsWaves = mStreamType == StreamType::NwStreamBinary || (mStreamType == StreamType::Opus && areTrackWavesAttached());
+
+            if (!countsWaves || mTrackList.isEmpty())
             {
                 return mAllocateChannelCount;
             }
@@ -567,6 +569,17 @@ public:
         Track::List& getTrackList()
         {
             return mTrackList;
+        }
+
+        bool areTrackWavesAttached() const
+        {
+            for (const Item* item : mTrackList)
+            {
+                if (!static_cast<const Track*>(item)->getWaveFileRef().isAttached())
+                    return false;
+            }
+
+            return true;
         }
 
         const WaveFile* getMainWave() const
@@ -707,6 +720,11 @@ public:
             return mPrefetchSource;
         }
 
+        u32 getPrefetchOrigFileId() const
+        {
+            return mPrefetchOrigFileId;
+        }
+
         u16 getStreamTypeInfoUpper() const
         {
             return mStreamTypeInfoUpper;
@@ -715,6 +733,40 @@ public:
         void setStreamTypeInfoUpper(u16 streamTypeInfoUpper)
         {
             mStreamTypeInfoUpper = streamTypeInfoUpper;
+        }
+
+        u32 getOpusChannelBitrate() const
+        {
+            return mOpusChannelBitrate;
+        }
+
+        void setOpusChannelBitrate(u32 bitrate)
+        {
+            mOpusChannelBitrate = bitrate;
+        }
+
+        u32 getOriginalOpusChannelBitrate() const
+        {
+            return mOriginalOpusChannelBitrate;
+        }
+
+        bool isOpusChannelBitrateChanged() const
+        {
+            return mOpusChannelBitrate != mOriginalOpusChannelBitrate;
+        }
+
+        void setOriginalOpusChannelBitrate(u32 bitrate)
+        {
+            if (!isOpusChannelBitrateChanged())
+                mOpusChannelBitrate = bitrate;
+
+            mOriginalOpusChannelBitrate = bitrate;
+        }
+
+        void copyOpusChannelBitrateFrom(const StreamSoundInfo& other)
+        {
+            mOpusChannelBitrate = other.mOpusChannelBitrate;
+            mOriginalOpusChannelBitrate = other.mOriginalOpusChannelBitrate;
         }
 
         u32 getMuteTracks() const
@@ -764,6 +816,10 @@ public:
 
         bool mHasPrefetch = false;
         std::vector<u8> mPrefetchSource;
+        u32 mPrefetchOrigFileId = Item::cInvalidId;
+
+        u32 mOpusChannelBitrate = 0;
+        u32 mOriginalOpusChannelBitrate = 0;
 
         friend class Bfsar;
     };
@@ -1140,7 +1196,12 @@ public:
 
     u32 getPlayerId() const
     {
-        return mPlayerRef.getItemId();
+        return mPlayerRef.isAttached() ? mPlayerRef.getItemId() : mUnresolvedPlayerId;
+    }
+
+    void setUnresolvedPlayerId(u32 playerId)
+    {
+        mUnresolvedPlayerId = playerId;
     }
 
     const ItemReference& getPlayerRef() const
@@ -1362,6 +1423,12 @@ public:
         mHasStreamFileBaseline = other.mHasStreamFileBaseline;
     }
 
+    void copyUnmodeledFieldsFrom(const Sound& other)
+    {
+        mV3NameField = other.mV3NameField;
+        mExtraSoundInfoOptions = other.mExtraSoundInfoOptions;
+    }
+
     const WaveSoundInfo& getWaveSoundInfo() const
     {
         return mWaveSoundInfo;
@@ -1405,6 +1472,7 @@ public:
 
 private:
     ItemReference mPlayerRef;
+    u32 mUnresolvedPlayerId = Item::cInvalidId;
     u8 mVolume;
     u8 mRemoteFilter;
     SoundType mSoundType;

@@ -6,6 +6,7 @@ inline constexpr f32 cPropertyDragSpeed = 0.1f;
 
 f32 CalcPropertyLabelWidth();
 void PropertyRow(const char* label, const char* help = nullptr);
+void PropertyValueColumn();
 bool PropertyToggleRow(const char* label, bool* enabled);
 
 f32 CalcSectionTitleHeight();
@@ -22,11 +23,14 @@ bool DrawPanelHeaderCombo(const char* title, const char* id, s32* current, const
 bool BeginGroupBox(const char* title, const char* action = nullptr, bool* pressed = nullptr);
 bool BeginGroupBoxWithTools(const char* title, f32 toolsWidth);
 bool BeginGroupBoxWithStatus(const char* title, const char* status);
+f32 CalcGroupBoxWidth(f32 contentWidth);
+f32 CalcChoiceRowWidth(const char* const* labels, s32 labelNum);
+bool DrawChoiceRow(s32* selected, const char* const* labels, s32 labelNum, const char* const* details = nullptr);
+bool BeginGroupBoxWithChoice(const char* title, s32* selected, const char* const* labels, s32 labelNum);
 void EndGroupBox();
 void GroupBoxRowLabel(const char* label, f32 labelWidth);
 void TintGroupBoxCell();
 void GroupBoxGap();
-
 
 bool DrawPageHeader(const char* icon, const char* title, const char* description, const char* action = nullptr);
 

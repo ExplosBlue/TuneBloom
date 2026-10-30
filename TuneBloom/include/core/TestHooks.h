@@ -6,7 +6,10 @@
 #include <basis/seadTypes.h>
 
 class AudioResource;
+class BarsListFile;
 class Bfsar;
+class LooseStreamFile;
+class LooseWaveFile;
 struct GLFWwindow;
 struct ImDrawData;
 
@@ -110,6 +113,21 @@ inline bool ApplyGroupCommands(Bfsar&)
 }
 
 inline bool ApplyResourceCommands(AudioResource&)
+{
+    return true;
+}
+
+inline bool ApplyBarsListCommands(BarsListFile&)
+{
+    return true;
+}
+
+inline bool ApplyLooseFileCommands(LooseStreamFile&)
+{
+    return true;
+}
+
+inline bool ApplyLooseFileCommands(LooseWaveFile&)
 {
     return true;
 }

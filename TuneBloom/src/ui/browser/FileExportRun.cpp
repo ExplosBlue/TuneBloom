@@ -214,7 +214,7 @@ static void ExportLooseFile(const ExportSource& source)
     else if (isWritten)
         isWritten = fileio::WriteWholeFileAtomic(path.cstr(), bytes.data(), bytes.size());
 
-    EndOutput(isWritten, sRun.mode == FileExportMode::Wav ? messages::exporting::cFormatWav : source.formatName.c_str());
+    EndOutput(isWritten, sRun.mode == FileExportMode::Wav ? messages::common::cWav : source.formatName.c_str());
 }
 
 static void OpenResource(const ExportSource& source)
@@ -257,10 +257,10 @@ static bool IsAssetSkipped(const AudioAsset& asset, sead::BufferedSafeString* ou
     if (sRun.mode == FileExportMode::Wav)
         return asset.getPlaybackError(outReason);
 
-    if (asset.getFile() && GetAudioAssetKindExtension(asset.getCompleteFileKind()))
+    if (asset.getCompleteFile() && GetAudioAssetKindExtension(asset.getCompleteFileKind()))
         return false;
 
-    outReason->copy(messages::resource::cNoAudioFile);
+    outReason->copy(asset.getNoAudioReason());
     return true;
 }
 
@@ -297,7 +297,7 @@ static void ExportAsset(AudioAsset* asset)
 
     if (sRun.mode == FileExportMode::Wav)
     {
-        EndOutput(asset->writeWavFile(path), messages::exporting::cFormatWav);
+        EndOutput(asset->writeWavFile(path), messages::common::cWav);
         return;
     }
 

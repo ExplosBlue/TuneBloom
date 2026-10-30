@@ -22,6 +22,8 @@ void RequestExportSequenceFiles(const std::vector<SequenceFile*>& files);
 void RequestImportSequenceFile();
 void RequestExportWaveFiles(const std::vector<WaveFile*>& files);
 void RequestExportWaveFilesToWav(const std::vector<WaveFile*>& files);
+bool CanExportActiveFileWav();
+void RequestExportActiveFileWav();
 void RequestExportBankSf2(const std::vector<BankFile*>& files);
 void RequestExportBankDls(const std::vector<BankFile*>& files);
 void RequestExportMidi(const std::vector<Sound*>& sounds);

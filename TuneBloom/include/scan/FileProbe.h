@@ -44,4 +44,6 @@ struct FileProbe
 
 bool ProbeFileBytes(const void* data, u64 size, FileProbe* out);
 bool ProbeFile(const std::filesystem::path& path, u64 fileSize, ProbeDepth depth, FileProbe* out);
+bool ProbeFileKind(const std::filesystem::path& path, BrowserFileKind* outKind);
+bool IsPlayerFile(const std::filesystem::path& path);
 bool ReadFileContents(const std::filesystem::path& path, std::vector<u8>* out);

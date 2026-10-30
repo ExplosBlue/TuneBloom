@@ -5,6 +5,7 @@
 #include <bfsar/model/Item.h>
 #include <bfsar/model/Sound.h>
 
+#include <string>
 #include <vector>
 
 class WaveFile;
@@ -17,6 +18,7 @@ void ResolveExportBaseName(const Item *item, const char *fallbackLabel, sead::Bu
 void BuildDefaultExportPath(sead::BufferedSafeString* outPath, const Sound* sound, const char* ext);
 void BuildItemDefaultExportPath(const Item* item, const char* fallbackLabel, const char* ext, sead::BufferedSafeString* out);
 void ReplacePathExtension(sead::BufferedSafeString* path, const char* ext);
+std::string MakeSiblingPath(const std::string& path, const char* extension);
 
 void BeginExportNameBatch();
 void BuildUniqueExportPath(sead::BufferedSafeString *outPath, const char *dir, const sead::SafeString &rawName, const char *ext);
@@ -25,6 +27,7 @@ void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char *dir, 
 const WaveFile* FindStreamExportWave(const Sound::StreamSoundInfo& stream);
 bool HasExportLoop(const WaveFile* wave);
 bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool multiChannel, u32 loopCount, f32 fadeSec, u32 targetRate, bool loopMarkers);
+bool ExportLooseStreamToWav(Sound::StreamSoundInfo& stream, const char* path);
 
 void ShowExportResult(const char* message);
 void ShowBatchExportResult(s32 total, s32 failureCount, const char* formatName);

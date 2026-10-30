@@ -290,7 +290,18 @@ bool LooseStreamFile::setAudio(const WaveFile::RiffWaveInfo& info, WaveFile::Enc
 {
     std::vector<std::vector<float>> channels;
 
-    if (!decodeRiffChannels(info, &channels) || channels.empty())
+    if (!decodeRiffChannels(info, &channels))
+    {
+        *outError = messages::import::cWaveReadFailed;
+        return false;
+    }
+
+    return setAudioChannels(std::move(channels), info, encoding, outError);
+}
+
+bool LooseStreamFile::setAudioChannels(std::vector<std::vector<float>> channels, const WaveFile::RiffWaveInfo& info, WaveFile::Encoding encoding, const char** outError)
+{
+    if (channels.empty())
     {
         *outError = messages::import::cWaveReadFailed;
         return false;

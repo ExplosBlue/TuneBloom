@@ -5,6 +5,7 @@
 #include <ui/app/About.h>
 #include <ui/backup/Backup.h>
 #include <ui/browser/FilesPanel.h>
+#include <ui/export/Export.h>
 #include <ui/settings/Config.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/file/DocumentMgr.h>
@@ -697,6 +698,9 @@ static void DrawFileMenu()
     if (!isSlim && MenuBarIconItem(ICON_LC_FILE_STACK, messages::mainmenu::cSaveAll, shortcuts::Action::SaveAllProjects, HasUnsavedDocuments()))
         RequestSaveAll();
 
+    if (isSlim && MenuBarIconItem(ICON_LC_FILE_AUDIO, messages::menu::cExportWav, std::nullopt, CanExportActiveFileWav()))
+        RequestExportActiveFileWav();
+
     if (!isPlayer)
         DrawBackupsMenu();
 
@@ -706,11 +710,13 @@ static void DrawFileMenu()
     if (!isSlim)
     {
         BeginMenuDisabled(!archiveOpen);
-
         DrawImportMenu();
-        DrawExportMenu();
-
         EndMenuDisabled();
+
+        BeginMenuDisabled(!archiveOpen && !CanExportActiveFileWav());
+        DrawExportMenu();
+        EndMenuDisabled();
+
         MenuSeparator();
     }
 

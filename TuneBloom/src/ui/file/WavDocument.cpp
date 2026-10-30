@@ -1,14 +1,39 @@
 #include <ui/file/WavDocument.h>
 
+#include <ui/file/LooseStreamDocument.h>
 #include <messages/Messages.h>
 
+#include <bfsar/archive/Bfsar.h>
+#include <bfsar/files/LooseStreamFile.h>
 #include <bfsar/model/ArchiveFormat.h>
 #include <bfsar/audio/DecodedPcm.h>
 #include <scan/FileProbe.h>
 #include <bfsar/player/SoundPlayer.h>
 #include <bfsar/files/WaveFile.h>
+#include <snd/Global.h>
+#include <snd/StreamSoundPlayer.h>
 
 #include <filedevice/seadPath.h>
+
+#include <utility>
+
+static bool HasTrackLayout(u32 channelNum)
+{
+    return channelNum > snd::cWaveChannelMax && channelNum <= cStrmChannelNum;
+}
+
+static std::unique_ptr<LooseStreamFile> BuildTrackStream(std::vector<std::vector<float>> channels, const WaveFile::RiffWaveInfo& info, const sead::SafeString& name)
+{
+    std::unique_ptr<LooseStreamFile> tracks = std::make_unique<LooseStreamFile>();
+    const char* error = nullptr;
+
+    tracks->create(Bfsar::GetNewFileTarget(ArchiveFormat::BFSAR, ArchivePlatform::NX, InnerFileKind::Stream), Sound::StreamSoundInfo::StreamType::NwStreamBinary, name);
+
+    if (!tracks->setAudioChannels(std::move(channels), info, WaveFile::Encoding::Pcm16, &error))
+        return nullptr;
+
+    return tracks;
+}
 
 Document* WavDocument::Open(File* file, const sead::SafeString& path)
 {
@@ -19,6 +44,9 @@ WavDocument::~WavDocument()
 {
     if (mWave && sSoundPlayer.getPlayingWaveFile() == mWave)
         sSoundPlayer.stopAllPlayers();
+
+    if (mTracks)
+        ForgetLooseStream(mTracks->getStream());
 
     closeWindows();
 }
@@ -60,7 +88,11 @@ StreamSource WavDocument::activeStreamSource()
 PlayableFile WavDocument::playableFile()
 {
     PlayableFile playable;
-    playable.wave = mWave;
+
+    if (mTracks)
+        playable.stream = mTracks->getStreamSource();
+    else
+        playable.wave = mWave;
 
     return playable;
 }
@@ -69,12 +101,13 @@ bool WavDocument::getFileFacts(FileFacts* out) const
 {
     const char* bitsFormat = mIsFloat ? messages::import::cTrackImportBitsFloatFormat : messages::import::cTrackImportBitsFormat;
 
-    SetWaveFacts(out, *mWave);
+    SetWaveFacts(out, mTracks ? *mTracks->getStream().getMainWave() : *mWave);
 
     out->format = fileFormat();
     out->kindName = messages::common::cWaveFile;
     out->encoding.format(bitsFormat, static_cast<u32>(mBitsPerSample));
     out->channelNum = mChannelNum;
+    out->trackNum = mTracks ? static_cast<u32>(mTracks->getStream().getTrackList().size()) : 0;
     out->bitrate = CalcPcmBitrate(out->sampleRate, mChannelNum, mBitsPerSample);
 
     return true;
@@ -83,6 +116,12 @@ bool WavDocument::getFileFacts(FileFacts* out) const
 void WavDocument::forEachItemList(const std::function<void(Item::List&)>& visit)
 {
     visit(mWaveList);
+
+    if (!mTracks)
+        return;
+
+    visit(mTracks->getStream().getTrackList());
+    visit(mTracks->getStreamWaveList());
 }
 
 bool WavDocument::isInfoModified() const
@@ -92,7 +131,10 @@ bool WavDocument::isInfoModified() const
 
 bool WavDocument::ownsItem(const Item& item) const
 {
-    return item.list() == &mWaveList;
+    if (item.list() == &mWaveList)
+        return true;
+
+    return mTracks && (item.list() == &mTracks->getStream().getTrackList() || item.list() == &mTracks->getStreamWaveList());
 }
 
 bool WavDocument::prepareSave()
@@ -135,7 +177,27 @@ bool WavDocument::openFile(const File& file, const sead::SafeString& path, sead:
     DecodedPcm pcm;
     WaveFile::RiffWaveInfo info;
 
-    mWave = decodeRiffBytes(file.data, file.size, &pcm, &info) ? BuildPcm16Wave(pcm) : nullptr;
+    if (!decodeRiffBytes(file.data, file.size, &pcm, &info))
+    {
+        outError->copy(messages::wavefile::cNotWavFile);
+        return false;
+    }
+
+    mBitsPerSample = info.bitsPerSample;
+    mChannelNum = info.numChannels;
+    mIsFloat = info.format == cRiffFormatFloat;
+
+    if (HasTrackLayout(info.numChannels))
+    {
+        mTracks = BuildTrackStream(std::move(pcm.channels), info, mFileName);
+
+        if (mTracks)
+            return true;
+
+        decodeRiffBytes(file.data, file.size, &pcm);
+    }
+
+    mWave = BuildPcm16Wave(pcm);
 
     if (!mWave)
     {
@@ -147,10 +209,6 @@ bool WavDocument::openFile(const File& file, const sead::SafeString& path, sead:
     mWave->getName().copy(mFileName);
     mWave->setId(0);
     mWaveList.pushBack(mWave);
-
-    mBitsPerSample = info.bitsPerSample;
-    mChannelNum = info.numChannels;
-    mIsFloat = info.format == cRiffFormatFloat;
 
     return true;
 }

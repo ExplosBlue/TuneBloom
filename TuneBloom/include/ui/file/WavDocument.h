@@ -2,6 +2,9 @@
 
 #include <ui/file/LooseFileDocument.h>
 
+#include <memory>
+
+class LooseStreamFile;
 class WaveFile;
 
 class WavDocument : public LooseFileDocument
@@ -40,6 +43,7 @@ private:
     sead::FixedSafeString<256> mFileName;
     Item::List mWaveList;
     WaveFile* mWave = nullptr;
+    std::unique_ptr<LooseStreamFile> mTracks;
     u16 mBitsPerSample = 0;
     u16 mChannelNum = 0;
     bool mIsFloat = false;

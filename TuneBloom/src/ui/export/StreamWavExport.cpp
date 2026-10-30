@@ -266,3 +266,8 @@ bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool mu
 
     return true;
 }
+
+bool ExportLooseStreamToWav(Sound::StreamSoundInfo& stream, const char* path)
+{
+    return ExportStreamToWav(stream, path, true, 1, 0.0f, 0, true);
+}

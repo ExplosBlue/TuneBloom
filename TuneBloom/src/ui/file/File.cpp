@@ -70,21 +70,6 @@ std::string GetDocumentName()
     return document ? document->displayName() : backup::GetArchiveName();
 }
 
-static bool ProbeFileKind(const char* path, BrowserFileKind* outKind)
-{
-    std::error_code error;
-    const u64 fileSize = std::filesystem::file_size(path, error);
-
-    FileProbe probe;
-
-    if (error || !ProbeFile(path, fileSize, ProbeDepth::Kind, &probe))
-        return false;
-
-    *outKind = probe.kind;
-
-    return true;
-}
-
 static bool IsDocumentKind(BrowserFileKind kind)
 {
     return kind == BrowserFileKind::SoundArchive || kind == BrowserFileKind::AudioResource || kind == BrowserFileKind::ResourceList || kind == BrowserFileKind::Stream || kind == BrowserFileKind::Wave;

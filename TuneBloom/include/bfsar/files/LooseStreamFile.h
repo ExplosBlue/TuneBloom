@@ -4,6 +4,8 @@
 #include <bfsar/model/StreamSource.h>
 #include <core/SaveResult.h>
 
+#include <vector>
+
 class LooseStreamFile : public StreamWaveOwner
 {
 public:
@@ -54,6 +56,7 @@ public:
     bool setLoop(bool isLoop, u32 loopStartFrame, const char** outError);
     bool replaceAudio(const WaveFile::RiffWaveInfo& info, const char** outError);
     bool setAudio(const WaveFile::RiffWaveInfo& info, WaveFile::Encoding encoding, const char** outError);
+    bool setAudioChannels(std::vector<std::vector<float>> channels, const WaveFile::RiffWaveInfo& info, WaveFile::Encoding encoding, const char** outError);
 
     Item::List& getStreamWaveList() override
     {

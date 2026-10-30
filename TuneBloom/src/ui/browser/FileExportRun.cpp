@@ -103,10 +103,10 @@ static std::string GetOutputExtension(const ExportSource& source, FileExportMode
 static bool ChooseSingleTarget(const ExportSource& source, FileExportMode mode, sead::BufferedSafeString* outPath)
 {
     const std::string extension = GetOutputExtension(source, mode);
-    const fs::path defaultPath = fs::path(source.path).parent_path() / (source.stem + "." + extension);
+    const std::string defaultPath = MakeSiblingPath(source.path, extension.c_str());
     const sead::FormatFixedSafeString<64> filter(messages::filedialog::cFilterFileFormat, source.formatName.c_str(), extension.c_str());
 
-    return SaveFileDialogWithExtension(outPath, mode == FileExportMode::Wav ? messages::filedialog::cFilterWave : filter.cstr(), extension.c_str(), defaultPath.string().c_str());
+    return SaveFileDialogWithExtension(outPath, mode == FileExportMode::Wav ? messages::filedialog::cFilterWave : filter.cstr(), extension.c_str(), defaultPath.c_str());
 }
 
 static void NotifySkippedFiles(const std::vector<const BrowserFile*>& skipped)
@@ -184,7 +184,7 @@ static bool WriteLooseWav(const ExportSource& source, std::vector<u8> bytes, con
         sead::FixedSafeString<256> error;
 
         if (stream.open(bytes.data(), static_cast<u32>(bytes.size()), sead::FixedSafeString<512>(source.path.c_str()), &error))
-            return ExportStreamToWav(stream.getStream(), path, true, 1, 0.0f, 0, true);
+            return ExportLooseStreamToWav(stream.getStream(), path);
     }
 
     DecodedAudioFile decoded;

@@ -108,7 +108,16 @@ void DrawExportMenu()
     if (!BeginIconSubMenu(ICON_LC_FILE_OUTPUT, messages::common::cExport))
         return;
 
-    Item* item = IsSoundArchiveOpen() ? GetActiveSelection() : nullptr;
+    if (!IsSoundArchiveOpen())
+    {
+        if (MenuBarIconItem(ICON_LC_FILE_AUDIO, messages::mainmenu::cExportWav, std::nullopt, CanExportActiveFileWav()))
+            RequestExportActiveFileWav();
+
+        EndSubMenu();
+        return;
+    }
+
+    Item* item = GetActiveSelection();
 
     switch (item ? item->getItemType() : Item::ItemType::Invalid)
     {

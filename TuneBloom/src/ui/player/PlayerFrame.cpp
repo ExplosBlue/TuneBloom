@@ -22,8 +22,9 @@
 
 #include <aal/AudioResource.h>
 #include <app/Utilll.h>
-#include <core/PlayerFile.h>
+#include <bfsar/player/SoundPlayer.h>
 #include <core/TestHooks.h>
+#include <scan/FileProbe.h>
 #include <snd/StreamSoundPlayer.h>
 #include <platform/WindowFrame.h>
 #include <platform/WindowZoom.h>
@@ -418,7 +419,7 @@ bool IsPlayerDocument(Document* document)
 
 void PreparePlayerFrame(const openqueue::Request& launch)
 {
-    if (launch.origin != openqueue::Origin::System || !playerfile::IsPlayerFile(launch.path.c_str()))
+    if (launch.origin != openqueue::Origin::System || !IsPlayerFile(launch.path))
         return;
 
     sIsShown = true;
@@ -441,6 +442,9 @@ void NotifyPlayerFrameOpen(const openqueue::Request& request, Document* previous
         return;
 
     sAutoplayDocument = opened;
+
+    if (previous != opened)
+        sSoundPlayer.resetTracks();
 
     if (IsPlayerDocument(previous) && previous != opened)
         RequestCloseDocument(previous);

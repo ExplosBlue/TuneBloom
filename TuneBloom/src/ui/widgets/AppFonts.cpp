@@ -10,6 +10,8 @@
 #include "imgui/imgui_internal.h"
 #include "libs/IconsLucide.h"
 
+#include <cstring>
+
 namespace
 {
 
@@ -123,12 +125,24 @@ static void AddDialogIconFont(const FontFile& file)
     ImGui::GetIO().Fonts->AddFontFromMemoryTTF(file.data, file.size, ScaleSize(cDialogIconFontSize), &config, GetDialogIconRanges());
 }
 
-static void EqualizeDigits(ImFont* font)
+static bool IsDigit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static f32 CalcDigitAdvance(const ImFont* font)
 {
     f32 width = 0.0f;
 
     for (ImWchar c = '0'; c <= '9'; c++)
         width = ImMax(width, font->GetCharAdvance(c));
+
+    return width;
+}
+
+static void EqualizeDigits(ImFont* font)
+{
+    const f32 width = CalcDigitAdvance(font);
 
     for (ImWchar c = '0'; c <= '9'; c++)
     {
@@ -204,4 +218,38 @@ void LoadAppFonts()
 ImFont* GetCodeFont()
 {
     return sCodeFont ? sCodeFont : ImGui::GetFont();
+}
+
+f32 AddTabularText(ImDrawList* draw, ImFont* font, f32 fontSize, const ImVec2& pos, u32 color, const char* text, const char* textEnd)
+{
+    if (!textEnd)
+        textEnd = text + strlen(text);
+
+    const f32 digitWidth = CalcDigitAdvance(font) * fontSize / font->FontSize;
+    f32 x = pos.x;
+
+    for (const char* run = text; run < textEnd;)
+    {
+        const bool isDigit = IsDigit(*run);
+        const char* runEnd = run + 1;
+
+        while (!isDigit && runEnd < textEnd && !IsDigit(*runEnd))
+            runEnd++;
+
+        const f32 width = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, run, runEnd).x;
+        const f32 cell = isDigit ? digitWidth : width;
+
+        if (draw)
+            draw->AddText(font, fontSize, ImVec2(ImFloor(x + (cell - width) * 0.5f), pos.y), color, run, runEnd);
+
+        x += cell;
+        run = runEnd;
+    }
+
+    return x - pos.x;
+}
+
+f32 CalcTabularTextWidth(ImFont* font, f32 fontSize, const char* text, const char* textEnd)
+{
+    return AddTabularText(nullptr, font, fontSize, ImVec2(0.0f, 0.0f), 0, text, textEnd);
 }

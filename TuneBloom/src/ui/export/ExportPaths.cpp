@@ -2,6 +2,7 @@
 
 #include <messages/Messages.h>
 
+#include <bfsar/model/ArchiveFormat.h>
 #include <bfsar/model/Sound.h>
 
 #include <algorithm>
@@ -136,4 +137,14 @@ void ReplacePathExtension(sead::BufferedSafeString* path, const char* ext)
         path->trim(dot);
 
     path->append(ext);
+}
+
+std::string MakeSiblingPath(const std::string& path, const char* extension)
+{
+    std::filesystem::path sibling(path);
+
+    if (IsZstdPath(path.c_str()))
+        sibling.replace_extension();
+
+    return sibling.replace_extension(extension).string();
 }

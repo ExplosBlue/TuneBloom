@@ -26,3 +26,5 @@ public:
 protected:
     LooseFileFormat fileFormat() const override;
 };
+
+void ForgetLooseStream(const Sound::StreamSoundInfo& stream);

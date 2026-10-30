@@ -25,15 +25,19 @@ Document* LooseStreamDocument::Create(const InnerFileTarget& target, Sound::Stre
     return document;
 }
 
-LooseStreamDocument::~LooseStreamDocument()
+void ForgetLooseStream(const Sound::StreamSoundInfo& stream)
 {
-    sSoundPlayer.forgetStream(&mFile.getStream());
+    sSoundPlayer.forgetStream(&stream);
 
     const Item* highlighted = GetHighlightedStreamTrack();
 
-    if (highlighted && highlighted->list() == &mFile.getStream().getTrackList())
+    if (highlighted && highlighted->list() == &stream.getTrackList())
         HighlightStreamTrack(nullptr);
+}
 
+LooseStreamDocument::~LooseStreamDocument()
+{
+    ForgetLooseStream(mFile.getStream());
     closeWindows();
 }
 
@@ -87,7 +91,7 @@ bool LooseStreamDocument::getFileFacts(FileFacts* out) const
 
     if (stream.getStreamType() == Sound::StreamSoundInfo::StreamType::Opus)
     {
-        out->encoding = messages::stream::cTypeOpus;
+        out->encoding.clear();
         out->bitrate = stream.getOriginalOpusChannelBitrate() * out->channelNum;
     }
     else if (mainWave)

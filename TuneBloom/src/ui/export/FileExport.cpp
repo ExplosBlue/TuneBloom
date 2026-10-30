@@ -15,8 +15,11 @@
 
 #include <imgui/imgui_internal.h>
 
+#include <aal/AudioAsset.h>
+#include <aal/AudioResource.h>
 #include <bfsar/files/BankFile.h>
 #include <bfsar/io/FileIo.h>
+#include <bfsar/player/SoundPlayer.h>
 #include <midi/InstBankExporter.h>
 
 #include <filedevice/seadFileDeviceMgr.h>
@@ -30,6 +33,7 @@ static std::vector<WaveFile*> sPendingWavesToWav;
 static std::vector<BankFile*> sPendingBankSf2;
 static std::vector<BankFile*> sPendingBankDls;
 static bool sPendingSequenceImport = false;
+static bool sPendingActiveFileWav = false;
 
 static bool sShowExportResult = false;
 static sead::FixedSafeString<128> sExportResultMessage;
@@ -54,6 +58,18 @@ void RequestExportWaveFilesToWav(const std::vector<WaveFile*>& files)
     sPendingWavesToWav = files;
 }
 
+bool CanExportActiveFileWav()
+{
+    Document* document = ActiveDocument();
+
+    return document && !document->isPlayerOnly() && document->playableFile().isValid();
+}
+
+void RequestExportActiveFileWav()
+{
+    sPendingActiveFileWav = true;
+}
+
 void RequestExportBankSf2(const std::vector<BankFile*>& files)
 {
     sPendingBankSf2 = files;
@@ -72,6 +88,7 @@ void CancelFileExports()
     sPendingBankSf2.clear();
     sPendingBankDls.clear();
     sPendingSequenceImport = false;
+    sPendingActiveFileWav = false;
     CancelMidiExport();
 }
 
@@ -180,6 +197,59 @@ static void ExportPendingWavesToWav()
         &ShowWavExportResult, &ShowWavBatchExportResult);
 }
 
+static bool WritePlayableWav(const PlayableFile& file, const sead::SafeString& path)
+{
+    if (file.stream.isValid())
+        return ExportLooseStreamToWav(*file.stream.stream, path.cstr());
+
+    if (file.wave)
+        return file.wave->writeWavFile(path);
+
+    if (!file.asset)
+        return false;
+
+    file.asset->getResource()->loadStreamFile(file.asset);
+
+    return file.asset->writeWavFile(path);
+}
+
+static void ExportActiveFileWav()
+{
+    if (!sPendingActiveFileWav)
+        return;
+
+    sPendingActiveFileWav = false;
+
+    if (!CanExportActiveFileWav())
+        return;
+
+    Document* document = ActiveDocument();
+    const PlayableFile file = document->playableFile();
+
+    sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
+
+    if (file.asset && file.asset->getPlaybackError(&playbackError))
+    {
+        MessageLog::instance()->addPopup({ playbackError, file.asset });
+        return;
+    }
+
+    const std::string source = document->filePath().isEmpty() ? document->displayName() : std::string(document->filePath().cstr());
+    const std::string defaultPath = MakeSiblingPath(source, cWavExtension);
+
+    sead::FixedSafeString<512> path;
+
+    if (!SaveFileDialogWithExtension(&path, messages::filedialog::cFilterWave, cWavExtension, defaultPath.c_str()))
+        return;
+
+    const bool isWritten = WritePlayableWav(file, path);
+
+    ShowWavExportResult(isWritten);
+
+    if (isWritten)
+        ShowExportedFiles(path);
+}
+
 static void ImportPendingSequenceFile()
 {
     if (!sPendingSequenceImport)
@@ -237,6 +307,7 @@ void DrawFileExportDialogs()
     ExportBankModels(&sPendingBankSf2, "sf2", messages::exporting::cFormatSf2, messages::exporting::cFormatSoundFont, &exportBankToSf2);
     ExportBankModels(&sPendingBankDls, "dls", messages::exporting::cFormatDls, messages::exporting::cFormatDls, &exportBankToDls);
     ExportPendingInstrument();
+    ExportActiveFileWav();
 
     if (!BeginInstrumentImport())
         return;

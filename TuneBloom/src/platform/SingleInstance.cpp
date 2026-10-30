@@ -4,7 +4,7 @@
 
 #include <basis/win/seadWindows.h>
 
-#include <core/PlayerFile.h>
+#include <scan/FileProbe.h>
 #include <ui/file/OpenQueue.h>
 
 #include <cstdio>
@@ -14,6 +14,7 @@ namespace singleinstance
 
 static constexpr DWORD cPathBufferSize = 2048;
 static constexpr DWORD cBusyWaitMs     = 1000;
+static constexpr DWORD cProbeWaitMs    = 1;
 
 static void FormatPipeName(char* out, size_t size)
 {
@@ -36,9 +37,17 @@ static HANDLE ConnectToRunningApp(const char* pipeName)
     return CreateFileA(pipeName, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
 }
 
+static bool IsAppRunning(const char* pipeName)
+{
+    return WaitNamedPipeA(pipeName, cProbeWaitMs) || GetLastError() != ERROR_FILE_NOT_FOUND;
+}
+
 bool ForwardToRunningApp(const char* path)
 {
-    if (!playerfile::IsPlayerFile(path))
+    char pipeName[64];
+    FormatPipeName(pipeName, sizeof(pipeName));
+
+    if (!IsAppRunning(pipeName) || !IsPlayerFile(path))
         return false;
 
     char fullPath[cPathBufferSize];
@@ -46,9 +55,6 @@ bool ForwardToRunningApp(const char* path)
 
     if (length == 0 || length >= cPathBufferSize)
         return false;
-
-    char pipeName[64];
-    FormatPipeName(pipeName, sizeof(pipeName));
 
     HANDLE pipe = ConnectToRunningApp(pipeName);
 

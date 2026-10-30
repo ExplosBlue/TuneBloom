@@ -14,6 +14,7 @@
 #include <ui/resource/ResourceViews.h>
 #include <messages/Messages.h>
 #include <ui/file/OpenQueue.h>
+#include <ui/player/PlayerFrame.h>
 #include <ui/player/PlayerViews.h>
 #include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
@@ -211,11 +212,14 @@ void HandleFileShortcuts()
     if (shortcuts::Pressed(shortcuts::Action::OpenProject))
         sWantsOpenDialog = true;
 
-    if (shortcuts::Pressed(shortcuts::Action::NewProject))
-        OpenNewFileDialog();
-
     if (shortcuts::Pressed(shortcuts::Action::SaveProjectAs) && IsDocumentOpen())
         RequestSaveDocumentAs(ActiveDocument());
+
+    if (IsPlayerFrameShown())
+        return;
+
+    if (shortcuts::Pressed(shortcuts::Action::NewProject))
+        OpenNewFileDialog();
 
     if (IsDocumentOpen() && !IsFileWindowFocused() && shortcuts::Pressed(shortcuts::Action::CloseProject))
         RequestCloseFile();

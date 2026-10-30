@@ -11,6 +11,7 @@
 #include <ui/stream/StreamPanelFold.h>
 #include <ui/stream/StreamRegions.h>
 #include <ui/settings/Theme.h>
+#include <ui/widgets/AppFonts.h>
 #include <ui/widgets/TimeUtil.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
@@ -537,12 +538,10 @@ static void DrawDisplayTime(const PlaybackProgress& progress, const ImVec2& pos,
     snprintf(text, sizeof(text), "%s%s", showRemaining ? "-" : "", clock);
 
     const char* fractionText = strchr(text, '.');
-    const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
-    const ImVec2 mainSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text, fractionText);
-    const f32 textX = ImFloor(pos.x + width - textSize.x);
+    const f32 textX = ImFloor(pos.x + width - CalcTabularTextWidth(font, fontSize, text));
+    const f32 mainWidth = AddTabularText(draw, font, fontSize, ImVec2(textX, textY), ImGui::GetColorU32(ImGuiCol_Text), text, fractionText);
 
-    draw->AddText(font, fontSize, ImVec2(textX, textY), ImGui::GetColorU32(ImGuiCol_Text), text, fractionText);
-    draw->AddText(font, fontSize, ImVec2(textX + mainSize.x, textY), GetDisplayValueColor(), fractionText);
+    AddTabularText(draw, font, fontSize, ImVec2(textX + mainWidth, textY), GetDisplayValueColor(), fractionText);
 }
 
 static void DrawDisplayLoop(const PlaybackProgress& progress, const ImVec2& pos)
@@ -756,7 +755,7 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
         timeHeight = height - cDisplayTextRaise * 4.0f;
     }
 
-    const f32 timeWidth = timeFont->CalcTextSizeA(timeFontSize, FLT_MAX, 0.0f, "-00:00.000").x;
+    const f32 timeWidth = CalcTabularTextWidth(timeFont, timeFontSize, "-00:00.000");
 
     if (large)
     {
@@ -810,12 +809,12 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     else
         snprintf(total, sizeof(total), "%s", messages::playback::cUnknownTime);
 
-    const f32 totalWidth = ImGui::CalcTextSize("00:00.000").x;
+    const f32 totalWidth = CalcTabularTextWidth(ImGui::GetFont(), em, "00:00.000");
     f32 seekWidth = right - left - totalWidth - pad;
     const bool showTotal = seekWidth >= em * cDisplaySeekMinEm;
 
     if (showTotal)
-        draw->AddText(ImVec2(right - totalWidth, row2), GetDisplayValueColor(), total);
+        AddTabularText(draw, ImGui::GetFont(), em, ImVec2(right - totalWidth, row2), GetDisplayValueColor(), total);
     else
         seekWidth = right - left;
 

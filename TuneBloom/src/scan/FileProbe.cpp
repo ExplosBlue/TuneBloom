@@ -4,6 +4,7 @@
 #include <aal/BarsSarc.h>
 #include <bfsar/archive/Bea.h>
 #include <bfsar/archive/Cmpbin.h>
+#include <bfsar/audio/NxOpus.h>
 #include <bfsar/files/WaveFile.h>
 #include <bfsar/io/PackFile.h>
 #include <bfsar/model/ArchiveFormat.h>
@@ -284,6 +285,20 @@ static bool ProbeRiff(const void* data, u64 size, u64 fileSize, FileProbe* out)
     return true;
 }
 
+static bool ProbeOpus(const void* data, u64 size, FileProbe* out)
+{
+    nxopus::Info info;
+
+    if (!nxopus::HasInfoChunk(data, size) || !nxopus::ReadInfo(data, size, &info))
+        return false;
+
+    out->kind = BrowserFileKind::Stream;
+    CopyFormatName(messages::stream::cTypeOpus, out);
+    out->channelCount = info.channelCount;
+
+    return true;
+}
+
 static bool ProbeBarsList(const void* data, u64 size, FileProbe* out)
 {
     if (!aal::IsBarsList(data, size))
@@ -302,7 +317,7 @@ static bool ProbeBarsList(const void* data, u64 size, FileProbe* out)
 
 static bool ProbeUncompressed(const void* data, u64 size, FileProbe* out)
 {
-    return ProbeNwFile(data, size, out) || ProbeBars(data, size, out) || ProbeBarsList(data, size, out) || ProbeBwav(data, size, out) || ProbeSarc(data, size, out) || ProbeRiff(data, size, size, out);
+    return ProbeNwFile(data, size, out) || ProbeBars(data, size, out) || ProbeBarsList(data, size, out) || ProbeBwav(data, size, out) || ProbeSarc(data, size, out) || ProbeRiff(data, size, size, out) || ProbeOpus(data, size, out);
 }
 
 bool ProbeFileBytes(const void* data, u64 size, FileProbe* out)
@@ -511,6 +526,28 @@ bool ProbeFile(const std::filesystem::path& path, u64 fileSize, ProbeDepth depth
         if (isProbed || bytes.size() >= fileSize || limit >= cCompressedReadMax || IsSarcIndexRead(bytes.data(), bytes.size()))
             return isProbed;
     }
+}
+
+bool ProbeFileKind(const std::filesystem::path& path, BrowserFileKind* outKind)
+{
+    std::error_code error;
+    const u64 fileSize = std::filesystem::file_size(path, error);
+
+    FileProbe probe;
+
+    if (error || !ProbeFile(path, fileSize, ProbeDepth::Kind, &probe))
+        return false;
+
+    *outKind = probe.kind;
+
+    return true;
+}
+
+bool IsPlayerFile(const std::filesystem::path& path)
+{
+    BrowserFileKind kind;
+
+    return ProbeFileKind(path, &kind) && (kind == BrowserFileKind::Stream || kind == BrowserFileKind::Wave);
 }
 
 bool ReadFileContents(const std::filesystem::path& path, std::vector<u8>* out)

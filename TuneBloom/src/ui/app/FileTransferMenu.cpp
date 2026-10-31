@@ -7,6 +7,7 @@
 #include <ui/app/MenuBar.h>
 #include <messages/Messages.h>
 #include <ui/items/Selection.h>
+#include <ui/resource/ResourceViews.h>
 #include <ui/sound/SoundViews.h>
 
 #include <libs/IconsLucide.h>
@@ -16,6 +17,8 @@
 #include <bfsar/model/Sound.h>
 #include <bfsar/model/SoundSet.h>
 #include <bfsar/files/WaveFile.h>
+
+#include <aal/AudioAsset.h>
 
 using InnerFileLabel = sead::FormatFixedSafeString<64>;
 
@@ -89,6 +92,44 @@ static void DrawBankFileExportItems(const std::vector<BankFile*>& bankFiles)
         RequestExportBankDls(bankFiles);
 }
 
+static void DrawAudioAssetExportItems(Item* item)
+{
+    const std::vector<AudioAsset*> assets = CollectForAction<AudioAsset>(item);
+    const char* fileReason = nullptr;
+    sead::FixedSafeString<256> wavReason;
+    const InnerFileLabel fileLabel(messages::mainmenu::cInnerFileFormat, GetAudioAssetKindName(assets.front()->getCompleteFileKind()));
+
+    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, fileLabel.cstr(), std::nullopt, CanExportAudioAssetFiles(assets, &fileReason), fileReason))
+        RequestExportAudioAssetFiles(assets);
+
+    if (MenuBarIconItem(ICON_LC_FILE_AUDIO, messages::mainmenu::cExportWav, std::nullopt, CanExportAudioAssetWavs(assets, &wavReason), wavReason.cstr()))
+        RequestExportAudioAssetWavs(assets);
+}
+
+static void DrawGroupExportItems(Item* item)
+{
+    if (GetGroupFileAction(item) != GroupFileAction::Export)
+    {
+        DrawExportHint();
+        return;
+    }
+
+    if (MenuBarIconItem(ICON_LC_FILE_OUTPUT, messages::menu::cExportGroupFile))
+        RunGroupFileAction(item);
+}
+
+static Item* GetSelectedAudioAsset()
+{
+    Item* item = GetActiveSelection();
+
+    return item && item->getItemType() == Item::ItemType::AudioAsset ? item : nullptr;
+}
+
+bool CanOpenExportMenu()
+{
+    return IsSoundArchiveOpen() || CanExportActiveFileWav() || GetSelectedAudioAsset();
+}
+
 void DrawImportMenu()
 {
     if (!BeginIconSubMenu(ICON_LC_FILE_INPUT, messages::common::cImport))
@@ -110,7 +151,9 @@ void DrawExportMenu()
 
     if (!IsSoundArchiveOpen())
     {
-        if (MenuBarIconItem(ICON_LC_FILE_AUDIO, messages::mainmenu::cExportWav, std::nullopt, CanExportActiveFileWav()))
+        if (Item* asset = GetSelectedAudioAsset())
+            DrawAudioAssetExportItems(asset);
+        else if (MenuBarIconItem(ICON_LC_FILE_AUDIO, messages::mainmenu::cExportWav, std::nullopt, CanExportActiveFileWav()))
             RequestExportActiveFileWav();
 
         EndSubMenu();
@@ -143,6 +186,10 @@ void DrawExportMenu()
 
         case Item::ItemType::Bank:
             DrawBankFileExportItems(CollectBankFilesFromBanks(item));
+            break;
+
+        case Item::ItemType::Group:
+            DrawGroupExportItems(item);
             break;
 
         default:

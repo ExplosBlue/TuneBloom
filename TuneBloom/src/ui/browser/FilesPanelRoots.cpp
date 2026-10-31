@@ -833,7 +833,7 @@ std::string FilesPanel::makePrefixKey(const FilesRow& row) const
 {
     const FileIndexSnapshot& snapshot = getSnapshot(row.root);
 
-    return MakeFolderKey(snapshot, row.index) + '/' + snapshot.files[row.sound].stem.substr(0, row.nameStart - 1) + '_';
+    return MakeFolderKey(snapshot, row.index) + '/' + snapshot.files[row.sound].stem.substr(0, row.nameStart);
 }
 
 void FilesPanel::drawRootRow(FrameContext& ctx, const FilesRow& row)

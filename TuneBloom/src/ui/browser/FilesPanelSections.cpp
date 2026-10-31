@@ -3,6 +3,7 @@
 #include <ui/app/Notifications.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/ContextMenu.h>
+#include <ui/widgets/ListFilter.h>
 #include <ui/widgets/RowRename.h>
 #include <ui/widgets/Widgets.h>
 #include <messages/Messages.h>
@@ -258,11 +259,18 @@ void FilesPanel::drawSectionLabel(const FrameContext& ctx, const FilesSection& s
     const bool isOpen = isSearching() || !section.isFolded;
     const f32 hit = frame.rowMax.y - frame.rowMin.y;
     const f32 buttonX = frame.rowMax.x - style.CellPadding.x - hit;
-    f32 right = buttonX;
+    const f32 removeX = buttonX - hit;
+    const f32 buttonSize = sead::Mathf::min(GetRowButtonSize(), hit);
+    f32 right = removeX;
+
+    ImGui::SetCursorScreenPos(ImVec2(removeX, frame.rowMin.y));
+
+    if (DrawRowHoverButton("##remove", ICON_LC_X, isRowHovered, messages::files::cRemoveSection, ImVec2(hit, hit), buttonSize))
+        requestAction(RootAction::RemoveSection, -1, std::string(), section.id);
 
     ImGui::SetCursorScreenPos(ImVec2(buttonX, frame.rowMin.y));
 
-    if (DrawRowHoverButton("##add", ICON_LC_PLUS, isRowHovered, messages::files::cAddTip, ImVec2(hit, hit), sead::Mathf::min(GetRowButtonSize(), hit)))
+    if (DrawRowHoverButton("##add", ICON_LC_PLUS, isRowHovered, messages::files::cAddTip, ImVec2(hit, hit), buttonSize))
         ImGui::OpenPopup(cSectionAddMenuId);
 
     if (!isOpen)
@@ -374,18 +382,8 @@ void FilesPanel::drawAddMenuItems(u32 section, bool showsTarget, bool isSubMenu)
 
 void FilesPanel::drawAddButton()
 {
-    const f32 size = ImGui::GetFrameHeight();
-
-    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgHovered));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgActive));
-
-    if (ImGui::Button(ICON_LC_PLUS "##add", ImVec2(size, size)))
+    if (DrawSearchAddButton(ImGui::GetFrameHeight(), messages::files::cAddTip))
         ImGui::OpenPopup(cAddMenuId);
-
-    ImGui::PopStyleColor(3);
-    ImGui::SetItemTooltip("%s", messages::files::cAddTip);
 
     drawAddMenu(cAddMenuId, getTargetSection(), true);
 }

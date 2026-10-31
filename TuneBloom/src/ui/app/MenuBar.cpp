@@ -578,7 +578,7 @@ static void DrawEditMenu()
 
     MenuSeparator();
 
-    if (MenuBarIconItem(ICON_LC_TRASH_2, messages::common::cDelete, std::nullopt, hasItem))
+    if (MenuBarIconItem(ICON_LC_TRASH_2, messages::common::cDelete, shortcuts::Action::DeleteSelection, hasItem))
         shortcuts::Trigger(shortcuts::Action::DeleteSelection);
 }
 
@@ -713,7 +713,7 @@ static void DrawFileMenu()
         DrawImportMenu();
         EndMenuDisabled();
 
-        BeginMenuDisabled(!archiveOpen && !CanExportActiveFileWav());
+        BeginMenuDisabled(!CanOpenExportMenu());
         DrawExportMenu();
         EndMenuDisabled();
 

@@ -5,6 +5,11 @@
 
 #include <libs/IconsLucide.h>
 
+#include <utility>
+
+static constexpr char cListMenuId[] = "##ListFreeMenu";
+static constexpr char cAddMenuId[]  = "##ListAddMenu";
+
 bool DrawItemContextMenu(ItemListContext& ctx, Item* item)
 {
     const CreateItemCallback createCallback = ctx.createCallback;
@@ -14,9 +19,28 @@ bool DrawItemContextMenu(ItemListContext& ctx, Item* item)
     if (!item && !createCallback && !menuCallback)
         return false;
 
+    if (!item && std::exchange(ctx.addRequested, false))
+    {
+        if (createCallback)
+        {
+            SetInsertAfterItem(nullptr);
+            sMultiSelectedItems.clear();
+            return true;
+        }
+
+        ImGui::OpenPopup(ctx.addMenuCallback ? cAddMenuId : cListMenuId);
+        ImGui::SetNextWindowPos(ImVec2(ctx.addAnchor.x, ctx.addAnchor.y + ImGui::GetStyle().ItemInnerSpacing.y), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    }
+
+    if (!item && ctx.addMenuCallback && BeginContextMenu(cAddMenuId))
+    {
+        ctx.addMenuCallback(nullptr);
+        EndContextMenu();
+    }
+
     const sead::FormatFixedSafeString<64> menuId("%p", item);
 
-    if (!(item ? BeginItemContextMenu(menuId.cstr()) : BeginWindowContextMenu()))
+    if (!(item ? BeginItemContextMenu(menuId.cstr()) : BeginWindowContextMenu(cListMenuId)))
         return false;
 
     if (item)
@@ -42,6 +66,9 @@ bool DrawItemContextMenu(ItemListContext& ctx, Item* item)
         sMultiSelectedItems.clear();
         add = true;
     }
+
+    if (item && !multiActive && CanRenameItem(item) && ContextMenuItem(ICON_LC_TEXT_CURSOR_INPUT, messages::common::cRename))
+        BeginItemRename(item, ctx.tableId);
 
     if (item && OffersItemDuplicate(item))
     {

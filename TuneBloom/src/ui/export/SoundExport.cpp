@@ -110,6 +110,7 @@ static SoundExportOptions MakeSoundExportOptions()
     options.multiChannel = sSettings.filesIndex == 0;
     options.splitSeqTracks = sSettings.filesIndex != 0;
     options.loopMarkers = sSettings.loopMarkers;
+    options.idInName = IsExportIdInName();
 
     return options;
 }
@@ -463,9 +464,12 @@ static void DrawExportFormatBox(const SoundExportSummary& summary, bool single, 
     GroupBoxRowLabel(messages::common::cFileType, labelWidth);
     ImGui::TextColored(GetItemValueColor(), "%s", messages::exporting::cFileTypeWav);
 
-    GroupBoxRowLabel(messages::common::cSampleRate, labelWidth);
-    ImGui::SetNextItemWidth(ImFloor(em * cExportListWidthEm));
-    ComboScroll("##SampleRate", &sSettings.sampleRateIndex, sampleRateItems, sSampleRateDetails, IM_ARRAYSIZE(sSampleRateItems));
+    if (hasStream || hasSequence)
+    {
+        GroupBoxRowLabel(messages::common::cSampleRate, labelWidth);
+        ImGui::SetNextItemWidth(ImFloor(em * cExportListWidthEm));
+        ComboScroll("##SampleRate", &sSettings.sampleRateIndex, sampleRateItems, sSampleRateDetails, IM_ARRAYSIZE(sSampleRateItems));
+    }
 
     if (hasStream || (hasSequence && (!single || summary.trackNum > 1)))
     {
@@ -475,6 +479,15 @@ static void DrawExportFormatBox(const SoundExportSummary& summary, bool single, 
             ComboScroll("##Files", &sSettings.filesIndex, sExportFilesItems, sExportFilesDetails, IM_ARRAYSIZE(sExportFilesItems));
         else
             ComboScroll("##Files", &sSettings.filesIndex, sExportSeqFilesItems, sExportSeqFilesDetails, IM_ARRAYSIZE(sExportSeqFilesItems));
+    }
+
+    if (!single)
+    {
+        sead::FixedSafeString<256> exampleName;
+        BuildExportFileName(&exampleName, sPendingSounds.front(), CalcExportIdWidth(sPendingSounds));
+
+        GroupBoxRowLabel(messages::exporting::cIdInNames, labelWidth);
+        DrawExportIdCheck(exampleName.cstr(), cWavExtension);
     }
 
     if (summary.loopNum > 0)
@@ -500,8 +513,7 @@ static void DrawSoundExportOptions(s32 seqCount, s32 strmCount, s32 waveCount)
 {
     const s32 count = static_cast<s32>(sPendingSounds.size());
     const bool single = count == 1;
-    const bool mixed = seqCount != count && strmCount != count;
-    const char* title = mixed ? messages::exporting::cSoundsTitle : seqCount > 0 ? messages::exporting::cSequenceTitle : messages::exporting::cStreamTitle;
+    const char* title = seqCount == count ? messages::exporting::cSequenceTitle : strmCount == count ? messages::exporting::cStreamTitle : messages::exporting::cSoundsTitle;
     const sead::FormatFixedSafeString<64> popupName("%s###ExportSound", title);
     const f32 em = ImGui::GetFontSize();
 
@@ -533,7 +545,7 @@ static void DrawSoundExportOptions(s32 seqCount, s32 strmCount, s32 waveCount)
 
     DrawPageHeader(single ? GetItemIcon(sPendingSounds[0]) : ICON_LC_FILE_AUDIO, headTitle.cstr(), FormatExportHeadDetail(summary, seqCount, strmCount, waveCount).cstr());
 
-    const f64 totalSec = DrawExportTimelineBox(summary, count);
+    const f64 totalSec = seqCount + strmCount > 0 ? DrawExportTimelineBox(summary, count) : 0.0;
 
     sSettings.loopCount = ImClamp(sSettings.loopCount, cExportLoopCountMin, cExportLoopCountMax);
     sSettings.fadeSec = ImClamp(sSettings.fadeSec, cExportFadeSecMin, cExportFadeSecMax);
@@ -586,7 +598,7 @@ void DrawSoundExportDialog()
         }
     }
 
-    if (seqCount > 0 || strmCount > 0)
+    if (seqCount > 0 || strmCount > 0 || waveCount > 1)
     {
         DrawSoundExportOptions(seqCount, strmCount, waveCount);
         return;

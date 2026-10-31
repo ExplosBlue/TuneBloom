@@ -231,8 +231,17 @@ void AudioAssetPanel::drawWaveformBox(FrameContext& ctx)
 
     const f32 buttonSize = ImGui::GetFrameHeight();
 
-    if (BeginWaveformHeader(buttonSize, ctx.info->isLoop, ctx.canSetLoop ? nullptr : ctx.loopReason))
+    WaveformReplaceTool replace;
+    replace.tooltip = messages::common::cReplaceAudio;
+
+    if (!ActiveAudioResource().canReplaceAudio(*ctx.asset, &replace.disabledReason) && !replace.disabledReason)
+        replace.disabledReason = messages::resource::cReplaceUnsupported;
+
+    if (BeginWaveformHeader(buttonSize, ctx.info->isLoop, ctx.canSetLoop ? nullptr : ctx.loopReason, &replace))
         commitLoop(ctx, !ctx.info->isLoop, ctx.info->loopStartFrame);
+
+    if (replace.pressed)
+        RequestAudioAssetReplace(ctx.asset);
 
     sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
     const bool canPlay = !ctx.asset->getPlaybackError(&playbackError);

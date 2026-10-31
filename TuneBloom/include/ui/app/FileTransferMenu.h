@@ -2,3 +2,4 @@
 
 void DrawImportMenu();
 void DrawExportMenu();
+bool CanOpenExportMenu();

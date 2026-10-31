@@ -6,6 +6,7 @@
 #include <ui/widgets/Dialogs.h>
 #include <ui/export/ExportInternal.h>
 #include <ui/file/File.h>
+#include <ui/file/FileDrag.h>
 #include <ui/file/FileDialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
@@ -54,12 +55,13 @@ struct AssetAudioImport
 
 static AssetAudioImport sReplaceImport;
 static AssetAudioImport sCreateImport;
+static sead::FixedSafeString<512> sDroppedAssetPath;
 static bool sCreateNeedsFile = true;
 
 static std::vector<AudioAsset*> sPendingWavExports;
 static std::vector<AudioAsset*> sPendingFileExports;
 
-static bool IsResourceAsset(const AudioAsset* asset)
+bool IsResourceAsset(const AudioAsset* asset)
 {
     const AudioResource* resource = FindActiveAudioResource();
 
@@ -145,7 +147,15 @@ static bool AskForWav(AssetAudioImport* import, bool acceptsAnyWav, AudioAsset* 
         { messages::filedialog::cFilterWave, "*.wav" }
     };
 
-    if (!OpenFileDialog(&import->info.path, nullptr, IM_ARRAYSIZE(filters), filters) || !WaveFile::readRiffWavInfo(&import->info, acceptsAnyWav))
+    const bool isDropped = !sDroppedAssetPath.isEmpty();
+
+    if (isDropped)
+    {
+        import->info.path = sDroppedAssetPath;
+        sDroppedAssetPath.clear();
+    }
+
+    if ((!isDropped && !OpenFileDialog(&import->info.path, nullptr, IM_ARRAYSIZE(filters), filters)) || !WaveFile::readRiffWavInfo(&import->info, acceptsAnyWav))
         return false;
 
     fileio::GetFileStem(&import->fileName, import->info.path);
@@ -268,7 +278,7 @@ static void ExportPendingFiles()
         });
 }
 
-static bool CanExportFiles(const std::vector<AudioAsset*>& assets, const char** outReason)
+bool CanExportAudioAssetFiles(const std::vector<AudioAsset*>& assets, const char** outReason)
 {
     const AudioAssetKind kind = assets.front()->getCompleteFileKind();
 
@@ -290,7 +300,7 @@ static bool CanExportFiles(const std::vector<AudioAsset*>& assets, const char** 
     return true;
 }
 
-static bool CanExportWavs(const std::vector<AudioAsset*>& assets, sead::BufferedSafeString* outReason)
+bool CanExportAudioAssetWavs(const std::vector<AudioAsset*>& assets, sead::BufferedSafeString* outReason)
 {
     for (const AudioAsset* asset : assets)
     {
@@ -299,6 +309,16 @@ static bool CanExportWavs(const std::vector<AudioAsset*>& assets, sead::Buffered
     }
 
     return true;
+}
+
+void RequestExportAudioAssetFiles(const std::vector<AudioAsset*>& assets)
+{
+    sPendingFileExports = assets;
+}
+
+void RequestExportAudioAssetWavs(const std::vector<AudioAsset*>& assets)
+{
+    sPendingWavExports = assets;
 }
 
 void PlayAudioAsset(AudioAsset* asset)
@@ -356,13 +376,13 @@ static void AudioAssetContextMenuFunc(Item* item)
 
     const char* exportReason = nullptr;
 
-    if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::resource::cExportAudioFile, CanExportFiles(assets, &exportReason), exportReason))
-        sPendingFileExports = assets;
+    if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::resource::cExportAudioFile, CanExportAudioAssetFiles(assets, &exportReason), exportReason))
+        RequestExportAudioAssetFiles(assets);
 
     sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> wavReason;
 
-    if (ContextMenuItem(ICON_LC_FILE_AUDIO, messages::menu::cExportWav, CanExportWavs(assets, &wavReason), wavReason.cstr()))
-        sPendingWavExports = assets;
+    if (ContextMenuItem(ICON_LC_FILE_AUDIO, messages::menu::cExportWav, CanExportAudioAssetWavs(assets, &wavReason), wavReason.cstr()))
+        RequestExportAudioAssetWavs(assets);
 }
 
 static Item* InstanciateAudioAsset()
@@ -519,9 +539,35 @@ static void DrawAssetReplacePopup()
     ImGui::EndPopup();
 }
 
+static bool DropAudioAssetFile(const FileDrag& drag, bool isDropped)
+{
+    if (!ActiveAudioResource().canAddAssets())
+        return false;
+
+    for (const std::string& path : drag.paths)
+    {
+        if (!IsWavPath(path))
+            continue;
+
+        if (isDropped)
+            sDroppedAssetPath = path.c_str();
+
+        return true;
+    }
+
+    return false;
+}
+
 void DrawAudioAssetsUI()
 {
     AudioResource& resource = ActiveAudioResource();
+
+    static const sead::FormatFixedSafeString<64> sAddAction(messages::item::cAddDialogTitleFormat, messages::common::cAudioAsset);
+
+    SearchFieldExtra searchExtra;
+    searchExtra.addReason = resource.canAddAssets() ? nullptr : messages::resource::cAddUnsupported;
+
+    DrawTabFilterBar(&searchExtra);
 
     u32 columnCount = 0;
     const ItemColumn* columns = GetItemColumns(Item::ItemType::AudioAsset, &columnCount);
@@ -532,6 +578,7 @@ void DrawAudioAssetsUI()
     SetNextItemListFixedOrder();
     SetNextItemListRemovable(resource.canRemoveAssets());
     SetNextItemListDeselectable();
+    SetNextItemListFileDrop(&DropAudioAssetFile, sAddAction.cstr(), true);
 
     DrawAllItemsUI("Audio Asset", messages::common::cAudioAsset, resource.getAssetList(),
         resource.canAddAssets() ? &CreateAudioAssetFunc : nullptr, nullptr, &AudioAssetContextMenuFunc, GetItemFilterCallback()

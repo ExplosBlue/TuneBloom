@@ -4,10 +4,13 @@
 #include <aal/AudioResource.h>
 #include <messages/Messages.h>
 #include <ui/app/Notifications.h>
+#include <ui/app/Shortcuts.h>
 #include <bfsar/model/MessageLog.h>
 #include <ui/file/Document.h>
 #include <ui/file/UnsavedChanges.h>
+#include <ui/items/ItemColumns.h>
 #include <ui/items/ItemSelector.h>
+#include <ui/resource/ResourceViews.h>
 #include <ui/widgets/ContextMenu.h>
 #include <ui/widgets/Knob.h>
 #include <ui/widgets/Properties.h>
@@ -36,6 +39,7 @@ static constexpr s32 cMarkerVisibleRows   = 8;
 static constexpr u32 cExtDecimalMax       = 0xFFFF;
 static constexpr u64 cKeyValueMax         = 0xFFFFFFFF;
 static constexpr s32 cKeyToolNum          = 1;
+static constexpr size_t cLabelUndoMax     = 16;
 static constexpr char cNewKeyName[]       = "Key";
 static constexpr char cMarkerWidestTime[] = "00:00.000";
 static constexpr char cNewMarkerName[]    = "Marker";
@@ -52,6 +56,7 @@ enum MarkerColumn
     cMarkerColumn_Range,
     cMarkerColumn_Start,
     cMarkerColumn_Length,
+    cMarkerColumn_Remove,
     cMarkerColumn_Num
 };
 
@@ -213,19 +218,62 @@ static const char* GetMarkerName(const aal::AmtaMarker& marker)
     return marker.name.empty() ? messages::innerfile::cNoNameHint : marker.name.c_str();
 }
 
-static void CommitLabels(AssetLabelView* view, AudioAsset* asset)
+static bool WriteLabels(AudioAsset* asset, const aal::AmtaLabels& labels)
 {
     const char* error = nullptr;
 
-    view->meta.clear();
-
-    if (!ActiveAudioResource().setLabels(asset, view->labels, &error))
+    if (!ActiveAudioResource().setLabels(asset, labels, &error))
     {
         MessageLog::instance()->addPopup({ error, asset });
-        return;
+        return false;
     }
 
     SetUnsavedChanges(true);
+    return true;
+}
+
+static bool CommitLabels(AssetLabelView* view, AudioAsset* asset)
+{
+    view->meta.clear();
+
+    return WriteLabels(asset, view->labels);
+}
+
+struct LabelUndo
+{
+    u32 token = 0;
+    AudioAsset* asset = nullptr;
+    aal::AmtaLabels labels;
+};
+
+static std::vector<LabelUndo> sLabelUndos;
+static u32 sNextLabelUndoToken = 1;
+
+static void UndoLabelDelete(u32 token)
+{
+    const auto undo = std::find_if(sLabelUndos.begin(), sLabelUndos.end(), [token](const LabelUndo& entry) { return entry.token == token; });
+
+    if (undo == sLabelUndos.end())
+        return;
+
+    if (IsResourceAsset(undo->asset))
+        WriteLabels(undo->asset, undo->labels);
+
+    sLabelUndos.erase(undo);
+}
+
+static void CommitLabelDelete(AssetLabelView* view, AudioAsset* asset, aal::AmtaLabels before, const char* title, const std::string& name)
+{
+    if (!CommitLabels(view, asset))
+        return;
+
+    if (sLabelUndos.size() >= cLabelUndoMax)
+        sLabelUndos.erase(sLabelUndos.begin());
+
+    const u32 token = sNextLabelUndoToken++;
+
+    sLabelUndos.push_back({ token, asset, std::move(before) });
+    notify::Add(notify::Kind::Info, title, name.empty() ? nullptr : name.c_str(), { messages::common::cUndo, &UndoLabelDelete, token });
 }
 
 void RefreshAssetLabels(AssetLabelView* view, AudioAsset* asset)
@@ -295,7 +343,7 @@ void ApplyAssetLabelCues(AssetLabelView* view, AudioAsset* asset, const ImGui::L
     CommitLabels(view, asset);
 }
 
-static void SetupMarkerColumns()
+static void SetupMarkerColumns(bool canEdit)
 {
     const f32 fieldWidth = ImGui::CalcTextSize(cMarkerWidestTime).x + ImGui::GetStyle().FramePadding.x * 2.0f;
     const bool showRange = ImGui::GetCurrentTable()->OuterRect.GetWidth() >= ImGui::GetFontSize() * cMarkerRangeTableEm;
@@ -304,6 +352,7 @@ static void SetupMarkerColumns()
     ImGui::TableSetupColumn(messages::common::cRange, ImGuiTableColumnFlags_WidthStretch | (showRange ? 0 : ImGuiTableColumnFlags_Disabled), cMarkerRangeWeight);
     ImGui::TableSetupColumn(messages::common::cStart, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
     ImGui::TableSetupColumn(messages::common::cLength, ImGuiTableColumnFlags_WidthFixed, fieldWidth);
+    ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed | (canEdit ? 0 : ImGuiTableColumnFlags_Disabled), GetItemActionColumnWidth());
 }
 
 static void DrawMarkerTitles()
@@ -337,7 +386,7 @@ static void DrawMarkerRowMenu(AssetLabelView* view, const MarkerTable& table, s3
         edit->deleteIndex = index;
 }
 
-static void DrawMarkerName(AssetLabelView* view, const MarkerTable& table, s32 index, RowEdit* edit)
+static bool DrawMarkerName(AssetLabelView* view, const MarkerTable& table, s32 index, RowEdit* edit)
 {
     aal::AmtaMarker& marker = view->labels.markers[index];
 
@@ -371,7 +420,7 @@ static void DrawMarkerName(AssetLabelView* view, const MarkerTable& table, s32 i
             edit->changed = true;
         }
 
-        return;
+        return rowHovered;
     }
 
     if (marker.name.empty())
@@ -381,6 +430,8 @@ static void DrawMarkerName(AssetLabelView* view, const MarkerTable& table, s32 i
 
     if (rowHovered && table.canEdit && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         BeginRowRename(&marker, table.tableId, marker.name.c_str());
+
+    return rowHovered;
 }
 
 static void DrawMarkerRange(const AssetLabelView& view, const MarkerTable& table, s32 index)
@@ -402,7 +453,8 @@ static void DrawMarkerRow(AssetLabelView* view, const MarkerTable& table, s32 in
     ImGui::PushID(index);
     ImGui::TableNextRow();
 
-    DrawMarkerName(view, table, index, edit);
+    const bool rowHovered = DrawMarkerName(view, table, index, edit);
+
     DrawMarkerRange(*view, table, index);
 
     const u32 startMax = table.sampleCount > marker.frameCount ? table.sampleCount - marker.frameCount : 0;
@@ -413,6 +465,16 @@ static void DrawMarkerRow(AssetLabelView* view, const MarkerTable& table, s32 in
 
     if (ImGui::TableSetColumnIndex(cMarkerColumn_Length))
         edit->changed |= IsItemEditCommitted(DrawCellTimeField("##Length", &marker.frameCount, 0, lengthMax, table.sampleCount, table.sampleRate, !table.canEdit));
+
+    if (table.canEdit && ImGui::TableSetColumnIndex(cMarkerColumn_Remove))
+    {
+        BeginItemActionCell();
+
+        if (DrawRowHoverButton("##Delete", ICON_LC_X, rowHovered, messages::menu::cDeleteMarker, GetItemActionCellSize(), GetRowButtonSize()))
+            edit->deleteIndex = index;
+
+        EndItemActionCell();
+    }
 
     ImGui::PopID();
 }
@@ -439,7 +501,7 @@ static void DrawMarkerTable(AssetLabelView* view, MarkerTable* table, RowEdit* e
     table->tableId = ImGui::GetCurrentTable()->ID;
 
     ImGui::TableSetupScrollFreeze(0, 1);
-    SetupMarkerColumns();
+    SetupMarkerColumns(table->canEdit);
     DrawMarkerTitles();
 
     for (s32 index = 0; index < markerNum; index++)
@@ -461,14 +523,42 @@ static bool EraseEditedRow(std::vector<T>* rows, const RowEdit& edit)
     return true;
 }
 
-static void ApplyRowEdit(AssetLabelView* view, AudioAsset* asset, const RowEdit& edit)
+template <typename T>
+static bool EraseRowWithUndo(AssetLabelView* view, AudioAsset* asset, std::vector<T>* rows, const RowEdit& edit, const char* title)
 {
-    if (EraseEditedRow(&view->labels.markers, edit))
-        view->selectedMarker = -1;
-    else if (!edit.changed)
+    if (edit.deleteIndex < 0 || edit.deleteIndex >= static_cast<s32>(rows->size()))
+        return false;
+
+    aal::AmtaLabels before = view->labels;
+    const std::string name = (*rows)[edit.deleteIndex].name;
+
+    EraseEditedRow(rows, edit);
+    CommitLabelDelete(view, asset, std::move(before), title, name);
+
+    return true;
+}
+
+static void HandleMarkerDeleteKey(const AssetLabelView& view, const MarkerTable& table, RowEdit* edit)
+{
+    const s32 index = view.selectedMarker;
+
+    if (!table.canEdit || index < 0 || index >= static_cast<s32>(view.labels.markers.size()) || edit->deleteIndex >= 0)
         return;
 
-    CommitLabels(view, asset);
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && shortcuts::Pressed(shortcuts::Action::DeleteSelection))
+        edit->deleteIndex = index;
+}
+
+static void ApplyRowEdit(AssetLabelView* view, AudioAsset* asset, const RowEdit& edit)
+{
+    if (EraseRowWithUndo(view, asset, &view->labels.markers, edit, messages::resource::cMarkerDeletedTitle))
+    {
+        view->selectedMarker = -1;
+        return;
+    }
+
+    if (edit.changed)
+        CommitLabels(view, asset);
 }
 
 void DrawAssetMarkersBox(AssetLabelView* view, AudioAsset* asset, u32 sampleCount, u32 sampleRate, u32 addFrame)
@@ -504,9 +594,43 @@ void DrawAssetMarkersBox(AssetLabelView* view, AudioAsset* asset, u32 sampleCoun
     else
         DrawMarkerTable(view, &table, &edit);
 
+    HandleMarkerDeleteKey(*view, table, &edit);
+
     EndPropertyBox();
 
     ApplyRowEdit(view, asset, edit);
+}
+
+static bool IsLabelRowHovered(const ImVec2& rowMin, f32 rowWidth)
+{
+    const ImVec2 rowMax(rowMin.x + rowWidth, rowMin.y + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemSpacing.y);
+
+    return ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(rowMin, rowMax);
+}
+
+static void SetLabelFieldWidth(const AssetLabelView& view)
+{
+    const f32 slotWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
+
+    ImGui::SetNextItemWidth(view.labelEditReason ? -FLT_MIN : -slotWidth);
+}
+
+static bool DrawLabelRemoveButton(const AssetLabelView& view, const char* id, bool rowHovered, bool hasValue, const char* tooltip)
+{
+    if (view.labelEditReason)
+        return false;
+
+    const f32 slot = ImGui::GetFrameHeight();
+
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+    if (!hasValue)
+    {
+        ImGui::Dummy(ImVec2(slot, slot));
+        return false;
+    }
+
+    return DrawRowHoverButton(id, ICON_LC_X, rowHovered, tooltip, ImVec2(slot, slot), GetRowButtonSize());
 }
 
 void DrawAssetTagsRow(AssetLabelView* view, AudioAsset* asset)
@@ -514,8 +638,11 @@ void DrawAssetTagsRow(AssetLabelView* view, AudioAsset* asset)
     if (!view->hasTags || !view->isReadable || (view->labels.tags.empty() && view->labelEditReason))
         return;
 
+    const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+    const bool rowHovered = IsLabelRowHovered(rowMin, ImGui::GetContentRegionAvail().x);
+
     PropertyRow(messages::resource::cTags);
-    ImGui::SetNextItemWidth(-FLT_MIN);
+    SetLabelFieldWidth(*view);
     ImGui::BeginDisabled(view->labelEditReason != nullptr);
     ImGui::InputTextWithHint("##Tags", messages::common::cNone, view->tagsText.getBuffer(), view->tagsText.getBufferSize());
 
@@ -525,6 +652,17 @@ void DrawAssetTagsRow(AssetLabelView* view, AudioAsset* asset)
 
     if (view->labelEditReason)
         ImGui::SetItemTooltip("%s", view->labelEditReason);
+
+    if (DrawLabelRemoveButton(*view, "##ClearTags", rowHovered, !view->labels.tags.empty(), messages::resource::cClearTags))
+    {
+        aal::AmtaLabels before = view->labels;
+        const std::string tags = view->tagsText.cstr();
+
+        view->labels.tags.clear();
+        view->tagsText.clear();
+        CommitLabelDelete(view, asset, std::move(before), messages::resource::cTagsClearedTitle, tags);
+        return;
+    }
 
     if (!commit)
         return;
@@ -620,8 +758,9 @@ static void DrawKeyValue(AssetLabelView* view, s32 index, RowEdit* edit)
 {
     sead::FixedSafeString<256>& text = view->keyTexts[index];
 
+    SetLabelFieldWidth(*view);
     ImGui::BeginDisabled(view->labelEditReason != nullptr);
-    ImGui::InputTextWithHint("##Value", messages::common::cNone, text.getBuffer(), text.getBufferSize());
+    ImGui::InputTextWithHint("##Value", view->labels.keys[index].isText ? messages::common::cNone : nullptr, text.getBuffer(), text.getBufferSize());
 
     const bool commit = ImGui::IsItemDeactivatedAfterEdit();
 
@@ -634,9 +773,13 @@ static void DrawKeyValue(AssetLabelView* view, s32 index, RowEdit* edit)
         return;
 
     if (ParseKeyValue(text.cstr(), &view->labels.keys[index]))
+    {
         edit->changed = true;
-    else
-        FormatKeyValues(view->labels.keys, &view->keyTexts);
+        return;
+    }
+
+    notify::Add(notify::Kind::Warning, messages::resource::cKeyValueInvalid);
+    FormatKeyValues(view->labels.keys, &view->keyTexts);
 }
 
 void DrawAssetKeyRows(AssetLabelView* view, AudioAsset* asset)
@@ -647,15 +790,20 @@ void DrawAssetKeyRows(AssetLabelView* view, AudioAsset* asset)
 
     for (s32 index = 0; index < static_cast<s32>(keys.size()); index++)
     {
+        const ImVec2 rowMin = ImGui::GetCursorScreenPos();
+        const bool rowHovered = IsLabelRowHovered(rowMin, ImGui::GetContentRegionAvail().x);
+
         ImGui::PushID(index);
         DrawKeyName(view, index, renameId, &edit);
         PropertyValueColumn();
         DrawKeyValue(view, index, &edit);
+
+        if (DrawLabelRemoveButton(*view, "##DeleteKey", rowHovered, true, messages::menu::cDeleteKey))
+            edit.deleteIndex = index;
+
         ImGui::PopID();
     }
 
-    if (!EraseEditedRow(&keys, edit) && !edit.changed)
-        return;
-
-    CommitLabels(view, asset);
+    if (!EraseRowWithUndo(view, asset, &keys, edit, messages::resource::cKeyDeletedTitle) && edit.changed)
+        CommitLabels(view, asset);
 }

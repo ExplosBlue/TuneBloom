@@ -355,7 +355,11 @@ bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width, boo
 constexpr f32 cListSearchHeightEm = 1.5f;
 constexpr f32 cListSearchGapEm    = 0.4f;
 
-bool ListSearchField(const char* id, char* buffer, size_t bufferSize, f32 width, bool* caseSensitive, bool setFocus, const SearchFieldExtra* extra)
+static ImGuiID sListAddWindow = 0;
+static s32 sListAddFrame = -1;
+static ImVec2 sListAddAnchor;
+
+static void PushListSearchStyle()
 {
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 em = ImGui::GetFontSize();
@@ -364,12 +368,58 @@ bool ListSearchField(const char* id, char* buffer, size_t bufferSize, f32 width,
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, padY));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, gap));
+}
+
+bool DrawSearchAddButton(f32 size, const char* tooltip, const char* disabledReason)
+{
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+    ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgHovered));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgActive));
+    ImGui::BeginDisabled(disabledReason != nullptr);
+
+    const bool pressed = ImGui::Button(ICON_LC_PLUS "##add", ImVec2(size, size));
+
+    ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
+    ImGui::SetItemTooltip("%s", disabledReason ? disabledReason : tooltip);
+
+    return pressed;
+}
+
+bool ConsumeListAddRequest(ImVec2* outAnchor)
+{
+    if (sListAddWindow != ImGui::GetCurrentWindow()->ID || sListAddFrame != ImGui::GetFrameCount())
+        return false;
+
+    sListAddWindow = 0;
+    *outAnchor = sListAddAnchor;
+    return true;
+}
+
+bool ListSearchField(const char* id, char* buffer, size_t bufferSize, f32 width, bool* caseSensitive, bool setFocus, const SearchFieldExtra* extra)
+{
+    PushListSearchStyle();
 
     const bool changed = SearchField(id, buffer, bufferSize, width, caseSensitive, setFocus, extra);
 
     ImGui::PopStyleVar(2);
 
     return changed;
+}
+
+static void DrawListAddButton(const SearchFieldExtra* extra)
+{
+    PushListSearchStyle();
+
+    if (DrawSearchAddButton(ImGui::GetFrameHeight(), messages::common::cAdd, extra ? extra->addReason : nullptr))
+    {
+        sListAddWindow = ImGui::GetCurrentWindow()->ID;
+        sListAddFrame = ImGui::GetFrameCount();
+        sListAddAnchor = ImGui::GetItemRectMax();
+    }
+
+    ImGui::PopStyleVar(2);
 }
 
 static bool IsListHostWindow()
@@ -418,7 +468,12 @@ static void DrawTabFilterBarPane(s32 pane, const SearchFieldExtra* extra = nullp
 
     const f32 padding = BeginListRow();
 
-    ListSearchField(pane == cListPane ? "##Search" : "##SearchDetail", tabFilter.filter.getBuffer(), tabFilter.filter.getBufferSize(), ImGui::GetContentRegionAvail().x - padding, &tabFilter.caseSensitive, setFocus, extra);
+    PushListSearchStyle();
+    const f32 addWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
+    ImGui::PopStyleVar(2);
+
+    ListSearchField(pane == cListPane ? "##Search" : "##SearchDetail", tabFilter.filter.getBuffer(), tabFilter.filter.getBufferSize(), ImGui::GetContentRegionAvail().x - padding - addWidth, &tabFilter.caseSensitive, setFocus, extra);
+    DrawListAddButton(extra);
 }
 
 void DrawTabFilterBar(const SearchFieldExtra* extra)

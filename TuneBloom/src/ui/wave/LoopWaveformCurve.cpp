@@ -242,6 +242,15 @@ static void AddCurvePoint(LoopWaveformState& state, ImVec2 mouse, float width, f
 bool BeginCurveEdit(LoopWaveformState& state, ImVec2 mouse, float width, float height, bool* changed)
 {
     const int index = state.curveHoverIndex;
+    const bool isInnerPoint = index > 0 && index + 1 < static_cast<int>(state.curve.size()) && !state.curveHoverTension;
+
+    if (isInnerPoint && !GetIO().WantTextInput && shortcuts::Pressed(shortcuts::Action::DeleteSelection))
+    {
+        state.curve.erase(state.curve.begin() + index);
+        state.curveHoverIndex = -1;
+        *changed = true;
+        return true;
+    }
 
     if (IsMouseClicked(ImGuiMouseButton_Right))
     {

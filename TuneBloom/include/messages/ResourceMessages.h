@@ -73,6 +73,11 @@ inline constexpr const char* cMarkers = "Markers";
 inline constexpr const char* cTags = "Tags";
 inline constexpr const char* cAddMarker = "Add Marker";
 inline constexpr const char* cAddKey = "Add Key";
+inline constexpr const char* cClearTags = "Clear Tags";
+inline constexpr const char* cMarkerDeletedTitle = "Marker deleted";
+inline constexpr const char* cKeyDeletedTitle = "Key deleted";
+inline constexpr const char* cTagsClearedTitle = "Tags cleared";
+inline constexpr const char* cKeyValueInvalid = "The value must be a whole number";
 inline constexpr const char* cNoMarkers = "No Markers";
 inline constexpr const char* cMarkersLayoutUnknown = "The layout of this metadata is not supported";
 

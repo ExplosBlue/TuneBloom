@@ -59,6 +59,7 @@ static bool sNextListFileDropOpensAdd = false;
 static bool sNextListFixedOrder = false;
 static bool sNextListRemovable = true;
 static bool sNextListDeselectable = false;
+static ContextMenuCallback sNextListAddMenu = nullptr;
 
 void ScrollItemListTo(Item* item)
 {
@@ -130,6 +131,11 @@ void SetNextItemListDeselectable()
     sNextListDeselectable = true;
 }
 
+void SetNextItemListAddMenu(ContextMenuCallback callback)
+{
+    sNextListAddMenu = callback;
+}
+
 static bool IsItemVisible(Item* item, ItemFilterCallback filterCallback)
 {
     return item && (!filterCallback || filterCallback(item));
@@ -162,6 +168,9 @@ static void CollectItemListRows(ItemListContext& ctx)
     sNextListFileDrop = nullptr;
     sNextListFileDropAction = nullptr;
     sNextListFileDropOpensAdd = false;
+
+    ctx.addMenuCallback = sNextListAddMenu;
+    sNextListAddMenu = nullptr;
 
     ctx.fixedOrder = sNextListFixedOrder;
     ctx.removable = sNextListRemovable;
@@ -892,6 +901,7 @@ void DrawAllItemsUI(const char* id, const char *listName, Item::List &list, Crea
     ctx.highlightItem = highlightItem;
     ctx.disableAddWindow = disableAddWindow;
     ctx.isSubWindow = forceSubWindow;
+    ctx.addRequested = ConsumeListAddRequest(&ctx.addAnchor);
 
     CollectItemListRows(ctx);
     BeginItemListChild(ctx, id);

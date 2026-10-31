@@ -47,6 +47,7 @@ struct ItemListContext
     ItemListFileDropCallback fileDropCallback = nullptr;
     const char* fileDropAction = nullptr;
     bool fileDropOpensAdd = false;
+    ContextMenuCallback addMenuCallback = nullptr;
     f32 footerWidth = 0.0f;
     f32 addDialogWidth = 0.0f;
     bool fixedOrder = false;
@@ -93,6 +94,8 @@ struct ItemListContext
 
     ItemRenameResult renameResult = ItemRenameResult::None;
     bool add = false;
+    bool addRequested = false;
+    ImVec2 addAnchor;
     bool reorder = false;
     Item* reorderSource = nullptr;
     Item* reorderTarget = nullptr;

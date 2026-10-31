@@ -130,6 +130,7 @@ void DrawBarsListUI(BarsListFile& file)
 
     static const sead::FormatFixedSafeString<64> sAddAction(messages::item::cAddDialogTitleFormat, messages::barslist::cEntry);
 
+    DrawTabFilterBar();
     SetNextItemListColumns(columns, columnCount);
     SetNextItemListAction(&BarsListRowActionFunc);
     SetNextItemListOpen(&OpenEntryBars);

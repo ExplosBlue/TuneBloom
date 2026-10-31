@@ -76,6 +76,7 @@ struct FilesRowKey
     s32 root;
     s32 index;
     s32 sound;
+    s32 groupEnd;
 };
 
 struct FilesRow
@@ -87,6 +88,7 @@ struct FilesRow
     s32 depth = 0;
     s32 prefixLength = 0;
     s32 nameStart = 0;
+    s32 groupStart = 0;
     u32 childCount = 0;
     u64 groupSize = 0;
     bool isMixedFormat = false;
@@ -94,12 +96,17 @@ struct FilesRow
 
     bool isSame(const FilesRow& other) const
     {
-        return kind == other.kind && root == other.root && index == other.index && sound == other.sound;
+        return kind == other.kind && root == other.root && index == other.index && sound == other.sound && getGroupEnd() == other.getGroupEnd();
+    }
+
+    s32 getGroupEnd() const
+    {
+        return kind == FilesRowKind::Prefix ? nameStart : 0;
     }
 
     FilesRowKey key() const
     {
-        return { static_cast<s32>(kind), root, index, sound };
+        return { static_cast<s32>(kind), root, index, sound, getGroupEnd() };
     }
 };
 
@@ -349,6 +356,7 @@ private:
     void collectRootRows(FrameContext& ctx, s32 root);
     void collectFolderRows(const FrameContext& ctx, std::vector<FilesRow>& rows, s32 root, s32 folder, s32 depth, bool isAllOpen);
     void collectFileRows(std::vector<FilesRow>& rows, s32 root, s32 folder, s32 depth, bool isAllOpen);
+    void collectPrefixRows(std::vector<FilesRow>& rows, s32 root, s32 folder, s32 depth, bool isAllOpen, const std::vector<s32>& files, s32 groupStart, s32 start);
     void markSharedPrefixes(std::vector<FilesRow>& rows, size_t firstFile) const;
     void collectAllOpenRows(const FrameContext& ctx, std::vector<FilesRow>& rows);
     void collectSearchRows(FrameContext& ctx, s32 root, bool isAllOpen);

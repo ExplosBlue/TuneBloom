@@ -20,5 +20,15 @@ void DrawGroupPropertiesUI();
 InstanciateItemCallback CreateGroupFunc(bool clear);
 void DrawGroupFileRow(const Group* group);
 void DrawGroupContextMenu(Item* item);
+
+enum class GroupFileAction
+{
+    None,
+    Export,
+    Locate
+};
+
+GroupFileAction GetGroupFileAction(const Item* item);
+void RunGroupFileAction(Item* item);
 void HandleGroupFileRequests();
 void NotifyDeletedGroupFiles();

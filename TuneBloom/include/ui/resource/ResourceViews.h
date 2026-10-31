@@ -3,6 +3,8 @@
 #include <basis/seadTypes.h>
 #include <prim/seadSafeString.h>
 
+#include <vector>
+
 class AudioAsset;
 class AudioResource;
 enum class AudioAssetKind;
@@ -21,3 +23,8 @@ void PlayAudioAsset(AudioAsset* asset);
 void RequestAudioAssetReplace(AudioAsset* asset);
 bool IsAudioAssetReplacePending(const AudioAsset* asset);
 void ReleaseAudioAssetView();
+bool IsResourceAsset(const AudioAsset* asset);
+bool CanExportAudioAssetFiles(const std::vector<AudioAsset*>& assets, const char** outReason);
+bool CanExportAudioAssetWavs(const std::vector<AudioAsset*>& assets, sead::BufferedSafeString* outReason);
+void RequestExportAudioAssetFiles(const std::vector<AudioAsset*>& assets);
+void RequestExportAudioAssetWavs(const std::vector<AudioAsset*>& assets);

@@ -29,11 +29,23 @@ static bool DrawLoopSwitch(bool isLoop, f32 size, const char* disabledReason)
     return pressed && !disabledReason;
 }
 
-bool BeginWaveformHeader(f32 playToolsWidth, bool isLoop, const char* loopDisabledReason)
+static void DrawReplaceTool(WaveformReplaceTool* replace, f32 size, f32 groupGap)
+{
+    ImGui::BeginDisabled(replace->disabledReason != nullptr);
+
+    replace->pressed = ImGui::Button(ICON_LC_ARROW_DOWN_UP "###ReplaceTool", ImVec2(size, size)) && !replace->disabledReason;
+
+    ImGui::EndDisabled();
+    ImGui::SetItemTooltip("%s", replace->disabledReason ? replace->disabledReason : replace->tooltip);
+    ImGui::SameLine(0.0f, groupGap);
+}
+
+bool BeginWaveformHeader(f32 playToolsWidth, bool isLoop, const char* loopDisabledReason, WaveformReplaceTool* replace)
 {
     const f32 buttonSize = ImGui::GetFrameHeight();
     const f32 groupGap = ImFloor(ImGui::GetFontSize() * cToolGroupGapEm);
-    const f32 toolsWidth = buttonSize + groupGap + playToolsWidth;
+    const f32 replaceWidth = replace ? buttonSize + groupGap : 0.0f;
+    const f32 toolsWidth = replaceWidth + buttonSize + groupGap + playToolsWidth;
     const ImVec2 headerPos = ImGui::GetCursorScreenPos();
     const f32 toolsX = headerPos.x + ImGui::GetContentRegionAvail().x - toolsWidth;
 
@@ -41,6 +53,9 @@ bool BeginWaveformHeader(f32 playToolsWidth, bool isLoop, const char* loopDisabl
 
     ImGui::SameLine();
     ImGui::SetCursorScreenPos(ImVec2(toolsX, headerPos.y));
+
+    if (replace)
+        DrawReplaceTool(replace, buttonSize, groupGap);
 
     const bool loopToggled = DrawLoopSwitch(isLoop, buttonSize, loopDisabledReason);
 

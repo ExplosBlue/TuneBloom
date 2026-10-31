@@ -27,8 +27,7 @@ static constexpr f32 cNameMinEm        = 8.0f;
 static constexpr f32 cNameComfortEm    = 20.0f;
 static constexpr f32 cFolderCountChars = 4.0f;
 static constexpr u32 cPrefixMinLength  = 3;
-static constexpr u32 cPrefixGroupMin   = 2;
-static constexpr u32 cGroupPrefixMin   = 2;
+static constexpr u32 cPrefixGroupMin   = 3;
 static constexpr char cPrefixSeparator = '_';
 
 static constexpr const char* cRowMenuId       = "##menu";
@@ -62,30 +61,165 @@ static const SoundTypeInfo& GetSoundType(ArchiveSoundType type)
     return cSoundTypes[static_cast<s32>(type)];
 }
 
+static bool IsUpperLetter(char c)
+{
+    return c >= 'A' && c <= 'Z';
+}
+
+static bool IsLowerLetter(char c)
+{
+    return c >= 'a' && c <= 'z';
+}
+
+static bool IsDigit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static bool IsWordStart(std::string_view name, size_t at)
+{
+    if (at == 0 || at >= name.size())
+        return false;
+
+    const char previous = name[at - 1];
+    const char current = name[at];
+
+    if (previous == cPrefixSeparator || current == cPrefixSeparator)
+        return previous == cPrefixSeparator && current != cPrefixSeparator;
+
+    if (IsLowerLetter(previous))
+        return IsUpperLetter(current) || IsDigit(current);
+
+    if (IsDigit(previous))
+        return IsUpperLetter(current);
+
+    if (IsUpperLetter(previous))
+        return IsDigit(current) || (IsUpperLetter(current) && at + 1 < name.size() && IsLowerLetter(name[at + 1]));
+
+    return false;
+}
+
+static size_t FindWordEnd(std::string_view name, size_t start)
+{
+    size_t end = start + 1;
+
+    while (end < name.size() && !IsWordStart(name, end))
+        end++;
+
+    return std::min(end, name.size());
+}
+
 static s32 SharedPrefixLength(std::string_view left, std::string_view right)
 {
     const size_t common = std::mismatch(left.begin(), left.begin() + std::min(left.size(), right.size()), right.begin()).first - left.begin();
-    const size_t separator = left.rfind(cPrefixSeparator, common == 0 ? 0 : common - 1);
 
-    if (common == 0 || separator == std::string_view::npos || separator + 1 < cPrefixMinLength)
-        return 0;
+    for (size_t length = common; length >= cPrefixMinLength; length--)
+    {
+        if (IsWordStart(left, length) && (length == right.size() || IsWordStart(right, length)))
+            return static_cast<s32>(length);
+    }
 
-    return static_cast<s32>(separator + 1);
+    return 0;
 }
 
-static std::string_view GetGroupName(const std::string& stem)
+static std::string_view GetNameCore(const std::string& stem)
 {
-    const size_t separator = stem.find(cPrefixSeparator);
-
-    if (separator == std::string::npos || separator + 1 < cGroupPrefixMin || separator + 1 == stem.size())
-        return stem;
-
-    return std::string_view(stem).substr(0, separator);
+    return std::string_view(stem).substr(0, stem.find('.'));
 }
 
-static bool IsGroupBase(const std::string& stem)
+static size_t SkipSeparators(std::string_view core, size_t start)
 {
-    return GetGroupName(stem).size() == stem.size();
+    while (start < core.size() && core[start] == cPrefixSeparator)
+        start++;
+
+    return start;
+}
+
+static std::string_view GetGroupKey(std::string_view core, size_t start)
+{
+    const size_t wordStart = SkipSeparators(core, start);
+
+    if (wordStart >= core.size())
+        return {};
+
+    size_t end = FindWordEnd(core, wordStart);
+
+    while (end > wordStart + 1 && core[end - 1] == cPrefixSeparator)
+        end--;
+
+    return core.substr(start, end - start);
+}
+
+static bool HasLongerStem(const std::vector<std::string_view>& stems, size_t end)
+{
+    return std::any_of(stems.begin(), stems.end(), [end](std::string_view stem) { return stem.size() > end; });
+}
+
+static bool HasBaseStem(const std::vector<std::string_view>& stems, size_t end)
+{
+    return std::any_of(stems.begin(), stems.end(), [end](std::string_view stem) { return stem.size() <= end; });
+}
+
+static bool IsSharedWord(const std::vector<std::string_view>& stems, size_t start, size_t end)
+{
+    const std::string_view word = stems.front().substr(start, end - start);
+
+    return std::all_of(stems.begin(), stems.end(), [&](std::string_view stem) { return stem.substr(start, end - start) == word && (stem.size() == end || IsWordStart(stem, end)); });
+}
+
+static size_t CalcGroupEnd(const std::vector<std::string_view>& stems, size_t end)
+{
+    const auto isBaseOrSeparator = [&end](std::string_view stem) { return stem.size() <= end || stem[end] == cPrefixSeparator; };
+
+    while (HasLongerStem(stems, end + 1) && std::all_of(stems.begin(), stems.end(), isBaseOrSeparator))
+        end++;
+
+    while (!HasBaseStem(stems, end))
+    {
+        const size_t wordEnd = FindWordEnd(stems.front(), end);
+
+        if (!HasLongerStem(stems, wordEnd) || !IsSharedWord(stems, end, wordEnd))
+            break;
+
+        end = wordEnd;
+    }
+
+    return end;
+}
+
+static std::vector<s32> FindPrefixGroups(const FileIndexSnapshot& snapshot, const std::vector<s32>& files, size_t start)
+{
+    std::vector<s32> leaders(files.size(), -1);
+    std::vector<std::string_view> keys(files.size());
+    std::vector<s32> order(files.size());
+
+    for (s32 i = 0; i < static_cast<s32>(files.size()); i++)
+    {
+        keys[i] = GetGroupKey(GetNameCore(snapshot.files[files[i]].stem), start);
+        order[i] = i;
+    }
+
+    std::stable_sort(order.begin(), order.end(), [&keys](s32 left, s32 right) { return keys[left] < keys[right]; });
+
+    for (size_t first = 0; first < order.size();)
+    {
+        const std::string_view key = keys[order[first]];
+        bool hasLongerStem = false;
+        size_t end = first;
+
+        while (end < order.size() && keys[order[end]] == key)
+            hasLongerStem |= GetNameCore(snapshot.files[files[order[end++]]].stem).size() > start + key.size();
+
+        if (!key.empty() && hasLongerStem && end - first >= cPrefixGroupMin)
+        {
+            for (size_t member = first; member < end; member++)
+                leaders[order[member]] = order[first];
+        }
+
+        first = end;
+    }
+
+    return leaders;
 }
 
 static std::string_view GetShownStem(const FileIndexSnapshot& snapshot, const FilesRow& row)
@@ -101,11 +235,12 @@ static bool IsSiblingFileRow(const FilesRow& row, const FilesRow& other)
 static s32 CalcHiddenPrefixLength(const char* name, s32 prefixLength, f32 width)
 {
     const f32 markerWidth = ImGui::CalcTextSize(cPrefixMarker).x;
+    const std::string_view text = name;
 
-    for (s32 cut = 0; cut < prefixLength; cut++)
+    for (s32 cut = 1; cut <= prefixLength; cut++)
     {
-        if (name[cut] == cPrefixSeparator && markerWidth + ImGui::CalcTextSize(name + cut + 1).x <= width)
-            return cut + 1;
+        if (IsWordStart(text, cut) && markerWidth + ImGui::CalcTextSize(name + cut).x <= width)
+            return cut;
     }
 
     return prefixLength;
@@ -189,45 +324,23 @@ void FilesPanel::collectFileRows(std::vector<FilesRow>& rows, s32 root, s32 fold
             files.push_back(file);
     }
 
-    std::vector<s32> leaders(files.size(), -1);
-    std::vector<u32> groupSizes(files.size(), 0);
-    const auto stemOf = [&](s32 position) -> const std::string& { return snapshot.files[files[position]].stem; };
+    collectPrefixRows(rows, root, folder, depth, isAllOpen, files, 0, 0);
+}
 
-    if (mGroupByPrefix)
-    {
-        std::vector<s32> order(files.size());
-
-        for (s32 i = 0; i < static_cast<s32>(order.size()); i++)
-            order[i] = i;
-
-        std::stable_sort(order.begin(), order.end(), [&](s32 left, s32 right) { return GetGroupName(stemOf(left)) < GetGroupName(stemOf(right)); });
-
-        for (size_t start = 0; start < order.size();)
-        {
-            const std::string_view name = GetGroupName(stemOf(order[start]));
-            bool hasPrefixedFile = false;
-            size_t end = start;
-
-            while (end < order.size() && GetGroupName(stemOf(order[end])) == name)
-                hasPrefixedFile |= !IsGroupBase(stemOf(order[end++]));
-
-            if (hasPrefixedFile && end - start >= cPrefixGroupMin)
-            {
-                for (size_t member = start; member < end; member++)
-                    leaders[order[member]] = order[start];
-
-                groupSizes[order[start]] = static_cast<u32>(end - start);
-            }
-
-            start = end;
-        }
-    }
+void FilesPanel::collectPrefixRows(std::vector<FilesRow>& rows, s32 root, s32 folder, s32 depth, bool isAllOpen, const std::vector<s32>& files, s32 groupStart, s32 start)
+{
+    const FileIndexSnapshot& snapshot = getSnapshot(root);
+    const std::vector<s32> leaders = mGroupByPrefix ? FindPrefixGroups(snapshot, files, start) : std::vector<s32>(files.size(), -1);
 
     for (s32 i = 0; i < static_cast<s32>(files.size()); i++)
     {
+        const std::string_view core = GetNameCore(snapshot.files[files[i]].stem);
+        const s32 wordStart = static_cast<s32>(SkipSeparators(core, start));
+
         if (leaders[i] < 0)
         {
-            rows.push_back({ .kind = FilesRowKind::File, .root = root, .index = files[i], .depth = depth });
+            const bool isBase = wordStart >= static_cast<s32>(core.size());
+            rows.push_back({ .kind = FilesRowKind::File, .root = root, .index = files[i], .depth = depth, .nameStart = isBase ? groupStart : wordStart });
             continue;
         }
 
@@ -235,8 +348,9 @@ void FilesPanel::collectFileRows(std::vector<FilesRow>& rows, s32 root, s32 fold
             continue;
 
         const BrowserFile& first = snapshot.files[files[i]];
-        const s32 prefixLength = static_cast<s32>(GetGroupName(first.stem).size() + 1);
-        FilesRow group = { .kind = FilesRowKind::Prefix, .root = root, .index = folder, .sound = files[i], .depth = depth, .nameStart = prefixLength, .childCount = groupSizes[i] };
+        std::vector<s32> members;
+        std::vector<std::string_view> cores;
+        FilesRow group = { .kind = FilesRowKind::Prefix, .root = root, .index = folder, .depth = depth, .groupStart = wordStart };
 
         for (s32 member = i; member < static_cast<s32>(files.size()); member++)
         {
@@ -245,20 +359,19 @@ void FilesPanel::collectFileRows(std::vector<FilesRow>& rows, s32 root, s32 fold
 
             const BrowserFile& file = snapshot.files[files[member]];
 
+            members.push_back(files[member]);
+            cores.push_back(GetNameCore(file.stem));
             group.groupSize += file.size;
             group.isMixedFormat |= strcmp(file.probe.formatName, first.probe.formatName) != 0;
         }
 
+        group.nameStart = static_cast<s32>(CalcGroupEnd(cores, start + GetGroupKey(core, start).size()));
+        group.childCount = static_cast<u32>(members.size());
+        group.sound = members[std::find_if(cores.begin(), cores.end(), [&group](std::string_view stem) { return static_cast<s32>(stem.size()) > group.nameStart; }) - cores.begin()];
         rows.push_back(group);
 
-        if (!isAllOpen && !isRowOpen(group))
-            continue;
-
-        for (s32 member = i; member < static_cast<s32>(files.size()); member++)
-        {
-            if (leaders[member] == i)
-                rows.push_back({ .kind = FilesRowKind::File, .root = root, .index = files[member], .depth = depth + 1, .nameStart = IsGroupBase(stemOf(member)) ? 0 : prefixLength });
-        }
+        if (isAllOpen || isRowOpen(group))
+            collectPrefixRows(rows, root, folder, depth + 1, isAllOpen, members, group.groupStart, group.nameStart);
     }
 }
 
@@ -481,7 +594,7 @@ f32 FilesPanel::calcNameWant(const FrameContext& ctx, const std::vector<FilesRow
         if ((!IsContentRow(row) && !isValueRoot) || isSpanningRow(row))
             continue;
 
-        const size_t nameLength = row.kind == FilesRowKind::Prefix ? row.nameStart : getRowName(row).size() - row.nameStart;
+        const size_t nameLength = row.kind == FilesRowKind::Prefix ? row.nameStart - row.groupStart : getRowName(row).size() - row.nameStart;
         const f32 width = row.depth * indent + lead + nameLength * charWidth + calcRowNoteWidth(ctx, row);
 
         widest = sead::Mathf::max(widest, width);
@@ -735,7 +848,7 @@ void FilesPanel::drawPrefixRow(FrameContext& ctx, const FilesRow& row)
     if (frame.isPressed)
         setRowOpen(row, !isExpanded);
 
-    const std::string name = std::string(GetGroupName(first.stem)) + cPrefixSeparator;
+    const std::string name = first.stem.substr(row.groupStart, row.nameStart - row.groupStart);
     const char* chevron = isExpanded ? ICON_LC_CHEVRON_DOWN : ICON_LC_CHEVRON_RIGHT;
     const ImU32 dimColor = ImGui::GetColorU32(ImGuiCol_TextDisabled);
     const sead::FixedSafeString<32> count = FormatCountText(row.childCount);

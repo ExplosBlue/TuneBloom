@@ -344,6 +344,7 @@ static void ExportMidiSoundsToFolder()
 
     BeginExportNameBatch();
 
+    const u32 idWidth = IsExportIdInName() ? CalcExportIdWidth(sMidiExport.sounds) : 0;
     s32 failureCount = 0;
 
     for (const MidiSoundEntry& entry : sMidiExport.entries)
@@ -354,7 +355,7 @@ static void ExportMidiSoundsToFolder()
             continue;
 
         sead::FixedSafeString<512> filePath;
-        BuildExportPathFromDir(&filePath, dirPath.cstr(), entry.sound, "midi");
+        BuildExportPathFromDir(&filePath, dirPath.cstr(), entry.sound, "midi", idWidth);
 
         if (!ExportMidiSound(entry, filter, filePath))
             failureCount++;
@@ -521,6 +522,18 @@ static void DrawMidiBankRow()
     DrawMidiBankCheck(messages::exporting::cFormatDls, messages::exporting::cMidiDlsType, &sMidiExport.withDls);
 }
 
+static void DrawMidiFileNamesRow()
+{
+    if (!sMidiExport.toFolder)
+        return;
+
+    sead::FixedSafeString<256> exampleName;
+    BuildExportFileName(&exampleName, sMidiExport.sounds.front(), CalcExportIdWidth(sMidiExport.sounds));
+
+    PropertyRow(messages::exporting::cIdInNames);
+    DrawExportIdCheck(exampleName.cstr(), "midi");
+}
+
 static void DrawMidiExportFooter()
 {
     const bool canExport = sMidiExport.selectedNoteNum > 0 || sMidiExport.noteNum == 0;
@@ -570,6 +583,7 @@ void DrawMidiExportDialog()
     DrawMidiExportHead();
     DrawMidiExportLists();
     DrawMidiBankRow();
+    DrawMidiFileNamesRow();
     DialogRowGap();
     DrawMidiExportFooter();
 

@@ -77,27 +77,42 @@ void DrawGroupFileRow(const Group* group)
     DetailTooltip(messages::group::cExtraFilesDetail);
 }
 
-void DrawGroupContextMenu(Item* item)
+GroupFileAction GetGroupFileAction(const Item* item)
 {
     if (!item || item->getItemType() != Item::ItemType::Group)
-        return;
+        return GroupFileAction::None;
 
-    Group* group = static_cast<Group*>(item);
+    const Group* group = static_cast<const Group*>(item);
 
     if (group->getOutputType() != Group::OutputType::External)
+        return GroupFileAction::None;
+
+    return group->getExternalFileState() == Group::ExternalFileState::Missing ? GroupFileAction::Locate : GroupFileAction::Export;
+}
+
+void RunGroupFileAction(Item* item)
+{
+    const GroupFileAction action = GetGroupFileAction(item);
+
+    if (action == GroupFileAction::Locate)
+        OpenGroupFileLocate();
+    else if (action == GroupFileAction::Export)
+        sExportGroup = static_cast<Group*>(item);
+}
+
+void DrawGroupContextMenu(Item* item)
+{
+    const GroupFileAction action = GetGroupFileAction(item);
+
+    if (action == GroupFileAction::None)
         return;
 
     ContextMenuSeparator();
 
-    if (group->getExternalFileState() == Group::ExternalFileState::Missing)
-    {
-        if (ContextMenuItem(ICON_LC_FILE_SEARCH, messages::menu::cLocateGroupFiles))
-            OpenGroupFileLocate();
-    }
-    else if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::menu::cExportGroupFile))
-    {
-        sExportGroup = group;
-    }
+    const bool isLocate = action == GroupFileAction::Locate;
+
+    if (ContextMenuItem(isLocate ? ICON_LC_FILE_SEARCH : ICON_LC_FILE_OUTPUT, isLocate ? messages::menu::cLocateGroupFiles : messages::menu::cExportGroupFile))
+        RunGroupFileAction(item);
 }
 
 static void ExportGroupFile(Group* group)

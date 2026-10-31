@@ -131,12 +131,14 @@ bool StartSoundExport(const std::vector<Sound*>& sounds, const SoundExportOption
 
     BeginExportNameBatch();
 
+    const u32 idWidth = options.idInName ? CalcExportIdWidth(sounds) : 0;
+
     for (Sound* sound : sounds)
     {
         sead::FixedSafeString<512> path(target);
 
         if (!single)
-            BuildExportPathFromDir(&path, target.cstr(), sound, cWavExtension);
+            BuildExportPathFromDir(&path, target.cstr(), sound, cWavExtension, idWidth);
 
         AddSoundTasks(sound, path);
     }

@@ -37,11 +37,8 @@ static Item* sGroupAddAfter = nullptr;
 static bool sGroupAddOpen = false;
 static sead::FixedSafeString<256> sGroupAddError;
 
-static void DrawGroupAddMenu(const char* icon, const char* label, Item* after)
+static void DrawGroupAddItems(Item* after)
 {
-    if (!BeginContextSubMenu(icon, label))
-        return;
-
     for (const GroupAddType& entry : cGroupAddTypes)
     {
         const bool hasItems = ActiveSoundArchive().getItemList(entry.type).front() != nullptr;
@@ -53,8 +50,20 @@ static void DrawGroupAddMenu(const char* icon, const char* label, Item* after)
         sGroupAddAfter = after;
         sGroupAddOpen = true;
     }
+}
 
+static void DrawGroupAddMenu(const char* icon, const char* label, Item* after)
+{
+    if (!BeginContextSubMenu(icon, label))
+        return;
+
+    DrawGroupAddItems(after);
     EndContextSubMenu();
+}
+
+static void GroupItemAddMenuFunc(Item*)
+{
+    DrawGroupAddItems(nullptr);
 }
 
 static void GroupItemContextMenuFunc(Item* item)
@@ -194,6 +203,7 @@ void DrawGroupsUI()
             sNote.format(messages::item::cCountInFormat, group->getFormattedName().cstr());
             SetNextItemListNote(sNote.cstr());
             SetNextItemListRemoveText(messages::menu::cRemoveFromGroup, messages::menu::cRemoveItemsFromGroupFormat, false);
+            SetNextItemListAddMenu(&GroupItemAddMenuFunc);
 
             DrawAllItemsUI("Item", messages::common::cItem, group->getItemInfoList(), nullptr, &GroupItemPrefixFunc, &GroupItemContextMenuFunc, GetDetailFilterCallback(), false, nullptr, nullptr, true);
             DrawGroupItemAdd(group);

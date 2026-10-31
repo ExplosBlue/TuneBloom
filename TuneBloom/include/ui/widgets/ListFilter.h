@@ -2,6 +2,8 @@
 
 #include <ui/items/ItemList.h>
 
+#include <imgui/imgui.h>
+
 struct SearchFieldExtra
 {
     bool* menuPressed = nullptr;
@@ -14,7 +16,11 @@ struct SearchFieldExtra
     const char* scopeClearTooltip = nullptr;
     bool* scopeCleared = nullptr;
     bool* scopeHovered = nullptr;
+    const char* addReason = nullptr;
 };
+
+bool DrawSearchAddButton(f32 size, const char* tooltip, const char* disabledReason = nullptr);
+bool ConsumeListAddRequest(ImVec2* outAnchor);
 
 bool SearchField(const char* id, char* buffer, size_t bufferSize, f32 width = 0.0f, bool* caseSensitive = nullptr, bool setFocus = false, const SearchFieldExtra* extra = nullptr);
 bool ListSearchField(const char* id, char* buffer, size_t bufferSize, f32 width = 0.0f, bool* caseSensitive = nullptr, bool setFocus = false, const SearchFieldExtra* extra = nullptr);

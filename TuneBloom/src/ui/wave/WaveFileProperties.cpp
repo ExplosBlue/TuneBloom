@@ -1,8 +1,10 @@
 #include <bfsar/files/WaveFile.h>
 
 #include <ui/widgets/Dialogs.h>
+#include <ui/file/Document.h>
 #include <ui/file/File.h>
 #include <ui/items/ItemColumns.h>
+#include <ui/project/FileLists.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/Knob.h>
 #include <ui/wave/LoopWaveformEditor.h>
@@ -363,8 +365,16 @@ static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& ed
     const f32 buttonsWidth = buttonSize * buttonNum + style.ItemSpacing.x * (buttonNum - 1);
     const bool playing = sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == &wave;
 
-    if (BeginWaveformHeader(buttonsWidth, edit.isLoop))
+    const bool inArchive = IsSoundArchiveOpen() && wave.list() == &ActiveSoundArchive().getWaveFileList();
+
+    WaveformReplaceTool replace;
+    replace.tooltip = messages::import::cReplaceWaveFileMenuLabel;
+
+    if (BeginWaveformHeader(buttonsWidth, edit.isLoop, nullptr, inArchive ? &replace : nullptr))
         SetWaveLoopFlag(wave, edit, !edit.isLoop);
+
+    if (replace.pressed)
+        RequestWaveFileReplace(&wave);
 
     DrawWavePlayButtons(wave, playing, buttonSize);
 

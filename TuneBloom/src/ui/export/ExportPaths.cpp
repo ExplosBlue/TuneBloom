@@ -83,10 +83,37 @@ void BuildUniqueExportPath(sead::BufferedSafeString *outPath, const char *dir, c
     outPath->format("%s/%s.%s", dir, uniqueName.cstr(), ext);
 }
 
-void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char *dir, const Sound *sound, const char *ext)
+u32 CalcExportIdWidth(u32 maxId)
+{
+    u32 width = 1;
+
+    for (; maxId >= 10; maxId /= 10)
+        width++;
+
+    return width;
+}
+
+void PrefixExportId(sead::BufferedSafeString* name, u32 id, u32 idWidth)
+{
+    if (idWidth == 0)
+        return;
+
+    sead::FixedSafeString<256> baseName;
+    baseName.copy(*name);
+
+    name->format("%0*u_%s", static_cast<s32>(idWidth), id, baseName.cstr());
+}
+
+void BuildExportFileName(sead::BufferedSafeString* out, const Sound* sound, u32 idWidth)
+{
+    ResolveSoundExportName(sound, out);
+    PrefixExportId(out, sound->getId(), idWidth);
+}
+
+void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char *dir, const Sound *sound, const char *ext, u32 idWidth)
 {
     sead::FixedSafeString<256> name;
-    ResolveSoundExportName(sound, &name);
+    BuildExportFileName(&name, sound, idWidth);
 
     BuildUniqueExportPath(outPath, dir, name, ext);
 }

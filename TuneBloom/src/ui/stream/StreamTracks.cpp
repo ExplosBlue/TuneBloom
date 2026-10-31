@@ -7,6 +7,9 @@
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/widgets/TabRowTools.h>
 #include <ui/app/UI.h>
+#include <ui/app/Shortcuts.h>
+
+#include <algorithm>
 
 const char* const cTrackMixLabels[cTrackMixLabelCount]       = { messages::common::cVolume, messages::common::cPan, messages::param::cSurroundPan, messages::stream::cTrackBypass };
 const char* const cTrackSendLabels[cTrackSendLabelCount]     = { messages::param::cSendMain, messages::param::cSendFxA, messages::param::cSendFxB, messages::param::cSendFxC };
@@ -144,6 +147,17 @@ TrackContext MakeTrackContext(const StreamSource& source)
     return ctx;
 }
 
+static void HandleTrackDeleteKey(const TrackContext& ctx, TrackEdit* edit)
+{
+    if (edit->deleteTrack || !ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) || ImGui::GetIO().WantTextInput)
+        return;
+
+    const auto highlighted = std::find(ctx.tracks.begin(), ctx.tracks.end(), GetHighlightedStreamTrack());
+
+    if (highlighted != ctx.tracks.end() && shortcuts::Pressed(shortcuts::Action::DeleteSelection))
+        edit->deleteTrack = *highlighted;
+}
+
 void DrawStreamTracksUI(const StreamSource& source)
 {
     TrackContext ctx = MakeTrackContext(source);
@@ -159,6 +173,7 @@ void DrawStreamTracksUI(const StreamSource& source)
     else
         DrawTrackTable(ctx, &edit);
 
+    HandleTrackDeleteKey(ctx, &edit);
     ApplyTrackEdit(source, edit);
     KeepStreamRegions(source.stream->getMainWave(), mainWave);
 }

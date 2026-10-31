@@ -125,6 +125,11 @@ inline constexpr const char* cStartupStartPage = "Start Page";
 inline constexpr const char* cStartupStartPageDetail = "Shows recent files and links";
 inline constexpr const char* cStartupLastArchive = "Last Archive";
 
+inline constexpr const char* cSystemOpenLabel = "From Explorer";
+inline constexpr const char* cSystemOpenNewTab = "New Tab";
+inline constexpr const char* cSystemOpenNewTabDetail = "Opens the file in an existing window";
+inline constexpr const char* cSystemOpenNewWindow = "New Window";
+
 inline constexpr const char* cAssociationLabel = "File Association";
 inline constexpr const char* cAssociationChoose = "Choose...";
 inline constexpr const char* cAssociationCountFormat = "%u of %u Types";
@@ -132,6 +137,7 @@ inline constexpr const char* cAssociationDetail = "File types that open in TuneB
 inline constexpr const char* cAssociationAppColumn = "Opens With";
 inline constexpr const char* cAssociationOnlyApp = "No other app opens this file type";
 inline constexpr const char* cAssociationFailed = "Couldn't change the file association";
+inline constexpr const char* cAssociationNewWindowVerb = "Open in New Window";
 
 inline constexpr const char* cDeviceLabel = "Playback Device";
 inline constexpr const char* cDeviceEmpty = "No playback device found";

@@ -365,6 +365,19 @@ StartupSettings& GetStartupSettings()
 }
 
 static constexpr const char* cStartupActionKeys[] = { "startPage", "lastArchive" };
+static constexpr const char* cSystemOpenKeys[]    = { "newTab", "newWindow" };
+
+template <typename T, s32 N>
+static T ReadKeyChoice(const std::string& key, const char* const (&keys)[N], T fallback)
+{
+    for (s32 i = 0; i < N; i++)
+    {
+        if (key == keys[i])
+            return static_cast<T>(i);
+    }
+
+    return fallback;
+}
 
 static StartupAction ReadStartupAction(const json::Value& startup)
 {
@@ -373,13 +386,14 @@ static StartupAction ReadStartupAction(const json::Value& startup)
     if (!key)
         return startup.getBool("reopenLastArchive", false) ? StartupAction::LastArchive : StartupAction::StartPage;
 
-    for (s32 i = 0; i < IM_ARRAYSIZE(cStartupActionKeys); i++)
-    {
-        if (*key == cStartupActionKeys[i])
-            return static_cast<StartupAction>(i);
-    }
+    return ReadKeyChoice(*key, cStartupActionKeys, StartupAction::StartPage);
+}
 
-    return StartupAction::StartPage;
+static SystemOpen ReadSystemOpen(const json::Value& startup)
+{
+    const std::string* key = startup.findString("systemOpen");
+
+    return key ? ReadKeyChoice(*key, cSystemOpenKeys, SystemOpen::NewTab) : SystemOpen::NewTab;
 }
 
 void SaveStartupConfig()
@@ -389,6 +403,7 @@ void SaveStartupConfig()
 
     json::Value startup;
     startup.setString("action", cStartupActionKeys[static_cast<s32>(sStartupSettings.action)]);
+    startup.setString("systemOpen", cSystemOpenKeys[static_cast<s32>(sStartupSettings.systemOpen)]);
     startup.setInt("recentFileCount", sStartupSettings.recentFileCount);
 
     SaveConfigSection(cSettingsFile, cStartupSection, startup);
@@ -400,6 +415,7 @@ void LoadStartupConfig()
     LoadConfigSection(cSettingsFile, cStartupSection, &startup);
 
     sStartupSettings.action = ReadStartupAction(startup);
+    sStartupSettings.systemOpen = ReadSystemOpen(startup);
     sStartupSettings.recentFileCount = sead::Mathi::clamp2(cRecentFileCountMin, startup.getInt("recentFileCount", sStartupSettings.recentFileCount), cRecentFileCountMax);
 
     json::Value session;

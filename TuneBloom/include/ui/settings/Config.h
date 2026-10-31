@@ -69,9 +69,16 @@ enum class StartupAction
     LastArchive,
 };
 
+enum class SystemOpen
+{
+    NewTab,
+    NewWindow,
+};
+
 struct StartupSettings
 {
     StartupAction action = StartupAction::StartPage;
+    SystemOpen systemOpen = SystemOpen::NewTab;
     s32 recentFileCount = cRecentFileCountDefault;
     std::string lastArchive;
     std::vector<std::string> sessionDocuments;

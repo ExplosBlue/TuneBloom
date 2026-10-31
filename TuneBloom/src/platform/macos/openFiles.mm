@@ -2,6 +2,7 @@
 #import <objc/runtime.h>
 
 #include <platform/macos/openFiles.h>
+#include <platform/macos/bundle.h>
 #include <ui/file/File.h>
 
 namespace
@@ -11,8 +12,15 @@ void handleOpenURLs(id self, SEL cmd, NSApplication* app, NSArray<NSURL*>* urls)
 {
     for (NSURL* url in urls)
     {
-        if ([url isFileURL])
-            OpenExternalPath([[url path] fileSystemRepresentation]);
+        if (![url isFileURL])
+            continue;
+
+        const char* path = [[url path] fileSystemRepresentation];
+
+        if (NeedsNewWindow(path))
+            macos::openInNewInstance(path);
+        else
+            OpenExternalPath(path);
     }
 }
 

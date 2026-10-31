@@ -80,6 +80,11 @@ inline bool IsNativeMenuOn()
     return false;
 }
 
+inline bool IsSingleInstanceOn()
+{
+    return false;
+}
+
 inline bool IsBackupOn()
 {
     return false;

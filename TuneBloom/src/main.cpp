@@ -36,6 +36,7 @@
 #include "bfsar/files/LooseStreamFile.h"
 #include "bfsar/files/LooseWaveFile.h"
 #include "ui/file/File.h"
+#include "ui/file/FileAssociation.h"
 #include "bfsar/io/FileIo.h"
 #include "bfsar/io/PackFile.h"
 #include "platform/JumpList.h"
@@ -416,9 +417,24 @@ static void setStartupFile(const char* path)
     SetStartupFile(ec ? path : fullPath.c_str());
 }
 
+static bool TakeNewWindowArgument(int* argc, char* argv[])
+{
+    if (*argc != 3 || std::strcmp(argv[1], singleinstance::cNewWindowArgument) != 0)
+        return false;
+
+    argv[1] = argv[2];
+    argv[2] = nullptr;
+    *argc = 2;
+
+    return true;
+}
+
 int main(int argc, char* argv[])
 {
-    if (argc == 2 && argv[1][0] != '-' && !testhooks::IsEnabled() && singleinstance::ForwardToRunningApp(argv[1]))
+    const bool isNewWindow = TakeNewWindowArgument(&argc, argv);
+    const bool isForwardOn = !testhooks::IsEnabled() || testhooks::IsSingleInstanceOn();
+
+    if (argc == 2 && argv[1][0] != '-' && !isNewWindow && isForwardOn && singleinstance::ForwardToRunningApp(argv[1]))
         return 0;
 
     if (argc == 2 && argv[1][0] != '-')
@@ -499,12 +515,16 @@ int main(int argc, char* argv[])
         heap->adjust();
     }
 
-    if (testhooks::IsEnabled())
-        testhooks::HideWindow(framework->getWindowHandle());
-    else
     {
-        singleinstance::StartListening();
-        jumplist::Update();
+        sead::CurrentHeapSetter heapSetter(sead::HeapMgr::getUnboundHeap());
+
+        if (testhooks::IsEnabled())
+            testhooks::HideWindow(framework->getWindowHandle());
+        else
+        {
+            jumplist::Update();
+            fileassoc::UpdateCommands();
+        }
     }
 
     sead::TaskBase::CreateArg rootArg(&sead::TTaskFactory<RootTask>);

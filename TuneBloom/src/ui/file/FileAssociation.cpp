@@ -13,6 +13,8 @@
 #include <shlobj.h>
 #include <shlwapi.h>
 
+#include <platform/SingleInstance.h>
+
 #include <cwctype>
 #elif defined(SEAD_PLATFORM_LINUX)
 #include <app/Utilll.h>
@@ -139,6 +141,8 @@ static constexpr const wchar_t* cFileExtsKey   = L"Software\\Microsoft\\Windows\
 static constexpr const wchar_t* cProgIdPrefix  = L"TuneBloom.";
 static constexpr const wchar_t* cLegacyProgId  = L"TuneBloom.SoundArchive";
 static constexpr const wchar_t* cCommandKey    = L"\\shell\\open\\command";
+static constexpr const wchar_t* cNewWindowKey  = L"\\shell\\newwindow";
+static constexpr const wchar_t* cVerbCommand   = L"\\command";
 static constexpr const wchar_t* cIconKey       = L"\\DefaultIcon";
 static constexpr const wchar_t* cOpenWithKey   = L"\\OpenWithProgids";
 
@@ -227,14 +231,23 @@ static std::wstring QueryAssociation(ASSOCSTR kind, const std::wstring& extensio
     return text;
 }
 
-static std::wstring GetOpenCommand()
+static std::wstring GetOpenCommand(const char* option)
 {
     const std::wstring path = GetExecutablePath().wstring();
 
     if (path.empty() || path.find(L'"') != std::wstring::npos)
         return std::wstring();
 
-    return L"\"" + path + L"\" \"%1\"";
+    const std::wstring optionText = option ? ToWide(option) + L" " : std::wstring();
+
+    return L"\"" + path + L"\" " + optionText + L"\"%1\"";
+}
+
+static bool SetNewWindowVerb(const std::wstring& progKey, const std::wstring& command)
+{
+    const std::wstring verbKey = progKey + cNewWindowKey;
+
+    return SetKeyText(verbKey, nullptr, ToWide(messages::preferences::cAssociationNewWindowVerb)) && SetKeyText(verbKey + cVerbCommand, nullptr, command);
 }
 
 static bool RemoveProgId(const std::wstring& progId)
@@ -295,7 +308,8 @@ static void ReadPlatformState(const FileType& type, fileassoc::TypeState* state)
 static bool SetPlatformType(const FileType& type, bool on)
 {
     const std::wstring progId = GetProgId(type);
-    const std::wstring command = GetOpenCommand();
+    const std::wstring command = GetOpenCommand(nullptr);
+    const std::wstring newWindowCommand = GetOpenCommand(singleinstance::cNewWindowArgument);
 
     bool success = RemoveProgId(cLegacyProgId);
 
@@ -318,12 +332,37 @@ static bool SetPlatformType(const FileType& type, bool on)
     success &= SetKeyText(progKey, nullptr, ToWide(FormatFileTypeName(type.name)));
     success &= SetKeyText(progKey + cIconKey, nullptr, L"\"" + GetExecutablePath().wstring() + L"\",0");
     success &= SetKeyText(progKey + cCommandKey, nullptr, command);
+    success &= SetNewWindowVerb(progKey, newWindowCommand);
     success &= SetKeyText(extensionKey + cOpenWithKey, progId.c_str(), std::wstring());
     success &= SetKeyText(extensionKey, nullptr, progId);
 
     NotifyShell();
 
     return success;
+}
+
+static void UpdatePlatformCommands()
+{
+    const std::wstring command = GetOpenCommand(nullptr);
+    const std::wstring newWindowCommand = GetOpenCommand(singleinstance::cNewWindowArgument);
+
+    if (command.empty())
+        return;
+
+    bool changed = false;
+
+    for (const FileType& type : cFileTypes)
+    {
+        const std::wstring progKey = GetClassKey(GetProgId(type));
+
+        if (GetKeyText(progKey + cCommandKey, nullptr) != command || GetKeyText(progKey + cNewWindowKey + cVerbCommand, nullptr) == newWindowCommand)
+            continue;
+
+        changed |= SetNewWindowVerb(progKey, newWindowCommand);
+    }
+
+    if (changed)
+        NotifyShell();
 }
 
 bool fileassoc::IsSupported()
@@ -588,4 +627,12 @@ bool fileassoc::SetTypeOn(u32 index, bool on)
         return false;
 
     return SetPlatformType(cFileTypes[index], on);
+}
+
+void fileassoc::UpdateCommands()
+{
+#if defined(SEAD_PLATFORM_WINDOWS)
+    if (!testhooks::IsEnabled())
+        UpdatePlatformCommands();
+#endif
 }

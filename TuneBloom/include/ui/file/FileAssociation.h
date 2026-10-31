@@ -26,5 +26,6 @@ bool IsSupported();
 u32 GetTypeCount();
 TypeState GetTypeState(u32 index);
 bool SetTypeOn(u32 index, bool on);
+void UpdateCommands();
 
 }

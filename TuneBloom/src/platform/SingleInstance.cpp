@@ -4,117 +4,151 @@
 
 #include <basis/win/seadWindows.h>
 
-#include <scan/FileProbe.h>
-#include <ui/file/OpenQueue.h>
-
-#include <cstdio>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 
 namespace singleinstance
 {
 
-static constexpr DWORD cPathBufferSize = 2048;
-static constexpr DWORD cBusyWaitMs     = 1000;
-static constexpr DWORD cProbeWaitMs    = 1;
+static constexpr const wchar_t* cWindowProperty = L"TuneBloom.Open";
+static constexpr const wchar_t* cStartLockName  = L"Local\\TuneBloom.Start";
+static constexpr DWORD          cPathBufferSize = 2048;
+static constexpr DWORD          cStartWaitMs    = 5000;
+static constexpr UINT           cSendWaitMs     = 5000;
 
-static void FormatPipeName(char* out, size_t size)
+static constexpr Target cTargetOrder[] = { Target::OpenDocument, Target::Player, Target::Editor };
+
+struct Offer
 {
-    DWORD sessionId = 0;
-    ProcessIdToSessionId(GetCurrentProcessId(), &sessionId);
+    const char* path = nullptr;
+    DWORD size = 0;
+    Target target = Target::Editor;
+    bool isTaken = false;
+};
 
-    std::snprintf(out, size, "\\\\.\\pipe\\TuneBloom.Open.%lu", static_cast<unsigned long>(sessionId));
+static HANDLE sStartLock = nullptr;
+static TakeFunc sTake = nullptr;
+static WNDPROC sPrevWndProc = nullptr;
+
+static void TakeStartLock()
+{
+    sStartLock = CreateSemaphoreW(nullptr, 1, 1, cStartLockName);
+
+    if (sStartLock && WaitForSingleObject(sStartLock, cStartWaitMs) != WAIT_OBJECT_0)
+    {
+        CloseHandle(sStartLock);
+        sStartLock = nullptr;
+    }
 }
 
-static HANDLE ConnectToRunningApp(const char* pipeName)
+static void ReleaseStartLock()
 {
-    HANDLE pipe = CreateFileA(pipeName, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (!sStartLock)
+        return;
 
-    if (pipe != INVALID_HANDLE_VALUE || GetLastError() != ERROR_PIPE_BUSY)
-        return pipe;
-
-    if (!WaitNamedPipeA(pipeName, cBusyWaitMs))
-        return INVALID_HANDLE_VALUE;
-
-    return CreateFileA(pipeName, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    ReleaseSemaphore(sStartLock, 1, nullptr);
+    CloseHandle(sStartLock);
+    sStartLock = nullptr;
 }
 
-static bool IsAppRunning(const char* pipeName)
+static BOOL CALLBACK OfferToWindow(HWND hwnd, LPARAM param)
 {
-    return WaitNamedPipeA(pipeName, cProbeWaitMs) || GetLastError() != ERROR_FILE_NOT_FOUND;
+    Offer* offer = reinterpret_cast<Offer*>(param);
+
+    if (!GetPropW(hwnd, cWindowProperty))
+        return TRUE;
+
+    DWORD processId = 0;
+    GetWindowThreadProcessId(hwnd, &processId);
+    AllowSetForegroundWindow(processId);
+
+    COPYDATASTRUCT data = {};
+    data.dwData = static_cast<ULONG_PTR>(offer->target);
+    data.cbData = offer->size;
+    data.lpData = const_cast<char*>(offer->path);
+
+    DWORD_PTR result = 0;
+
+    if (!SendMessageTimeoutW(hwnd, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&data), SMTO_ABORTIFHUNG, cSendWaitMs, &result) || !result)
+        return TRUE;
+
+    offer->isTaken = true;
+
+    return FALSE;
+}
+
+bool IsSupported()
+{
+    return true;
 }
 
 bool ForwardToRunningApp(const char* path)
 {
-    char pipeName[64];
-    FormatPipeName(pipeName, sizeof(pipeName));
-
-    if (!IsAppRunning(pipeName) || !IsPlayerFile(path))
-        return false;
-
     char fullPath[cPathBufferSize];
     const DWORD length = GetFullPathNameA(path, cPathBufferSize, fullPath, nullptr);
 
     if (length == 0 || length >= cPathBufferSize)
         return false;
 
-    HANDLE pipe = ConnectToRunningApp(pipeName);
+    TakeStartLock();
 
-    if (pipe == INVALID_HANDLE_VALUE)
+    for (Target target : cTargetOrder)
+    {
+        Offer offer;
+        offer.path = fullPath;
+        offer.size = length + 1;
+        offer.target = target;
+
+        EnumWindows(&OfferToWindow, reinterpret_cast<LPARAM>(&offer));
+
+        if (offer.isTaken)
+        {
+            ReleaseStartLock();
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool TakeCopiedPath(const COPYDATASTRUCT* data)
+{
+    if (!data || !data->lpData || data->cbData == 0 || data->cbData > cPathBufferSize || data->dwData > static_cast<ULONG_PTR>(Target::Editor))
         return false;
 
-    ULONG serverProcessId = 0;
+    const char* path = static_cast<const char*>(data->lpData);
 
-    if (GetNamedPipeServerProcessId(pipe, &serverProcessId))
-        AllowSetForegroundWindow(serverProcessId);
+    if (path[data->cbData - 1] != '\0')
+        return false;
 
-    DWORD written = 0;
-    const bool sent = WriteFile(pipe, fullPath, length, &written, nullptr) && written == length;
-
-    CloseHandle(pipe);
-
-    return sent;
+    return sTake(path, static_cast<Target>(data->dwData));
 }
 
-static void ReceivePath(HANDLE pipe)
+static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
-    char path[cPathBufferSize];
-    DWORD total = 0;
-    DWORD read = 0;
+    if (msg == WM_COPYDATA)
+        return TakeCopiedPath(reinterpret_cast<const COPYDATASTRUCT*>(lParam)) ? TRUE : FALSE;
 
-    while (total < cPathBufferSize - 1 && ReadFile(pipe, path + total, cPathBufferSize - 1 - total, &read, nullptr) && read > 0)
-        total += read;
+    if (msg == WM_NCDESTROY)
+        RemovePropW(hwnd, cWindowProperty);
 
-    path[total] = '\0';
-
-    if (total > 0)
-        openqueue::PushExternal(path);
+    return CallWindowProcW(sPrevWndProc, hwnd, msg, wParam, lParam);
 }
 
-static DWORD WINAPI ListenThread(LPVOID)
+void StartListening(GLFWwindow* window, TakeFunc take)
 {
-    char pipeName[64];
-    FormatPipeName(pipeName, sizeof(pipeName));
+    HWND hwnd = window ? glfwGetWin32Window(window) : nullptr;
 
-    for (;;)
+    if (hwnd && take && !sPrevWndProc)
     {
-        HANDLE pipe = CreateNamedPipeA(pipeName, PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS, 1, 0, cPathBufferSize, 0, nullptr);
-
-        if (pipe == INVALID_HANDLE_VALUE)
-            return 0;
-
-        if (ConnectNamedPipe(pipe, nullptr) || GetLastError() == ERROR_PIPE_CONNECTED)
-            ReceivePath(pipe);
-
-        DisconnectNamedPipe(pipe);
-        CloseHandle(pipe);
+        sTake = take;
+        sPrevWndProc = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(hwnd, GWLP_WNDPROC));
+        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(&WndProc));
+        SetPropW(hwnd, cWindowProperty, hwnd);
     }
-}
 
-void StartListening()
-{
-    HANDLE thread = CreateThread(nullptr, 0, &ListenThread, nullptr, 0, nullptr);
-
-    if (thread)
-        CloseHandle(thread);
+    ReleaseStartLock();
 }
 
 }
@@ -124,12 +158,17 @@ void StartListening()
 namespace singleinstance
 {
 
+bool IsSupported()
+{
+    return false;
+}
+
 bool ForwardToRunningApp(const char*)
 {
     return false;
 }
 
-void StartListening()
+void StartListening(GLFWwindow*, TakeFunc)
 {
 }
 

@@ -277,6 +277,47 @@ void RunStartupAction()
         openqueue::Push(settings.lastArchive.c_str());
 }
 
+static bool IsSystemFileTarget(const char* path, singleinstance::Target target)
+{
+    switch (target)
+    {
+        case singleinstance::Target::OpenDocument:
+            return FindOpenDocument(path) != nullptr;
+
+        case singleinstance::Target::Player:
+            return IsPlayerFrameShown() && IsPlayerFile(path);
+
+        case singleinstance::Target::Editor:
+            return !IsPlayerFrameShown() && !IsFileEditorShown() && (!singleinstance::IsSupported() || GetStartupSettings().systemOpen == SystemOpen::NewTab);
+    }
+
+    return false;
+}
+
+bool NeedsNewWindow(const char* path)
+{
+    if (!IsDocumentFile(path))
+        return false;
+
+    for (singleinstance::Target target : { singleinstance::Target::OpenDocument, singleinstance::Target::Player, singleinstance::Target::Editor })
+    {
+        if (IsSystemFileTarget(path, target))
+            return false;
+    }
+
+    return true;
+}
+
+bool TakeSystemFile(const char* path, singleinstance::Target target)
+{
+    if (!IsSystemFileTarget(path, target))
+        return false;
+
+    openqueue::PushExternal(path);
+
+    return true;
+}
+
 static bool FinishSave(Document* document, SaveResult result, const char* error)
 {
     if (result == SaveResult::Failed)

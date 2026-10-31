@@ -12,9 +12,11 @@
 
 #include <core/TestHooks.h>
 #include <platform/OwnedWindow.h>
+#include <platform/SingleInstance.h>
 #include <platform/WindowFrame.h>
 
 #include <ui/browser/FilesPanel.h>
+#include <ui/file/File.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/player/OutputMeter.h>
 #include <ui/player/PlayerFrame.h>
@@ -217,6 +219,9 @@ void ImGuiTask::prepare()
         HookPlatformWindows();
     }
     sead::Graphics::instance()->unlockDrawContext();
+
+    if (!testhooks::IsEnabled() || testhooks::IsSingleInstanceOn())
+        singleinstance::StartListening(fw->getWindowHandle(), &TakeSystemFile);
 
     adjustHeapAll();
 }

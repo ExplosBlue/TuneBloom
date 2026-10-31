@@ -2,6 +2,7 @@
 
 #include <aal/AudioResource.h>
 #include <bfsar/archive/Bfsar.h>
+#include <platform/SingleInstance.h>
 #include <ui/file/Document.h>
 
 #include <string>
@@ -16,6 +17,8 @@ void SetStartupPlayer();
 bool IsOpenPending();
 void UpdatePendingOpen();
 void RunStartupAction();
+bool TakeSystemFile(const char* path, singleinstance::Target target);
+bool NeedsNewWindow(const char* path);
 bool SaveFile();
 bool SaveFileAs(Document* document);
 void MarkArchiveInSync();

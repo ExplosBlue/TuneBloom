@@ -31,4 +31,25 @@ void useBundleResources()
     }
 }
 
+void openInNewInstance(const char* path)
+{
+    @autoreleasepool
+    {
+        NSURL* file = [NSURL fileURLWithPath:[NSString stringWithUTF8String:path]];
+
+        if (!isAppBundle())
+        {
+            NSURL* executable = [[NSBundle mainBundle] executableURL];
+
+            [NSTask launchedTaskWithExecutableURL:executable arguments:@[ [file path] ] error:nil terminationHandler:nil];
+            return;
+        }
+
+        NSWorkspaceOpenConfiguration* configuration = [NSWorkspaceOpenConfiguration configuration];
+        configuration.createsNewApplicationInstance = YES;
+
+        [[NSWorkspace sharedWorkspace] openURLs:@[ file ] withApplicationAtURL:[[NSBundle mainBundle] bundleURL] configuration:configuration completionHandler:nil];
+    }
+}
+
 } // namespace macos

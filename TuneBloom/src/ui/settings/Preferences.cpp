@@ -28,6 +28,7 @@
 
 #include <bfsar/files/BankFile.h>
 #include <midi/MidiInput.h>
+#include <platform/SingleInstance.h>
 
 #include <snd/SoundSystem.h>
 
@@ -481,6 +482,30 @@ static bool DrawAssociationRow()
     return DrawValueButtonRow(messages::preferences::cAssociationLabel, text, onCount == 0, messages::preferences::cAssociationChoose, true, messages::preferences::cAssociationDetail);
 }
 
+template <typename T, s32 N>
+static void DrawStartupChoiceRow(const char* label, const char* id, T* value, const char* const (&labels)[N], const char* const (&details)[N])
+{
+    s32 selected = static_cast<s32>(*value);
+
+    DrawRowLabel(label);
+    if (!ComboScroll(id, &selected, labels, details, N))
+        return;
+
+    *value = static_cast<T>(selected);
+    SaveStartupConfig();
+}
+
+static void DrawSystemOpenRow()
+{
+    if (!singleinstance::IsSupported())
+        return;
+
+    const char* labels[] = { messages::preferences::cSystemOpenNewTab, messages::preferences::cSystemOpenNewWindow };
+    const char* details[] = { messages::preferences::cSystemOpenNewTabDetail, nullptr };
+
+    DrawStartupChoiceRow(messages::preferences::cSystemOpenLabel, "##SystemOpen", &GetStartupSettings().systemOpen, labels, details);
+}
+
 static void DrawOpeningRows()
 {
     StartupSettings& settings = GetStartupSettings();
@@ -489,14 +514,8 @@ static void DrawOpeningRows()
     {
         const char* labels[] = { messages::preferences::cStartupStartPage, messages::preferences::cStartupLastArchive };
         const char* details[] = { messages::preferences::cStartupStartPageDetail, nullptr };
-        s32 selected = static_cast<s32>(settings.action);
 
-        DrawRowLabel(messages::preferences::cStartupLabel);
-        if (ComboScroll("##Startup", &selected, labels, details, IM_ARRAYSIZE(labels)))
-        {
-            settings.action = static_cast<StartupAction>(selected);
-            SaveStartupConfig();
-        }
+        DrawStartupChoiceRow(messages::preferences::cStartupLabel, "##Startup", &settings.action, labels, details);
     }
 
     // Recent files
@@ -1215,6 +1234,7 @@ static void DrawAdvancedPage()
     if (fileassoc::IsSupported() && BeginGroupBox(messages::common::cSystem))
     {
         chooseTypes = DrawAssociationRow();
+        DrawSystemOpenRow();
         EndGroupBox();
     }
 

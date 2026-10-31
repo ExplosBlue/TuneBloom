@@ -8,6 +8,8 @@
 
 #include <platform/OwnedWindow.h>
 
+#include <gfx/gl/seadGL.h>
+
 #include <GLFW/glfw3.h>
 
 #include <cmath>

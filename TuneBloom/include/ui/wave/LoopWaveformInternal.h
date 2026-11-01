@@ -12,7 +12,7 @@ constexpr u32 cMinViewSpan = 16;
 
 struct WaveformPalette
 {
-    ImU32 wave, waveLit, loop, loopGlow, introGlow, xfadeFill, good, edge, edgeSoft, inkFaint, bg, crop;
+    ImU32 wave, waveLit, loop, loopGlow, introGlow, xfadeFill, good, edge, edgeSoft, inkFaint, tickMinor, bg, crop;
 };
 
 struct WaveformCanvas

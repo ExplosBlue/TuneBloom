@@ -29,6 +29,7 @@ constexpr int    cDroppedDimAlpha  = 190;
 constexpr float  cWaveDimMix          = 0.5f;
 constexpr float  cEdgeMix             = 0.14f;
 constexpr int    cEdgeSoftAlpha       = 150;
+constexpr float  cMinorTickMix        = 0.6f;
 constexpr u32    cLoopGlowAlpha       = 0x28;
 
 constexpr float  cCueLineAlpha        = 0.55f;
@@ -73,6 +74,7 @@ const WaveformPalette& Palette()
     sPalette.edge      = ColorConvertFloat4ToU32(ImLerp(bg, ink, cEdgeMix));
     sPalette.edgeSoft  = uicolors::WithAlpha(sPalette.edge, cEdgeSoftAlpha);
     sPalette.inkFaint  = ColorConvertFloat4ToU32(faint);
+    sPalette.tickMinor = ColorConvertFloat4ToU32(ImLerp(bg, faint, cMinorTickMix));
     sPalette.waveLit   = ColorConvertFloat4ToU32(lit);
     sPalette.wave      = ColorConvertFloat4ToU32(ImLerp(bg, lit, cWaveDimMix));
     sPalette.xfadeFill = uicolors::WithAlpha(sPalette.waveLit, uicolors::Pick(cCrossfadeAlpha));
@@ -579,7 +581,7 @@ static void DrawRulerTicks(const RulerDraw& ruler, const LoopWaveformState& stat
         }
         else
         {
-            draw->AddLine(ImVec2(left + tickX, bottom - minorTickLen), ImVec2(left + tickX, bottom), palette.edgeSoft);
+            draw->AddLine(ImVec2(left + tickX, bottom - minorTickLen), ImVec2(left + tickX, bottom), palette.tickMinor);
         }
     }
 }

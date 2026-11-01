@@ -6,6 +6,7 @@
 #include <ui/items/ItemColumnSettings.h>
 #include <messages/Messages.h>
 #include <ui/settings/UiColors.h>
+#include <ui/widgets/AppFonts.h>
 #include <ui/widgets/Widgets.h>
 
 #include <bfsar/files/BankFile.h>
@@ -101,10 +102,18 @@ void RegisterItemColumnTexts()
     ImGui::LocalizeRegisterEntries(cEntries, IM_ARRAYSIZE(cEntries));
 }
 
+static f32 CalcItemValueTextWidth(const char* text, u32 flags)
+{
+    if (flags & cItemColumnFlag_Text)
+        return ImGui::CalcTextSize(text).x;
+
+    return CalcTabularTextWidth(ImGui::GetFont(), ImGui::GetFontSize(), text);
+}
+
 f32 GetItemColumnWidth(const ItemColumn& column)
 {
     const f32 titleWidth  = ImGui::CalcTextSize(column.title).x;
-    const f32 sampleWidth = ImGui::CalcTextSize(column.widthSample).x;
+    const f32 sampleWidth = CalcItemValueTextWidth(column.widthSample, column.flags);
 
     return sead::Mathf::max(titleWidth, sampleWidth) + cItemColumnGap;
 }
@@ -264,7 +273,7 @@ static f32 CalcItemColumnFitWidth(const ItemColumn& column, const std::vector<It
         sead::FixedSafeString<256> text;
         column.format(item, &text);
 
-        textWidth = sead::Mathf::max(textWidth, ImGui::CalcTextSize(text.cstr()).x);
+        textWidth = sead::Mathf::max(textWidth, CalcItemValueTextWidth(text.cstr(), column.flags));
     }
 
     const f32 titleWidth = ImGui::CalcTextSize(column.title).x;
@@ -708,7 +717,7 @@ void DrawTextEnd(ImDrawList* drawList, const ImVec2& pos, f32 maxX, const char* 
 
 f32 CalcItemValueCellWidth(const char* text)
 {
-    return ImGui::CalcTextSize(text).x + cItemColumnGap;
+    return CalcItemValueTextWidth(text, cItemColumnFlag_None) + cItemColumnGap;
 }
 
 static void DrawPathEnd(const ImVec2& pos, f32 width, const char* text)
@@ -729,7 +738,7 @@ void DrawItemValueCell(const char* text, u32 flags, s32 index, bool unused)
     pos.y += ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset;
 
     const f32 width = ImGui::GetContentRegionAvail().x - cItemColumnGap - (index == sEdgeColumn ? sEdgeInset : 0.0f);
-    const f32 textWidth = ImGui::CalcTextSize(text).x;
+    const f32 textWidth = CalcItemValueTextWidth(text, flags);
 
     ImGui::PushStyleColor(ImGuiCol_Text, unused ? uicolors::Warning() : GetItemValueColor());
 
@@ -746,10 +755,10 @@ void DrawItemValueCell(const char* text, u32 flags, s32 index, bool unused)
     }
     else
     {
-        if (textWidth < width)
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + width - textWidth);
+        pos.x = ImFloor(pos.x + sead::Mathf::max(width - textWidth, 0.0f));
 
-        ImGui::TextUnformatted(text);
+        AddTabularText(ImGui::GetWindowDrawList(), ImGui::GetFont(), ImGui::GetFontSize(), pos, ImGui::GetColorU32(ImGuiCol_Text), text);
+        ImGui::Dummy(ImVec2(sead::Mathf::min(textWidth, width), ImGui::GetFontSize()));
     }
 
     ImGui::PopStyleColor();

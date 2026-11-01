@@ -2,6 +2,7 @@
 
 #include <bfsar/model/Item.h>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -136,3 +137,4 @@ aal::AmtaSourceAudio GetAudioAssetLength(const AudioAsset& asset);
 bool IsAudioAssetLoop(const AudioAsset& asset);
 bool IsReadableFwav(const std::vector<u8>& file);
 bool DecodeAudioFile(const AudioAssetFile& file, DecodedPcm* out);
+bool DecodeAudioAssetMono(AudioAssetKind kind, const AudioAssetFile& file, bool isMidSide, std::vector<f32>* out, const std::function<bool()>& isStopped);

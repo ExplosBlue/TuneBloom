@@ -4,8 +4,7 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/sound/SoundProperties.h>
 #include <ui/app/UI.h>
-#include <ui/settings/UiColors.h>
-#include <ui/widgets/ContextMenu.h>
+#include <ui/widgets/LaneRow.h>
 #include <ui/widgets/Widgets.h>
 
 #include <imgui/imgui_custom.h>
@@ -16,8 +15,6 @@ static constexpr f32 cTrackKnobLaneMaxRowEm = 2.7f;
 static constexpr f32 cTrackWaveMinWidthEm   = 6.5f;
 static constexpr f32 cTrackWaveMaxWidthEm   = 13.0f;
 static constexpr f32 cTrackWaveShare        = 0.4f;
-static constexpr f32 cTrackHoveredAlpha     = 0.05f;
-static constexpr f32 cTrackMenuHoverEm      = 1.3f;
 
 struct TrackTableView
 {
@@ -35,18 +32,8 @@ struct TrackGroupInfo
     const TrackParam* params;
 };
 
-struct TrackMenuButton
+static f32 CalcTrackFlexWidth(const TrackTableLayout& layout, f32 availWidth, f32 minWidth, f32 scrollbarWidth, s32* fitGroupNum)
 {
-    ImGuiID menuId = 0;
-    ImVec2 min;
-    ImVec2 max;
-};
-
-static TrackMenuButton sTrackMenuButton;
-
-static f32 CalcTrackFlexWidth(const TrackTableLayout& layout, f32 availWidth, f32 minWidth, s32* fitGroupNum)
-{
-    const f32 scrollbarWidth = ImGui::GetCurrentWindow()->ScrollbarY ? ImGui::GetStyle().ScrollbarSize : 0.0f;
     const f32 freeWidth = availWidth - layout.fixedWidth - scrollbarWidth;
 
     *fitGroupNum = layout.groupNum;
@@ -99,16 +86,48 @@ static void SplitTrackFlexWidth(const TrackContext& ctx, f32 flexWidth, TrackTab
     view->laneWidth = ImFloor(sead::Mathf::max(em * cTrackLaneMinWidthEm, flexWidth - view->waveWidth));
 }
 
-static f32 CalcTrackRowHeight(const TrackContext& ctx, const TrackTableLayout& layout)
+static f32 CalcTrackRowExtra(const TrackTableLayout& layout)
 {
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 rowExtra = layout.cellPadding.y * 2.0f + 1.0f;
-    const f32 freeHeight = ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeight() - rowExtra - style.ScrollbarSize;
-    const s32 rowNum = sead::Mathf::max(1, static_cast<s32>(ctx.tracks.size()));
-    const f32 fitHeight = ImFloor(freeHeight / static_cast<f32>(rowNum) - rowExtra);
-    const f32 maxRowEm = layout.groupNum > 0 ? cTrackKnobLaneMaxRowEm : cTrackLaneMaxRowEm;
+    return layout.cellPadding.y * 2.0f;
+}
 
-    return ImClamp(fitHeight, CalcTrackKnobSize(), ImFloor(ImGui::GetFontSize() * maxRowEm));
+static f32 CalcTrackMaxRowHeight(const TrackTableLayout& layout)
+{
+    return ImFloor(ImGui::GetFontSize() * (layout.groupNum > 0 ? cTrackKnobLaneMaxRowEm : cTrackLaneMaxRowEm));
+}
+
+static f32 CalcTrackFlexMinWidth(const TrackContext& ctx)
+{
+    return ImFloor(ImGui::GetFontSize() * (cTrackLaneMinWidthEm + (ctx.source.sound ? cTrackWaveMinWidthEm : 0.0f)));
+}
+
+static f32 CalcTrackTitleHeight(const TrackTableLayout& layout, bool scrollX)
+{
+    return ImGui::GetFrameHeight() + CalcTrackRowExtra(layout) + 1.0f + (scrollX ? ImGui::GetStyle().ScrollbarSize : 0.0f);
+}
+
+static f32 CalcTrackRowHeight(const TrackContext& ctx, const TrackTableLayout& layout, f32 availHeight, bool scrollX)
+{
+    const s32 rowNum = sead::Mathf::max(1, static_cast<s32>(ctx.tracks.size()));
+    const f32 freeHeight = availHeight - CalcTrackTitleHeight(layout, scrollX);
+    const f32 fitHeight = ImFloor(freeHeight / static_cast<f32>(rowNum) - CalcTrackRowExtra(layout));
+
+    return ImClamp(fitHeight, CalcTrackKnobSize(), CalcTrackMaxRowHeight(layout));
+}
+
+f32 CalcTrackTableFitHeight(const TrackContext& ctx)
+{
+    const TrackTableLayout layout = CalcTrackTableLayout(ctx);
+
+    s32 fitGroupNum = 0;
+    CalcTrackFlexWidth(layout, ImGui::GetContentRegionAvail().x, CalcTrackFlexMinWidth(ctx), 0.0f, &fitGroupNum);
+
+    const f32 titleHeight = CalcTrackTitleHeight(layout, fitGroupNum < layout.groupNum);
+
+    if (ctx.tracks.empty())
+        return titleHeight + ImGui::GetFrameHeight() + CalcTrackRowExtra(layout);
+
+    return titleHeight + static_cast<f32>(ctx.tracks.size()) * (CalcTrackMaxRowHeight(layout) + CalcTrackRowExtra(layout));
 }
 
 static void SetupTrackTableColumns(const TrackContext& ctx, TrackTableView& view)
@@ -174,24 +193,6 @@ static void DrawTrackTableTitles(const TrackContext& ctx, TrackTableView& view)
     }
 }
 
-static void DrawTrackIndexBadge(s32 index, const ImVec2& cellMin, const ImVec2& cellSize, bool selected)
-{
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const sead::FormatFixedSafeString<16> number("%d", index);
-    const ImVec2 textSize = ImGui::CalcTextSize(number.cstr());
-    const f32 badgeHeight = ImGui::GetFrameHeight();
-    const ImVec2 badgeSize(sead::Mathf::max(badgeHeight, textSize.x + style.FramePadding.x), badgeHeight);
-    const ImVec2 badgeMin = ImFloor(cellMin + (cellSize - badgeSize) * 0.5f);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-
-    if (selected)
-        draw->AddRectFilled(badgeMin, badgeMin + badgeSize, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackIndexAlpha)), style.FrameRounding);
-
-    const ImVec2 textPos(ImFloor(badgeMin.x + (badgeSize.x - textSize.x) * 0.5f), badgeMin.y + style.FramePadding.y);
-
-    draw->AddText(textPos, ImGui::GetColorU32(ImGuiCol_Text), number.cstr());
-}
-
 static bool DrawTrackIndexCell(const TrackContext& ctx, s32 index, f32 rowHeight, TrackEdit* edit)
 {
     Sound::StreamSoundInfo::Track* track = ctx.tracks[index];
@@ -200,18 +201,9 @@ static bool DrawTrackIndexCell(const TrackContext& ctx, s32 index, f32 rowHeight
 
     const ImVec2 cellMin = ImGui::GetCursorScreenPos();
     const f32 cellWidth = ImGui::GetContentRegionAvail().x;
+    const bool hovered = DrawTrackHandle(ctx, track, rowHeight, edit);
 
-    ImGui::SetNextItemAllowOverlap();
-    const bool hovered = DrawTrackHandle(ctx, track, ImVec2(0.0f, rowHeight), ImGuiSelectableFlags_SpanAllColumns, edit);
-    const bool selected = track == GetHighlightedStreamTrack();
-    const f32 hoverRatio = ImGui::GetHoverRatio(ImGui::GetID("###RowFade"), hovered && !selected);
-
-    if (selected)
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackSelectedAlpha)));
-    else if (hoverRatio > 0.0f)
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_Text, cTrackHoveredAlpha * hoverRatio));
-
-    DrawTrackIndexBadge(index, cellMin, ImVec2(cellWidth, rowHeight), selected);
+    DrawLaneIndexBadge(index, cellMin, ImVec2(cellWidth, rowHeight), track == GetHighlightedStreamTrack());
 
     return hovered;
 }
@@ -264,36 +256,7 @@ static void DrawTrackMenuCell(f32 rowHeight, bool rowHovered)
 {
     ImGui::TableNextColumn();
     CenterTrackCellFrame(rowHeight);
-
-    const ImGuiID menuId = ImGui::GetID(cTrackMenuId);
-    const bool shown = rowHovered || ImGui::IsPopupOpen(cTrackMenuId);
-    const f32 size = ImGui::GetFrameHeight();
-
-    if (DrawRowHoverButton("###TrackMenuButton", ICON_LC_CHEVRON_DOWN, shown, messages::stream::cTrackMenuTip, ImVec2(size, size), ImFloor(ImGui::GetFontSize() * cTrackMenuHoverEm)))
-    {
-        ImGui::OpenPopup(cTrackMenuId);
-        sTrackMenuButton.menuId = menuId;
-    }
-
-    if (sTrackMenuButton.menuId != menuId)
-        return;
-
-    sTrackMenuButton.min = ImGui::GetItemRectMin();
-    sTrackMenuButton.max = ImGui::GetItemRectMax();
-}
-
-void PlaceTrackMenu()
-{
-    if (sTrackMenuButton.menuId != ImGui::GetID(cTrackMenuId))
-        return;
-
-    if (!ImGui::IsPopupOpen(cTrackMenuId) || ImGui::IsMouseReleased(ImGuiMouseButton_Right))
-    {
-        sTrackMenuButton.menuId = 0;
-        return;
-    }
-
-    PlaceContextMenuBelow(cTrackMenuId, sTrackMenuButton.min, sTrackMenuButton.max, true);
+    DrawLaneRowMenuButton(cTrackMenuId, rowHovered, messages::stream::cTrackMenuTip);
 }
 
 static void DrawTrackTableRow(const TrackContext& ctx, s32 index, TrackTableView& view, TrackEdit* edit)
@@ -326,13 +289,10 @@ static void DrawTrackTableRow(const TrackContext& ctx, s32 index, TrackTableView
 // One row for each track
 void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit)
 {
-    const f32 em = ImGui::GetFontSize();
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
 
     TrackTableView view = {};
     view.layout = CalcTrackTableLayout(ctx);
-    view.rowHeight = CalcTrackRowHeight(ctx, view.layout);
-
-    const f32 availWidth = ImGui::GetContentRegionAvail().x;
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, view.layout.cellPadding);
     const bool tableOpen = ImGui::BeginTable("TrackTable", view.layout.columnNum, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY);
@@ -343,9 +303,10 @@ void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit)
         return;
     }
 
-    const f32 flexMinWidth = ImFloor(em * (cTrackLaneMinWidthEm + (ctx.source.sound ? cTrackWaveMinWidthEm : 0.0f)));
+    const f32 scrollbarWidth = ImGui::GetCurrentWindow()->ScrollbarY ? ImGui::GetStyle().ScrollbarSize : 0.0f;
 
-    SplitTrackFlexWidth(ctx, CalcTrackFlexWidth(view.layout, availWidth, flexMinWidth, &view.menuSlot), &view);
+    SplitTrackFlexWidth(ctx, CalcTrackFlexWidth(view.layout, avail.x, CalcTrackFlexMinWidth(ctx), scrollbarWidth, &view.menuSlot), &view);
+    view.rowHeight = CalcTrackRowHeight(ctx, view.layout, avail.y, view.menuSlot < view.layout.groupNum);
     SetupTrackTableColumns(ctx, view);
     DrawTrackTableTitles(ctx, view);
 

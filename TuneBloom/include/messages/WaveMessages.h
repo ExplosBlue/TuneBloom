@@ -158,6 +158,7 @@ inline constexpr const char* cTimeFormat       = "%u:%06.3f";
 
 inline constexpr const char* cWaveform         = "Waveform";
 inline constexpr const char* cTooLong          = "Too long to show as a waveform";
+inline constexpr const char* cLoading          = "Reading the waveform";
 inline constexpr const char* cNoData           = "No sample data";
 
 inline constexpr const char* cEncodingPcm8 = "PCM 8-bit";

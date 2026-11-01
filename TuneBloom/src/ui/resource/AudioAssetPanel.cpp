@@ -7,6 +7,7 @@
 #include <ui/widgets/Knob.h>
 #include <ui/wave/LoopWaveformEditor.h>
 #include <ui/wave/WaveformBox.h>
+#include <ui/wave/WaveMonoJob.h>
 #include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <bfsar/model/MessageLog.h>
@@ -19,8 +20,6 @@
 #include <imgui/imgui_internal.h>
 
 #include <aal/Bwav.h>
-#include <bfsar/audio/AudioProcessing.h>
-#include <bfsar/audio/DecodedPcm.h>
 #include <bfsar/files/WaveFile.h>
 
 #include <vector>
@@ -57,7 +56,10 @@ private:
 
     const AudioAsset* mAsset = nullptr;
     AudioAssetFile mSource;
+
     std::vector<float> mMono;
+    WaveMonoJob* mMonoJob = nullptr;
+    u32 mSampleCount = 0;
     bool mTooLong = false;
     ImGui::LoopWaveformState mState;
     AssetLabelView mLabels;
@@ -106,6 +108,10 @@ void AudioAssetPanel::release()
     mAsset = nullptr;
     mSource.reset();
     mMono.clear();
+
+    if (mMonoJob)
+        mMonoJob->cancel();
+
     mState = ImGui::LoopWaveformState{};
     mLabels = AssetLabelView{};
 }
@@ -124,21 +130,18 @@ void AudioAssetPanel::refreshView(AudioAsset* asset)
         mState.lockEnd = true;
     }
 
-    mAsset = asset;
-    mSource = source;
-    mMono.clear();
-    mState.dataRevision++;
-
     const AudioAssetInfo& info = asset->getInfo();
 
+    mTooLong = GetWaveMonoJob(&mMonoJob).requestView(*asset);
+
+    if (asset != mAsset || info.sampleCount != mSampleCount || mTooLong)
+        mMono.clear();
+
+    mAsset = asset;
+    mSource = source;
+    mSampleCount = info.sampleCount;
     mLoopStartFrame = info.loopStartFrame;
     mLoopEndFrame = info.isLoop ? info.loopEndFrame : info.sampleCount;
-    mTooLong = info.sampleCount > cWaveViewMaxSamples;
-
-    DecodedPcm pcm;
-
-    if (!mTooLong && asset->decode(&pcm))
-        AudioProcessing::mixToMono(pcm.channels, mMono);
 }
 
 AudioAssetPanel::FrameContext AudioAssetPanel::beginFrame(AudioAsset* asset)
@@ -147,6 +150,7 @@ AudioAssetPanel::FrameContext AudioAssetPanel::beginFrame(AudioAsset* asset)
 
     resource.loadStreamFile(asset);
     refreshView(asset);
+    TakeWaveMono(GetWaveMonoJob(&mMonoJob), &mMono, mState);
     RefreshAssetLabels(&mLabels, asset);
 
     FrameContext ctx;
@@ -266,7 +270,7 @@ void AudioAssetPanel::drawWaveformBox(FrameContext& ctx)
     EndWaveformHeader();
 
     if (mMono.empty())
-        ImGui::TextDisabled("%s", mTooLong ? messages::wavefile::cTooLong : (canPlay ? messages::wavefile::cNoData : playbackError.cstr()));
+        DrawWaveformPlaceholder(GetWaveMonoJob(&mMonoJob), mTooLong, canPlay ? messages::wavefile::cNoData : playbackError.cstr(), ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm));
     else
         drawWaveCanvas(ctx);
 

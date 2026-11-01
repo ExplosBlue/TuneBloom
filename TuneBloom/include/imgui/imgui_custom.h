@@ -24,6 +24,7 @@ void SetWindowShadowAlpha(float alpha);
 void RenderWindowShadow(ImGuiWindow* window);
 
 void AddRectFilledGradient(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float amount, float rounding = 0.0f, ImDrawFlags flags = 0);
+void ScaleVertsAlpha(ImDrawList* draw_list, int vtx_begin, float alpha);
 
 void SetRaisedGradient(float amount);
 void AddRectFilledRaised(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding = 0.0f, ImDrawFlags flags = 0);

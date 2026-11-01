@@ -2,6 +2,7 @@
 
 #include <ui/wave/LoopWaveformInternal.h>
 
+#include <imgui/imgui_custom.h>
 #include <imgui/imgui_internal.h>
 
 #include <math/seadMathCalcCommon.h>
@@ -19,6 +20,7 @@ constexpr float  cSeekRulerH       = 30.0f;
 constexpr float  cReadoutTextScale = 0.85f;
 constexpr float  cCropGrabPx       = 8.0f;
 constexpr float  cMarkerGrabPx     = 6.0f;
+constexpr float  cAppearSeconds    = 0.15f;
 
 static bool IsCropDrag(Dragging dragging)
 {
@@ -30,7 +32,7 @@ static bool IsLoopDrag(Dragging dragging)
     return dragging == Dragging::Start || dragging == Dragging::End;
 }
 
-static WaveformCanvas ReadCanvasInput(ImVec2 origin, ImVec2 size, u32 sampleCount)
+WaveformCanvas ReadCanvasInput(ImVec2 origin, ImVec2 size, u32 sampleCount)
 {
     const ImGuiIO& io = GetIO();
 
@@ -345,6 +347,24 @@ bool LoopWaveformEditor(const char* idStr, LoopWaveformState& state,
 
     PopID();
     return changed;
+}
+
+float LoopWaveformEditorHeight(float canvasHeight, bool showSeekBar)
+{
+    const float spacing = GetStyle().ItemSpacing.y;
+    const float seekHeight = showSeekBar ? cSeekRulerH + spacing : 0.0f;
+
+    return canvasHeight + spacing + seekHeight + MinimapHeight();
+}
+
+float LoopWaveformAppearAlpha(double appearTime)
+{
+    if (appearTime < 0.0)
+        return 1.0f;
+
+    const float ratio = ImSaturate(static_cast<float>(GetTime() - appearTime) / cAppearSeconds);
+
+    return ratio * ratio * (3.0f - 2.0f * ratio);
 }
 
 }

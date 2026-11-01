@@ -24,8 +24,5 @@ f32 CalcCompactPlayerBarMaxWidth();
 void DrawCompactPlayerBar();
 void RegisterPlaybackSettings();
 
-bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate, bool seekable,
-                 f32 loopStartFrac, f32 loopEndFrac, f32& outSeekFraction);
-
 void DrawPlayersUI();
 void DrawPlayerPropertiesUI();

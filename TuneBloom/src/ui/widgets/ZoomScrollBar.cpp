@@ -12,6 +12,34 @@
 static constexpr f32 cPianoScrollHeightEm = 0.7f;
 static constexpr f32 cPianoScrollHandleEm = 0.5f;
 static constexpr f32 cPianoScrollThumbEm  = 2.0f;
+static constexpr f32 cActiveFadeInSeconds  = 0.04f;
+static constexpr f32 cActiveFadeOutSeconds = 0.16f;
+static constexpr f32 cFitsFadeSeconds      = 0.16f;
+
+f32 ZoomScrollBarHeight()
+{
+    return ImFloor(ImGui::GetFontSize() * cPianoScrollHeightEm);
+}
+
+static ImU32 MixColor(ImU32 from, ImU32 to, f32 ratio)
+{
+    if (ratio <= 0.0f)
+        return from;
+
+    if (ratio >= 1.0f)
+        return to;
+
+    return ImGui::ColorConvertFloat4ToU32(ImLerp(ImGui::ColorConvertU32ToFloat4(from), ImGui::ColorConvertU32ToFloat4(to), ratio));
+}
+
+static ImU32 PartColor(ImGuiID id, bool hovered, bool active, ImU32 restCol)
+{
+    const PianoRollPalette& palette = GetPianoRollPalette();
+    const ImU32 hoverCol = ImGui::GetHoverColorU32(id, hovered, restCol, palette.vScrollThumbHover);
+    const f32 activeRatio = ImGui::GetTransitionRatio(id + 3, active, cActiveFadeInSeconds, cActiveFadeOutSeconds);
+
+    return MixColor(hoverCol, palette.hScrollThumbActive, activeRatio);
+}
 
 ZoomScrollResult ZoomScrollBar(const char* id, f32 width, f32* left, f32* right, f32 minSpan, f32 maxSpan)
 {
@@ -29,7 +57,7 @@ ZoomScrollResult ZoomScrollBar(const char* id, f32 width, f32* left, f32* right,
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
     const f32 em = ImGui::GetFontSize();
-    const f32 trackH = ImFloor(em * cPianoScrollHeightEm);
+    const f32 trackH = ZoomScrollBarHeight();
     const f32 handleW = ImFloor(em * cPianoScrollHandleEm);
     const f32 trackW = width;
     const ImVec2 trackOrigin = ImGui::GetCursorScreenPos();
@@ -127,20 +155,13 @@ ZoomScrollResult ZoomScrollBar(const char* id, f32 width, f32* left, f32* right,
     const ImVec2 thumbMin(ImFloor(trackOrigin.x + thumbX), trackOrigin.y + 1.0f);
     const ImVec2 thumbMax(ImFloor(trackOrigin.x + thumbX + thumbW), trackOrigin.y + trackH - 1.0f);
     const ImGuiID scrollId = ImGui::GetItemID();
-    const ImU32 restCol = fitsAll ? palette.hScrollThumbFits : palette.hScrollThumbOverflow;
+    const f32 overflowRatio = ImGui::GetTransitionRatio(scrollId + 7, !fitsAll, cFitsFadeSeconds, cFitsFadeSeconds);
+    const ImU32 restCol = MixColor(palette.hScrollThumbFits, palette.hScrollThumbOverflow, overflowRatio);
 
-    ImU32 thumbCol = ImGui::GetHoverColorU32(scrollId + 1, hotPart == ScrollPart::Thumb && !fitsAll, restCol, palette.vScrollThumbHover);
-
-    if (scrollActive && sScrollDrag == ScrollPart::Thumb && !fitsAll)
-        thumbCol = palette.hScrollThumbActive;
-
-    ImU32 handleLCol = ImGui::GetHoverColorU32(scrollId + 2, hotPart == ScrollPart::HandleL, thumbCol, palette.vScrollThumbHover);
-    ImU32 handleRCol = ImGui::GetHoverColorU32(scrollId + 3, hotPart == ScrollPart::HandleR, thumbCol, palette.vScrollThumbHover);
-
-    if (scrollActive && sScrollDrag == ScrollPart::HandleL)
-        handleLCol = palette.hScrollThumbActive;
-    else if (scrollActive && sScrollDrag == ScrollPart::HandleR)
-        handleRCol = palette.hScrollThumbActive;
+    const ScrollPart dragPart = scrollActive ? sScrollDrag : ScrollPart::None;
+    const ImU32 thumbCol = PartColor(scrollId + 1, hotPart == ScrollPart::Thumb && !fitsAll, dragPart == ScrollPart::Thumb && !fitsAll, restCol);
+    const ImU32 handleLCol = PartColor(scrollId + 2, hotPart == ScrollPart::HandleL, dragPart == ScrollPart::HandleL, thumbCol);
+    const ImU32 handleRCol = PartColor(scrollId + 3, hotPart == ScrollPart::HandleR, dragPart == ScrollPart::HandleR, thumbCol);
 
     drawList->AddRectFilled(trackOrigin, ImVec2(trackOrigin.x + trackW, trackOrigin.y + trackH), palette.hScrollTrack, 3.0f);
 

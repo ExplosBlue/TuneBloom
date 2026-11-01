@@ -226,7 +226,7 @@ void DragViewPan(LoopWaveformState& state, const WaveformCanvas& canvas)
     SetView(state, static_cast<s64>(state.dragAnchorViewStart) - shift, static_cast<s64>(state.dragAnchorViewEnd) - shift, canvas.sampleCount);
 }
 
-void HandleViewWheel(LoopWaveformState& state, const WaveformCanvas& canvas)
+void HandleViewWheel(LoopWaveformState& state, const WaveformCanvas& canvas, bool plainWheelZooms)
 {
     const ImGuiIO& io = GetIO();
 
@@ -239,7 +239,7 @@ void HandleViewWheel(LoopWaveformState& state, const WaveformCanvas& canvas)
         {
             PanViewByWheel(state, io.MouseWheel, canvas.sampleCount);
         }
-        else
+        else if (plainWheelZooms || shortcuts::Held(shortcuts::Modifier::ZoomHorizontal))
         {
             const double factor = io.MouseWheel > 0 ? (1.0 / cWheelZoomFactor) : cWheelZoomFactor;
             ZoomAt(state, XToSample(state, canvas.mouseX, canvas.width), factor, canvas.sampleCount);
@@ -250,12 +250,20 @@ void HandleViewWheel(LoopWaveformState& state, const WaveformCanvas& canvas)
         PanViewByWheel(state, io.MouseWheelH, canvas.sampleCount);
 }
 
+float MinimapHeight()
+{
+    return cControlPad + ZoomScrollBarHeight();
+}
+
 void DrawMinimap(LoopWaveformState& state, float width, u32 sampleCount)
 {
     float left = static_cast<float>(state.viewStart) / sampleCount;
     float right = static_cast<float>(state.viewEnd) / sampleCount;
 
+    const float barX = GetCursorPosX();
+
     Dummy(ImVec2(0.0f, cControlPad - GetStyle().ItemSpacing.y));
+    SetCursorPosX(barX);
 
     const float prevLeft = left;
     const float prevRight = right;

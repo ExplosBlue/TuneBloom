@@ -145,12 +145,21 @@ bool DrawStreamTracksTabRow(const StreamSource& source)
     return UpdateStreamPanelFold(toggleFold);
 }
 
-void DrawStreamTracksSection(const StreamSource& source, f32 height)
+void DrawStreamTracksSection(const StreamSource& source, f32 reserveBelow)
 {
     BeginTitleRowTools(messages::common::cTracks, CalcTabRowToolsWidth(cTrackToolNum));
     DrawTrackTools(source, false);
 
     sTrackToolsInTitleRow = true;
+
+    f32 height = 0.0f;
+
+    if (reserveBelow > 0.0f)
+    {
+        const f32 fitHeight = CalcTrackTableFitHeight(MakeTrackContext(source)) + ImGui::GetStyle().ChildBorderSize * 2.0f;
+
+        height = sead::Mathf::max(ImGui::GetFrameHeight(), sead::Mathf::min(fitHeight, ImGui::GetContentRegionAvail().y - reserveBelow));
+    }
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, ImGui::GetStyle().ChildBorderSize));
     const bool open = ImGui::BeginChild("TracksSection", ImVec2(0.0f, height), ImGuiChildFlags_AlwaysUseWindowPadding);

@@ -7,13 +7,15 @@
 #include <ui/stream/StreamTrackAdd.h>
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/app/UI.h>
-#include <ui/settings/UiColors.h>
+#include <ui/widgets/LaneRow.h>
 #include <ui/widgets/Widgets.h>
 
 static constexpr f32 cTrackKnobEm         = 2.0f;
 static constexpr f32 cTrackSlotGapEm      = 0.3f;
 static constexpr f32 cTrackCellPadYEm     = 0.2f;
 static constexpr u8  cTrackPanCenter      = 64;
+
+static const char* cTrackNumberWidest = "00";
 
 f32 CalcTrackKnobSize()
 {
@@ -124,8 +126,8 @@ TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx)
     layout.cellPadding = CalcTrackCellPadding();
     layout.leadNum = hasWave ? 3 : 2;
     layout.columnNum = layout.leadNum + 2 + (ctx.source.hasTrackMix ? 2 : 0) + (ctx.source.enableSend ? 1 : 0) + (ctx.source.enableFilter ? 1 : 0);
-    layout.indexWidth = ImCeil(ImGui::GetFrameHeight());
-    layout.menuWidth = layout.indexWidth;
+    layout.indexWidth = CalcLaneIndexWidth(cTrackNumberWidest);
+    layout.menuWidth = ImCeil(ImGui::GetFrameHeight());
     layout.channelWidth = ImCeil(sead::Mathf::max(ImGui::CalcTextSize(messages::common::cChannels).x, ImGui::CalcTextSize(messages::common::cStereo).x));
 
     layout.columnExtra = layout.cellPadding.x * 2.0f;
@@ -150,22 +152,16 @@ TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx)
     return layout;
 }
 
-bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, const ImVec2& size, ImGuiSelectableFlags flags, TrackEdit* edit)
+bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, f32 height, TrackEdit* edit)
 {
     using Track = Sound::StreamSoundInfo::Track;
 
-    ImGui::PushStyleColor(ImGuiCol_Header, uicolors::cTransparent);
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, uicolors::cTransparent);
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, uicolors::cTransparent);
+    bool hovered = false;
 
-    if (ImGui::Selectable("###Row", track == GetHighlightedStreamTrack(), flags, size))
+    if (DrawLaneRowSelectable("###Row", track == GetHighlightedStreamTrack(), false, height, &hovered))
         HighlightStreamTrack(track);
 
-    ImGui::PopStyleColor(3);
-
-    const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenOverlappedByItem);
-
-    PlaceTrackMenu();
+    PlaceLaneRowMenu(cTrackMenuId);
 
     if (BeginItemContextMenu(cTrackMenuId))
     {

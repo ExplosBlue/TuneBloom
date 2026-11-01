@@ -110,6 +110,19 @@ void FormatTabRowTitle(sead::BufferedSafeString* name, const TabRowTitle& title,
     name->format("%*s %s %s %*s %s", pad.lead, "", title.icon, title.title, pad.trail, "", title.id);
 }
 
+static ImU32 CalcTabRowCountColor(const ImGuiWindow* window, const ImGuiDockNode* node)
+{
+    const ImGuiContext& g = *ImGui::GetCurrentContext();
+    const bool isHovered = !window->DockTabDisabled && (g.HoveredId == window->TabId || g.ActiveId == window->TabId);
+    const bool isActive = node->VisibleWindow == window || isHovered;
+    ImVec4 color = isActive ? GetItemValueColor() : ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled);
+
+    if (window->DockTabDisabled)
+        color.w *= g.Style.DisabledAlpha;
+
+    return ImGui::GetColorU32(color);
+}
+
 void DrawTabRowCount(const TabRowTitle& title, s32 count)
 {
     ImGuiWindow* window = ImGui::GetCurrentWindow();
@@ -130,7 +143,7 @@ void DrawTabRowCount(const TabRowTitle& title, s32 count)
 
     ImGui::PushClipRect(barRect.Min, barRect.Max, true);
     ImGui::PushClipRect(tabRect.Min, ImVec2(tabRect.Max.x - padding.x, tabRect.Max.y), true);
-    ImGui::GetWindowDrawList()->AddText(pos, ImGui::GetColorU32(GetItemValueColor()), text.cstr());
+    ImGui::GetWindowDrawList()->AddText(pos, CalcTabRowCountColor(window, node), text.cstr());
     ImGui::PopClipRect();
     ImGui::PopClipRect();
 

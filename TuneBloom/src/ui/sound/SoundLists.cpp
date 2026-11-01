@@ -8,13 +8,13 @@
 #include <ui/items/ItemColumns.h>
 #include <ui/items/ItemList.h>
 #include <ui/widgets/ListFilter.h>
+#include <ui/widgets/RangeStrip.h>
 #include <messages/Messages.h>
 #include <ui/app/Notifications.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/project/References.h>
 #include <ui/items/Selection.h>
 #include <ui/settings/Theme.h>
-#include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/app/Workspace.h>
 
@@ -343,15 +343,8 @@ InstanciateItemCallback CreateSequenceSoundSetFunc(bool clear)
     return CreateFixedSoundSetTypeFunc<SoundSet::SoundSetType::Seq>(clear);
 }
 
-static constexpr u8  cRangeSetAlpha         = 160;
-static constexpr u8  cRangeViewedSetAlpha   = 255;
-static constexpr u8  cRangeTextDimAlpha     = 190;
-static constexpr u8  cRangeOverlapAlpha     = 180;
-static constexpr u8  cRangeHoverAlpha       = 35;
-static constexpr u8  cRangeOutlineAlpha     = 160;
-static constexpr f32 cRangeViewedMarkHeight = 3.0f;
-static constexpr f32 cRangeBarHeight        = 28.0f;
-static constexpr f32 cRangeBarOuterPad      = 2.0f;
+static constexpr f32 cRangeBarHeight   = 28.0f;
+static constexpr f32 cRangeBarOuterPad = 2.0f;
 
 namespace
 {
@@ -445,63 +438,41 @@ static RangeBar CalcRangeBar(const std::vector<RangeSet>& sets, u32 totalSounds)
     return bar;
 }
 
-static void DrawRangeSet(ImDrawList* drawList, const RangeBar& bar, const RangeSet& rangeSet, bool viewed)
+static RangeSpan CalcRangeSetSpan(const RangeBar& bar, const RangeSet& rangeSet)
 {
     const f32 x1 = bar.calcX(rangeSet.start);
-    const f32 x2 = bar.calcEndX(x1, rangeSet.end);
 
-    const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
-    const ImU32 color = uicolors::ToU32(GetSeriesColor(rangeSet.index), viewed ? cRangeViewedSetAlpha : cRangeSetAlpha);
-    const ImU32 textColor = viewed ? ink : uicolors::WithAlpha(ink, cRangeTextDimAlpha);
-
-    drawList->AddRectFilled(ImVec2(x1, bar.min.y), ImVec2(x2, bar.max.y), color);
-
-    if (viewed)
-        drawList->AddRectFilled(ImVec2(x1, bar.max.y - cRangeViewedMarkHeight), ImVec2(x2, bar.max.y), ink);
-
-    if (x2 - x1 > 3.0f)
-        drawList->AddLine(ImVec2(x1 + 0.5f, bar.min.y), ImVec2(x1 + 0.5f, bar.max.y), ImGui::GetColorU32(ImGuiCol_FrameBg));
-
-    const char* name = rangeSet.set->getNameOrNull().cstr();
-    ImVec2 textSize = ImGui::CalcTextSize(name);
-    if (x2 - x1 > textSize.x + 6.0f)
-    {
-        f32 textX = x1 + (x2 - x1 - textSize.x) * 0.5f;
-        if (textX < bar.min.x + 2.0f)
-            textX = bar.min.x + 2.0f;
-
-        if (textX + textSize.x > bar.max.x - 2.0f)
-            textX = bar.max.x - textSize.x - 2.0f;
-
-        drawList->AddText(ImVec2(textX, bar.min.y + (cRangeBarHeight - textSize.y) * 0.5f), textColor, name);
-        return;
-    }
-
-    sead::FormatFixedSafeString<16> idStr("%u", rangeSet.set->getId());
-    ImVec2 idSize = ImGui::CalcTextSize(idStr.cstr());
-    if (x2 - x1 > idSize.x + 4.0f)
-    {
-        f32 textX = x1 + (x2 - x1 - idSize.x) * 0.5f;
-        drawList->AddText(ImVec2(textX, bar.min.y + (cRangeBarHeight - idSize.y) * 0.5f), textColor, idStr.cstr());
-    }
+    return { x1, bar.calcEndX(x1, rangeSet.end) };
 }
 
-static void DrawRangeOverlaps(ImDrawList* drawList, const RangeBar& bar, const std::vector<RangeSet>& sets)
+static std::vector<RangeSpan> CollectRangeSetSpans(const RangeBar& bar, const std::vector<RangeSet>& sets)
 {
-    for (size_t i = 0; i < sets.size(); i++)
-    {
-        for (size_t j = i + 1; j < sets.size(); j++)
-        {
-            u32 ovStart = sets[i].start > sets[j].start ? sets[i].start : sets[j].start;
-            u32 ovEnd = sets[i].end < sets[j].end ? sets[i].end : sets[j].end;
-            if (ovStart <= ovEnd)
-            {
-                const f32 ox1 = bar.calcX(ovStart);
-                const f32 ox2 = bar.calcEndX(ox1, ovEnd);
-                drawList->AddRectFilled(ImVec2(ox1, bar.min.y), ImVec2(ox2, bar.max.y), uicolors::ToU32(uicolors::Marker(), cRangeOverlapAlpha));
-            }
-        }
-    }
+    std::vector<RangeSpan> spans;
+    spans.reserve(sets.size());
+
+    for (const RangeSet& rangeSet : sets)
+        spans.push_back(CalcRangeSetSpan(bar, rangeSet));
+
+    return spans;
+}
+
+static void DrawRangeSet(ImDrawList* drawList, const RangeBar& bar, const std::vector<RangeSpan>& spans, const RangeSet& rangeSet, s32 setNo, bool viewed)
+{
+    const sead::FormatFixedSafeString<16> id("%u", rangeSet.set->getId());
+
+    RangeSegment segment;
+    segment.min = ImVec2(spans[setNo].left, bar.min.y);
+    segment.max = ImVec2(spans[setNo].right, bar.max.y);
+
+    const bool hasLabelSpace = SetRangeSegmentCover(&segment, spans.data(), static_cast<s32>(spans.size()), setNo);
+
+    segment.color = GetSeriesColor(rangeSet.index);
+    segment.backdrop = ImGui::GetStyleColorVec4(ImGuiCol_FrameBg);
+    segment.label = hasLabelSpace ? rangeSet.set->getNameOrNull().cstr() : nullptr;
+    segment.shortLabel = hasLabelSpace ? id.cstr() : nullptr;
+    segment.marked = viewed;
+
+    DrawRangeSegment(drawList, segment);
 }
 
 static const RangeSet* FindHoveredRangeSet(const RangeBar& bar, const std::vector<RangeSet>& sets)
@@ -515,10 +486,10 @@ static const RangeSet* FindHoveredRangeSet(const RangeBar& bar, const std::vecto
 
     const f32 hoveredId = (f32)bar.firstId + (relX / bar.width) * bar.idRange;
 
-    for (const RangeSet& s : sets)
+    for (auto it = sets.rbegin(); it != sets.rend(); ++it)
     {
-        if (hoveredId >= (f32)s.start && hoveredId < (f32)(s.end + 1))
-            return &s;
+        if (hoveredId >= (f32)it->start && hoveredId < (f32)(it->end + 1))
+            return &*it;
     }
 
     return nullptr;
@@ -540,10 +511,10 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
 
     drawList->AddRectFilled(bar.min, bar.max, ImGui::GetColorU32(ImGuiCol_FrameBg));
 
-    for (const RangeSet& rangeSet : sets)
-        DrawRangeSet(drawList, bar, rangeSet, rangeSet.set == viewedSet);
+    const std::vector<RangeSpan> spans = CollectRangeSetSpans(bar, sets);
 
-    DrawRangeOverlaps(drawList, bar, sets);
+    for (s32 setNo = 0; setNo < static_cast<s32>(sets.size()); setNo++)
+        DrawRangeSet(drawList, bar, spans, sets[setNo], setNo, sets[setNo].set == viewedSet);
 
     drawList->AddRect(bar.min, bar.max, ImGui::GetColorU32(ImGuiCol_Border));
 
@@ -554,12 +525,9 @@ static void DrawSoundSetRangeVisualizer(const SoundSet::List& list, bool filterB
     if (!hoveredSet)
         return;
 
-    const f32 hx1 = bar.calcX(hoveredSet->start);
-    const f32 hx2 = bar.calcEndX(hx1, hoveredSet->end);
-    const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
+    const RangeSpan hoveredSpan = CalcRangeSetSpan(bar, *hoveredSet);
 
-    drawList->AddRectFilled(ImVec2(hx1, bar.min.y), ImVec2(hx2, bar.max.y), uicolors::WithAlpha(ink, cRangeHoverAlpha));
-    drawList->AddRect(ImVec2(hx1, bar.min.y), ImVec2(hx2, bar.max.y), uicolors::WithAlpha(ink, cRangeOutlineAlpha), 0.0f, 0, 1.5f);
+    DrawRangeSegmentHover(drawList, ImVec2(hoveredSpan.left, bar.min.y), ImVec2(hoveredSpan.right, bar.max.y));
 
     if (ImGui::IsItemActivated())
         SelectItem(hoveredSet->set);

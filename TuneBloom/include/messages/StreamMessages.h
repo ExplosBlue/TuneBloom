@@ -133,9 +133,9 @@ inline constexpr const char* cTrackChannelsFormat   = "%u ch";
 inline constexpr const char* cTrackNameFormat       = "Track %u";
 
 inline constexpr const char* cRegionNone            = "No Regions";
-inline constexpr const char* cRegionNext            = "Next";
 inline constexpr const char* cRegionRangeFormat     = "%u to %u";
 inline constexpr const char* cRegionAddTip          = "Add Region";
+inline constexpr const char* cRegionMenuTip         = "Region Actions";
 inline constexpr const char* cRegionImport          = "Import Regions from WAV";
 inline constexpr const char* cRegionMovingFormat    = "Moving Region %d";
 inline constexpr const char* cRegionDisplayFormat   = "Region %d";

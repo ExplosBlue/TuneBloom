@@ -157,6 +157,21 @@ void ImGui::AddRectFilledGradient(ImDrawList* draw_list, const ImVec2& p_min, co
     ImGui::ShadeVertsLinearColorGradientKeepAlpha(draw_list, vtx_begin, draw_list->VtxBuffer.Size, p_min, ImVec2(p_min.x, p_max.y), ImGui::ColorConvertFloat4ToU32(top), ImGui::ColorConvertFloat4ToU32(bottom));
 }
 
+void ImGui::ScaleVertsAlpha(ImDrawList* draw_list, int vtx_begin, float alpha)
+{
+    if (alpha >= 1.0f)
+        return;
+
+    const float scale = ImSaturate(alpha);
+
+    for (int i = vtx_begin; i < draw_list->VtxBuffer.Size; i++)
+    {
+        ImU32& col = draw_list->VtxBuffer[i].col;
+        const ImU32 a = (ImU32)((float)((col >> IM_COL32_A_SHIFT) & 0xFF) * scale + 0.5f);
+        col = (col & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
+    }
+}
+
 void ImGui::AddRectFilledRaised(ImDrawList* draw_list, const ImVec2& p_min, const ImVec2& p_max, ImU32 col, float rounding, ImDrawFlags flags)
 {
     AddRectFilledGradient(draw_list, p_min, p_max, col, GRaisedGradient, rounding, flags);

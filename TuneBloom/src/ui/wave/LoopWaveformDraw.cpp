@@ -19,7 +19,14 @@ namespace ImGui
 constexpr u32    cPeakBlockSize    = 256;
 
 constexpr float  cWaveAmpScale     = 0.92f;
-constexpr float  cTickTargetPx     = 100.0f;
+constexpr float  cTickMinPx         = 6.0f;
+constexpr float  cTickFadePx        = 6.0f;
+constexpr float  cTickLabelPadX     = 3.0f;
+constexpr float  cTickLabelFadePx   = 10.0f;
+constexpr float  cTickEdgeFadePx    = 12.0f;
+constexpr float  cTickLabelMarginPx = 80.0f;
+constexpr float  cMajorTickLen      = 13.0f;
+constexpr float  cMinorTickLen      = 6.0f;
 constexpr float  cSeekPlayedAlpha  = 0.18f;
 constexpr int    cSeekLoopTintA    = 26;
 constexpr int    cOverviewLoopTintA = 12;
@@ -42,12 +49,14 @@ constexpr uicolors::Themed<u32> cCrossfadeAlpha = { 0x24, 0x2D };
 
 constexpr double cTickStepsMs[] =
 {
-    0.1,   0.2,   0.5,
-    1,     2,     5,
-    10,    20,    50,
-    100,   200,   500,
-    1000,  2000,  5000,
-    10000, 20000, 30000, 60000,
+    0.1,   0.5,
+    1,     5,
+    10,    50,
+    100,   500,
+    1000,  5000,
+    10000, 30000,
+    60000, 300000,
+    600000, 1800000, 3600000,
 };
 
 const WaveformPalette& Palette()
@@ -476,10 +485,14 @@ void DrawWaveform(ImDrawList* draw, ImVec2 origin, float width, float height,
     if (showLoop)
         DrawLoopRegion(ctx, state, sampleRate, loopStartX, loopEndX);
 
+    const int waveVtxBegin = draw->VtxBuffer.Size;
+
     if (ctx.samplesPerPixel <= 1.0f)
         DrawWaveSamples(ctx, state, mono);
     else
         DrawWavePeaks(ctx, state, mono);
+
+    ScaleVertsAlpha(draw, waveVtxBegin, LoopWaveformAppearAlpha(state.appearTime));
 
     if (state.showCrop)
         DrawCrop(draw, origin, width, height, state);
@@ -512,78 +525,126 @@ struct RulerDraw
     float width = 0.0f;
 };
 
-static double FindMajorTickStep(double roughStepMs)
+static s64 TickUnits(double stepMs)
 {
-    for (double stepMs : cTickStepsMs)
+    return static_cast<s64>(std::llround(stepMs * 10.0));
+}
+
+static int FindTickLevel(s64 timeUnits, int finestLevel)
+{
+    int level = finestLevel;
+
+    while (level + 1 < IM_ARRAYSIZE(cTickStepsMs) && timeUnits % TickUnits(cTickStepsMs[level + 1]) == 0)
+        level++;
+
+    return level;
+}
+
+static ImU32 FadeColor(ImU32 color, float alpha)
+{
+    ImVec4 value = ColorConvertU32ToFloat4(color);
+    value.w *= alpha;
+
+    return ColorConvertFloat4ToU32(value);
+}
+
+static float CalcLabelStartPx(const char* label)
+{
+    return CalcTextSize(label).x + cTickLabelPadX + GetStyle().ItemSpacing.x;
+}
+
+struct RulerLabels
+{
+    double stepMs;
+    float startPx;
+};
+
+static RulerLabels FindRulerLabels(int finestLevel, double pxPerMs, double endMs)
+{
+    char label[32];
+
+    for (int level = finestLevel; level < IM_ARRAYSIZE(cTickStepsMs); level++)
     {
-        if (stepMs >= roughStepMs)
-            return stepMs;
+        FormatTickLabel(label, sizeof(label), endMs, cTickStepsMs[level]);
+
+        const float startPx = CalcLabelStartPx(label);
+
+        if (cTickStepsMs[level] * pxPerMs >= startPx || level + 1 == IM_ARRAYSIZE(cTickStepsMs))
+            return { cTickStepsMs[level], startPx };
     }
 
-    return cTickStepsMs[IM_ARRAYSIZE(cTickStepsMs) - 1];
+    return { cTickStepsMs[IM_ARRAYSIZE(cTickStepsMs) - 1], FLT_MAX };
+}
+
+static float CalcLabelEdgeFit(const RulerDraw& ruler, float tickX, float textWidth)
+{
+    const float leftFit = 1.0f + tickX / cTickEdgeFadePx;
+    const float rightFit = (ruler.width - tickX - cTickLabelPadX - textWidth) / cTickEdgeFadePx;
+
+    return sead::Mathf::clamp2(0.0f, sead::Mathf::min(leftFit, rightFit), 1.0f);
+}
+
+static void DrawRulerTick(const RulerDraw& ruler, float tickX, double timeMs, const RulerLabels& labels, double levelStepMs, float levelPx)
+{
+    const WaveformPalette& palette = Palette();
+    const float tickAlpha = sead::Mathf::clamp2(0.0f, (levelPx - cTickMinPx) / cTickFadePx, 1.0f);
+
+    if (tickAlpha <= 0.0f)
+        return;
+
+    const bool labelLevel = levelStepMs >= labels.stepMs;
+    const float labelAlpha = labelLevel ? sead::Mathf::clamp2(0.0f, (levelPx - labels.startPx) / cTickLabelFadePx, 1.0f) : 0.0f;
+    const float tickLen = ImLerp(cMinorTickLen, cMajorTickLen, labelAlpha);
+    const ImU32 tickColor = ColorConvertFloat4ToU32(ImLerp(ColorConvertU32ToFloat4(palette.tickMinor), ColorConvertU32ToFloat4(palette.inkFaint), labelAlpha));
+    const float x = ruler.left + tickX;
+
+    ruler.draw->AddLine(ImVec2(x, ruler.bottom - tickLen), ImVec2(x, ruler.bottom), FadeColor(tickColor, tickAlpha));
+
+    if (labelAlpha <= 0.0f)
+        return;
+
+    char label[32];
+    FormatTickLabel(label, sizeof(label), timeMs, labels.stepMs);
+
+    const float textAlpha = labelAlpha * CalcLabelEdgeFit(ruler, tickX, CalcTextSize(label).x);
+
+    if (textAlpha > 0.0f)
+        ruler.draw->AddText(ImVec2(x + cTickLabelPadX, ruler.top + 2.0f), FadeColor(palette.inkFaint, textAlpha), label);
 }
 
 static void DrawRulerTicks(const RulerDraw& ruler, const LoopWaveformState& state, u32 sampleRate)
 {
-    const WaveformPalette& palette = Palette();
-    ImDrawList* draw = ruler.draw;
-    const float left = ruler.left;
-    const float top = ruler.top;
-    const float bottom = ruler.bottom;
-    const float width = ruler.width;
-
-    const float majorTickLen = 13.0f;
-    const float minorTickLen = 6.0f;
-
     const double startMs = timeutil::SamplesToSeconds(state.viewStart, sampleRate) * 1000.0;
     const double endMs = timeutil::SamplesToSeconds(state.viewEnd, sampleRate) * 1000.0;
     const double spanMs = endMs - startMs;
 
-    if (spanMs <= 0.0)
+    if (spanMs <= 0.0 || ruler.width <= 0.0f)
         return;
 
-    const double targetDivisions = std::max(1.0, static_cast<double>(width) / cTickTargetPx);
-    const double majorStepMs = FindMajorTickStep(spanMs / targetDivisions);
-    const double majorStepPx = majorStepMs / spanMs * width;
-    int subdivisions = 1;
+    const double pxPerMs = ruler.width / spanMs;
+    int finestLevel = 0;
 
-    if (majorStepPx / 5.0 >= 7.0)
-        subdivisions = 5;
-    else if (majorStepPx / 4.0 >= 7.0)
-        subdivisions = 4;
-    else if (majorStepPx / 2.0 >= 6.0)
-        subdivisions = 2;
+    while (finestLevel + 1 < IM_ARRAYSIZE(cTickStepsMs) && cTickStepsMs[finestLevel] * pxPerMs < cTickMinPx)
+        finestLevel++;
 
-    const double minorStepMs = majorStepMs / subdivisions;
-    float labelEndX = -FLT_MAX;
-    char label[32];
+    const double stepMs = cTickStepsMs[finestLevel];
+    const s64 stepUnits = TickUnits(stepMs);
+    const double firstMs = std::max(0.0, startMs - cTickLabelMarginPx / pxPerMs);
+    const RulerLabels labels = FindRulerLabels(finestLevel, pxPerMs, endMs);
 
-    for (s64 i = static_cast<s64>(std::ceil(startMs / minorStepMs)); i * minorStepMs <= endMs; i++)
+    ruler.draw->PushClipRect(ImVec2(ruler.left, ruler.top), ImVec2(ruler.left + ruler.width, ruler.bottom), true);
+
+    for (s64 i = static_cast<s64>(std::ceil(firstMs / stepMs)); i * stepMs <= endMs; i++)
     {
-        const double timeMs = i * minorStepMs;
-        const float tickX = SampleToX(state, static_cast<u32>(timeMs / 1000.0 * sampleRate + 0.5), width);
+        const double timeMs = i * stepMs;
+        const int level = FindTickLevel(i * stepUnits, finestLevel);
+        const double tickSample = timeMs / 1000.0 * sampleRate;
+        const float tickX = static_cast<float>((tickSample - static_cast<double>(state.viewStart)) / ViewSpan(state) * ruler.width);
 
-        if (tickX < 0.0f || tickX > width)
-            continue;
-
-        if (i % subdivisions == 0)
-        {
-            draw->AddLine(ImVec2(left + tickX, bottom - majorTickLen), ImVec2(left + tickX, bottom), palette.inkFaint);
-            FormatTickLabel(label, sizeof(label), timeMs, majorStepMs);
-
-            const float labelWidth = CalcTextSize(label).x;
-
-            if (tickX + 3 >= labelEndX && tickX + 3 + labelWidth <= width)
-            {
-                draw->AddText(ImVec2(left + tickX + 3, top + 2), palette.inkFaint, label);
-                labelEndX = tickX + 3 + labelWidth + GetStyle().ItemSpacing.x;
-            }
-        }
-        else
-        {
-            draw->AddLine(ImVec2(left + tickX, bottom - minorTickLen), ImVec2(left + tickX, bottom), palette.tickMinor);
-        }
+        DrawRulerTick(ruler, tickX, timeMs, labels, cTickStepsMs[level], static_cast<float>(cTickStepsMs[level] * pxPerMs));
     }
+
+    ruler.draw->PopClipRect();
 }
 
 void DrawTimeRuler(ImDrawList* draw, ImVec2 min, ImVec2 max, u32 sampleCount, u32 sampleRate)
@@ -605,14 +666,14 @@ void DrawTimeRuler(ImDrawList* draw, ImVec2 min, ImVec2 max, u32 sampleCount, u3
     DrawRulerTicks(ruler, state, sampleRate);
 }
 
-void DrawWaveOverview(ImDrawList* draw, ImVec2 min, ImVec2 max, const std::vector<float>& peakMin, const std::vector<float>& peakMax, WaveOverviewTone tone, const WaveOverviewLoop* loop, float playRatio)
+void DrawWaveOverview(ImDrawList* draw, ImVec2 min, ImVec2 max, const std::vector<float>& peakMin, const std::vector<float>& peakMax, WaveOverviewTone tone, const WaveOverviewLoop* loop, float waveAlpha)
 {
     const WaveformPalette& palette = Palette();
     const u32 blockCount = static_cast<u32>(std::min(peakMin.size(), peakMax.size()));
     const float width = max.x - min.x;
     const float midY = ImFloor((min.y + max.y) * 0.5f);
     const float halfHeight = (max.y - min.y) * 0.5f * cWaveAmpScale;
-    const ImU32 color = tone == WaveOverviewTone::Lit ? palette.waveLit : tone == WaveOverviewTone::Dim ? palette.edge : palette.wave;
+    const ImU32 color = FadeColor(tone == WaveOverviewTone::Lit ? palette.waveLit : tone == WaveOverviewTone::Dim ? palette.edge : palette.wave, waveAlpha);
 
     float loopStartX = 0.0f;
     float loopEndX = 0.0f;
@@ -649,13 +710,16 @@ void DrawWaveOverview(ImDrawList* draw, ImVec2 min, ImVec2 max, const std::vecto
         draw->AddLine(ImVec2(loopStartX, min.y), ImVec2(loopStartX, max.y), palette.loop);
         draw->AddLine(ImVec2(loopEndX, min.y), ImVec2(loopEndX, max.y), palette.loop);
     }
+}
 
+void DrawOverviewPlayhead(ImDrawList* draw, ImVec2 min, ImVec2 max, float playRatio)
+{
     if (playRatio < 0.0f || playRatio > 1.0f)
         return;
 
-    const float playX = ImFloor(min.x + width * playRatio) + 0.5f;
+    const float playX = ImFloor(min.x + (max.x - min.x) * playRatio) + 0.5f;
 
-    draw->AddLine(ImVec2(playX, min.y), ImVec2(playX, max.y), palette.good, 1.5f);
+    draw->AddLine(ImVec2(playX, min.y), ImVec2(playX, max.y), Palette().good, 1.5f);
 }
 
 static void DrawRulerLoopEdge(const RulerDraw& ruler, float x, float footLen)
@@ -690,7 +754,7 @@ static void DrawRulerPlayhead(const RulerDraw& ruler, const LoopWaveformState& s
 bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
                    const LoopWaveformState& state, u32 sampleRate,
                    float playheadSample, bool showLoop, u32 loopStart, u32 loopEnd,
-                   double* outSeekSample)
+                   double* outSeekSample, SeekRulerForm form)
 {
     const WaveformPalette& palette = Palette();
     ImDrawList* draw = GetWindowDrawList();
@@ -700,14 +764,18 @@ bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
     const float bottom = origin.y + height;
     const float span = static_cast<float>(ViewSpan(state));
     const bool playing = playheadSample >= 0.0f;
+    const bool band = form == SeekRulerForm::Band;
     const RulerDraw ruler{ draw, left, top, bottom, width };
 
     const float loopFootLen = 5.0f;
 
-    draw->AddRectFilled(origin, ImVec2(left + width, bottom), palette.bg, 3.0f);
-    draw->AddLine(origin, ImVec2(left + width, top), palette.edge);
+    if (band)
+    {
+        draw->AddRectFilled(origin, ImVec2(left + width, bottom), palette.bg, 3.0f);
+        draw->AddLine(origin, ImVec2(left + width, top), palette.edge);
+    }
 
-    if (playing)
+    if (band && playing)
     {
         const float playheadX = sead::Mathf::clamp2(0.0f, SampleToX(state, static_cast<u32>(playheadSample), width), width);
         const ImU32 playedColor = uicolors::ToU32(uicolors::PlaybackFill(), uicolors::UnitToByte(cSeekPlayedAlpha));
@@ -715,7 +783,7 @@ bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
         draw->AddRectFilled(ImVec2(left, top), ImVec2(left + playheadX, bottom), playedColor, 3.0f);
     }
 
-    if (showLoop)
+    if (band && showLoop)
     {
         const float clampedLoopStartX = sead::Mathf::clamp2(0.0f, SampleToX(state, loopStart, width), width);
         const float clampedLoopEndX = sead::Mathf::clamp2(0.0f, SampleToX(state, loopEnd, width), width);
@@ -729,7 +797,9 @@ bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
 
     if (showLoop)
     {
-        DimDroppedRange(draw, origin, width, height, SampleToX(state, loopEnd, width), width, 3.0f);
+        if (band)
+            DimDroppedRange(draw, origin, width, height, SampleToX(state, loopEnd, width), width, 3.0f);
+
         DrawRulerLoopEdge(ruler, SampleToX(state, loopStart, width), loopFootLen);
         DrawRulerLoopEdge(ruler, SampleToX(state, loopEnd, width), -loopFootLen);
     }
@@ -739,7 +809,7 @@ bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
 
     InvisibleButton(idStr, ImVec2(width, height));
 
-    if (IsItemHovered())
+    if (playing && IsItemHovered())
         SetMouseCursor(ImGuiMouseCursor_Hand);
 
     if (IsItemActivated())

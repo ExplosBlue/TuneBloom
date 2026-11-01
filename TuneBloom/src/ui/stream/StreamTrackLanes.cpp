@@ -2,7 +2,8 @@
 
 #include <messages/Messages.h>
 #include <ui/wave/LoopWaveformInternal.h>
-#include <ui/wave/WaveformBox.h>
+#include <ui/wave/WaveMonoJob.h>
+#include <ui/widgets/LaneRow.h>
 
 #include <imgui/imgui_internal.h>
 
@@ -11,33 +12,37 @@
 
 static constexpr u32 cTrackPeakKeepCount   = 64;
 static constexpr s32 cTrackPeakForgetFrames = 600;
-static constexpr f32 cTrackLanePadYEm      = 0.15f;
 
-struct TrackPeaks
+struct TrackPeakKey
 {
     const WaveFile* wave;
     u32 contentSerial;
     u32 sampleCount;
     u32 channelNum;
     WaveFile::Encoding encoding;
+};
+
+struct TrackPeaks
+{
+    TrackPeakKey key;
     s32 lastFrame;
+    bool isReady;
+    f64 appearTime;
     std::vector<f32> peakMin;
     std::vector<f32> peakMax;
 };
 
 static std::vector<TrackPeaks>* sTrackPeaks = nullptr;
+static WaveMonoJob* sTrackPeakJob = nullptr;
+static TrackPeakKey sTrackPeakJobKey = {};
 static s32 sTrackPeakBuildFrame = -1;
 
-static void FillTrackPeakKey(TrackPeaks* peaks, const WaveFile& wave)
+static TrackPeakKey MakeTrackPeakKey(const WaveFile& wave)
 {
-    peaks->wave = &wave;
-    peaks->contentSerial = wave.getContentSerial();
-    peaks->sampleCount = wave.getSampleCount();
-    peaks->channelNum = static_cast<u32>(wave.getChannels().size());
-    peaks->encoding = wave.getEncoding();
+    return { &wave, wave.getContentSerial(), wave.getSampleCount(), static_cast<u32>(wave.getChannels().size()), wave.getEncoding() };
 }
 
-static bool IsTrackPeakKeySame(const TrackPeaks& a, const TrackPeaks& b)
+static bool IsTrackPeakKeySame(const TrackPeakKey& a, const TrackPeakKey& b)
 {
     return a.wave == b.wave && a.contentSerial == b.contentSerial && a.sampleCount == b.sampleCount && a.channelNum == b.channelNum && a.encoding == b.encoding;
 }
@@ -56,15 +61,30 @@ static bool CanDecodeTrackPeaks(const WaveFile& wave)
     }
 }
 
-static void BuildTrackPeaks(TrackPeaks* peaks, const WaveFile& wave)
+static void TakeTrackPeakJob()
 {
-    peaks->peakMin.clear();
-    peaks->peakMax.clear();
+    WaveMono mono;
 
-    std::vector<f32> mono;
+    if (!sTrackPeakJob || !sTrackPeakJob->poll(&mono))
+        return;
 
-    if (CanDecodeTrackPeaks(wave) && DecodeWaveViewMono(wave, &mono) && !mono.empty())
-        ImGui::LoopWaveformBuildPeaks(mono, &peaks->peakMin, &peaks->peakMax);
+    auto found = std::find_if(sTrackPeaks->begin(), sTrackPeaks->end(), [](const TrackPeaks& peaks) { return IsTrackPeakKeySame(peaks.key, sTrackPeakJobKey); });
+
+    if (found == sTrackPeaks->end())
+        return;
+
+    if (found->peakMin.empty() && !mono.peakMin.empty())
+        found->appearTime = ImGui::GetTime();
+
+    found->peakMin = std::move(mono.peakMin);
+    found->peakMax = std::move(mono.peakMax);
+    found->isReady = true;
+}
+
+static void StartTrackPeakJob(const TrackPeakKey& key, const WaveFile& wave)
+{
+    sTrackPeakJobKey = key;
+    GetWaveMonoJob(&sTrackPeakJob).requestPeaks(wave);
 }
 
 static void ForgetOldTrackPeaks(s32 frame)
@@ -79,49 +99,47 @@ static void ForgetOldTrackPeaks(s32 frame)
     list.erase(std::min_element(list.begin(), list.end(), [](const TrackPeaks& a, const TrackPeaks& b) { return a.lastFrame < b.lastFrame; }));
 }
 
-static const TrackPeaks* FindTrackPeaks(const WaveFile& wave)
+static const TrackPeaks& FindTrackPeaks(const WaveFile& wave)
 {
     if (!sTrackPeaks)
         sTrackPeaks = new std::vector<TrackPeaks>();
 
     const s32 frame = ImGui::GetFrameCount();
+    const TrackPeakKey key = MakeTrackPeakKey(wave);
 
-    TrackPeaks key = {};
-    FillTrackPeakKey(&key, wave);
+    TakeTrackPeakJob();
 
-    auto found = std::find_if(sTrackPeaks->begin(), sTrackPeaks->end(), [&wave](const TrackPeaks& peaks) { return peaks.wave == &wave; });
+    auto found = std::find_if(sTrackPeaks->begin(), sTrackPeaks->end(), [&wave](const TrackPeaks& peaks) { return peaks.key.wave == &wave; });
 
-    if (found != sTrackPeaks->end() && IsTrackPeakKeySame(*found, key))
-    {
-        found->lastFrame = frame;
-        return &*found;
-    }
-
-    if (sTrackPeakBuildFrame == frame)
-        return nullptr;
-
-    sTrackPeakBuildFrame = frame;
-
-    if (found != sTrackPeaks->end())
-        FillTrackPeakKey(&*found, wave);
-    else
+    if (found == sTrackPeaks->end())
     {
         ForgetOldTrackPeaks(frame);
-        found = sTrackPeaks->insert(sTrackPeaks->end(), key);
+        found = sTrackPeaks->insert(sTrackPeaks->end(), TrackPeaks { key, frame, false, -1.0, {}, {} });
+    }
+    else if (!IsTrackPeakKeySame(found->key, key))
+    {
+        found->key = key;
+        found->isReady = false;
     }
 
     found->lastFrame = frame;
-    BuildTrackPeaks(&*found, wave);
 
-    return &*found;
+    if (found->isReady || sTrackPeakBuildFrame == frame || (sTrackPeakJob && sTrackPeakJob->isLoading()))
+        return *found;
+
+    sTrackPeakBuildFrame = frame;
+    StartTrackPeakJob(key, wave);
+    TakeTrackPeakJob();
+
+    return *found;
 }
 
-static f32 CalcTrackPlayRatio(const TrackContext& ctx, const WaveFile& wave)
+f32 CalcStreamPlayRatio(const StreamSource& source, u32 sampleCount)
 {
-    if (sSoundPlayer.getPlayingStream() != ctx.source.stream || wave.getSampleCount() == 0)
+    if (sSoundPlayer.getPlayingStream() != source.stream || sampleCount == 0)
         return -1.0f;
 
-    return static_cast<f32>(sSoundPlayer.getPlaySamplePosition(true)) / static_cast<f32>(wave.getSampleCount());
+    return static_cast<f32>(sSoundPlayer.getPlaySamplePosition(true)) / static_cast<f32>(sampleCount);
 }
 
 static ImGui::WaveOverviewLoop CalcTrackLoop(const WaveFile& wave)
@@ -147,21 +165,6 @@ static ImGui::WaveOverviewTone GetTrackLaneTone(const TrackContext& ctx, s32 ind
     return ImGui::WaveOverviewTone::Normal;
 }
 
-static ImVec2 CalcTrackLanePad()
-{
-    return ImVec2(ImGui::GetStyle().FrameRounding, ImFloor(ImGui::GetFontSize() * cTrackLanePadYEm));
-}
-
-static void DrawTrackLaneFill(ImDrawList* draw, const ImVec2& min, const ImVec2& max, bool selected)
-{
-    const f32 rounding = ImGui::GetStyle().FrameRounding;
-
-    draw->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_FrameBg), rounding);
-
-    if (selected)
-        draw->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackSelectedAlpha)), rounding);
-}
-
 static void DrawTrackLaneText(ImDrawList* draw, const ImVec2& min, const ImVec2& max, const char* text)
 {
     const ImVec2 size = ImGui::CalcTextSize(text);
@@ -172,36 +175,14 @@ static void DrawTrackLaneText(ImDrawList* draw, const ImVec2& min, const ImVec2&
 
 static void DrawTrackLaneWave(const TrackContext& ctx, s32 index, const WaveFile* wave, ImDrawList* draw, const ImVec2& min, const ImVec2& max)
 {
-    static const std::vector<f32> sNoPeaks;
-
-    const TrackPeaks* peaks = FindTrackPeaks(*wave);
-    const ImVec2 pad = CalcTrackLanePad();
+    const TrackPeaks& peaks = FindTrackPeaks(*wave);
+    const ImVec2 pad = CalcLanePad();
     const bool hasLoop = wave->hasValidLoop();
     const ImGui::WaveOverviewLoop loop = hasLoop ? CalcTrackLoop(*wave) : ImGui::WaveOverviewLoop{};
 
     draw->PushClipRect(min, max, true);
-    ImGui::DrawWaveOverview(draw, min + pad, max - pad, peaks ? peaks->peakMin : sNoPeaks, peaks ? peaks->peakMax : sNoPeaks, GetTrackLaneTone(ctx, index), hasLoop ? &loop : nullptr, CalcTrackPlayRatio(ctx, *wave));
+    ImGui::DrawWaveOverview(draw, min + pad, max - pad, peaks.peakMin, peaks.peakMax, GetTrackLaneTone(ctx, index), hasLoop ? &loop : nullptr, ImGui::LoopWaveformAppearAlpha(peaks.appearTime));
     draw->PopClipRect();
-}
-
-void DrawTrackLane(const TrackContext& ctx, s32 index, f32 height)
-{
-    const WaveFile* wave = static_cast<const WaveFile*>(ctx.tracks[index]->getWaveFileRef().getItem());
-    const bool selected = IsTrackLaneSelected(ctx, index);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-
-    const ImVec2 min = ImGui::GetCursorScreenPos();
-    const ImVec2 max = min + ImVec2(ImGui::GetContentRegionAvail().x, height);
-
-    DrawTrackLaneFill(draw, min, max, selected);
-    ImGui::Dummy(max - min);
-
-    if (!wave)
-        DrawTrackLaneText(draw, min, max, messages::reference::cNoWaveFile);
-    else if (!CanDecodeTrackPeaks(*wave))
-        DrawTrackLaneText(draw, min, max, messages::stream::cTrackLaneNoPreview);
-    else
-        DrawTrackLaneWave(ctx, index, wave, draw, min, max);
 }
 
 static const WaveFile* FindTrackRulerWave(const TrackContext& ctx)
@@ -215,16 +196,43 @@ static const WaveFile* FindTrackRulerWave(const TrackContext& ctx)
     return nullptr;
 }
 
+static void DrawTrackLanePlayhead(const TrackContext& ctx, const WaveFile* wave, const ImVec2& min, const ImVec2& max)
+{
+    const WaveFile* timeWave = wave ? wave : FindTrackRulerWave(ctx);
+
+    if (!timeWave)
+        return;
+
+    const ImVec2 pad = CalcLanePad();
+
+    DrawLaneRowPlayhead(min.x + pad.x, max.x - pad.x, max.y - min.y, CalcStreamPlayRatio(ctx.source, timeWave->getSampleCount()));
+}
+
+void DrawTrackLane(const TrackContext& ctx, s32 index, f32 height)
+{
+    const WaveFile* wave = static_cast<const WaveFile*>(ctx.tracks[index]->getWaveFileRef().getItem());
+    const bool selected = IsTrackLaneSelected(ctx, index);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const ImVec2 max = min + ImVec2(ImGui::GetContentRegionAvail().x, height);
+
+    DrawLaneFill(draw, min, max, selected);
+    ImGui::Dummy(max - min);
+
+    if (!wave)
+        DrawTrackLaneText(draw, min, max, messages::reference::cNoWaveFile);
+    else if (!CanDecodeTrackPeaks(*wave))
+        DrawTrackLaneText(draw, min, max, messages::stream::cTrackLaneNoPreview);
+    else
+        DrawTrackLaneWave(ctx, index, wave, draw, min, max);
+
+    DrawTrackLanePlayhead(ctx, wave, min, max);
+}
+
 void DrawTrackLaneRuler(const TrackContext& ctx)
 {
     const WaveFile* wave = FindTrackRulerWave(ctx);
-    const ImVec2 min = ImGui::GetCursorScreenPos();
-    const ImVec2 size(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight());
 
-    const f32 padX = CalcTrackLanePad().x;
-
-    if (wave)
-        ImGui::DrawTimeRuler(ImGui::GetWindowDrawList(), ImVec2(min.x + padX, min.y), ImVec2(min.x + size.x - padX, min.y + size.y), wave->getSampleCount(), wave->getSampleRate());
-
-    ImGui::Dummy(size);
+    DrawLaneRuler(wave ? wave->getSampleCount() : 0, wave ? wave->getSampleRate() : 0);
 }

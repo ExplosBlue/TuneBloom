@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ui/app/UI.h>
-#include <ui/settings/UiColors.h>
 
 #include <vector>
 
@@ -9,9 +8,6 @@ inline constexpr const char* cTrackMenuId = "TrackMenu";
 
 inline constexpr s32 cTrackBypassIndex = 3;
 inline constexpr f32 cTrackCellPadXEm  = 0.4f;
-
-inline constexpr uicolors::Themed<f32> cTrackSelectedAlpha = { 0.10f, 0.06f };
-inline constexpr uicolors::Themed<f32> cTrackIndexAlpha    = { 0.45f, 0.18f };
 
 inline constexpr u32 cTrackMixLabelCount    = 4;
 inline constexpr u32 cTrackSendLabelCount   = 4;
@@ -107,6 +103,7 @@ Item* GetHighlightedStreamTrack();
 TrackContext MakeTrackContext(const StreamSource& source);
 void DrawTrackLane(const TrackContext& ctx, s32 index, f32 height);
 void DrawTrackLaneRuler(const TrackContext& ctx);
+f32 CalcStreamPlayRatio(const StreamSource& source, u32 sampleCount);
 
 f32 CalcTrackKnobSize();
 TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx);
@@ -114,8 +111,8 @@ TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx);
 void DrawTrackSlotGroup(const TrackContext& ctx, s32 index, TrackSlots& slots, const TrackParam* params, f32 rowHeight);
 void DrawTrackWaveSelector(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, f32 width);
 
-bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, const ImVec2& size, ImGuiSelectableFlags flags, TrackEdit* edit);
+bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, f32 height, TrackEdit* edit);
 void DrawTrackListMenu(const TrackContext& ctx);
-void PlaceTrackMenu();
 
 void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit);
+f32 CalcTrackTableFitHeight(const TrackContext& ctx);

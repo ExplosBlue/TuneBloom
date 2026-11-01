@@ -17,9 +17,10 @@ void DrawStreamRegionsSection();
 
 // Selection
 s32 GetSelectedStreamRegion(const WaveFile* wave);
+void NoteStreamRegionSelectionShown();
+s32 GetShownStreamRegionSelection(const WaveFile* wave);
 void SelectStreamRegion(const WaveFile* wave, s32 regionNo);
-void ClickStreamRegion(const WaveFile* wave, s32 regionNo);
-void GetPlayingStreamRegions(const WaveFile* wave, s32* playingNo, s32* nextNo);
+s32 GetPlayingStreamRegion(const WaveFile* wave);
 
 s32 AddStreamRegion(WaveFile* wave, s32 afterNo);
 void DeleteStreamRegion(WaveFile* wave, s32 regionNo);
@@ -37,7 +38,15 @@ void KeepStreamRegions(WaveFile* mainWave, WaveFile* oldMainWave);
 u32 RemoveStreamRegionsPastEnd(WaveFile* wave);
 void ClearStreamRegions(WaveFile* wave);
 
-void DrawStreamRegionLane(WaveFile* wave, ImGui::LoopWaveformState& state);
+enum class RegionLaneClick
+{
+    None,
+    Select,
+    Menu
+};
 
-void DrawStreamRegionMarks(ImDrawList* draw, const ImVec2& min, const ImVec2& max, const WaveFile* wave, s32 onlyNo = -1);
+void DrawStreamRegionLane(WaveFile* wave, ImGui::LoopWaveformState& state);
+RegionLaneClick DrawStreamRegionRowLane(WaveFile* wave, ImGui::LoopWaveformState& state, s32 regionNo, const ImVec2& min, const ImVec2& max, bool editable);
+
+void DrawStreamRegionMarks(ImDrawList* draw, const ImVec2& min, const ImVec2& max, const WaveFile* wave, s32 onlyNo = -1, const ImGui::LoopWaveformState* view = nullptr);
 s32 FindStreamRegionAt(const WaveFile* wave, u32 sample);

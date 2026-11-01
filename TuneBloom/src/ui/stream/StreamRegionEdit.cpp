@@ -35,11 +35,22 @@ struct RegionImport
 
 static const WaveFile* sSelectedRegionWave = nullptr;
 static s32 sSelectedRegionNo = -1;
+static s32 sSelectionShownFrame = -1;
 static RegionImport* sRegionImport = nullptr;
 
 s32 GetSelectedStreamRegion(const WaveFile* wave)
 {
     return sSelectedRegionWave == wave ? sSelectedRegionNo : -1;
+}
+
+void NoteStreamRegionSelectionShown()
+{
+    sSelectionShownFrame = ImGui::GetFrameCount();
+}
+
+s32 GetShownStreamRegionSelection(const WaveFile* wave)
+{
+    return sSelectionShownFrame >= ImGui::GetFrameCount() - 1 ? GetSelectedStreamRegion(wave) : -1;
 }
 
 void SelectStreamRegion(const WaveFile* wave, s32 regionNo)
@@ -48,45 +59,29 @@ void SelectStreamRegion(const WaveFile* wave, s32 regionNo)
     sSelectedRegionNo = regionNo;
 }
 
-void GetPlayingStreamRegions(const WaveFile* wave, s32* playingNo, s32* nextNo)
+s32 GetPlayingStreamRegion(const WaveFile* wave)
 {
-    *playingNo = -1;
-    *nextNo = -1;
-
     const Sound::StreamSoundInfo* stream = sSoundPlayer.getPlayingStream();
 
     if (!stream || stream->getMainWave() != wave)
-        return;
+        return -1;
 
-    *playingNo = sSoundPlayer.getPlayingStreamRegion();
-    *nextNo = sSoundPlayer.getNextStreamRegion();
-}
-
-void ClickStreamRegion(const WaveFile* wave, s32 regionNo)
-{
-    s32 playingNo = -1;
-    s32 nextNo = -1;
-    GetPlayingStreamRegions(wave, &playingNo, &nextNo);
-
-    SelectStreamRegion(wave, regionNo);
-
-    if (playingNo != -1)
-        sSoundPlayer.setNextStreamRegion(regionNo == playingNo ? -1 : regionNo);
+    return sSoundPlayer.getPlayingStreamRegion();
 }
 
 static void ApplyRegionNumbers(const WaveFile* wave, const std::vector<s32>& newNos)
 {
     const s32 count = static_cast<s32>(newNos.size());
 
-    s32 playingNo = -1;
-    s32 nextNo = -1;
-    GetPlayingStreamRegions(wave, &playingNo, &nextNo);
+    if (GetPlayingStreamRegion(wave) != -1)
+    {
+        const s32 nextNo = sSoundPlayer.getNextStreamRegion();
 
-    if (nextNo >= 0 && (nextNo >= count || newNos[nextNo] == -1))
-        sSoundPlayer.setNextStreamRegion(-1);
+        if (nextNo >= 0 && (nextNo >= count || newNos[nextNo] == -1))
+            sSoundPlayer.setNextStreamRegion(-1);
 
-    if (playingNo != -1)
         sSoundPlayer.renumberStreamRegions(newNos.data(), count);
+    }
 
     if (sSelectedRegionWave == wave && sSelectedRegionNo >= 0)
         sSelectedRegionNo = sSelectedRegionNo < count ? newNos[sSelectedRegionNo] : -1;
@@ -183,13 +178,12 @@ void SetStreamRegionRange(WaveFile* wave, s32 regionNo, u32 start, u32 end)
 
 void CommitStreamRegionRange(const WaveFile* wave, s32 regionNo)
 {
-    s32 playingNo = -1;
-    s32 nextNo = -1;
-    GetPlayingStreamRegions(wave, &playingNo, &nextNo);
+    if (regionNo != GetPlayingStreamRegion(wave))
+        return;
 
-    const bool repeats = regionNo == playingNo && nextNo == -1 && sSoundPlayer.isLoopEnabled();
+    const s32 nextNo = sSoundPlayer.getNextStreamRegion();
 
-    if (regionNo == nextNo || repeats)
+    if (nextNo == regionNo || (nextNo == -1 && sSoundPlayer.isLoopEnabled()))
         sSoundPlayer.setNextStreamRegion(regionNo);
 }
 

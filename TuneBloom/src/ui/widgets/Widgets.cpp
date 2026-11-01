@@ -420,19 +420,26 @@ void DrawInsertLine(ImDrawList* drawList, f32 left, f32 right, f32 centerY)
     drawList->AddRectFilled(ImVec2(left, top), ImVec2(right, top + cInsertLineHeight), ImGui::GetColorU32(ImGuiCol_CheckMark, cInsertLineAlpha));
 }
 
+bool DrawBareRowSelectable(const char* id, bool selected, const ImVec2& size)
+{
+    ImGui::PushStyleColor(ImGuiCol_Header,        uicolors::cTransparentU32);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, uicolors::cTransparentU32);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  uicolors::cTransparentU32);
+
+    const bool pressed = ImGui::Selectable(id, selected, ImGuiSelectableFlags_SpanAllColumns, size);
+
+    ImGui::PopStyleColor(3);
+
+    return pressed;
+}
+
 bool DrawTableRowSelectable(const char* id, bool selected, bool* outHovered)
 {
     const ImU32 rowColor        = ImGui::GetColorU32(ImGuiCol_Header);
     const ImU32 rowHoveredColor = ImGui::GetColorU32(ImGuiCol_HeaderHovered);
     const ImU32 rowActiveColor  = ImGui::GetColorU32(ImGuiCol_HeaderActive);
 
-    ImGui::PushStyleColor(ImGuiCol_Header,        uicolors::cTransparentU32);
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, uicolors::cTransparentU32);
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  uicolors::cTransparentU32);
-
-    const bool rowPressed = ImGui::Selectable(id, selected, ImGuiSelectableFlags_SpanAllColumns);
-
-    ImGui::PopStyleColor(3);
+    const bool rowPressed = DrawBareRowSelectable(id, selected, ImVec2(0.0f, 0.0f));
 
     const ImGuiID hoveredId = ImGui::GetHoveredID();
     const bool rowHovered = ImGui::IsItemHovered() && (hoveredId == 0 || hoveredId == ImGui::GetItemID());

@@ -34,12 +34,19 @@ RangeCell BeginRangeCell(f32 blockHeight)
 
 void DrawRangeMark(ImDrawList* draw, const ImVec2& min, const ImVec2& max, u32 start, u32 end, u32 sampleCount, ImU32 color)
 {
-    if (sampleCount == 0 || max.x - min.x < cMarkMinWidth)
+    DrawRangeMarkInView(draw, min, max, sead::Mathf::min(start, sampleCount), sead::Mathf::min(end, sampleCount), 0, sampleCount, color);
+}
+
+void DrawRangeMarkInView(ImDrawList* draw, const ImVec2& min, const ImVec2& max, u32 start, u32 end, u32 viewStart, u32 viewEnd, ImU32 color)
+{
+    const bool onlyTouchesView = start != end && (end == viewStart || start == viewEnd);
+
+    if (viewEnd <= viewStart || max.x - min.x < cMarkMinWidth || end < viewStart || start > viewEnd || onlyTouchesView)
         return;
 
-    const f32 scale = (max.x - min.x) / static_cast<f32>(sampleCount);
-    const f32 right = sead::Mathf::max(min.x + cMarkMinWidth, ImFloor(min.x + sead::Mathf::min(end, sampleCount) * scale));
-    const f32 left = sead::Mathf::min(ImFloor(min.x + sead::Mathf::min(start, sampleCount) * scale), right - cMarkMinWidth);
+    const f32 scale = (max.x - min.x) / static_cast<f32>(viewEnd - viewStart);
+    const f32 right = sead::Mathf::max(min.x + cMarkMinWidth, ImFloor(min.x + (sead::Mathf::min(end, viewEnd) - viewStart) * scale));
+    const f32 left = sead::Mathf::min(ImFloor(min.x + (sead::Mathf::max(start, viewStart) - viewStart) * scale), right - cMarkMinWidth);
 
     draw->AddRectFilled(ImVec2(left, min.y), ImVec2(right, max.y), color, cMarkRounding);
 }

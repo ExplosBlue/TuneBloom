@@ -44,5 +44,5 @@ void MoveSoundsHook(Item* target, const std::vector<Item*>& items);
 
 void DrawStreamTracksUI(const StreamSource& source);
 bool DrawStreamTracksTabRow(const StreamSource& source);
-void DrawStreamTracksSection(const StreamSource& source, f32 height);
+void DrawStreamTracksSection(const StreamSource& source, f32 reserveBelow);
 void HighlightStreamTrack(Item* track);

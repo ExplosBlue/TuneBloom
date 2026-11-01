@@ -30,6 +30,7 @@ constexpr f32   cSeekTrackHeight      = 6.0f;
 constexpr f32   cSeekHandleRadius     = 5.0f;
 constexpr f32   cSeekLoopInset        = 3.0f;
 constexpr f32   cSeekGhostAlpha       = 0.35f;
+constexpr f32   cSeekFocusDimAlpha    = 0.75f;
 constexpr f32   cSeekRegionGap        = 5.0f;
 constexpr f32   cSeekRegionHeight     = 4.0f;
 constexpr f32   cSeekHoldTolerance    = 0.01f;
@@ -108,8 +109,37 @@ static f32 ResolvePendingSeek(f32 playFraction)
     return playFraction;
 }
 
-bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate, bool seekable,
-                 f32 loopStartFrac, f32 loopEndFrac, f32& outSeekFraction)
+static ImVec4 CalcDisplayBackground()
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+
+    return ImLerp(style.Colors[uicolors::Pick(cDisplayBackgroundRole)], uicolors::cInkOnLight, uicolors::Pick(cDisplayDarken));
+}
+
+static void DimSeekOutside(f32 barLeft, f32 barWidth, f32 top, f32 bottom, f32 startFrac, f32 endFrac)
+{
+    if (startFrac < 0.0f || endFrac <= startFrac)
+        return;
+
+    const f32 trackStart = barLeft + cSeekHandleRadius;
+    const f32 trackWidth = sead::Mathf::max(barWidth - cSeekHandleRadius * 2.0f, 1.0f);
+    const f32 startX = ImFloor(trackStart + startFrac * trackWidth);
+    const f32 endX = ImFloor(trackStart + endFrac * trackWidth);
+
+    ImVec4 color = CalcDisplayBackground();
+    color.w = cSeekFocusDimAlpha;
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+
+    if (startX > barLeft)
+        draw->AddRectFilled(ImVec2(barLeft, top), ImVec2(startX, bottom), ImGui::GetColorU32(color));
+
+    if (endX < barLeft + barWidth)
+        draw->AddRectFilled(ImVec2(endX, top), ImVec2(barLeft + barWidth, bottom), ImGui::GetColorU32(color));
+}
+
+static bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate, bool seekable,
+                        f32 loopStartFrac, f32 loopEndFrac, f32& outSeekFraction, f32 focusStartFrac, f32 focusEndFrac)
 {
     const f32 height = ImGui::GetFrameHeight();
     const ImVec2 barStart = ImGui::GetCursorScreenPos();
@@ -171,6 +201,8 @@ bool DrawSeekBar(const char* id, f32 width, f32 fraction, bool determinate, bool
         const f32 markerX = ImFloor(trackStart + loopEndFrac * trackWidth);
         draw->AddRectFilled(ImVec2(markerX - cLoopMarkerThickness, barStart.y + cSeekLoopInset), ImVec2(markerX, barStart.y + height - cSeekLoopInset), markerColor);
     }
+
+    DimSeekOutside(barStart.x, width, barStart.y, barStart.y + height, focusStartFrac, focusEndFrac);
 
     if (hovered && !held)
     {
@@ -288,6 +320,9 @@ struct PlaybackProgress
     f32 loopStartFrac = -1.0f;
     f32 loopEndFrac = -1.0f;
 
+    f32 focusStartFrac = -1.0f;
+    f32 focusEndFrac = -1.0f;
+
     bool isLoop = false;
 
     const WaveFile* wave = nullptr;
@@ -311,21 +346,27 @@ const SeqTimeline* ResolveSeqTimeline()
     return &sSoundPlayer.getSeqTimeline(*sound);
 }
 
-static void SetPlayingRegionLoop(PlaybackProgress* progress, const WaveFile& wave)
+static void SetRegionFocus(PlaybackProgress* progress, const WaveFile& wave)
 {
     const std::vector<StreamRegion>& regions = wave.getStreamFileLayout().regions;
     const u32 sampleCount = wave.getSampleCount();
 
-    s32 playingNo = -1;
-    s32 nextNo = -1;
-    GetPlayingStreamRegions(&wave, &playingNo, &nextNo);
+    const s32 playingNo = GetPlayingStreamRegion(&wave);
 
-    if (playingNo < 0 || playingNo >= static_cast<s32>(regions.size()) || sampleCount == 0)
+    const s32 focusNo = playingNo != -1 ? playingNo : GetShownStreamRegionSelection(&wave);
+
+    if (focusNo < 0 || focusNo >= static_cast<s32>(regions.size()) || sampleCount == 0)
+        return;
+
+    progress->focusStartFrac = regions[focusNo].start / static_cast<f32>(sampleCount);
+    progress->focusEndFrac = regions[focusNo].end / static_cast<f32>(sampleCount);
+
+    if (focusNo != playingNo)
         return;
 
     progress->isLoop = true;
-    progress->loopStartFrac = regions[playingNo].start / static_cast<f32>(sampleCount);
-    progress->loopEndFrac = regions[playingNo].end / static_cast<f32>(sampleCount);
+    progress->loopStartFrac = progress->focusStartFrac;
+    progress->loopEndFrac = progress->focusEndFrac;
 }
 
 static PlaybackProgress BuildPlaybackProgress()
@@ -391,7 +432,7 @@ static PlaybackProgress BuildPlaybackProgress()
 
             progress.loopEndFrac = wave->getOriginalLoopEndFrame() / static_cast<f32>(sampleCount);
 
-            SetPlayingRegionLoop(&progress, *wave);
+            SetRegionFocus(&progress, *wave);
         }
     }
 
@@ -610,14 +651,15 @@ static f32 DrawDisplayRegion(const ImVec2& pos, f32 pad)
     return left;
 }
 
-static void DrawSeekRegions(const WaveFile* wave, const ImVec2& barMin, const ImVec2& barMax)
+static void DrawSeekRegions(const PlaybackProgress& progress, const ImVec2& barMin, const ImVec2& barMax)
 {
-    if (!wave || wave->getStreamFileLayout().regions.empty())
+    if (!progress.wave || progress.wave->getStreamFileLayout().regions.empty())
         return;
 
     const f32 top = ImFloor((barMin.y + barMax.y) * 0.5f) + cSeekTrackHeight * 0.5f + cSeekRegionGap;
 
-    DrawStreamRegionMarks(ImGui::GetWindowDrawList(), ImVec2(barMin.x + cSeekHandleRadius, top), ImVec2(barMax.x - cSeekHandleRadius, top + cSeekRegionHeight), wave);
+    DrawStreamRegionMarks(ImGui::GetWindowDrawList(), ImVec2(barMin.x + cSeekHandleRadius, top), ImVec2(barMax.x - cSeekHandleRadius, top + cSeekRegionHeight), progress.wave);
+    DimSeekOutside(barMin.x, barMax.x - barMin.x, top, top + cSeekRegionHeight, progress.focusStartFrac, progress.focusEndFrac);
 }
 
 static void SetSeekTooltip(const PlaybackProgress& progress, f32 fraction)
@@ -689,11 +731,11 @@ static PlaybackProgress DrawDisplaySeekBar(const PlaybackProgress& progress, con
     ImGui::SetCursorScreenPos(pos);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, 0.0f));
 
-    const bool seeked = DrawSeekBar("##transport", width, shown.fraction, progress.determinate, progress.seekable, progress.loopStartFrac, progress.loopEndFrac, seekFrac);
+    const bool seeked = DrawSeekBar("##transport", width, shown.fraction, progress.determinate, progress.seekable, progress.loopStartFrac, progress.loopEndFrac, seekFrac, progress.focusStartFrac, progress.focusEndFrac);
 
     ImGui::PopStyleVar();
 
-    DrawSeekRegions(progress.wave, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    DrawSeekRegions(progress, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
 
     const f32 mouseFrac = CalcSeekMouseFraction(pos.x, width);
 
@@ -729,9 +771,8 @@ static void DrawTransportDisplay(const PlaybackProgress& progress, f32 width, f3
     const f32 row2 = row1 + em + cDisplayRowGap;
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ImVec4 background = ImLerp(style.Colors[uicolors::Pick(cDisplayBackgroundRole)], uicolors::cInkOnLight, uicolors::Pick(cDisplayDarken));
 
-    draw->AddRectFilled(min, max, ImGui::GetColorU32(background), style.FrameRounding);
+    draw->AddRectFilled(min, max, ImGui::GetColorU32(CalcDisplayBackground()), style.FrameRounding);
     draw->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_Border), style.FrameRounding);
 
     ImGui::PushID("##display");

@@ -45,6 +45,7 @@ bool IsItemEditCommitted(bool changed);
 f32 GetRowButtonSize();
 bool DrawRowPlayButton(u32 id, const char* playbackError, bool playing);
 bool DrawRowOpenButton(u32 id, const char* tooltip, const char* disabledReason = nullptr);
+bool DrawBareRowSelectable(const char* id, bool selected, const ImVec2& size);
 bool DrawTableRowSelectable(const char* id, bool selected, bool* outHovered);
 void DrawInsertLine(ImDrawList* drawList, f32 left, f32 right, f32 centerY);
 bool DrawRowHoverButton(const char* id, const char* icon, bool visible, const char* tooltip, const ImVec2& hitSize, f32 size);

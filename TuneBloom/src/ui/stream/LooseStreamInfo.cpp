@@ -137,7 +137,7 @@ void DrawLooseStreamContentUI(LooseStreamFile& file)
     const Item* previousTrack = GetHighlightedStreamTrack();
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor(ImGui::GetFontSize() * cSoundPanelPadYEm) + ImGui::GetStyle().FrameBorderSize);
-    DrawStreamTracksSection(source, hasRegions ? -regionsHeight : 0.0f);
+    DrawStreamTracksSection(source, hasRegions ? regionsHeight : 0.0f);
 
     if (hasRegions)
         DrawStreamRegionsSection();

@@ -9,6 +9,7 @@
 #include <ui/widgets/Knob.h>
 #include <ui/wave/LoopWaveformEditor.h>
 #include <ui/wave/WaveformBox.h>
+#include <ui/wave/WaveMonoJob.h>
 #include <messages/Messages.h>
 #include <ui/player/PlayerViews.h>
 #include <ui/widgets/Properties.h>
@@ -40,6 +41,7 @@ struct WaveFileView
     const WaveFile* wave = nullptr;
     const void* data = nullptr;
     const void* fullData = nullptr;
+    u32 contentSerial = 0;
     u32 sampleCount = 0;
     u32 channelNum = 0;
     WaveFile::Encoding encoding = WaveFile::Encoding::DspAdpcm;
@@ -58,6 +60,12 @@ struct WaveFileView
 static constexpr f32 cWaveViewHeightEm = 7.0f;
 
 static WaveFileView* sWaveFileView = nullptr;
+static WaveMonoJob* sWaveFileMonoJob = nullptr;
+
+static WaveMonoJob& GetWaveFileMonoJob()
+{
+    return GetWaveMonoJob(&sWaveFileMonoJob);
+}
 
 static void CapWaveLoopStart(WaveLoopEdit& edit)
 {
@@ -142,6 +150,9 @@ static void SetWaveLoopEnd(WaveLoopEdit& edit, u32 loopEndFrame, bool commit)
 
 void ReleaseWaveFileView()
 {
+    if (sWaveFileMonoJob)
+        sWaveFileMonoJob->cancel();
+
     delete sWaveFileView;
     sWaveFileView = nullptr;
 }
@@ -164,24 +175,37 @@ static WaveFileView& GetWaveFileView(const WaveFile& wave)
     const void* fullData = channel ? channel->getFullData_() : nullptr;
     const u32 channelNum = static_cast<u32>(wave.getChannels().size());
 
-    if (view.wave == &wave && view.data == data && view.fullData == fullData && view.sampleCount == wave.getSampleCount() && view.channelNum == channelNum && view.encoding == wave.getEncoding())
+    if (view.wave == &wave && view.data == data && view.fullData == fullData && view.contentSerial == wave.getContentSerial() && view.sampleCount == wave.getSampleCount() && view.channelNum == channelNum && view.encoding == wave.getEncoding())
+    {
+        TakeWaveMono(GetWaveFileMonoJob(), &view.mono, view.state);
         return view;
+    }
 
     if (view.wave != &wave)
     {
         view.state = ImGui::LoopWaveformState{};
         view.state.grabMarkers = true;
         view.fieldPending = false;
+        view.mono.clear();
     }
 
     view.wave = &wave;
     view.data = data;
     view.fullData = fullData;
-    view.sampleCount = wave.getSampleCount();
+    view.contentSerial = wave.getContentSerial();
     view.channelNum = channelNum;
     view.encoding = wave.getEncoding();
-    view.state.dataRevision++;
-    view.tooLong = !DecodeWaveViewMono(wave, &view.mono);
+
+    WaveMonoJob& job = GetWaveFileMonoJob();
+
+    view.tooLong = job.requestView(wave);
+
+    if (view.sampleCount != wave.getSampleCount() || view.tooLong)
+        view.mono.clear();
+
+    view.sampleCount = wave.getSampleCount();
+
+    TakeWaveMono(job, &view.mono, view.state);
 
     return view;
 }
@@ -259,6 +283,21 @@ static void DrawWavePlayButtons(const WaveFile& wave, bool playing, f32 buttonSi
     ImGui::EndDisabled();
 }
 
+static f32 CalcWaveCanvasHeight()
+{
+    return ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm);
+}
+
+static void DrawWaveCanvasPlaceholder(WaveFile& wave, WaveFileView& view)
+{
+    const WaveMonoJob& job = GetWaveFileMonoJob();
+
+    if (job.isLoading() && !wave.getStreamFileLayout().regions.empty())
+        DrawStreamRegionLane(&wave, view.state);
+
+    DrawWaveformPlaceholder(job, view.tooLong, messages::wavefile::cNoData, CalcWaveCanvasHeight());
+}
+
 static void DrawWaveCanvas(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edit, bool playing)
 {
     const u32 sampleRate = wave.getSampleRate();
@@ -273,10 +312,8 @@ static void DrawWaveCanvas(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edi
     if (!wave.getStreamFileLayout().regions.empty())
         DrawStreamRegionLane(&wave, view.state);
 
-    const f32 height = ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm);
-
     ImGui::LoopWaveformEditor("wave", view.state, view.mono, sampleRate, view.loopStartFrame, view.loopEndFrame, playheadSample, edit.isLoop, true,
-                              nullptr, ImVec2(0.0f, height), true, &seekSample);
+                              nullptr, ImVec2(0.0f, CalcWaveCanvasHeight()), true, &seekSample);
 
     if (!IsWaveLoopDragging(view.state))
     {
@@ -338,7 +375,7 @@ static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& ed
     EndWaveformHeader();
 
     if (view.mono.empty())
-        ImGui::TextDisabled("%s", view.tooLong ? messages::wavefile::cTooLong : messages::wavefile::cNoData);
+        DrawWaveCanvasPlaceholder(wave, view);
     else
         DrawWaveCanvas(wave, view, edit, playing);
 

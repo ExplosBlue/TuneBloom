@@ -1,11 +1,13 @@
 #include <ui/wave/WaveformBox.h>
 
 #include <messages/Messages.h>
+#include <ui/wave/LoopWaveformEditor.h>
+#include <ui/wave/LoopWaveformInternal.h>
 #include <ui/wave/WaveFormatUI.h>
+#include <ui/wave/WaveMonoJob.h>
 #include <ui/widgets/Knob.h>
 #include <ui/widgets/Widgets.h>
 
-#include <bfsar/audio/WaveFileEditDecode.h>
 #include <bfsar/player/SoundPlayer.h>
 
 #include <libs/IconsLucide.h>
@@ -19,6 +21,8 @@ static constexpr f32 cFieldMinEm      = 3.5f;
 static constexpr f32 cFieldMaxEm      = 7.0f;
 static constexpr f32 cFieldGroupGapEm = 1.5f;
 static constexpr f32 cFieldDragRange  = 2000.0f;
+static constexpr f32 cSpinnerRadiusEm = 0.3f;
+static constexpr f32 cSpinnerGapEm    = 0.4f;
 
 void SeekPlayerToSample(f64 sample)
 {
@@ -170,17 +174,35 @@ LoopFieldsResult DrawLoopFields(u32* loopStartFrame, u32* loopEndFrame, u32 samp
     return result;
 }
 
-bool DecodeWaveViewMono(const WaveFile& wave, std::vector<f32>* mono)
+static void DrawLoadingLabel(const ImVec2& min, const ImVec2& max)
 {
-    mono->clear();
+    const f32 em = ImGui::GetFontSize();
+    const f32 spinnerWidth = em + ImFloor(em * cSpinnerGapEm);
+    const ImU32 color = ImGui::GetColorU32(ImGuiCol_TextDisabled);
 
-    if (wave.getSampleCount() > cWaveViewMaxSamples)
-        return false;
+    const ImVec2 textSize = ImGui::CalcTextSize(messages::wavefile::cLoading);
+    const ImVec2 pos = ImFloor(min + (max - min - ImVec2(spinnerWidth + textSize.x, textSize.y)) * 0.5f);
 
-    const DecodedPcm pcm = decodeWaveFileForEditing(wave);
+    DrawSpinner(ImVec2(pos.x + ImFloor(em * 0.5f), pos.y + ImFloor(textSize.y * 0.5f)), ImFloor(em * cSpinnerRadiusEm), color);
+    ImGui::GetWindowDrawList()->AddText(ImVec2(pos.x + spinnerWidth, pos.y), color, messages::wavefile::cLoading);
+}
 
-    if (pcm.isValid())
-        *mono = pcm.monoMix();
+void DrawWaveformPlaceholder(const WaveMonoJob& job, bool tooLong, const char* emptyText, f32 canvasHeight)
+{
+    if (!job.isLoading())
+    {
+        ImGui::TextDisabled("%s", tooLong ? messages::wavefile::cTooLong : emptyText);
+        return;
+    }
 
-    return true;
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const f32 width = ImGui::GetContentRegionAvail().x;
+    const ImVec2 canvasMax(min.x + width, min.y + canvasHeight);
+
+    ImGui::GetWindowDrawList()->AddRectFilled(min, canvasMax, ImGui::Palette().bg);
+
+    if (job.showsProgress())
+        DrawLoadingLabel(min, canvasMax);
+
+    ImGui::Dummy(ImVec2(width, ImGui::LoopWaveformEditorHeight(canvasHeight, true)));
 }

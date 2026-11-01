@@ -10,6 +10,7 @@
 #include <ui/widgets/Widgets.h>
 #include <ui/wave/LoopWaveformEditor.h>
 #include <ui/wave/WaveformBox.h>
+#include <ui/wave/WaveMonoJob.h>
 
 #include <bfsar/player/SoundPlayer.h>
 #include <bfsar/files/WaveFile.h>
@@ -45,6 +46,7 @@ struct BrowserResult
 struct BrowserWaveView
 {
     const WaveFile* wave = nullptr;
+    u32 contentSerial = 0;
     std::vector<f32> mono;
     ImGui::LoopWaveformState state;
     bool tooLong = false;
@@ -71,6 +73,7 @@ static constexpr const char* cItemPopupId = "###ItemBrowser";
 static char sQuery[128] = "";
 static Item* sHighlight = nullptr;
 static BrowserWaveView* sWaveView = nullptr;
+static WaveMonoJob* sWaveMonoJob = nullptr;
 static bool sAutoPlay = false;
 static bool sCaseSensitive = false;
 static bool sFocusSearch = false;
@@ -145,18 +148,22 @@ static BrowserWaveView& GetWaveView(const WaveFile& wave)
     if (!sWaveView)
         sWaveView = new BrowserWaveView();
 
-    if (sWaveView->wave == &wave)
+    if (sWaveView->wave == &wave && sWaveView->contentSerial == wave.getContentSerial())
         return *sWaveView;
 
     *sWaveView = BrowserWaveView();
     sWaveView->wave = &wave;
-    sWaveView->tooLong = !DecodeWaveViewMono(wave, &sWaveView->mono);
+    sWaveView->contentSerial = wave.getContentSerial();
+    sWaveView->tooLong = GetWaveMonoJob(&sWaveMonoJob).requestView(wave);
 
     return *sWaveView;
 }
 
 static void ForgetWaveView()
 {
+    if (sWaveMonoJob)
+        sWaveMonoJob->cancel();
+
     delete sWaveView;
     sWaveView = nullptr;
 }
@@ -165,9 +172,11 @@ static void DrawWaveform(const WaveFile& wave, f32 height)
 {
     BrowserWaveView& view = GetWaveView(wave);
 
-    if (view.tooLong)
+    TakeWaveMono(*sWaveMonoJob, &view.mono, view.state);
+
+    if (view.mono.empty())
     {
-        ImGui::TextDisabled("%s", messages::wavefile::cTooLong);
+        DrawWaveformPlaceholder(*sWaveMonoJob, view.tooLong, messages::wavefile::cNoData, height);
         return;
     }
 

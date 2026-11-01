@@ -658,7 +658,7 @@ static void DrawVelocityScrollBar(const KeyMapFrame& frame)
     if (frame.maxScrollY > 0.0f)
     {
         const f32 thumbTop = (frame.vsbTravel > 0.0f) ? (view.scrollY / frame.maxScrollY) * frame.vsbTravel : 0.0f;
-        const ImU32 thumbCol = frame.vScrollbarHot ? GetPianoRollPalette().vScrollThumbHover : GetPianoRollPalette().vScrollThumb;
+        const ImU32 thumbCol = ImGui::GetHoverColorU32(ImGui::GetID("##VelocityScroll"), frame.vScrollbarHot, GetPianoRollPalette().vScrollThumb, GetPianoRollPalette().vScrollThumbHover);
 
         frame.draw->AddRectFilled(ImVec2(frame.vsbTrackX, frame.vsbTrackY0), ImVec2(frame.vsbTrackX + cVelocityScrollWidth, frame.vsbTrackY1), GetPianoRollPalette().vScrollTrack, 3.0f);
         frame.draw->AddRectFilled(ImVec2(frame.vsbTrackX, frame.vsbTrackY0 + thumbTop), ImVec2(frame.vsbTrackX + cVelocityScrollWidth, frame.vsbTrackY0 + thumbTop + frame.vsbThumbH), thumbCol, 3.0f);

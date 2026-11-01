@@ -93,6 +93,8 @@ struct LoopWaveformState
     int cueDragIndex = -1;
     int cueSelected = -1;
 
+    double appearTime = -1.0;
+
     // Peak cache
     u32 dataRevision = 0;
     std::vector<float> peakMin;
@@ -115,6 +117,9 @@ bool LoopWaveformEditor(const char* idStr, LoopWaveformState& state,
                         ImVec2 size = ImVec2(0, 0),
                         bool showSeekBar = false,
                         double* outSeekSample = nullptr);
+
+float LoopWaveformEditorHeight(float canvasHeight, bool showSeekBar);
+float LoopWaveformAppearAlpha(double appearTime);
 
 void LoopWaveformZoomToLoop(LoopWaveformState& state, u32 loopStart, u32 loopEnd, u32 totalSamples);
 

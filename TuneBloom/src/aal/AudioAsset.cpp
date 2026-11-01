@@ -37,6 +37,18 @@ struct SourceAudio
     std::vector<OutputSide> sides;
 };
 
+struct ChannelSource
+{
+    aal::Bwav bwav;
+    bfstm::Bfstm bfstm;
+    bool isBwav = false;
+    u32 sampleCount = 0;
+    u32 sampleRate = 0;
+    bool isLoop = false;
+    u32 loopStartFrame = 0;
+    std::vector<OutputSide> sides;
+};
+
 }
 
 static void FillBwavInfo(const aal::Bwav& bwav, AudioAssetInfo* info)
@@ -129,74 +141,104 @@ static void TrimSourceAudio(SourceAudio* source)
     source->loopStartFrame = source->isLoop ? source->loopStartFrame : 0;
 }
 
-static bool ReadBwavSource(const AudioAssetFile& file, SourceAudio* out)
+static bool OpenBwavChannels(const AudioAssetFile& file, ChannelSource* out)
 {
-    aal::Bwav bwav;
-
-    if (!ReadAudioAssetBwav(file, &bwav))
+    if (!ReadAudioAssetBwav(file, &out->bwav) || out->bwav.channels.empty())
         return false;
 
-    out->channels.resize(bwav.channels.size());
+    out->isBwav = true;
+    out->sampleRate = out->bwav.channels.front().sampleRate;
+    out->isLoop = out->bwav.isLoop();
+    out->loopStartFrame = out->bwav.channels.front().loopStartFrame;
 
-    for (u32 i = 0; i < bwav.channels.size(); i++)
-    {
-        aal::DecodeBwavChannel(bwav, i, &out->channels[i]);
-        out->sides.push_back(GetBwavSide(bwav.channels[i].pan));
-        out->sampleCount = i == 0 ? static_cast<u32>(out->channels[i].size()) : std::min<u32>(out->sampleCount, static_cast<u32>(out->channels[i].size()));
-    }
+    for (const aal::BwavChannel& channel : out->bwav.channels)
+        out->sides.push_back(GetBwavSide(channel.pan));
 
-    out->sampleRate = bwav.channels.front().sampleRate;
-    out->isLoop = bwav.isLoop();
-    out->loopStartFrame = bwav.channels.front().loopStartFrame;
-
-    TrimSourceAudio(out);
-    return out->sampleCount != 0;
+    return true;
 }
 
-static bool ReadBfstmSource(const AudioAssetFile& file, SourceAudio* out)
+static bool OpenBfstmChannels(const AudioAssetFile& file, ChannelSource* out)
 {
-    bfstm::Bfstm bfstm;
     const char* error = nullptr;
 
-    if (!file || !bfstm::ReadBfstm(file->data(), file->size(), &bfstm, &error))
+    if (!file || !bfstm::ReadBfstm(file->data(), file->size(), &out->bfstm, &error))
         return false;
 
-    out->channels.resize(bfstm.channels.size());
+    const u32 channelNum = static_cast<u32>(out->bfstm.channels.size());
 
-    for (u32 i = 0; i < bfstm.channels.size(); i++)
-    {
-        bfstm::DecodeBfstmChannel(bfstm, i, &out->channels[i]);
-        out->sides.push_back(GetPairedSide(i, static_cast<u32>(bfstm.channels.size())));
+    out->sampleCount = out->bfstm.getSourceSampleCount();
+    out->sampleRate = out->bfstm.sampleRate;
+    out->isLoop = out->bfstm.isLoop;
+    out->loopStartFrame = out->bfstm.getSourceLoopStartFrame();
 
-        if (out->channels[i].size() < bfstm.getSourceSampleCount())
-            return false;
-    }
+    for (u32 i = 0; i < channelNum; i++)
+        out->sides.push_back(GetPairedSide(i, channelNum));
 
-    out->sampleRate = bfstm.sampleRate;
-    out->sampleCount = bfstm.getSourceSampleCount();
-    out->isLoop = bfstm.isLoop;
-    out->loopStartFrame = bfstm.getSourceLoopStartFrame();
-
-    TrimSourceAudio(out);
-    return out->sampleCount != 0;
+    return true;
 }
 
-static bool ReadSourceAudio(AudioAssetKind kind, const AudioAssetFile& file, SourceAudio* out)
+static bool OpenChannelSource(AudioAssetKind kind, const AudioAssetFile& file, ChannelSource* out)
 {
     switch (kind)
     {
         case AudioAssetKind::Bwav:
-            return ReadBwavSource(file, out);
+            return OpenBwavChannels(file, out);
 
         case AudioAssetKind::StreamPrefetch:
         case AudioAssetKind::Stream:
-            return ReadBfstmSource(file, out);
+            return OpenBfstmChannels(file, out);
 
         default:
             break;
     }
 
     return false;
+}
+
+static bool DecodeSourceChannel(const ChannelSource& source, u32 index, std::vector<s16>* out)
+{
+    if (source.isBwav)
+        aal::DecodeBwavChannel(source.bwav, index, out);
+    else
+        bfstm::DecodeBfstmChannel(source.bfstm, index, out);
+
+    return source.isBwav || out->size() >= source.sampleCount;
+}
+
+static u32 CalcDecodedLength(const ChannelSource& source, u32 length, u32 index, const std::vector<s16>& samples)
+{
+    if (!source.isBwav)
+        return source.sampleCount;
+
+    const u32 size = static_cast<u32>(samples.size());
+
+    return index == 0 ? size : std::min(length, size);
+}
+
+static bool ReadSourceAudio(AudioAssetKind kind, const AudioAssetFile& file, SourceAudio* out)
+{
+    ChannelSource source;
+
+    if (!OpenChannelSource(kind, file, &source))
+        return false;
+
+    out->channels.resize(source.sides.size());
+    out->sides = source.sides;
+
+    for (u32 i = 0; i < out->channels.size(); i++)
+    {
+        if (!DecodeSourceChannel(source, i, &out->channels[i]))
+            return false;
+
+        out->sampleCount = CalcDecodedLength(source, out->sampleCount, i, out->channels[i]);
+    }
+
+    out->sampleRate = source.sampleRate;
+    out->isLoop = source.isLoop;
+    out->loopStartFrame = source.loopStartFrame;
+
+    TrimSourceAudio(out);
+    return out->sampleCount != 0;
 }
 
 static bool ReadPlayableSource(const AudioAsset& asset, SourceAudio* out)
@@ -213,6 +255,33 @@ static bool ReadPlayableSource(const AudioAsset& asset, SourceAudio* out)
 static bool FeedsOutputChannel(OutputSide side, u32 output)
 {
     return side == OutputSide::Both || static_cast<u32>(side) == output;
+}
+
+static std::vector<f32> CalcMonoWeights(const std::vector<OutputSide>& sides)
+{
+    const u32 channelNum = static_cast<u32>(sides.size());
+    std::vector<f32> weights(channelNum, 1.0f / static_cast<f32>(channelNum));
+
+    if (channelNum <= snd::cWaveChannelMax)
+        return weights;
+
+    std::fill(weights.begin(), weights.end(), 0.0f);
+
+    for (u32 output = 0; output < snd::cWaveChannelMax; output++)
+    {
+        u32 sourceCount = 0;
+
+        for (u32 i = 0; i < channelNum; i++)
+            sourceCount += FeedsOutputChannel(sides[i], output) ? 1 : 0;
+
+        for (u32 i = 0; i < channelNum; i++)
+        {
+            if (FeedsOutputChannel(sides[i], output))
+                weights[i] += 1.0f / static_cast<f32>(sourceCount * snd::cWaveChannelMax);
+        }
+    }
+
+    return weights;
 }
 
 static std::vector<float> MixOutputChannel(const SourceAudio& source, u32 output)
@@ -286,6 +355,58 @@ bool DecodeAudioFile(const AudioAssetFile& file, DecodedPcm* out)
     const AudioAssetKind kind = DetectAudioAssetKind(*file);
 
     return kind != AudioAssetKind::StreamPrefetch && ReadSourceAudio(kind, file, &source) && BuildDecodedPcm(source, out);
+}
+
+static void AddMonoChannel(const std::vector<s16>& samples, f32 weight, std::vector<f32>* out)
+{
+    const size_t count = std::min(out->size(), samples.size());
+
+    for (size_t i = 0; i < count; i++)
+        (*out)[i] += AudioProcessing::fromPcm16(samples[i]) * weight;
+}
+
+bool DecodeAudioAssetMono(AudioAssetKind kind, const AudioAssetFile& file, bool isMidSide, std::vector<f32>* out, const std::function<bool()>& isStopped)
+{
+    out->clear();
+
+    ChannelSource source;
+
+    if (!OpenChannelSource(kind, file, &source) || source.sides.empty())
+        return false;
+
+    const u32 channelNum = static_cast<u32>(source.sides.size());
+    const u32 groupSize = channelNum == 2 && isMidSide ? 2 : 1;
+    const std::vector<f32> weights = CalcMonoWeights(source.sides);
+
+    std::vector<s16> group[2];
+    u32 length = 0;
+
+    for (u32 first = 0; first < channelNum; first += groupSize)
+    {
+        if (isStopped())
+            return false;
+
+        for (u32 j = 0; j < groupSize; j++)
+        {
+            if (!DecodeSourceChannel(source, first + j, &group[j]))
+                return false;
+
+            length = CalcDecodedLength(source, length, first + j, group[j]);
+        }
+
+        if (groupSize == 2)
+            AudioProcessing::decodeMidSide(group[0], group[1]);
+
+        if (out->empty())
+            out->assign(source.isBwav ? group[0].size() : source.sampleCount, 0.0f);
+
+        for (u32 j = 0; j < groupSize; j++)
+            AddMonoChannel(group[j], weights[first + j], out);
+    }
+
+    out->resize(length);
+
+    return length != 0;
 }
 
 const char* GetAudioAssetKindName(AudioAssetKind kind)

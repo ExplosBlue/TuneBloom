@@ -349,7 +349,9 @@ static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& ed
 
 void WaveFile::drawUI()
 {
-    DrawItemNameRow(this);
+    if (!hasStandaloneTarget())
+        DrawItemNameRow(this);
+
     drawEditorUI();
 }
 

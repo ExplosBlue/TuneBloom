@@ -71,7 +71,6 @@ static constexpr f32    cRecentTableFolderMinEm  = 6.0f;
 static constexpr f32    cRecentTableNameMinEm    = 8.0f;
 static constexpr f32    cRecentTableNameMaxShare = 0.5f;
 static constexpr f32    cRecentGroupGapEm        = 0.5f;
-static constexpr f32    cRecentEmptyGapEm        = 0.3f;
 
 static constexpr f32    cRecentNameMaxEm    = 16.0f;
 static constexpr f32    cRecentFolderMaxEm  = 7.0f;
@@ -768,20 +767,13 @@ static void DrawRecentTableEmpty()
     const ImVec2 start = ImGui::GetCursorPos();
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     const ImVec2 boxMin = ImGui::GetCursorScreenPos();
-    const f32 gap = ImFloor(em * cRecentEmptyGapEm);
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     drawList->AddRectFilled(boxMin, boxMin + avail, ImGui::GetColorU32(ImGuiCol_ChildBg));
     drawList->AddRect(boxMin, boxMin + avail + ImVec2(1.0f, 0.0f), ImGui::GetColorU32(ImGuiCol_TableBorderStrong));
-    ImGui::SetCursorPosY(start.y + ImFloor((avail.y - em * 2.0f - gap) * 0.5f));
+    ImGui::SetCursorPosY(start.y + ImFloor((avail.y - em) * 0.5f));
 
     CenteredTextWrapped(messages::recent::cEmpty, avail.x);
-    ImGui::Dummy(ImVec2(0.0f, sead::Mathf::max(gap - ImGui::GetStyle().ItemSpacing.y * 2.0f, 0.0f)));
-
-    ImGui::SetCursorPosX(start.x);
-    ImGui::PushStyleColor(ImGuiCol_Text, GetItemValueColor());
-    CenteredTextWrapped(messages::start::cEmptyDetail, avail.x);
-    ImGui::PopStyleColor();
 }
 
 static RecentAction DrawRecentTableRow(const std::string& path)

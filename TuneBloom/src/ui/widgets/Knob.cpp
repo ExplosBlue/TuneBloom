@@ -29,6 +29,7 @@ static constexpr f32 cKnobHoverTint      = 0.3f;
 static constexpr f32 cKnobActiveTint     = 0.65f;
 static constexpr f32 cKnobLabelGap       = 2.0f;
 static constexpr f32 cKnobLabelMinScale  = 0.7f;
+static constexpr f32 cKnobTextPadEm      = 0.2f;
 
 static bool sRegionPanelFill = false;
 
@@ -238,6 +239,7 @@ static f64 sNextKnobReset = 0.0;
 static const char* sNextKnobText = nullptr;
 static bool sNextKnobLogScale = false;
 static KnobScale sNextKnobScale = nullptr;
+static KnobTrackColor sNextKnobTrack = nullptr;
 static sead::FixedSafeString<64> sNextKnobTextBuffer;
 
 void SetNextKnobReset(f64 value)
@@ -256,6 +258,11 @@ void SetNextKnobText(const char* text)
 
     sNextKnobTextBuffer.cutOffCopy(text);
     sNextKnobText = sNextKnobTextBuffer.cstr();
+}
+
+void SetNextKnobTrack(KnobTrackColor color)
+{
+    sNextKnobTrack = color;
 }
 
 void SetNextKnobScale(KnobScale scale)
@@ -354,7 +361,91 @@ bool DragField(const char* label, ImGuiDataType dataType, void* value, f32 speed
     return changed;
 }
 
-static void DrawKnobFace(ImGuiID id, const ImVec2& center, f32 diameter, bool hovered, bool active, f32 ratio, f32 originRatio, const char* text)
+static bool IsKnobDisabled()
+{
+    return (GImGui->CurrentItemFlags & ImGuiItemFlags_Disabled) != 0;
+}
+
+static ImU32 GetRingColorU32(KnobTrackColor track, f32 ratio)
+{
+    ImVec4 color = track(ratio);
+
+    if (IsKnobDisabled())
+    {
+        const f32 gray = color.x * 0.299f + color.y * 0.587f + color.z * 0.114f;
+        color = ImVec4(gray, gray, gray, color.w);
+    }
+
+    return ImGui::GetColorU32(color);
+}
+
+static void DrawKnobRingBand(ImDrawList* draw, const ImVec2& center, f32 radius, f32 thickness, KnobTrackColor track)
+{
+    constexpr s32 cStepNum      = 72;
+    constexpr s32 cRingVertices = 4;
+    constexpr s32 cBandNum      = cRingVertices - 1;
+
+    const f32 span = cKnobArcMax - cKnobArcMin;
+    const f32 fringe = draw->_FringeScale;
+    const f32 outer = radius + thickness * 0.5f - fringe * 0.5f;
+    const f32 inner = radius - thickness * 0.5f + fringe * 0.5f;
+    const f32 radii[cRingVertices] = { outer + fringe, outer, inner, inner - fringe };
+    const ImVec2 uv = draw->_Data->TexUvWhitePixel;
+
+    draw->PrimReserve(cStepNum * cBandNum * 6, (cStepNum + 1) * cRingVertices);
+
+    const u32 base = draw->_VtxCurrentIdx;
+
+    for (s32 i = 0; i <= cStepNum; i++)
+    {
+        const f32 ratio = static_cast<f32>(i) / cStepNum;
+        const f32 angle = cKnobArcMin + span * ratio;
+        const ImVec2 direction(cosf(angle), sinf(angle));
+        const ImU32 color = GetRingColorU32(track, ratio);
+        const ImU32 clear = color & ~IM_COL32_A_MASK;
+
+        for (s32 j = 0; j < cRingVertices; j++)
+            draw->PrimWriteVtx(ImVec2(center.x + direction.x * radii[j], center.y + direction.y * radii[j]), uv, j == 0 || j == cBandNum ? clear : color);
+    }
+
+    for (s32 i = 0; i < cStepNum; i++)
+    {
+        for (s32 band = 0; band < cBandNum; band++)
+        {
+            const ImDrawIdx a = static_cast<ImDrawIdx>(base + i * cRingVertices + band);
+            const ImDrawIdx b = static_cast<ImDrawIdx>(a + 1);
+            const ImDrawIdx c = static_cast<ImDrawIdx>(a + cRingVertices);
+            const ImDrawIdx d = static_cast<ImDrawIdx>(c + 1);
+
+            draw->PrimWriteIdx(a);
+            draw->PrimWriteIdx(b);
+            draw->PrimWriteIdx(d);
+            draw->PrimWriteIdx(a);
+            draw->PrimWriteIdx(d);
+            draw->PrimWriteIdx(c);
+        }
+    }
+}
+
+static void DrawKnobRing(ImDrawList* draw, const ImVec2& center, f32 radius, f32 thickness, KnobTrackColor track, f32 ratio, bool hot)
+{
+    constexpr f32 cMarkScale    = 0.6f;
+    constexpr f32 cMarkLine     = 1.5f;
+    constexpr f32 cMarkLineHot  = 2.0f;
+
+    const f32 span = cKnobArcMax - cKnobArcMin;
+
+    DrawKnobRingBand(draw, center, radius, thickness, track);
+
+    const f32 angle = cKnobArcMin + span * ratio;
+    const ImVec2 mark(center.x + cosf(angle) * radius, center.y + sinf(angle) * radius);
+    const f32 markRadius = thickness * cMarkScale;
+
+    draw->AddCircleFilled(mark, markRadius, GetRingColorU32(track, ratio));
+    draw->AddCircle(mark, markRadius, ImGui::GetColorU32(IsKnobDisabled() ? ImGuiCol_TextDisabled : ImGuiCol_Text), 0, hot ? cMarkLineHot : cMarkLine);
+}
+
+static void DrawKnobFace(ImGuiID id, const ImVec2& center, f32 diameter, bool hovered, bool active, f32 ratio, f32 originRatio, const char* text, KnobTrackColor track)
 {
     const f32 thickness = std::max(3.0f, ImFloor(diameter * 0.12f));
     const f32 radius = (diameter - thickness) * 0.5f;
@@ -366,17 +457,29 @@ static void DrawKnobFace(ImGuiID id, const ImVec2& center, f32 diameter, bool ho
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
 
-    draw->PathArcTo(center, radius, cKnobArcMin, cKnobArcMax);
-    draw->PathStroke(GetTrackColorU32(ImGui::GetHoverColorU32(id, hovered, active, ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgActive)), ImDrawFlags_None, thickness);
-
-    if (ratio != originRatio)
+    if (track)
     {
-        draw->PathArcTo(center, radius, cKnobArcMin + (cKnobArcMax - cKnobArcMin) * std::min(ratio, originRatio), cKnobArcMin + (cKnobArcMax - cKnobArcMin) * std::max(ratio, originRatio));
-        draw->PathStroke(ImGui::GetColorU32(valueColor), ImDrawFlags_None, thickness);
+        DrawKnobRing(draw, center, radius, thickness, track, ratio, hovered || active);
+    }
+    else
+    {
+        draw->PathArcTo(center, radius, cKnobArcMin, cKnobArcMax);
+        draw->PathStroke(GetTrackColorU32(ImGui::GetHoverColorU32(id, hovered, active, ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgActive)), ImDrawFlags_None, thickness);
+
+        if (ratio != originRatio)
+        {
+            draw->PathArcTo(center, radius, cKnobArcMin + (cKnobArcMax - cKnobArcMin) * std::min(ratio, originRatio), cKnobArcMin + (cKnobArcMax - cKnobArcMin) * std::max(ratio, originRatio));
+            draw->PathStroke(ImGui::GetColorU32(valueColor), ImDrawFlags_None, thickness);
+        }
     }
 
+    const ImGuiContext& g = *GImGui;
     const ImVec2 textSize = ImGui::CalcTextSize(text);
-    ImGui::RenderText(ImVec2(ImFloor(center.x - textSize.x * 0.5f), ImFloor(center.y - textSize.y * 0.5f)), text);
+    const f32 innerWidth = (radius - thickness * 0.5f) * 2.0f - g.FontSize * cKnobTextPadEm * 2.0f;
+    const f32 textScale = textSize.x > innerWidth ? std::max(innerWidth / textSize.x, cKnobLabelMinScale) : 1.0f;
+    const f32 fontSize = g.FontSize * textScale;
+
+    draw->AddText(g.Font, fontSize, ImVec2(ImFloor(center.x - textSize.x * textScale * 0.5f), ImFloor(center.y - fontSize * 0.5f)), ImGui::GetColorU32(ImGuiCol_Text), text);
 }
 
 static bool Knob(const char* label, ImGuiDataType dataType, void* value, const void* min, const void* max, const void* origin, const char* format, f32 speed, const ImVec2& size)
@@ -386,10 +489,12 @@ static bool Knob(const char* label, ImGuiDataType dataType, void* value, const v
     const char* valueText = sNextKnobText;
     const bool logScale = sNextKnobLogScale && dataType == ImGuiDataType_Float;
     const KnobScale scale = dataType == ImGuiDataType_U8 ? sNextKnobScale : nullptr;
+    const KnobTrackColor track = sNextKnobTrack;
     sNextKnobHasReset = false;
     sNextKnobText = nullptr;
     sNextKnobLogScale = false;
     sNextKnobScale = nullptr;
+    sNextKnobTrack = nullptr;
 
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (window->SkipItems)
@@ -514,7 +619,7 @@ static bool Knob(const char* label, ImGuiDataType dataType, void* value, const v
         ImGui::DataTypeFormatString(text, IM_ARRAYSIZE(text), dataType, value, format);
 
     ImGui::RenderNavHighlight(knobBb, id);
-    DrawKnobFace(id, center, diameter, hovered, active, CalcKnobArcRatio(logScale, scale, dataType, value, min, max), CalcKnobArcRatio(logScale, scale, dataType, origin, min, max), text);
+    DrawKnobFace(id, center, diameter, hovered, active, CalcKnobArcRatio(logScale, scale, dataType, value, min, max), CalcKnobArcRatio(logScale, scale, dataType, origin, min, max), text, track);
 
     return changed;
 }

@@ -67,13 +67,6 @@ inline constexpr const char* cNotFoundFormat = "Not found: %s";
 
 }
 
-namespace start
-{
-
-inline constexpr const char* cEmptyDetail = "Recently opened archives will appear here.";
-
-}
-
 namespace preferences
 {
 
@@ -157,6 +150,9 @@ inline constexpr const char* cFixedVelocityLabel = "Fixed Velocity";
 inline constexpr const char* cFixedVelocityDisabled = "Velocity comes from the device";
 
 inline constexpr const char* cHueLabel = "Hue";
+inline constexpr const char* cHueDegreesFormat = "%.0f\xC2\xB0";
+inline constexpr const char* cShadowKnobLabel = "Shadow";
+inline constexpr const char* cShadowOpacityDetail = "Opacity of window shadows";
 inline constexpr const char* cBrightnessLabel = "Brightness";
 inline constexpr const char* cSaturationLabel = "Saturation";
 inline constexpr const char* cContrastLabel = "Contrast";
@@ -172,7 +168,6 @@ inline constexpr const char* cUIScaleLabel = "UI Scale";
 inline constexpr const char* cUIScaleRestart = "Restart to apply";
 inline constexpr const char* cWindowLayoutLabel = "Window Layout";
 inline constexpr const char* cWindowLayoutDetail = "Place and size of each panel and list column";
-inline constexpr const char* cShadowOpacityLabel = "Shadow Opacity";
 inline constexpr const char* cTimeFormatLabel = "Time Format";
 inline constexpr const char* cTimeFormat24Format = "24-Hour (%s)";
 inline constexpr const char* cTimeFormat12Format = "12-Hour (%s)";

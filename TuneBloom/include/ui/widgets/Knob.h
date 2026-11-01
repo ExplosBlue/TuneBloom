@@ -27,6 +27,9 @@ void SetNextKnobText(const char* text);
 
 using KnobScale = f32 (*)(u8 value);
 void SetNextKnobScale(KnobScale scale);
+
+using KnobTrackColor = ImVec4 (*)(f32 ratio);
+void SetNextKnobTrack(KnobTrackColor color);
 void UpdateKnobCursor();
 bool DragField(const char* label, ImGuiDataType dataType, void* value, f32 speed = 1.0f, const void* min = nullptr, const void* max = nullptr, const char* format = nullptr, ImGuiSliderFlags flags = 0);
 bool DrawPitchKnobs(f32* pitch, const ImVec2& knobSize);

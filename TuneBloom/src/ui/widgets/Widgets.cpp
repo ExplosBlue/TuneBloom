@@ -336,7 +336,7 @@ bool DrawTextAction(const char* id, const char* label, f32 height, f32 textOffse
     const bool isPressed = ImGui::InvisibleButton(id, ImVec2(width, height));
     const bool isHovered = ImGui::IsItemHovered();
 
-    const ImU32 color = ImGui::GetHoverColorU32(ImGui::GetItemID(), isHovered, ImGui::GetColorU32(ImGuiCol_CheckMark), ImGui::GetColorU32(ImGuiCol_Text));
+    const ImU32 color = ImGui::GetHoverColorU32(ImGui::GetItemID(), isHovered, ImGui::GetColorU32(GetLegibleAccentColor()), ImGui::GetColorU32(ImGuiCol_Text));
     const ImVec2 min = ImGui::GetItemRectMin();
 
     ImGui::GetWindowDrawList()->AddText(ImVec2(min.x + ImFloor((width - textSize.x) * 0.5f), min.y + textOffsetY), color, label);
@@ -868,6 +868,27 @@ const char* FindTextTailStart(const char* text, f32 width)
     }
 
     return last;
+}
+
+static bool IsWordBreak(char c)
+{
+    return c == ' ' || c == '_' || c == '-' || c == '.';
+}
+
+const char* FindWordTailStart(const char* text, f32 width)
+{
+    const char* start = FindTextTailStart(text, width);
+
+    if (start > text && !IsWordBreak(start[-1]))
+    {
+        while (*start != '\0' && !IsWordBreak(*start))
+            start++;
+    }
+
+    while (IsWordBreak(*start))
+        start++;
+
+    return start;
 }
 
 const char* FindTextHeadEnd(const char* text, f32 width)

@@ -89,9 +89,6 @@ inline constexpr ImVec4 cNavWindowingHighlight = HexA(0xFFFFFFB3);
 inline constexpr ImVec4 cNavWindowingDimBg     = HexA(0x0000004D);
 inline constexpr ImVec4 cModalWindowDimBg      = HexA(0x00000073);
 
-inline constexpr f32 cDimTextSaturation = 0.20f;
-inline constexpr f32 cDimTextLuma       = 0.50f;
-
 }
 
 inline constexpr ImVec4 cOnBright = token::cWindow;
@@ -113,11 +110,11 @@ inline constexpr ImVec4 cMenuBarBg             = Hex(0xEAEAED);
 inline constexpr ImVec4 cCheckMark             = Hex(0x4B4BD6);
 inline constexpr ImVec4 cSliderGrab            = Hex(0x5555DD);
 inline constexpr ImVec4 cSliderGrabActive      = Hex(0x3B3BC4);
-inline constexpr ImVec4 cButton                = HexA(0x4B4BD62E);
-inline constexpr ImVec4 cButtonHovered         = HexA(0x4B4BD647);
-inline constexpr ImVec4 cButtonActive          = HexA(0x4B4BD666);
+inline constexpr ImVec4 cButton                = HexA(0x23232B14);
+inline constexpr ImVec4 cButtonHovered         = HexA(0x23232B21);
+inline constexpr ImVec4 cButtonActive          = HexA(0x23232B33);
 inline constexpr ImVec4 cHeader                = HexA(0x4949F23D);
-inline constexpr ImVec4 cHeaderHovered         = HexA(0x6161F21A);
+inline constexpr ImVec4 cHeaderHovered         = HexA(0x23232B0D);
 inline constexpr ImVec4 cHeaderActive          = HexA(0x4545E65C);
 inline constexpr ImVec4 cSeparator             = Hex(0xC6C6CC);
 inline constexpr ImVec4 cSeparatorHovered      = HexA(0x6C6CD9CC);
@@ -178,7 +175,9 @@ inline constexpr Themed<f32>      cBlackKeyLift    = { 0.45f, 0.18f };
 inline constexpr f32 cWhiteKeyInkMix       = 0.92f;
 inline constexpr f32 cWhiteKeyHoverMix     = 0.22f;
 inline constexpr f32 cBlackKeyHoverMix     = 0.30f;
-inline constexpr f32 cBlackKeyActiveDarken = 0.275f;
+inline constexpr f32 cWhiteKeyActiveMix    = 0.60f;
+inline constexpr f32 cBlackKeyActiveMix    = 0.65f;
+inline constexpr f32 cRootKeyActiveDarken  = 0.30f;
 inline constexpr f32 cKeyShadowAlpha       = 0.28f;
 inline constexpr f32 cKeySeparatorMix      = 0.18f;
 

@@ -6,6 +6,7 @@
 #include <ui/bank/PianoRollPalette.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/app/UI.h>
+#include <ui/settings/Theme.h>
 #include <ui/settings/UiColors.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/widgets/ZoomScrollBar.h>
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 static constexpr f32 cPianoMinNoteWidthEm = 0.35f;
 static constexpr f32 cPianoMaxNoteWidthEm = 1.5f;
@@ -29,9 +31,17 @@ static constexpr f32 cWheelZoomStep        = 0.2f;
 static constexpr s32 cVelocityGridTicks[]  = { 0, 16, 32, 48, 64, 80, 96, 112, 127 };
 static constexpr s32 cVelocityLabelOrder[] = { 127, 0, 64, 32, 96, 16, 48, 80, 112 };
 
-static constexpr uicolors::Themed<f32> cRegionFillAlpha         = { 0.30f, 0.07f };
-static constexpr uicolors::Themed<f32> cRegionSelectedFillAlpha = { 0.50f, 0.14f };
-static constexpr f32                   cRegionBorderAlpha       = 0.55f;
+static constexpr uicolors::Themed<f32> cRegionFillAlpha         = { 0.30f, 0.90f };
+static constexpr uicolors::Themed<f32> cRegionSelectedFillAlpha = { 0.50f, 0.90f };
+static constexpr uicolors::Themed<f32> cRegionBorderAlpha       = { 0.55f, 1.00f };
+
+static constexpr f32 cLightRegionLightness         = 0.63f;
+static constexpr f32 cLightRegionChroma            = 0.184f;
+static constexpr f32 cLightRegionSelectedLightness = 0.54f;
+static constexpr f32 cLightRegionSelectedChroma    = 0.22f;
+
+static constexpr const char* cRegionNameEndMark = "...";
+static constexpr size_t      cRegionNameMinTail = 3;
 
 static constexpr f32 cRegionEdgeSize      = 6.0f;
 static constexpr f32 cVelocityScrollWidth = 9.0f;
@@ -729,9 +739,7 @@ static void DrawVelocityRegionName(const KeyMapFrame& frame, BankFile::VelocityR
 {
     const char* name = messages::common::cNull;
     if (velRegion->getWaveFileRef().isAttached())
-    {
         name = velRegion->getWaveFileRef().getItem()->getName().cstr();
-    }
 
     const f32 visLeft  = std::max(p0.x, frame.visibleCanvasPos.x);
     const f32 visRight = std::min(p1.x, frame.visibleCanvasPos.x + frame.width);
@@ -739,27 +747,32 @@ static void DrawVelocityRegionName(const KeyMapFrame& frame, BankFile::VelocityR
     const f32 visBot   = std::min(p1.y, frame.canvasPos.y + frame.regionHeight);
     const f32 avail    = (visRight - visLeft) - 8.0f;
 
-    if (avail > 1.0f && visBot > visTop)
+    if (avail <= 1.0f || visBot <= visTop)
+        return;
+
+    const char* shown = name;
+    sead::FixedSafeString<256> truncated;
+
+    if (ImGui::CalcTextSize(name).x > avail)
     {
-        const char* shown = name;
-        sead::FixedSafeString<256> truncated;
+        const char* tail = FindWordTailStart(name, avail - ImGui::CalcTextSize(cRegionNameEndMark).x);
 
-        if (ImGui::CalcTextSize(name).x > avail)
-        {
-            truncated.format("...%s", FindTextTailStart(name, avail - ImGui::CalcTextSize("...").x));
-            shown = truncated.cstr();
-        }
+        if (strlen(tail) < cRegionNameMinTail)
+            return;
 
-        const ImVec2 sz = ImGui::CalcTextSize(shown);
-        const ImVec2 tp(
-            visLeft + (visRight - visLeft - sz.x) * 0.5f,
-            visTop + (visBot - visTop - sz.y) * 0.5f
-        );
-
-        frame.draw->PushClipRect(ImVec2(visLeft, visTop), ImVec2(visRight, visBot), true);
-        frame.draw->AddText(tp, nameColor, shown);
-        frame.draw->PopClipRect();
+        truncated.format("%s%s", cRegionNameEndMark, tail);
+        shown = truncated.cstr();
     }
+
+    const ImVec2 sz = ImGui::CalcTextSize(shown);
+    const ImVec2 tp(
+        visLeft + (visRight - visLeft - sz.x) * 0.5f,
+        visTop + (visBot - visTop - sz.y) * 0.5f
+    );
+
+    frame.draw->PushClipRect(ImVec2(visLeft, visTop), ImVec2(visRight, visBot), true);
+    frame.draw->AddText(tp, nameColor, shown);
+    frame.draw->PopClipRect();
 }
 
 static void DrawRegionDropMark(KeyMapFrame& frame, const ImVec2& min, const ImVec2& max)
@@ -787,6 +800,18 @@ static void DrawRegionWavDrop(KeyMapFrame& frame, BankFile::VelocityRegion* velR
         DrawRegionDropMark(frame, min, max);
 
     ImGui::EndDragDropTarget();
+}
+
+static ImU32 CalcRegionFillColor(bool selected)
+{
+    const f32 alpha = uicolors::Pick(selected ? cRegionSelectedFillAlpha : cRegionFillAlpha);
+
+    if (IsDarkTheme())
+        return ImGui::GetColorU32(ImGuiCol_CheckMark, alpha);
+
+    const ImVec4 fill = selected ? GetAccentAt(cLightRegionSelectedLightness, cLightRegionSelectedChroma) : GetAccentAt(cLightRegionLightness, cLightRegionChroma);
+
+    return ImGui::GetColorU32(ImVec4(fill.x, fill.y, fill.z, alpha));
 }
 
 static void DrawVelocityRegion(KeyMapFrame& frame, const KeyRegionSpan& span, BankFile::VelocityRegion* velRegion)
@@ -851,9 +876,9 @@ static void DrawVelocityRegion(KeyMapFrame& frame, const KeyRegionSpan& span, Ba
     }
 
     const bool selected = (sSubSelectedItem == velRegion);
-    const ImU32 color = ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(selected ? cRegionSelectedFillAlpha : cRegionFillAlpha));
-    const ImU32 borderColor = ImGui::GetColorU32(ImGuiCol_CheckMark, selected ? 1.0f : cRegionBorderAlpha);
-    const ImU32 nameColor = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 color = CalcRegionFillColor(selected);
+    const ImU32 borderColor = selected ? ImGui::GetColorU32(uicolors::cPlayback) : ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cRegionBorderAlpha));
+    const ImU32 nameColor = ImGui::GetColorU32(GetOnAccentTextColor());
 
     if (!frame.overVScrollbar && ImGui::IsItemClicked(ImGuiMouseButton_Left))
     {
@@ -903,7 +928,10 @@ static void DrawVelocityRegion(KeyMapFrame& frame, const KeyRegionSpan& span, Ba
     }
 
     frame.draw->AddRectFilled(p0, p1, color);
-    frame.draw->AddRect(p0, p1, borderColor, 0.0f, 0, selected ? 2.0f : 1.0f);
+    if (selected)
+        frame.draw->AddRect(p0 + ImVec2(0.5f, 0.5f), p1 - ImVec2(0.5f, 0.5f), borderColor, 0.0f, 0, 2.0f);
+    else
+        frame.draw->AddRect(p0, p1, borderColor);
 
     DrawVelocityRegionName(frame, velRegion, p0, p1, nameColor);
 }
@@ -969,6 +997,18 @@ static void DrawKeyRegion(KeyMapFrame& frame, BankFile::KeyRegion* keyRegion)
         DrawKeyRegionGrabBar(frame, span);
 }
 
+static bool HasKeyRegionAt(const BankFile::Instrument* instrument, s32 key)
+{
+    for (Item* keyRegionItem : instrument->getKeyRegionList())
+    {
+        const BankFile::KeyRegion* keyRegion = static_cast<BankFile::KeyRegion*>(keyRegionItem);
+        if (key >= keyRegion->getKeyMin() && key <= keyRegion->getKeyMax())
+            return true;
+    }
+
+    return false;
+}
+
 static void DrawKeyMapGrid(const KeyMapFrame& frame)
 {
     for (s32 gk = frame.beginNote; gk <= frame.endNote; gk++)
@@ -995,7 +1035,9 @@ static void DrawKeyMapGrid(const KeyMapFrame& frame)
 
         const f32 fontSize = ImGui::GetFontSize();
         const f32 labelX = frame.visibleCanvasPos.x + cVelocityTickWidth + ImGui::GetStyle().ItemInnerSpacing.x;
-        const ImU32 labelColor = uicolors::WithAlpha(GetPianoRollPalette().gridLineVelTick, cVelocityLabelAlpha);
+        const bool onRegion = HasKeyRegionAt(frame.instrument, XToKey(frame, labelX));
+        const ImU32 labelInk = onRegion ? ImGui::GetColorU32(GetOnAccentTextColor()) : GetPianoRollPalette().gridLineVelTick;
+        const ImU32 labelColor = uicolors::WithAlpha(labelInk, cVelocityLabelAlpha);
         f32 labelY[IM_ARRAYSIZE(cVelocityLabelOrder)];
         s32 labelNum = 0;
 

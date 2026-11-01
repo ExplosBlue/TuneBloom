@@ -86,6 +86,7 @@ bool ResetItemOnRightClick(T* value, const T& reset)
 }
 
 const char* FindTextTailStart(const char* text, f32 width);
+const char* FindWordTailStart(const char* text, f32 width);
 const char* FindTextHeadEnd(const char* text, f32 width);
 std::string CutPathStart(const std::string& path, size_t maxLength);
 

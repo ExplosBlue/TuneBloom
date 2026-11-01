@@ -68,6 +68,11 @@ const std::vector<std::string>& GetMidiEnabledDevices()
     return sMidiEnabledDevices;
 }
 
+static f32 LoadThemeAmount(const json::Value& theme, const char* key, f32 fallback, f32 min, f32 max)
+{
+    return sead::Mathf::clamp2(min, theme.getFloat(key, fallback), max);
+}
+
 void SaveThemeConfig()
 {
     const ThemeAdjust& adjust = GetThemeAdjust();
@@ -104,10 +109,10 @@ void LoadThemeConfig()
     }
 
     SetDarkTheme(theme.getBool("dark", systemtheme::isDark()));
-    adjust.brightness = theme.getFloat("brightness", adjust.brightness);
-    adjust.saturation = theme.getFloat("saturation", adjust.saturation);
-    adjust.contrast = theme.getFloat("contrast", adjust.contrast);
-    adjust.gradient = theme.getFloat("gradient", adjust.gradient);
+    adjust.brightness = LoadThemeAmount(theme, "brightness", theme.getFloat("darkSurfaceBrightness", adjust.brightness), cThemeBrightnessMin, cThemeBrightnessMax);
+    adjust.saturation = LoadThemeAmount(theme, "saturation", theme.getFloat("darkSurfaceSaturation", adjust.saturation), cThemeSaturationMin, cThemeSaturationMax);
+    adjust.contrast = LoadThemeAmount(theme, "contrast", theme.getFloat("darkSurfaceContrast", adjust.contrast), cThemeContrastMin, cThemeContrastMax);
+    adjust.gradient = LoadThemeAmount(theme, "gradient", adjust.gradient, cThemeGradientMin, cThemeGradientMax);
 }
 
 MidiSettings& GetMidiSettings()

@@ -130,15 +130,16 @@ bool BeginGroupBox(const char* title, const char* action, bool* pressed, f32 act
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 pos = ImGui::GetCursorScreenPos();
     const f32 width = ImGui::GetContentRegionAvail().x;
-    const f32 actionWidth = action ? ImMax(actionMinWidth, CalcTextButtonWidth(action)) : 0.0f;
+    const f32 textWidth = action ? CalcTextActionWidth(action) : 0.0f;
+    const f32 actionWidth = ImMax(actionMinWidth, textWidth);
 
-    RegionHeader(title, action ? actionWidth + style.ItemSpacing.x : 0.0f);
+    RegionHeader(title, action ? actionWidth - style.FramePadding.x + style.ItemSpacing.x : 0.0f);
 
     if (action)
     {
         ImGui::SameLine();
-        ImGui::SetCursorScreenPos(ImVec2(pos.x + width - actionWidth, pos.y));
-        *pressed = ImGui::Button(action, ImVec2(actionWidth, 0.0f));
+        ImGui::SetCursorScreenPos(ImVec2(pos.x + width - textWidth + style.FramePadding.x, pos.y));
+        *pressed = DrawTextAction("##GroupBoxAction", action, ImGui::GetFrameHeight(), style.FramePadding.y);
     }
 
     return true;

@@ -1,43 +1,57 @@
 #include <ui/stream/StreamTracks.h>
 
 #include <messages/Messages.h>
-#include <ui/project/FileLists.h>
+#include <ui/items/ItemColumns.h>
 #include <ui/sound/SoundProperties.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
+#include <ui/widgets/ContextMenu.h>
+#include <ui/widgets/Widgets.h>
 
 #include <imgui/imgui_custom.h>
 
-static constexpr f32 cTrackWaveMinWidthEm  = 5.0f;
-static constexpr f32 cTrackWaveLinkWidthEm = 6.5f;
-static constexpr f32 cTrackWaveFullWidthEm = 9.5f;
-static constexpr f32 cTrackWaveWideWidthEm = 13.0f;
-static constexpr f32 cTrackChannelsMinEm   = 20.0f;
-static constexpr f32 cTrackHoveredAlpha    = 0.05f;
-
-static const char* cTrackChannelWidest = messages::common::cStereo;
-
-static const TrackParam cTrackMuteParams[] = { TrackParam::Mute };
-static const TrackParam cTrackSoloParams[] = { TrackParam::Solo };
+static constexpr f32 cTrackLaneMinWidthEm   = 5.0f;
+static constexpr f32 cTrackLaneMaxRowEm     = 4.0f;
+static constexpr f32 cTrackKnobLaneMaxRowEm = 2.7f;
+static constexpr f32 cTrackWaveMinWidthEm   = 6.5f;
+static constexpr f32 cTrackWaveMaxWidthEm   = 13.0f;
+static constexpr f32 cTrackWaveShare        = 0.4f;
+static constexpr f32 cTrackHoveredAlpha     = 0.05f;
+static constexpr f32 cTrackMenuHoverEm      = 1.3f;
 
 struct TrackTableView
 {
     TrackTableLayout layout;
     f32 rowHeight;
-    f32 channelWidth;
-    bool compactWave;
-    bool showWaveLink;
-    bool showChannels;
+    f32 waveWidth;
+    f32 laneWidth;
+    s32 menuSlot;
 };
 
-static f32 CalcTrackWaveWidth(const TrackTableLayout& layout, f32 availWidth, f32 minWidth, bool* allInView)
+struct TrackGroupInfo
+{
+    const char* title;
+    TrackSlots* slots;
+    const TrackParam* params;
+};
+
+struct TrackMenuButton
+{
+    ImGuiID menuId = 0;
+    ImVec2 min;
+    ImVec2 max;
+};
+
+static TrackMenuButton sTrackMenuButton;
+
+static f32 CalcTrackFlexWidth(const TrackTableLayout& layout, f32 availWidth, f32 minWidth, s32* fitGroupNum)
 {
     const f32 scrollbarWidth = ImGui::GetCurrentWindow()->ScrollbarY ? ImGui::GetStyle().ScrollbarSize : 0.0f;
     const f32 freeWidth = availWidth - layout.fixedWidth - scrollbarWidth;
 
-    *allInView = freeWidth >= minWidth;
+    *fitGroupNum = layout.groupNum;
 
-    if (*allInView)
+    if (freeWidth >= minWidth)
         return ImFloor(freeWidth);
 
     f32 usedWidth = layout.leadWidth + scrollbarWidth;
@@ -45,7 +59,10 @@ static f32 CalcTrackWaveWidth(const TrackTableLayout& layout, f32 availWidth, f3
     for (s32 i = 0; i < layout.groupNum; i++)
     {
         if (usedWidth + layout.groupWidths[i] + minWidth > availWidth)
+        {
+            *fitGroupNum = i;
             break;
+        }
 
         usedWidth += layout.groupWidths[i];
     }
@@ -53,244 +70,255 @@ static f32 CalcTrackWaveWidth(const TrackTableLayout& layout, f32 availWidth, f3
     return ImFloor(sead::Mathf::max(minWidth, availWidth - usedWidth));
 }
 
-void DimTrackCell(bool toTableEdge)
+static TrackGroupInfo GetTrackGroupInfo(TrackTableLayout& layout, TrackGroup group)
 {
-    ImGuiTable* table = ImGui::GetCurrentTable();
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-    ImRect rect = ImGui::TableGetCellBgRect(table, table->CurrentColumn);
-    ImRect clip(drawList->GetClipRectMin(), drawList->GetClipRectMax());
-
-    rect.Min.y += 1.0f;
-
-    if (toTableEdge)
+    switch (group)
     {
-        rect.Max.x = table->InnerClipRect.Max.x;
-        clip.Max.x = table->InnerClipRect.Max.x;
+        case TrackGroup::Mix:
+            return { messages::stream::cTrackMix, &layout.mixSlots, cTrackMixParams };
+        case TrackGroup::Bypass:
+            return { messages::stream::cTrackBypass, &layout.bypassSlots, cTrackMixParams + cTrackBypassIndex };
+        case TrackGroup::Send:
+            return { messages::panel::cSend, &layout.sendSlots, cTrackSendParams };
+        case TrackGroup::Filter:
+            return { messages::common::cFilter, &layout.filterSlots, cTrackFilterParams };
     }
 
-    drawList->PushClipRect(clip.Min, clip.Max);
-    drawList->AddRectFilled(rect.Min, rect.Max, ImGui::GetColorU32(ImGuiCol_WindowBg, cTrackSilentAlpha));
-    drawList->PopClipRect();
+    return {};
 }
 
-static const char* GetTrackWaveTitle(const TrackContext& ctx)
+static void SplitTrackFlexWidth(const TrackContext& ctx, f32 flexWidth, TrackTableView* view)
 {
-    return ctx.source.sound ? cTrackWaveLabel : messages::common::cChannels;
+    const f32 em = ImGui::GetFontSize();
+
+    view->waveWidth = 0.0f;
+
+    if (ctx.source.sound)
+        view->waveWidth = ImFloor(ImClamp(flexWidth * cTrackWaveShare, em * cTrackWaveMinWidthEm, em * cTrackWaveMaxWidthEm));
+
+    view->laneWidth = ImFloor(sead::Mathf::max(em * cTrackLaneMinWidthEm, flexWidth - view->waveWidth));
 }
 
-static void SetupTrackTableColumns(const TrackContext& ctx, const TrackTableLayout& layout, f32 waveWidth)
+static f32 CalcTrackRowHeight(const TrackContext& ctx, const TrackTableLayout& layout)
 {
-    ImGui::TableSetupScrollFreeze(3, 1);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 rowExtra = layout.cellPadding.y * 2.0f + 1.0f;
+    const f32 freeHeight = ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeight() - rowExtra - style.ScrollbarSize;
+    const s32 rowNum = sead::Mathf::max(1, static_cast<s32>(ctx.tracks.size()));
+    const f32 fitHeight = ImFloor(freeHeight / static_cast<f32>(rowNum) - rowExtra);
+    const f32 maxRowEm = layout.groupNum > 0 ? cTrackKnobLaneMaxRowEm : cTrackLaneMaxRowEm;
+
+    return ImClamp(fitHeight, CalcTrackKnobSize(), ImFloor(ImGui::GetFontSize() * maxRowEm));
+}
+
+static void SetupTrackTableColumns(const TrackContext& ctx, TrackTableView& view)
+{
+    TrackTableLayout& layout = view.layout;
+
+    ImGui::TableSetupScrollFreeze(layout.leadNum, 1);
     ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, layout.indexWidth);
-    ImGui::TableSetupColumn(messages::stream::cTrackMute, ImGuiTableColumnFlags_WidthFixed, layout.muteWidth);
-    ImGui::TableSetupColumn(messages::stream::cTrackSolo, ImGuiTableColumnFlags_WidthFixed, layout.soloWidth);
-    ImGui::TableSetupColumn(GetTrackWaveTitle(ctx), ImGuiTableColumnFlags_WidthFixed, waveWidth);
-    if (ctx.source.hasTrackMix)
+
+    if (ctx.source.sound)
+        ImGui::TableSetupColumn(cTrackWaveLabel, ImGuiTableColumnFlags_WidthFixed, view.waveWidth);
+
+    ImGui::TableSetupColumn(messages::common::cChannels, ImGuiTableColumnFlags_WidthFixed, layout.channelWidth);
+    ImGui::TableSetupColumn("###Lane", ImGuiTableColumnFlags_WidthFixed, view.laneWidth);
+
+    for (s32 i = 0; i <= layout.groupNum; i++)
     {
-        ImGui::TableSetupColumn(messages::stream::cTrackMix, ImGuiTableColumnFlags_WidthFixed, layout.mixWidth);
-        ImGui::TableSetupColumn(messages::stream::cTrackBypass, ImGuiTableColumnFlags_WidthFixed, layout.bypassWidth);
+        if (i == view.menuSlot)
+            ImGui::TableSetupColumn("###Menu", ImGuiTableColumnFlags_WidthFixed, layout.menuWidth);
+
+        if (i < layout.groupNum)
+            ImGui::TableSetupColumn(GetTrackGroupInfo(layout, layout.groups[i]).title, ImGuiTableColumnFlags_WidthFixed, layout.groupWidths[i] - layout.columnExtra);
     }
-
-    if (ctx.source.enableSend)
-        ImGui::TableSetupColumn(messages::panel::cSend, ImGuiTableColumnFlags_WidthFixed, layout.sendWidth);
-
-    if (ctx.source.enableFilter)
-        ImGui::TableSetupColumn(messages::common::cFilter, ImGuiTableColumnFlags_WidthFixed, layout.filterWidth);
 }
 
-static void DrawTrackTableTitles(const TrackContext& ctx, const TrackTableLayout& layout)
+static void DrawTrackTitle(const char* text, bool centered = false)
 {
+    ImGui::TableNextColumn();
+
+    if (centered)
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImFloor((ImGui::GetContentRegionAvail().x - ImGui::CalcTextSize(text).x) * 0.5f));
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s", text);
+}
+
+static void DrawTrackTableTitles(const TrackContext& ctx, TrackTableView& view)
+{
+    TrackTableLayout& layout = view.layout;
+
     ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
 
-    ImGui::TableNextColumn();
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted("#");
+    DrawTrackTitle("#", true);
+
+    if (ctx.source.sound)
+        DrawTrackTitle(cTrackWaveLabel);
+
+    DrawTrackTitle(messages::common::cChannels);
 
     ImGui::TableNextColumn();
-    layout.muteSlots.drawLabels();
+    DrawTrackLaneRuler(ctx);
 
-    ImGui::TableNextColumn();
-    layout.soloSlots.drawLabels();
-
-    ImGui::TableNextColumn();
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(GetTrackWaveTitle(ctx));
-
-    if (ctx.source.hasTrackMix)
+    for (s32 i = 0; i <= layout.groupNum; i++)
     {
-        ImGui::TableNextColumn();
-        layout.mixSlots.drawLabels();
+        if (i == view.menuSlot)
+            ImGui::TableNextColumn();
+
+        if (i >= layout.groupNum)
+            continue;
 
         ImGui::TableNextColumn();
-        layout.bypassSlots.drawLabels();
-    }
-
-    if (ctx.source.enableSend)
-    {
-        ImGui::TableNextColumn();
-        layout.sendSlots.drawLabels();
-    }
-
-    if (ctx.source.enableFilter)
-    {
-        ImGui::TableNextColumn();
-        layout.filterSlots.drawLabels();
+        GetTrackGroupInfo(layout, layout.groups[i]).slots->drawLabels();
     }
 }
 
-static void DrawTrackIndexCell(const TrackContext& ctx, s32 index, f32 rowHeight, TrackEdit* edit)
+static void DrawTrackIndexBadge(s32 index, const ImVec2& cellMin, const ImVec2& cellSize, bool selected)
+{
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const sead::FormatFixedSafeString<16> number("%d", index);
+    const ImVec2 textSize = ImGui::CalcTextSize(number.cstr());
+    const f32 badgeHeight = ImGui::GetFrameHeight();
+    const ImVec2 badgeSize(sead::Mathf::max(badgeHeight, textSize.x + style.FramePadding.x), badgeHeight);
+    const ImVec2 badgeMin = ImFloor(cellMin + (cellSize - badgeSize) * 0.5f);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+
+    if (selected)
+        draw->AddRectFilled(badgeMin, badgeMin + badgeSize, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackIndexAlpha)), style.FrameRounding);
+
+    const ImVec2 textPos(ImFloor(badgeMin.x + (badgeSize.x - textSize.x) * 0.5f), badgeMin.y + style.FramePadding.y);
+
+    draw->AddText(textPos, ImGui::GetColorU32(ImGuiCol_Text), number.cstr());
+}
+
+static bool DrawTrackIndexCell(const TrackContext& ctx, s32 index, f32 rowHeight, TrackEdit* edit)
 {
     Sound::StreamSoundInfo::Track* track = ctx.tracks[index];
 
     ImGui::TableNextColumn();
 
-    const ImVec2 pos = ImGui::GetCursorPos();
-    const bool hovered = DrawTrackHandle(ctx, track, ImVec2(0.0f, rowHeight), ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap, edit);
+    const ImVec2 cellMin = ImGui::GetCursorScreenPos();
+    const f32 cellWidth = ImGui::GetContentRegionAvail().x;
+
+    ImGui::SetNextItemAllowOverlap();
+    const bool hovered = DrawTrackHandle(ctx, track, ImVec2(0.0f, rowHeight), ImGuiSelectableFlags_SpanAllColumns, edit);
     const bool selected = track == GetHighlightedStreamTrack();
     const f32 hoverRatio = ImGui::GetHoverRatio(ImGui::GetID("###RowFade"), hovered && !selected);
 
     if (selected)
-    {
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackSelectedAlpha)));
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, ImGui::GetColorU32(ImGuiCol_CheckMark, uicolors::Pick(cTrackIndexAlpha)));
-    }
     else if (hoverRatio > 0.0f)
-    {
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg1, ImGui::GetColorU32(ImGuiCol_Text, cTrackHoveredAlpha * hoverRatio));
-    }
 
-    ImGui::SetCursorPos(ImVec2(pos.x, pos.y + ImFloor((rowHeight - ImGui::GetFontSize()) * 0.5f)));
-    ImGui::Text("%d", index);
+    DrawTrackIndexBadge(index, cellMin, ImVec2(cellWidth, rowHeight), selected);
+
+    return hovered;
 }
 
-void DrawTrackChannelText(u16 channelCount, bool dim)
+static void CenterTrackCellFrame(f32 rowHeight)
 {
-    sead::FixedSafeString<16> text;
-
-    if (channelCount == 1)
-        text = messages::common::cMono;
-    else if (channelCount == 2)
-        text = messages::common::cStereo;
-    else
-        text.format(messages::stream::cTrackChannelsFormat, channelCount);
-
-    ImGui::AlignTextToFramePadding();
-
-    if (dim)
-        ImGui::TextDisabled("%s", text.cstr());
-    else
-        ImGui::TextUnformatted(text.cstr());
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor((rowHeight - ImGui::GetFrameHeight()) * 0.5f));
 }
 
-static void DrawTrackChannelCount(u16 channelCount)
-{
-    ImGui::SameLine();
-    DrawTrackChannelText(channelCount, true);
-}
-
-static void DrawLooseTrackChannelCell(const TrackContext& ctx, s32 index)
+static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, f32 rowHeight)
 {
     Sound::StreamSoundInfo::Track* track = ctx.tracks[index];
     Item* waveFile = track->getWaveFileRef().getItem();
 
-    const f32 buttonSize = ImGui::GetFrameHeight();
-    const f32 cellRight = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+    ImGui::TableNextColumn();
+    CenterTrackCellFrame(rowHeight);
 
-    DrawTrackChannelText(track->getChannelCount(ctx.source.stream->getStreamType()), false);
+    DrawTrackWaveSelector(ctx, track, ImGui::GetContentRegionAvail().x - TrailingButtonsWidth(1));
 
-    ImGui::SameLine();
-    ImGui::SetCursorPosX(cellRight - buttonSize);
-    ImGui::BeginDisabled(!waveFile);
-
-    if (ImGui::Button(ICON_LC_ARROW_DOWN_UP "###ReplaceWave", ImVec2(buttonSize, buttonSize)))
-        RequestWaveFileReplace(static_cast<WaveFile*>(waveFile));
-
-    ImGui::EndDisabled();
-    ImGui::SetItemTooltip("%s", waveFile ? messages::common::cReplaceAudio : messages::reference::cNoWaveFile);
+    if (TrailingGoToButton(ICON_LC_EXTERNAL_LINK "###GoWave", waveFile, messages::sound::cWaveFileGoTo, messages::reference::cNoWaveFile))
+        SelectItem(waveFile);
 }
 
-static void DrawTrackWaveCell(const TrackContext& ctx, s32 index, const TrackTableView& view, bool audible)
+static void DrawTrackChannelCell(const TrackContext& ctx, s32 index, f32 rowHeight)
 {
-    Sound::StreamSoundInfo::Track* track = ctx.tracks[index];
-    const ImGuiStyle& style = ImGui::GetStyle();
+    sead::FixedSafeString<16> text;
+    FormatChannelCount(&text, ctx.tracks[index]->getChannelCount(ctx.source.stream->getStreamType()));
 
     ImGui::TableNextColumn();
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImFloor((view.rowHeight - ImGui::GetFrameHeight()) * 0.5f));
+    CenterTrackCellFrame(rowHeight);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s", text.cstr());
+}
 
-    if (!ctx.source.sound)
+static void DrawTrackLaneCell(const TrackContext& ctx, s32 index, f32 rowHeight)
+{
+    ImGui::TableNextColumn();
+    DrawTrackLane(ctx, index, rowHeight);
+}
+
+static void DrawTrackGroupCell(const TrackContext& ctx, s32 index, TrackTableLayout& layout, TrackGroup group, f32 rowHeight)
+{
+    const TrackGroupInfo info = GetTrackGroupInfo(layout, group);
+
+    ImGui::TableNextColumn();
+    DrawTrackSlotGroup(ctx, index, *info.slots, info.params, rowHeight);
+}
+
+static void DrawTrackMenuCell(f32 rowHeight, bool rowHovered)
+{
+    ImGui::TableNextColumn();
+    CenterTrackCellFrame(rowHeight);
+
+    const ImGuiID menuId = ImGui::GetID(cTrackMenuId);
+    const bool shown = rowHovered || ImGui::IsPopupOpen(cTrackMenuId);
+    const f32 size = ImGui::GetFrameHeight();
+
+    if (DrawRowHoverButton("###TrackMenuButton", ICON_LC_CHEVRON_DOWN, shown, messages::stream::cTrackMenuTip, ImVec2(size, size), ImFloor(ImGui::GetFontSize() * cTrackMenuHoverEm)))
     {
-        DrawLooseTrackChannelCell(ctx, index);
+        ImGui::OpenPopup(cTrackMenuId);
+        sTrackMenuButton.menuId = menuId;
+    }
 
-        if (!audible)
-            DimTrackCell(false);
+    if (sTrackMenuButton.menuId != menuId)
+        return;
 
+    sTrackMenuButton.min = ImGui::GetItemRectMin();
+    sTrackMenuButton.max = ImGui::GetItemRectMax();
+}
+
+void PlaceTrackMenu()
+{
+    if (sTrackMenuButton.menuId != ImGui::GetID(cTrackMenuId))
+        return;
+
+    if (!ImGui::IsPopupOpen(cTrackMenuId) || ImGui::IsMouseReleased(ImGuiMouseButton_Right))
+    {
+        sTrackMenuButton.menuId = 0;
         return;
     }
 
-    DrawTrackWaveSelector(ctx, track, ImGui::GetContentRegionAvail().x - (view.showWaveLink ? TrailingButtonsWidth(1) : 0.0f) - (view.showChannels ? style.ItemSpacing.x + view.channelWidth : 0.0f), view.compactWave);
-
-    Item* waveFile = track->getWaveFileRef().getItem();
-
-    if (view.showWaveLink)
-    {
-        ImGui::BeginDisabled(!waveFile);
-
-        if (TrailingButton(ICON_LC_EXTERNAL_LINK "###GoWave"))
-            SelectItem(waveFile);
-
-        ImGui::EndDisabled();
-
-        if (!waveFile)
-            ImGui::SetItemTooltip("%s", messages::reference::cNoWaveFile);
-    }
-
-    if (view.showChannels)
-        DrawTrackChannelCount(track->getChannelCount(ctx.source.stream->getStreamType()));
-
-    if (!audible)
-        DimTrackCell(false);
-}
-
-static void DrawTrackGroupCell(const TrackContext& ctx, s32 index, TrackSlots& slots, const TrackParam* params, const TrackTableView& view, bool audible)
-{
-    ImGui::TableNextColumn();
-    DrawTrackSlotGroup(ctx, index, slots, params, view.rowHeight);
-
-    if (!audible)
-        DimTrackCell(ImGui::TableGetColumnIndex() == view.layout.columnNum - 1);
+    PlaceContextMenuBelow(cTrackMenuId, sTrackMenuButton.min, sTrackMenuButton.max, true);
 }
 
 static void DrawTrackTableRow(const TrackContext& ctx, s32 index, TrackTableView& view, TrackEdit* edit)
 {
     TrackTableLayout& layout = view.layout;
-    const bool audible = ctx.source.stream->isTrackAudible(static_cast<u32>(index));
 
     ImGui::PushID(ctx.tracks[index]);
     ImGui::TableNextRow();
 
-    DrawTrackIndexCell(ctx, index, view.rowHeight, edit);
+    const bool rowHovered = DrawTrackIndexCell(ctx, index, view.rowHeight, edit);
 
-    // Mute
-    ImGui::TableNextColumn();
-    DrawTrackSlotGroup(ctx, index, layout.muteSlots, cTrackMuteParams, view.rowHeight);
+    if (ctx.source.sound)
+        DrawTrackWaveCell(ctx, index, view.rowHeight);
 
-    // Solo
-    ImGui::TableNextColumn();
-    DrawTrackSlotGroup(ctx, index, layout.soloSlots, cTrackSoloParams, view.rowHeight);
+    DrawTrackChannelCell(ctx, index, view.rowHeight);
+    DrawTrackLaneCell(ctx, index, view.rowHeight);
 
-    DrawTrackWaveCell(ctx, index, view, audible);
-    if (ctx.source.hasTrackMix)
+    for (s32 i = 0; i <= layout.groupNum; i++)
     {
-        DrawTrackGroupCell(ctx, index, layout.mixSlots, cTrackMixParams, view, audible);
-        DrawTrackGroupCell(ctx, index, layout.bypassSlots, cTrackMixParams + cTrackBypassIndex, view, audible);
+        if (i == view.menuSlot)
+            DrawTrackMenuCell(view.rowHeight, rowHovered);
+
+        if (i < layout.groupNum)
+            DrawTrackGroupCell(ctx, index, layout, layout.groups[i], view.rowHeight);
     }
-
-    if (ctx.source.enableSend)
-        DrawTrackGroupCell(ctx, index, layout.sendSlots, cTrackSendParams, view, audible);
-
-    if (ctx.source.enableFilter)
-        DrawTrackGroupCell(ctx, index, layout.filterSlots, cTrackFilterParams, view, audible);
 
     ImGui::PopID();
 }
@@ -302,13 +330,12 @@ void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit)
 
     TrackTableView view = {};
     view.layout = CalcTrackTableLayout(ctx);
-    view.rowHeight = CalcTrackKnobSize();
-    view.channelWidth = ImGui::CalcTextSize(cTrackChannelWidest).x;
+    view.rowHeight = CalcTrackRowHeight(ctx, view.layout);
 
     const f32 availWidth = ImGui::GetContentRegionAvail().x;
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, view.layout.cellPadding);
-    const bool tableOpen = ImGui::BeginTable("TrackTable", view.layout.columnNum, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuter | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY);
+    const bool tableOpen = ImGui::BeginTable("TrackTable", view.layout.columnNum, ImGuiTableFlags_NoSavedSettings | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY);
 
     if (!tableOpen)
     {
@@ -316,20 +343,16 @@ void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit)
         return;
     }
 
-    bool allInView = false;
-    const f32 waveWidth = CalcTrackWaveWidth(view.layout, availWidth, ImFloor(em * cTrackWaveMinWidthEm), &allInView);
+    const f32 flexMinWidth = ImFloor(em * (cTrackLaneMinWidthEm + (ctx.source.sound ? cTrackWaveMinWidthEm : 0.0f)));
 
-    view.compactWave = waveWidth < em * (allInView ? cTrackWaveFullWidthEm : cTrackWaveWideWidthEm);
-    view.showWaveLink = ctx.source.sound && waveWidth >= em * cTrackWaveLinkWidthEm;
-    view.showChannels = waveWidth >= em * cTrackChannelsMinEm;
-
-    SetupTrackTableColumns(ctx, view.layout, waveWidth);
-    DrawTrackTableTitles(ctx, view.layout);
+    SplitTrackFlexWidth(ctx, CalcTrackFlexWidth(view.layout, availWidth, flexMinWidth, &view.menuSlot), &view);
+    SetupTrackTableColumns(ctx, view);
+    DrawTrackTableTitles(ctx, view);
 
     if (ctx.tracks.empty())
     {
         ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(3);
+        ImGui::TableSetColumnIndex(view.layout.leadNum);
         ImGui::AlignTextToFramePadding();
         ImGui::TextDisabled("%s", messages::stream::cTrackNone);
     }
@@ -337,7 +360,7 @@ void DrawTrackTable(const TrackContext& ctx, TrackEdit* edit)
     for (s32 i = 0; i < static_cast<s32>(ctx.tracks.size()); i++)
         DrawTrackTableRow(ctx, i, view, edit);
 
-    DrawTrackListMenu(ctx, edit);
+    DrawTrackListMenu(ctx);
 
     ImGui::EndTable();
     ImGui::PopStyleVar();

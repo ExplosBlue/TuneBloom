@@ -239,15 +239,8 @@ static void DrawWaveFileField(BankFile::VelocityRegion& velRegion, f32 width)
         SetUnsavedChanges(true);
     }
 
-    ImGui::BeginDisabled(!waveFile);
-
-    if (TrailingButton(ICON_LC_EXTERNAL_LINK "###GoWave"))
+    if (TrailingGoToButton(ICON_LC_EXTERNAL_LINK "###GoWave", waveFile, messages::sound::cWaveFileGoTo, messages::reference::cNoWaveFile))
         SelectItem(waveFile);
-
-    ImGui::EndDisabled();
-
-    if (!waveFile)
-        ImGui::SetItemTooltip("%s", messages::reference::cNoWaveFile);
 }
 
 static void DrawInterpolationField(BankFile::VelocityRegion& velRegion, f32 width)

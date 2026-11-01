@@ -17410,7 +17410,7 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     // Title bar
     if (is_focused)
         node->LastFrameFocused = g.FrameCount;
-    ImU32 title_bar_col = GetColorU32(host_window->Collapsed ? ImGuiCol_TitleBgCollapsed : is_focused ? ImGuiCol_TitleBgActive : ImGuiCol_TitleBg);
+    ImU32 title_bar_col = GetColorU32(host_window->Collapsed ? ImGuiCol_TitleBgCollapsed : ImGuiCol_TitleBg); // TuneBloom: switch tabs
     ImDrawFlags rounding_flags = CalcRoundingFlagsForRectInRect(title_bar_rect, host_window->Rect(), g.Style.DockingSeparatorSize);
     host_window->DrawList->AddRectFilled(title_bar_rect.Min, title_bar_rect.Max, title_bar_col, host_window->WindowRounding, rounding_flags);
 
@@ -17496,6 +17496,12 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     for (int color_n = 0; color_n < ImGuiWindowDockStyleCol_COUNT; color_n++)
         backup_style_cols[color_n] = g.Style.Colors[GWindowDockStyleColors[color_n]];
 
+    // TuneBloom: switch tabs
+    float tab_width = 0.0f;
+    for (int window_n = 0; window_n < node->Windows.Size; window_n++)
+        tab_width = ImMax(tab_width, TabItemCalcSize(node->Windows[window_n]).x);
+    tab_width = IM_TRUNC(tab_width + g.FontSize * 2.0f);
+
     // Submit actual tabs
     node->VisibleWindow = NULL;
     for (int window_n = 0; window_n < node->Windows.Size; window_n++)
@@ -17519,6 +17525,7 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
             // Note that TabItemEx() calls TabBarCalcTabID() so our tab item ID will ignore the current ID stack (rightly so)
             bool tab_open = true;
             BeginDisabled(window->DockTabDisabled); // TuneBloom: disabled tab
+            SetNextItemWidth(tab_width); // TuneBloom: switch tabs
             TabItemEx(tab_bar, window->Name, window->HasCloseButton ? &tab_open : NULL, tab_item_flags, window);
             EndDisabled();
             if (!tab_open)
@@ -17544,8 +17551,17 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     if (has_window_menu_button)
     {
         const float window_menu_button_sz_draw = ImTrunc(g.FontSize * 0.70f);
-        const ImU32 window_menu_button_col = GetColorU32(((window_menu_button_held && window_menu_button_hovered) || (is_focused && !window_menu_button_hovered)) ? ImGuiCol_ButtonActive : window_menu_button_hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
-        host_window->DrawList->AddTriangleFilled(window_menu_button_pos, window_menu_button_pos + ImVec2(window_menu_button_sz_draw, 0.0f), window_menu_button_pos + ImVec2(0.0f, window_menu_button_sz_draw), window_menu_button_col);
+        const float window_menu_button_sz_near = ImTrunc(g.FontSize * 1.5f);
+        const bool window_menu_button_lit = window_menu_button_hovered || window_menu_button_held;
+        const bool near_corner = window_menu_button_lit || (g.HoveredWindow && g.HoveredWindow->RootWindowDockTree == host_window->RootWindowDockTree && IsMouseHoveringRect(window_menu_button_pos, window_menu_button_pos + ImVec2(window_menu_button_sz_near, window_menu_button_sz_near), false));
+        const float visible = GetHoverRatio(ImHashStr("#COLLAPSE_NEAR", 0, node->ID), near_corner);
+        if (visible > 0.0f)
+        {
+            const float lit = GetHoverRatio(ImHashStr("#COLLAPSE_LIT", 0, node->ID), window_menu_button_lit);
+            ImVec4 col = ImLerp(GetStyleColorVec4(ImGuiCol_TextDisabled), GetStyleColorVec4(ImGuiCol_Text), lit);
+            col.w *= visible;
+            host_window->DrawList->AddTriangleFilled(window_menu_button_pos, window_menu_button_pos + ImVec2(window_menu_button_sz_draw, 0.0f), window_menu_button_pos + ImVec2(0.0f, window_menu_button_sz_draw), GetColorU32(col));
+        }
     }
 
     // Notify root of visible window (used to display title in OS task bar)

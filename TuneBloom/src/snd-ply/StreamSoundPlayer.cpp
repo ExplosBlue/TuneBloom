@@ -52,9 +52,6 @@ void StreamSoundPlayer::init()
         track.mVolume      = 1.0f;
         track.mOutputLine  = -1;
 
-        for (u32 channel = 0; channel < snd::cWaveChannelMax; channel++)
-            track.mPeak[channel].store(0.0f, std::memory_order_relaxed);
-
         track.mParam.initialize();
     }
 
@@ -543,10 +540,7 @@ bool StreamSoundPlayer::seek(u32 offsetSample)
         return false;
     }
 
-    if (offsetSample > mWaveInfos[0].loopEndFrame)
-    {
-        offsetSample = mWaveInfos[0].loopEndFrame;
-    }
+    offsetSample = nw::snd::internal::CalcSeekOffset(mWaveInfos[0], mLoopEnabled, offsetSample);
 
     if (!restartVoices_())
         return false;
@@ -846,28 +840,7 @@ void StreamSoundPlayer::update()
     }
 
     for (u32 trackIndex = 0; trackIndex < mTrackCount; trackIndex++)
-    {
         updateVoiceParams(&mTracks[trackIndex]);
-        updateTrackPeak(&mTracks[trackIndex]);
-    }
-}
-
-void StreamSoundPlayer::updateTrackPeak(StreamTrack* track)
-{
-    if (!track->mActiveFlag)
-        return;
-
-    for (u32 ch = 0; ch < track->channelCount && ch < snd::cWaveChannelMax; ch++)
-    {
-        const StreamChannel* channel = track->mChannels[ch];
-        if (!channel || !channel->mVoice)
-            continue;
-
-        const f32 peak = channel->mVoice->fetchVoicePeak();
-
-        if (peak > track->mPeak[ch].load(std::memory_order_relaxed))
-            track->mPeak[ch].store(peak, std::memory_order_relaxed);
-    }
 }
 
 void StreamSoundPlayer::updateVoiceParams(StreamTrack* track)

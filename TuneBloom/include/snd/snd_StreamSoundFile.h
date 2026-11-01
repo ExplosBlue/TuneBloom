@@ -343,6 +343,14 @@ struct StreamSoundFile
         char name[64];
     };
     static_assert(sizeof(ConverterRegionInfo) == 208);
+
+    struct MarkerInfo
+    {
+        ut::ResU32 position;
+        ut::ResU32 unknown4;
+        char name[64];
+    };
+    static_assert(sizeof(MarkerInfo) == 72);
 };
 
 } } } // namespace nw::snd::internal

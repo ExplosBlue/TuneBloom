@@ -92,6 +92,7 @@ public:
     AudioAsset* duplicateAsset(AudioAsset* source, const char** outError);
 
     bool canReplaceAudio(const AudioAsset& asset, const char** outReason) const;
+    bool canReimportAudio(const AudioAsset& asset, const char** outReason) const;
     bool canSetLoop(const AudioAsset& asset, const char** outReason) const;
     OldAudioData findOldAudioData(const AudioAsset& asset) const;
     bool replaceAudio(AudioAsset* asset, const WaveFile::RiffWaveInfo& info, const aal::AmtaSourceAudio& source, const AudioAssetEncoding& encoding, const OldAudioClear& cleared, const char** outError);

@@ -5,6 +5,7 @@
 #include <ui/widgets/Widgets.h>
 
 #include <libs/IconsLucide.h>
+#include <imgui/imgui_custom.h>
 
 #include <math/seadMathCalcCommon.h>
 
@@ -84,12 +85,29 @@ static s32 CalcTabRowCountDigits(const TabRowTitle& title, s32 count)
     return sead::Mathi::max(digits, title.countDigits);
 }
 
+struct TabRowCountPad
+{
+    s32 lead;
+    s32 trail;
+};
+
+static TabRowCountPad CalcTabRowCountPad(const TabRowTitle& title, s32 count)
+{
+    const f32 spaceWidth = ImGui::CalcTextSize(" ").x;
+    const f32 slotWidth = ImGui::CalcTextSize("0").x * CalcTabRowCountDigits(title, count);
+    const s32 spaceNum = static_cast<s32>(ImCeil(slotWidth / spaceWidth));
+    const f32 countWidth = count < 0 ? 0.0f : ImGui::CalcTextSize(FormatCountText(count).cstr()).x;
+    const f32 freeWidth = spaceNum * spaceWidth - countWidth;
+    const s32 lead = sead::Mathi::clamp2(0, static_cast<s32>(freeWidth * 0.5f / spaceWidth + 0.5f), spaceNum);
+
+    return { lead, spaceNum - lead };
+}
+
 void FormatTabRowTitle(sead::BufferedSafeString* name, const TabRowTitle& title, s32 count)
 {
-    const f32 slotWidth = ImGui::CalcTextSize("0").x * CalcTabRowCountDigits(title, count);
-    const s32 spaceNum = static_cast<s32>(ImCeil(slotWidth / ImGui::CalcTextSize(" ").x));
+    const TabRowCountPad pad = CalcTabRowCountPad(title, count);
 
-    name->format(" %s %s %*s %s", title.icon, title.title, spaceNum, "", title.id);
+    name->format("%*s %s %s %*s %s", pad.lead, "", title.icon, title.title, pad.trail, "", title.id);
 }
 
 void DrawTabRowCount(const TabRowTitle& title, s32 count)
@@ -103,9 +121,12 @@ void DrawTabRowCount(const TabRowTitle& title, s32 count)
     const ImRect& barRect = node->TabBar->BarRect;
     const ImRect tabRect = window->DockTabItemRect;
     const ImVec2& padding = node->TabBar->FramePadding;
-    const sead::FormatFixedSafeString<64> lead(" %s %s ", title.icon, title.title);
+    const TabRowCountPad pad = CalcTabRowCountPad(title, count);
+    const sead::FormatFixedSafeString<64> lead("%*s %s %s ", pad.lead, "", title.icon, title.title);
     const sead::FixedSafeString<32> text = FormatCountText(count);
-    const ImVec2 pos(tabRect.Min.x + padding.x + ImGui::CalcTextSize(lead.cstr()).x, tabRect.Min.y + padding.y);
+    const f32 labelOffset = window->HasCloseButton ? padding.x : ImGui::CalcTabLabelOffset(tabRect.GetWidth(), padding.x, window->Name);
+    const f32 labelX = tabRect.Min.x + labelOffset;
+    const ImVec2 pos(labelX + ImGui::CalcTextSize(lead.cstr()).x, tabRect.Min.y + padding.y);
 
     ImGui::PushClipRect(barRect.Min, barRect.Max, true);
     ImGui::PushClipRect(tabRect.Min, ImVec2(tabRect.Max.x - padding.x, tabRect.Max.y), true);

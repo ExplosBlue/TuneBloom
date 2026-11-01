@@ -8,10 +8,11 @@
 #include <ui/player/PlayerViews.h>
 #include <ui/app/Shortcuts.h>
 #include <ui/widgets/Widgets.h>
+#include <ui/wave/LoopWaveformEditor.h>
+#include <ui/wave/WaveformBox.h>
 
 #include <bfsar/player/SoundPlayer.h>
 #include <bfsar/files/WaveFile.h>
-#include <bfsar/audio/WaveFileEditDecode.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
@@ -22,12 +23,6 @@
 
 namespace
 {
-
-struct Peak
-{
-    f32 min;
-    f32 max;
-};
 
 struct BrowserTable
 {
@@ -47,6 +42,14 @@ struct BrowserResult
     bool close = false;
 };
 
+struct BrowserWaveView
+{
+    const WaveFile* wave = nullptr;
+    std::vector<f32> mono;
+    ImGui::LoopWaveformState state;
+    bool tooLong = false;
+};
+
 }
 
 static constexpr f32 cWaveBrowserWidthEm  = 64.0f;
@@ -58,7 +61,6 @@ static constexpr f32 cDetailLabelEm       = 5.0f;
 static constexpr f32 cWaveformHeightEm    = 7.0f;
 static constexpr f32 cFooterGapEm         = 0.6f;
 static constexpr s32 cPageRows            = 10;
-static constexpr s32 cPeakNum             = 512;
 
 static constexpr s32 cBrowserNameColumn       = 1;
 static constexpr s32 cBrowserFirstValueColumn = 2;
@@ -68,8 +70,7 @@ static constexpr const char* cItemPopupId = "###ItemBrowser";
 
 static char sQuery[128] = "";
 static Item* sHighlight = nullptr;
-static const Item* sPeakWave = nullptr;
-static Peak sPeaks[cPeakNum];
+static BrowserWaveView* sWaveView = nullptr;
 static bool sAutoPlay = false;
 static bool sCaseSensitive = false;
 static bool sFocusSearch = false;
@@ -112,38 +113,6 @@ static void BuildRows(std::vector<Item*>& rows, const Item::List& list, const Im
     SortItemRows(&rows, sortSpecs, columns, columnCount);
 }
 
-static void BuildPeaks(const WaveFile& wave)
-{
-    for (Peak& peak : sPeaks)
-        peak = { 0.0f, 0.0f };
-
-    const DecodedPcm pcm = decodeWaveFileForEditing(wave);
-    if (!pcm.isValid())
-        return;
-
-    for (s32 i = 0; i < cPeakNum; i++)
-    {
-        const u32 begin = static_cast<u32>(static_cast<u64>(pcm.sampleCount) * i / cPeakNum);
-        const u32 end = std::max(begin + 1, static_cast<u32>(static_cast<u64>(pcm.sampleCount) * (i + 1) / cPeakNum));
-
-        Peak peak = { 1.0f, -1.0f };
-
-        for (const std::vector<float>& channel : pcm.channels)
-        {
-            for (u32 sample = begin; sample < end && sample < pcm.sampleCount; sample++)
-            {
-                peak.min = std::min(peak.min, channel[sample]);
-                peak.max = std::max(peak.max, channel[sample]);
-            }
-        }
-
-        if (peak.min > peak.max)
-            peak = { 0.0f, 0.0f };
-
-        sPeaks[i] = peak;
-    }
-}
-
 static void StopPreview()
 {
     if (sSoundPlayer.isActive() && sHighlight && sSoundPlayer.getPlayingWaveFile() == sHighlight)
@@ -171,56 +140,47 @@ static void SetHighlight(Item* item)
         PlayPreview(*static_cast<const WaveFile*>(item));
 }
 
-static void DrawWaveform(const WaveFile& wave, const ImVec2& size)
+static BrowserWaveView& GetWaveView(const WaveFile& wave)
 {
-    if (sPeakWave != &wave)
+    if (!sWaveView)
+        sWaveView = new BrowserWaveView();
+
+    if (sWaveView->wave == &wave)
+        return *sWaveView;
+
+    *sWaveView = BrowserWaveView();
+    sWaveView->wave = &wave;
+    sWaveView->tooLong = !DecodeWaveViewMono(wave, &sWaveView->mono);
+
+    return *sWaveView;
+}
+
+static void ForgetWaveView()
+{
+    delete sWaveView;
+    sWaveView = nullptr;
+}
+
+static void DrawWaveform(const WaveFile& wave, f32 height)
+{
+    BrowserWaveView& view = GetWaveView(wave);
+
+    if (view.tooLong)
     {
-        BuildPeaks(wave);
-        sPeakWave = &wave;
+        ImGui::TextDisabled("%s", messages::wavefile::cTooLong);
+        return;
     }
 
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const bool playing = sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == &wave;
+    const f32 playheadSample = playing ? static_cast<f32>(sSoundPlayer.getPlaySamplePosition(true)) : -1.0f;
+    u32 loopStart = wave.getOriginalLoopStartFrame();
+    u32 loopEnd = wave.getOriginalLoopEndFrame();
+    f64 seekSample = -1.0;
 
-    ImGui::Dummy(size);
-    ImGui::RenderFrame(pos, ImVec2(pos.x + size.x, pos.y + size.y), ImGui::GetColorU32(ImGuiCol_FrameBg), true, style.FrameRounding);
+    ImGui::LoopWaveformEditor("##Waveform", view.state, view.mono, wave.getSampleRate(), loopStart, loopEnd, playheadSample, wave.hasValidLoop(), false, nullptr, ImVec2(0.0f, height), true, &seekSample);
 
-    const f32 left = pos.x + style.FramePadding.x;
-    const f32 width = size.x - style.FramePadding.x * 2.0f;
-    const f32 midY = pos.y + size.y * 0.5f;
-    const f32 halfHeight = size.y * 0.5f - style.FramePadding.y;
-
-    if (wave.getIsLoop() && wave.getSampleCount() > 0)
-    {
-        const f32 loopStart = static_cast<f32>(wave.getOriginalLoopStartFrame()) / wave.getSampleCount();
-        const f32 loopEnd = std::min(1.0f, static_cast<f32>(wave.getOriginalLoopEndFrame()) / wave.getSampleCount());
-
-        draw->AddRectFilled(ImVec2(left + width * loopStart, pos.y + 1.0f), ImVec2(left + width * loopEnd, pos.y + size.y - 1.0f), ImGui::GetColorU32(ImGuiCol_CheckMark, 0.12f));
-    }
-
-    draw->AddLine(ImVec2(left, midY), ImVec2(left + width, midY), ImGui::GetColorU32(ImGuiCol_TextDisabled, 0.4f));
-
-    const ImU32 color = ImGui::GetColorU32(ImGuiCol_PlotLines);
-    const s32 columns = std::max(1, static_cast<s32>(width));
-
-    for (s32 x = 0; x < columns; x++)
-    {
-        const s32 begin = x * cPeakNum / columns;
-        const s32 end = std::max(begin + 1, (x + 1) * cPeakNum / columns);
-
-        Peak peak = sPeaks[begin];
-        for (s32 i = begin + 1; i < end && i < cPeakNum; i++)
-        {
-            peak.min = std::min(peak.min, sPeaks[i].min);
-            peak.max = std::max(peak.max, sPeaks[i].max);
-        }
-
-        const f32 top = midY - sead::Mathf::clamp2(-1.0f, peak.max, 1.0f) * halfHeight;
-        const f32 bottom = midY - sead::Mathf::clamp2(-1.0f, peak.min, 1.0f) * halfHeight;
-
-        draw->AddLine(ImVec2(left + x, top), ImVec2(left + x, std::max(bottom, top + 1.0f)), color);
-    }
+    if (playing)
+        SeekPlayerToSample(seekSample);
 }
 
 static void DetailRow(const char* label, const char* value)
@@ -252,7 +212,7 @@ static void DrawWaveDetails()
     ImGui::TextDisabled("%s %u", messages::item::cColumnId, wave.getId());
 
     ImGui::Spacing();
-    DrawWaveform(wave, ImVec2(ImGui::GetContentRegionAvail().x, ImFloor(em * cWaveformHeightEm)));
+    DrawWaveform(wave, ImFloor(em * cWaveformHeightEm));
 
     // Preview
     {
@@ -537,7 +497,7 @@ static void ForgetHighlight()
 {
     StopPreview();
     sHighlight = nullptr;
-    sPeakWave = nullptr;
+    ForgetWaveView();
 }
 
 static bool BeginBrowserPopup(Item::ItemType itemType, const char* customTitle)

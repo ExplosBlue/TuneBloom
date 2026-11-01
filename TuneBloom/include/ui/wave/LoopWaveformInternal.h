@@ -41,6 +41,22 @@ void UpdatePeakCache(LoopWaveformState& state, const std::vector<float>& mono);
 void DrawWaveform(ImDrawList* draw, ImVec2 origin, float width, float height,
                   LoopWaveformState& state, const std::vector<float>& mono, u32 sampleRate,
                   u32 loopStart, u32 loopEnd, float playheadSample, bool showLoop);
+
+enum class WaveOverviewTone
+{
+    Normal,
+    Lit,
+    Dim
+};
+
+struct WaveOverviewLoop
+{
+    float startRatio;
+    float endRatio;
+};
+
+void DrawTimeRuler(ImDrawList* draw, ImVec2 min, ImVec2 max, u32 sampleCount, u32 sampleRate);
+void DrawWaveOverview(ImDrawList* draw, ImVec2 min, ImVec2 max, const std::vector<float>& peakMin, const std::vector<float>& peakMax, WaveOverviewTone tone, const WaveOverviewLoop* loop, float playRatio);
 bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
                    const LoopWaveformState& state, u32 sampleRate,
                    float playheadSample, bool showLoop, u32 loopStart, u32 loopEnd,

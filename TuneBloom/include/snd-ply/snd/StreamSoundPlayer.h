@@ -8,8 +8,6 @@
 
 #include <bfsar/model/Sound.h>
 
-#include <atomic>
-
 static const u32 cStrmChannelNum = 16;
 static const u32 cStrmTrackNum = 8;
 
@@ -42,8 +40,6 @@ public:
 
     f32 mVolume;
     s32 mOutputLine;
-
-    std::atomic<f32> mPeak[snd::cWaveChannelMax] = {};
 
     snd::internal::OutputParam mParam;
 };
@@ -186,7 +182,6 @@ public:
 
     void update();
     void updateVoiceParams(StreamTrack* track);
-    void updateTrackPeak(StreamTrack* track);
     void setOutputParam(snd::internal::OutputParam* pOutputParam, const snd::internal::OutputParam& trackParam, const TrackData& trackData);
     void mixSettingForOutputParam(snd::internal::OutputParam* pOutputParam, s32 channelIndex, snd::MixMode mixMode);
     void applyTvOutputParamForMultiChannel(snd::internal::OutputParam* pOutputParam, snd::internal::driver::Channel* pVoice, s32 channelIndex, snd::MixMode mixMode);
@@ -208,11 +203,6 @@ public:
     u32 getTrackCount() const
     {
         return mTrackCount;
-    }
-
-    f32 fetchTrackPeak(u32 trackNo, u32 channel)
-    {
-        return mTracks[trackNo].mPeak[channel].exchange(0.0f, std::memory_order_relaxed);
     }
 
     u32 getSampleRate() const

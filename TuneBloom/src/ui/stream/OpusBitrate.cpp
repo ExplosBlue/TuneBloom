@@ -37,7 +37,7 @@ bool SetOpusStreamBitrate(const StreamSource& source, u32 bitrate)
         return true;
     }
 
-    if (!source.stream->areTrackWavesAttached() && !opusstream::AttachStreamWaves(*archive, source.sound))
+    if (source.stream->hasUnloadedTracks() && !opusstream::AttachStreamWaves(*archive, source.sound))
         return false;
 
     for (Item* item : archive->getSoundList())
@@ -54,7 +54,7 @@ bool SetOpusStreamBitrate(const StreamSource& source, u32 bitrate)
 void DrawOpusBitrateRow(const StreamSource& source)
 {
     const Sound::StreamSoundInfo& stream = *source.stream;
-    const bool isKnown = stream.getOriginalOpusChannelBitrate() != 0 || stream.areTrackWavesAttached();
+    const bool isKnown = stream.getOriginalOpusChannelBitrate() != 0 || !stream.hasUnloadedTracks();
     u32 bitrate = GetOpusBitrateChoice(stream);
 
     PropertyRow(messages::common::cBitrate);
@@ -124,6 +124,25 @@ WaveImportEncoding MakeOpusStreamImportEncoding(s32* codec, u32* bitrate, u32 or
     choice.bitrate = bitrate;
     choice.bitrateValue = static_cast<s32>(aal::BwavCodec::Opus);
     choice.originalBitrate = originalBitrate;
+
+    return choice;
+}
+
+WaveImportEncoding MakeFollowTrackEncoding(const WaveFile& leadWave, s32 leadTrackNo, const Sound::StreamSoundInfo* opusStream, WaveFile::Encoding* encoding, s32* opusCodec, u32* opusBitrate, sead::BufferedSafeString* followsText)
+{
+    WaveImportEncoding choice;
+
+    if (opusStream)
+        choice = MakeOpusStreamImportEncoding(opusCodec, opusBitrate, GetOpusOriginalChoice(*opusStream));
+    else
+    {
+        *encoding = leadWave.getEncoding();
+        choice = MakeWaveImportEncoding(encoding);
+    }
+
+    followsText->format(messages::import::cTrackImportFollowsFormat, leadTrackNo);
+    choice.fixedSampleRate = leadWave.getSampleRate();
+    choice.fixedReason = followsText->cstr();
 
     return choice;
 }

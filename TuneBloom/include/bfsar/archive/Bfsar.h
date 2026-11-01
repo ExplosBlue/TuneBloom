@@ -432,6 +432,11 @@ public:
         return mWaveFileList;
     }
 
+    const Item::List* getArchiveWaveList() override
+    {
+        return &mWaveFileList;
+    }
+
     void prepareStreamWave(WaveFile* wave) override
     {
         wave->setArchive(this);

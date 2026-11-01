@@ -4,6 +4,7 @@
 
 #include <prim/seadMemUtil.h>
 
+#include <algorithm>
 #include <cstddef>
 
 using nw::snd::internal::StreamSoundFile;
@@ -32,6 +33,18 @@ void StreamFileLayout::mixInto(StateHash& hash) const
         hash.mixValue<u32>(region.end);
         hash.mixValue<u32>(region.unknown68);
         hash.mixText(region.name);
+    }
+
+    if (markers.empty())
+        return;
+
+    hash.mixValue<u32>(static_cast<u32>(markers.size()));
+
+    for (const StreamMarker& marker : markers)
+    {
+        hash.mixValue<u32>(marker.position);
+        hash.mixValue<u32>(marker.unknown4);
+        hash.mixBytes(marker.name, sizeof(marker.name));
     }
 }
 
@@ -199,10 +212,47 @@ static void ReadRegionRecord(StreamRegion* region, const u8* record, u32 recordB
     region->name.copy(name);
 }
 
+static void ReadStreamMarkers(StreamFileLayout* layout, const StreamSoundFile::FileHeader& header, u32 strmFileSize)
+{
+    layout->markers.clear();
+
+    const nw::snd::internal::Util::ReferenceWithSize* block = header.GetReferenceBy(nw::snd::internal::ElementType_StreamSoundFile_MarkerBlock);
+
+    if (!block)
+        return;
+
+    const u64 blockOffset = block->offset;
+    const u64 blockEnd = blockOffset + block->size;
+    const u64 entriesOffset = blockOffset + sizeof(nw::ut::BinaryBlockHeader) + sizeof(u32);
+
+    if (blockEnd > strmFileSize || entriesOffset > blockEnd)
+        return;
+
+    const u32 count = *static_cast<const nw::ut::ResU32*>(sead::PtrUtil::addOffset(&header, blockOffset + sizeof(nw::ut::BinaryBlockHeader)));
+
+    if (count > (blockEnd - entriesOffset) / sizeof(StreamSoundFile::MarkerInfo))
+        return;
+
+    const StreamSoundFile::MarkerInfo* entries = static_cast<const StreamSoundFile::MarkerInfo*>(sead::PtrUtil::addOffset(&header, entriesOffset));
+
+    layout->markers.resize(count);
+
+    for (u32 i = 0; i < count; i++)
+    {
+        StreamMarker& marker = layout->markers[i];
+
+        marker.position = entries[i].position;
+        marker.unknown4 = entries[i].unknown4;
+        sead::MemUtil::copy(marker.name, entries[i].name, sizeof(marker.name));
+    }
+}
+
 StreamRegionReadResult ReadStreamFileLayout(StreamFileLayout* layout, const nw::snd::internal::StreamSoundFileReader& reader, u32 strmFileSize)
 {
     const StreamSoundFile::FileHeader& header = *reader.mHeader;
     const StreamSoundFile::StreamSoundInfo& info = *reader.mInfoBlockBody->GetStreamSoundInfo();
+
+    ReadStreamMarkers(layout, header, strmFileSize);
 
     layout->version = header.version;
     layout->hasRegionInfo = reader.GetStreamSoundInfoSize() >= offsetof(StreamSoundFile::StreamSoundInfo, originalLoopStart);
@@ -316,4 +366,24 @@ void WriteStreamRegions(sead::WriteStream* stream, const StreamFileLayout& layou
 {
     for (const StreamRegion& region : layout.regions)
         WriteRegionRecord(stream, region, layout.regionRecordBytes, sampleData);
+}
+
+u32 CountStreamMarkersUpTo(const StreamFileLayout& layout, u32 sampleCount)
+{
+    return static_cast<u32>(std::count_if(layout.markers.begin(), layout.markers.end(), [sampleCount](const StreamMarker& marker) { return marker.position <= sampleCount; }));
+}
+
+void WriteStreamMarkers(sead::WriteStream* stream, const StreamFileLayout& layout, u32 sampleCount)
+{
+    stream->writeU32(CountStreamMarkersUpTo(layout, sampleCount));
+
+    for (const StreamMarker& marker : layout.markers)
+    {
+        if (marker.position > sampleCount)
+            continue;
+
+        stream->writeU32(marker.position);
+        stream->writeU32(marker.unknown4);
+        stream->writeMemBlock(marker.name, sizeof(marker.name));
+    }
 }

@@ -611,6 +611,11 @@ bool AudioResource::canReplaceAudio(const AudioAsset& asset, const char** outRea
     return canEditStreamAudio(asset, outReason) && CanEditAudio(asset, messages::resource::cReplaceUnsupported, outReason);
 }
 
+bool AudioResource::canReimportAudio(const AudioAsset& asset, const char** outReason) const
+{
+    return canEditStreamAudio(asset, outReason) && CanEditAudio(asset, messages::resource::cReimportUnsupported, outReason);
+}
+
 bool AudioResource::canSetLoop(const AudioAsset& asset, const char** outReason) const
 {
     if (usesStreamFile(asset) && asset.getStreamFileState() != StreamFileState::Loaded)

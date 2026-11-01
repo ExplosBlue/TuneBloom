@@ -44,6 +44,7 @@ inline constexpr const char* cStreamWriteFailed = "Couldn't write a stream file 
 inline constexpr const char* cEncodeFailed = "Couldn't encode the audio";
 inline constexpr const char* cRenameFailed = "Couldn't rename the metadata of this Audio Asset";
 inline constexpr const char* cReplaceUnsupported = "Only BWAV, BFWAV and BFSTP can be replaced";
+inline constexpr const char* cReimportUnsupported = "Only BWAV, BFWAV and BFSTP can be reimported";
 inline constexpr const char* cAddUnsupported = "Audio Assets cannot be added to this file";
 inline constexpr const char* cPrefetchBuildFailed = "Couldn't build the start of the stream from the new file";
 inline constexpr const char* cLoopUnsupported = "The loop of this format cannot be edited";

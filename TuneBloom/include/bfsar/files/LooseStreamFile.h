@@ -51,7 +51,7 @@ public:
 
     bool isOpus() const;
     bool isModified() const;
-    bool writeTo(const sead::SafeString& path) const;
+    bool writeTo(const sead::SafeString& path, sead::BufferedSafeString* outError = nullptr) const;
 
     bool setLoop(bool isLoop, u32 loopStartFrame, const char** outError);
     bool replaceAudio(const WaveFile::RiffWaveInfo& info, const char** outError);

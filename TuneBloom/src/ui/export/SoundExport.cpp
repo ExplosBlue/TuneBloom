@@ -213,7 +213,7 @@ static SoundExportSummary CalcSoundExportSummary()
                 summary.trackNum++;
             }
 
-            if (HasExportLoop(wave))
+            if (wave->hasValidLoop())
             {
                 summary.loopNum++;
                 summary.introSec = wave->getOriginalLoopStartFrame() / sampleRate;

@@ -13,6 +13,7 @@
 #include <ui/player/PlayerViews.h>
 #include <bfsar/model/MessageLog.h>
 #include <ui/file/RecentFiles.h>
+#include <ui/stream/StreamTrackImport.h>
 #include <core/TestHooks.h>
 #include <ui/file/UnsavedChanges.h>
 
@@ -397,6 +398,8 @@ static void RemoveDocument(Document* document)
         CancelPendingExportsAndImports();
         MessageLog::instance()->closeFile();
     }
+    else
+        CancelStreamTrackImports();
 
     MessageLog::instance()->forgetAllItems();
     ForgetDocumentRequests(document);

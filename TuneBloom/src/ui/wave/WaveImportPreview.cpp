@@ -167,10 +167,7 @@ void WaveImportPanel::drawWaveform(FrameContext& ctx)
         sead::FixedSafeString<32> time;
         FormatSampleTime(&time, len, mSettings.workingSampleRate);
 
-        if (mSettings.period)
-            readout.format(messages::import::cWaveLoopReadoutPeriodsFormat, time.cstr(), len, static_cast<f64>(len) / mSettings.period);
-        else
-            readout.format(messages::import::cWaveLoopReadoutFormat, time.cstr(), len);
+        readout.format(messages::import::cWaveLoopReadoutFormat, time.cstr());
     }
 
     f32 playheadSample = -1.0f;

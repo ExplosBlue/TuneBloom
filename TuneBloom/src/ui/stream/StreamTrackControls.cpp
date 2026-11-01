@@ -2,8 +2,9 @@
 
 #include <ui/widgets/ContextMenu.h>
 #include <messages/Messages.h>
-#include <ui/app/Shortcuts.h>
+#include <ui/project/FileLists.h>
 #include <ui/sound/SoundPanels.h>
+#include <ui/stream/StreamTrackAdd.h>
 #include <ui/stream/StreamTrackImport.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
@@ -12,12 +13,7 @@
 static constexpr f32 cTrackKnobEm         = 2.0f;
 static constexpr f32 cTrackSlotGapEm      = 0.3f;
 static constexpr f32 cTrackCellPadYEm     = 0.2f;
-static constexpr f32 cTrackIndexWidthEm   = 1.0f;
 static constexpr u8  cTrackPanCenter      = 64;
-static constexpr f32 cTrackToggleHeightEm = 1.6f;
-
-static constexpr const char* cTrackMuteLabel = messages::stream::cTrackMute;
-static constexpr const char* cTrackSoloLabel = messages::stream::cTrackSolo;
 
 f32 CalcTrackKnobSize()
 {
@@ -62,7 +58,7 @@ void TrackSlots::drawLabels() const
     {
         const f32 labelWidth = ImGui::CalcTextSize(labels[i]).x;
 
-        ImGui::GetWindowDrawList()->AddText(ImVec2(x + ImFloor((widths[i] - labelWidth) * 0.5f), y), ImGui::GetColorU32(ImGuiCol_Text), labels[i]);
+        ImGui::GetWindowDrawList()->AddText(ImVec2(x + ImFloor((widths[i] - labelWidth) * 0.5f), y), ImGui::GetColorU32(ImGuiCol_TextDisabled), labels[i]);
         x += widths[i] + ImGui::GetFontSize() * cTrackSlotGapEm;
     }
 
@@ -85,7 +81,7 @@ static f32 CalcTrackSlotWidth()
     return width;
 }
 
-TrackSlots MakeTrackSlots(const char* const* labels, s32 labelNum)
+static TrackSlots MakeTrackSlots(const char* const* labels, s32 labelNum)
 {
     SEAD_ASSERT(labelNum <= TrackSlots::cSlotMax);
 
@@ -106,17 +102,18 @@ static ImVec2 CalcTrackCellPadding()
     return ImVec2(ImFloor(em * cTrackCellPadXEm), ImFloor(em * cTrackCellPadYEm));
 }
 
+static void AddTrackGroup(TrackTableLayout* layout, TrackGroup group, const TrackSlots& slots)
+{
+    layout->groups[layout->groupNum] = group;
+    layout->groupWidths[layout->groupNum] = slots.calcWidth() + layout->columnExtra;
+    layout->groupNum++;
+}
+
 TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx)
 {
-    const f32 frameHeight = ImGui::GetFrameHeight();
+    const bool hasWave = ctx.source.sound != nullptr;
 
     TrackTableLayout layout = {};
-
-    layout.muteSlots = MakeTrackSlots(&cTrackMuteLabel, 1);
-    layout.muteSlots.widths[0] = ImCeil(sead::Mathf::max(frameHeight, ImGui::CalcTextSize(cTrackMuteLabel).x));
-
-    layout.soloSlots = MakeTrackSlots(&cTrackSoloLabel, 1);
-    layout.soloSlots.widths[0] = ImCeil(sead::Mathf::max(frameHeight, ImGui::CalcTextSize(cTrackSoloLabel).x));
 
     layout.mixSlots = MakeTrackSlots(cTrackMixLabels, cTrackBypassIndex);
     layout.bypassSlots = MakeTrackSlots(cTrackMixLabels + cTrackBypassIndex, IM_ARRAYSIZE(cTrackMixLabels) - cTrackBypassIndex);
@@ -125,29 +122,26 @@ TrackTableLayout CalcTrackTableLayout(const TrackContext& ctx)
     layout.filterSlots.widths[1] = sead::Mathf::max(layout.filterSlots.widths[1], ctx.biquadWidth);
 
     layout.cellPadding = CalcTrackCellPadding();
-    layout.columnNum = 4 + (ctx.source.hasTrackMix ? 2 : 0) + (ctx.source.enableSend ? 1 : 0) + (ctx.source.enableFilter ? 1 : 0);
-    layout.indexWidth = ImCeil(ImGui::GetFontSize() * cTrackIndexWidthEm);
-    layout.muteWidth = layout.muteSlots.calcWidth();
-    layout.soloWidth = layout.soloSlots.calcWidth();
-    layout.mixWidth = ctx.source.hasTrackMix ? layout.mixSlots.calcWidth() : 0.0f;
-    layout.bypassWidth = ctx.source.hasTrackMix ? layout.bypassSlots.calcWidth() : 0.0f;
-    layout.sendWidth = ctx.source.enableSend ? layout.sendSlots.calcWidth() : 0.0f;
-    layout.filterWidth = ctx.source.enableFilter ? layout.filterSlots.calcWidth() : 0.0f;
+    layout.leadNum = hasWave ? 3 : 2;
+    layout.columnNum = layout.leadNum + 2 + (ctx.source.hasTrackMix ? 2 : 0) + (ctx.source.enableSend ? 1 : 0) + (ctx.source.enableFilter ? 1 : 0);
+    layout.indexWidth = ImCeil(ImGui::GetFrameHeight());
+    layout.menuWidth = layout.indexWidth;
+    layout.channelWidth = ImCeil(sead::Mathf::max(ImGui::CalcTextSize(messages::common::cChannels).x, ImGui::CalcTextSize(messages::common::cStereo).x));
 
-    layout.columnExtra = layout.cellPadding.x * 2.0f + 1.0f;
-    layout.leadWidth = layout.indexWidth + layout.muteWidth + layout.soloWidth + layout.columnExtra * 4.0f + 1.0f;
+    layout.columnExtra = layout.cellPadding.x * 2.0f;
+    layout.leadWidth = layout.indexWidth + layout.channelWidth + layout.menuWidth + layout.columnExtra * static_cast<f32>(layout.leadNum + 2);
 
     if (ctx.source.hasTrackMix)
     {
-        layout.groupWidths[layout.groupNum++] = layout.mixWidth + layout.columnExtra;
-        layout.groupWidths[layout.groupNum++] = layout.bypassWidth + layout.columnExtra;
+        AddTrackGroup(&layout, TrackGroup::Mix, layout.mixSlots);
+        AddTrackGroup(&layout, TrackGroup::Bypass, layout.bypassSlots);
     }
 
     if (ctx.source.enableSend)
-        layout.groupWidths[layout.groupNum++] = layout.sendWidth + layout.columnExtra;
+        AddTrackGroup(&layout, TrackGroup::Send, layout.sendSlots);
 
     if (ctx.source.enableFilter)
-        layout.groupWidths[layout.groupNum++] = layout.filterWidth + layout.columnExtra;
+        AddTrackGroup(&layout, TrackGroup::Filter, layout.filterSlots);
 
     layout.fixedWidth = layout.leadWidth;
     for (s32 i = 0; i < layout.groupNum; i++)
@@ -169,22 +163,20 @@ bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* tra
 
     ImGui::PopStyleColor(3);
 
-    const bool hovered = ImGui::IsItemHovered();
+    const bool hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenOverlappedByItem);
 
-    if (BeginItemContextMenu("TrackMenu"))
+    PlaceTrackMenu();
+
+    if (BeginItemContextMenu(cTrackMenuId))
     {
-        const sead::FormatFixedSafeString<64> limit(messages::stream::cTrackLimitFormat, cStrmTrackNum);
-
         HighlightStreamTrack(track);
 
-        if (ContextMenuItem(ICON_LC_LIST_PLUS, messages::menu::cInsertAfter, ctx.canAdd, limit.cstr()))
-        {
-            edit->add = true;
-            edit->insertAfter = track;
-        }
+        WaveFile* wave = static_cast<WaveFile*>(track->getWaveFileRef().getItem());
 
-        if (ContextMenuItem(ICON_LC_IMPORT, messages::import::cTrackImportMenuLabel, ctx.canAdd, limit.cstr()))
-            RequestStreamTrackImport(ctx.source);
+        if (wave)
+            DrawWaveFileMenuItems(wave, { wave }, false);
+        else if (ContextMenuItem(ICON_LC_IMPORT, messages::common::cImportAudio))
+            RequestStreamTrackImport(ctx.source, track);
 
         ContextMenuSeparator();
 
@@ -216,108 +208,36 @@ bool DrawTrackHandle(const TrackContext& ctx, Sound::StreamSoundInfo::Track* tra
     return hovered;
 }
 
-void DrawTrackListMenu(const TrackContext& ctx, TrackEdit* edit)
+void DrawTrackListMenu(const TrackContext& ctx)
 {
     if (!BeginWindowContextMenu("TrackListMenu"))
         return;
 
-    const sead::FormatFixedSafeString<64> limit(messages::stream::cTrackLimitFormat, cStrmTrackNum);
-
-    if (ContextMenuItem(ICON_LC_PLUS, messages::common::cAdd, ctx.canAdd, limit.cstr()))
-        edit->add = true;
-
-    if (ContextMenuItem(ICON_LC_IMPORT, messages::import::cTrackImportMenuLabel, ctx.canAdd, limit.cstr()))
-        RequestStreamTrackImport(ctx.source);
-
-    ContextMenuSeparator();
-
-    if (ContextMenuToggleItem(messages::stream::cTrackMixerView, IsTrackMixerView()))
-        edit->toggleView = true;
-
+    DrawTrackAddMenu(ctx.source);
     EndContextMenu();
 }
 
-static ImVec2 CalcTrackToggleSize(f32 width)
-{
-    const f32 frameHeight = ImGui::GetFrameHeight();
-
-    if (width <= frameHeight)
-        return ImVec2(frameHeight, frameHeight);
-
-    return ImVec2(width, ImFloor(ImGui::GetFontSize() * cTrackToggleHeightEm));
-}
-
-bool DrawTrackToggle(const char* label, bool on, const ImVec4& color, const ImVec2& size)
-{
-    if (on)
-        PushBrightButtonColors(color);
-
-    const bool pressed = ImGui::Button(label, size);
-
-    if (on)
-        PopBrightButtonColors();
-
-    return pressed;
-}
-
-static void DrawTrackMuteButton(const TrackContext& ctx, s32 index, const ImVec2& size)
-{
-    Sound::StreamSoundInfo& strmInfo = *ctx.source.stream;
-    const u32 bit = 1 << index;
-    const u32 muteTracks = strmInfo.getMuteTracks();
-
-    if (!DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Mute", messages::stream::cTrackMuteShort).cstr(), (muteTracks & bit) != 0, uicolors::cMarker, size))
-        return;
-
-    strmInfo.setMuteTracks(muteTracks ^ bit);
-    sSoundPlayer.updateStreamTrackMute(ctx.source.stream);
-}
-
-static void DrawTrackSoloButton(const TrackContext& ctx, s32 index, const ImVec2& size)
-{
-    Sound::StreamSoundInfo& strmInfo = *ctx.source.stream;
-    const u32 bit = 1 << index;
-    const u32 soloTracks = strmInfo.getSoloTracks();
-
-    if (!DrawTrackToggle(sead::FormatFixedSafeString<32>("%s###Solo", messages::stream::cTrackSoloShort).cstr(), (soloTracks & bit) != 0, uicolors::PlaybackFill(), size))
-        return;
-
-    if (shortcuts::Held(shortcuts::Modifier::ToggleSelection))
-        strmInfo.setSoloTracks(soloTracks ^ bit);
-    else
-        strmInfo.setSoloTracks(soloTracks == bit ? 0 : bit);
-
-    sSoundPlayer.updateStreamTrackMute(ctx.source.stream);
-}
-
-void DrawTrackWaveSelector(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, f32 width, bool compact)
+void DrawTrackWaveSelector(const TrackContext& ctx, Sound::StreamSoundInfo::Track* track, f32 width)
 {
     Item* waveFile = track->getWaveFileRef().getItem();
 
     ImGui::SetNextItemWidth(width);
-    if (ItemSelector("##WaveFile", ctx.source.waveOwner->getStreamWaveList(), &waveFile, false, compact))
+    if (ItemSelector("##WaveFile", ctx.source.waveOwner->getStreamWaveList(), &waveFile, false, true))
     {
         track->getWaveFileRef().attach(waveFile);
         SetUnsavedChanges(true);
     }
 }
 
-ImVec2 CalcTrackParamSize(const TrackContext& ctx, TrackParam param, f32 width)
+static ImVec2 CalcTrackParamSize(const TrackContext& ctx, TrackParam param, f32 width)
 {
     const f32 frameHeight = ImGui::GetFrameHeight();
     const f32 knobSize = CalcTrackKnobSize();
 
     switch (param)
     {
-        case TrackParam::Mute:
-        case TrackParam::Solo:
-            return CalcTrackToggleSize(width);
-
         case TrackParam::FrontBypass:
             return ImVec2(frameHeight, frameHeight);
-
-        case TrackParam::WaveFile:
-            return ImVec2(width, frameHeight);
 
         case TrackParam::BiquadType:
             return ImVec2(sead::Mathf::min(width, ctx.biquadWidth), frameHeight);
@@ -327,7 +247,7 @@ ImVec2 CalcTrackParamSize(const TrackContext& ctx, TrackParam param, f32 width)
     }
 }
 
-void DrawTrackParam(const TrackContext& ctx, s32 index, TrackParam param, f32 width)
+static void DrawTrackParam(const TrackContext& ctx, s32 index, TrackParam param, f32 width)
 {
     Sound::StreamSoundInfo::Track* track = ctx.tracks[index];
     const f32 size = CalcTrackKnobSize();
@@ -337,18 +257,6 @@ void DrawTrackParam(const TrackContext& ctx, s32 index, TrackParam param, f32 wi
 
     switch (param)
     {
-        case TrackParam::Mute:
-            DrawTrackMuteButton(ctx, index, CalcTrackToggleSize(width));
-            break;
-
-        case TrackParam::Solo:
-            DrawTrackSoloButton(ctx, index, CalcTrackToggleSize(width));
-            break;
-
-        case TrackParam::WaveFile:
-            DrawTrackWaveSelector(ctx, track, width, true);
-            break;
-
         case TrackParam::Volume:
         {
             u8 volume = track->getVolume();

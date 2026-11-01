@@ -6,6 +6,7 @@ inline constexpr f32 cSoundSideGapEm = 1.0f;
 
 f32 TrailingButtonsWidth(s32 count);
 bool TrailingButton(const char* label);
+bool TrailingGoToButton(const char* label, bool canGo, const char* tooltip, const char* missingReason);
 bool ItemSelectorRow(const char* label, const Item::List& list, Item** item, bool allowNone = false, f32 trailingWidth = 0.0f);
 bool DrawSoundPanelHeader(const char* title, bool* enabled);
 bool BeginSoundSection(const char* title, bool* enabled, bool* changed, const char* detail = nullptr);

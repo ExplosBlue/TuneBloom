@@ -20,8 +20,7 @@
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
 
-#include <bfsar/audio/AudioProcessing.h>
-#include <bfsar/audio/WaveFileEditDecode.h>
+#include <bfsar/files/BfstmFile.h>
 
 namespace
 {
@@ -52,17 +51,11 @@ struct WaveFileView
     u32 loopStartFrame = 0;
     u32 loopEndFrame = 0;
     bool fieldPending = false;
-
-    bool fillHeight = false;
-    f32 canvasBottomY = 0.0f;
-    f32 canvasExtraHeight = 0.0f;
-    f32 belowCanvasHeight = 0.0f;
 };
 
 }
 
-static constexpr f32 cWaveViewHeightEm   = 7.0f;
-static constexpr u32 cWaveViewMaxSamples = 12000000;
+static constexpr f32 cWaveViewHeightEm = 7.0f;
 
 static WaveFileView* sWaveFileView = nullptr;
 
@@ -187,19 +180,8 @@ static WaveFileView& GetWaveFileView(const WaveFile& wave)
     view.sampleCount = wave.getSampleCount();
     view.channelNum = channelNum;
     view.encoding = wave.getEncoding();
-    view.tooLong = view.sampleCount > cWaveViewMaxSamples;
     view.state.dataRevision++;
-    view.mono.clear();
-
-    if (view.tooLong)
-        return view;
-
-    DecodedPcm pcm = decodeWaveFileForEditing(wave);
-
-    if (!pcm.isValid())
-        return view;
-
-    AudioProcessing::mixToMono(pcm.channels, view.mono);
+    view.tooLong = !DecodeWaveViewMono(wave, &view.mono);
 
     return view;
 }
@@ -254,8 +236,6 @@ static bool DrawWaveFormatBox(const WaveFile& wave, WaveFile::Encoding* outEncod
 
 static void DrawWavePlayButtons(const WaveFile& wave, bool playing, f32 buttonSize)
 {
-    const u32 channelNum = wave.getChannels().size();
-
     sead::FixedSafeString<SoundPlayer::cPlaybackErrorLength> playbackError;
     const bool canPlay = !SoundPlayer::GetWaveFilePlaybackError(wave, &playbackError);
 
@@ -276,22 +256,6 @@ static void DrawWavePlayButtons(const WaveFile& wave, bool playing, f32 buttonSi
 
     buttonTooltip(playing ? messages::common::cStop : messages::common::cPlay);
 
-    for (u32 i = 0; channelNum > 1 && i < channelNum; i++)
-    {
-        static const char* const sChannelLabels[snd::cWaveChannelMax] = { messages::common::cLeft, messages::common::cRight };
-        static const char* const sChannelTips[snd::cWaveChannelMax] = { messages::wavefile::cPlayLeft, messages::wavefile::cPlayRight };
-
-        ImGui::SameLine();
-        ImGui::PushID(static_cast<s32>(i));
-
-        if (ImGui::Button(sChannelLabels[i], ImVec2(buttonSize, buttonSize)))
-            sSoundPlayer.playWaveFile(wave, static_cast<s32>(i));
-
-        buttonTooltip(sChannelTips[i]);
-
-        ImGui::PopID();
-    }
-
     ImGui::EndDisabled();
 }
 
@@ -309,17 +273,10 @@ static void DrawWaveCanvas(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edi
     if (!wave.getStreamFileLayout().regions.empty())
         DrawStreamRegionLane(&wave, view.state);
 
-    const f32 canvasTop = ImGui::GetCursorScreenPos().y;
-    const f32 contentBottom = ImGui::GetWindowPos().y + ImGui::GetWindowContentRegionMax().y;
-    const f32 minHeight = ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm);
-    const f32 fillHeight = ImFloor(contentBottom - canvasTop - view.canvasExtraHeight - view.belowCanvasHeight);
-    const f32 height = view.fillHeight ? sead::Mathf::max(minHeight, fillHeight) : minHeight;
+    const f32 height = ImFloor(ImGui::GetFontSize() * cWaveViewHeightEm);
 
     ImGui::LoopWaveformEditor("wave", view.state, view.mono, sampleRate, view.loopStartFrame, view.loopEndFrame, playheadSample, edit.isLoop, true,
                               nullptr, ImVec2(0.0f, height), true, &seekSample);
-
-    view.canvasBottomY = ImGui::GetCursorScreenPos().y;
-    view.canvasExtraHeight = view.canvasBottomY - canvasTop - height;
 
     if (!IsWaveLoopDragging(view.state))
     {
@@ -329,8 +286,8 @@ static void DrawWaveCanvas(WaveFile& wave, WaveFileView& view, WaveLoopEdit& edi
             SetWaveLoopEnd(edit, view.loopEndFrame, true);
     }
 
-    if (seekSample >= 0.0 && playing && sSoundPlayer.getSampleCount() > 0)
-        sSoundPlayer.seek(sead::Mathf::clamp2(0.0f, static_cast<f32>(seekSample / static_cast<f64>(sSoundPlayer.getSampleCount())), 1.0f));
+    if (playing)
+        SeekPlayerToSample(seekSample);
 }
 
 static void DrawWaveLoopFields(WaveFileView& view, WaveLoopEdit& edit, u32 sampleRate)
@@ -358,20 +315,20 @@ static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& ed
     if (!BeginPropertyBox("WaveView"))
         return;
 
-    const ImGuiStyle& style = ImGui::GetStyle();
     const f32 buttonSize = ImGui::GetFrameHeight();
-    const u32 channelNum = wave.getChannels().size();
-    const u32 buttonNum = channelNum > 1 ? 1 + channelNum : 1;
-    const f32 buttonsWidth = buttonSize * buttonNum + style.ItemSpacing.x * (buttonNum - 1);
     const bool playing = sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == &wave;
 
-    const bool inArchive = IsSoundArchiveOpen() && wave.list() == &ActiveSoundArchive().getWaveFileList();
+    WaveformTool reimport;
+    reimport.tooltip = messages::import::cReimportWaveFileMenuLabel;
 
-    WaveformReplaceTool replace;
+    WaveformTool replace;
     replace.tooltip = messages::import::cReplaceWaveFileMenuLabel;
 
-    if (BeginWaveformHeader(buttonsWidth, edit.isLoop, nullptr, inArchive ? &replace : nullptr))
+    if (BeginWaveformHeader(buttonSize, edit.isLoop, nullptr, { &reimport, &replace }))
         SetWaveLoopFlag(wave, edit, !edit.isLoop);
+
+    if (reimport.pressed)
+        RequestWaveFileReimport(&wave);
 
     if (replace.pressed)
         RequestWaveFileReplace(&wave);
@@ -393,10 +350,10 @@ static void DrawWaveViewBox(WaveFile& wave, WaveFileView& view, WaveLoopEdit& ed
 void WaveFile::drawUI()
 {
     DrawItemNameRow(this);
-    drawEditorUI(false);
+    drawEditorUI();
 }
 
-void WaveFile::drawEditorUI(bool fillHeight)
+void WaveFile::drawEditorUI()
 {
     const InnerFileTarget target = getTarget();
 
@@ -416,16 +373,13 @@ void WaveFile::drawEditorUI(bool fillHeight)
 
     const bool openEncodingPopup = DrawWaveFormatBox(*this, &sEncoding);
 
-    view.fillHeight = fillHeight;
-
     DrawWaveViewBox(*this, view, edit);
-
-    view.belowCanvasHeight = ImGui::GetCursorScreenPos().y - view.canvasBottomY;
 
     if (edit.changed)
     {
         disposeChannels_();
         SetUnsavedChanges(true);
+        ShareStreamTrackLoop(*this);
     }
 
     if (openEncodingPopup)

@@ -22,6 +22,7 @@
 #include <aal/AudioAsset.h>
 #include <aal/Bars.h>
 #include <aal/Bwav.h>
+#include <bfsar/files/BfstmFile.h>
 #include <core/Sarc.h>
 #include <scan/FileProbe.h>
 
@@ -68,6 +69,28 @@ static const char* const cNewBarsVersionDetails[] = {
 
 static constexpr s32 cNewBarsVersionNum = IM_ARRAYSIZE(cNewBarsVersions);
 
+struct NewStreamVersionList
+{
+    const u32* versions;
+    s32 num;
+    s32 sectionStart;
+};
+
+static constexpr u32 cNewStreamVersionsNx[]   = { makeVersion(0, 4, 0), makeVersion(2, 0, 0), makeVersion(2, 0, 1), makeVersion(0, 6, 1), makeVersion(0, 6, 3), makeVersion(0, 6, 4) };
+static constexpr u32 cNewStreamVersionsCafe[] = { makeVersion(0, 3, 0), makeVersion(0, 4, 0) };
+static constexpr u32 cNewStreamVersionsCtr[]  = { makeVersion(2, 0, 0), makeVersion(2, 1, 0), makeVersion(2, 2, 0), makeVersion(2, 3, 1) };
+
+static constexpr NewStreamVersionList cNewStreamVersions[] = {
+    { cNewStreamVersionsNx,   IM_ARRAYSIZE(cNewStreamVersionsNx),   3  },
+    { cNewStreamVersionsCafe, IM_ARRAYSIZE(cNewStreamVersionsCafe), -1 },
+    { cNewStreamVersionsCtr,  IM_ARRAYSIZE(cNewStreamVersionsCtr),  -1 }
+};
+
+static constexpr s32 cNewStreamVersionMax = IM_ARRAYSIZE(cNewStreamVersionsNx);
+
+static_assert(IM_ARRAYSIZE(cNewStreamVersions) == cNewFileSystemNum);
+static_assert(IM_ARRAYSIZE(cNewStreamVersionsCafe) <= cNewStreamVersionMax && IM_ARRAYSIZE(cNewStreamVersionsCtr) <= cNewStreamVersionMax);
+
 static constexpr bool cNewSarcMetaForms[] = { true, false };
 
 static const char* const cNewSarcMetaDetails[] = {
@@ -85,6 +108,7 @@ static s32 sNewFileSystem = 0;
 static s32 sNewFileForm = 0;
 static u32 sNewFileVersion = 0;
 static bool sNewFileStringTable = true;
+static s32 sNewStreamVersion = 0;
 static s32 sNewBarsVersion = 0;
 static AudioAssetKind sNewBarsAudio = AudioAssetKind::Fwav;
 static s32 sNewSarcMeta = 0;
@@ -127,6 +151,7 @@ static void SetNewFileSystem(s32 system)
 {
     sNewFileSystem = system;
     sNewFileVersion = GetNewSystemInfo(system).defaultVersion;
+    sNewStreamVersion = 0;
 }
 
 static bool IsNewSwitchSystem()
@@ -144,7 +169,7 @@ static bool IsNewSwitchOnlyForm(NewFileType type)
     return HasNewFileForms(type) && sNewFileForm == cNewSwitchOnlyForm;
 }
 
-static const InnerFileTarget& GetNewLooseTarget(NewFileType type)
+static InnerFileTarget GetNewLooseTarget(NewFileType type)
 {
     const s32 key = static_cast<s32>(type) * cNewFileSystemNum + sNewFileSystem;
 
@@ -156,7 +181,12 @@ static const InnerFileTarget& GetNewLooseTarget(NewFileType type)
         sNewLooseTargetKey = key;
     }
 
-    return sNewLooseTarget;
+    InnerFileTarget target = sNewLooseTarget;
+
+    if (type == NewFileType::StreamFile)
+        target.version = cNewStreamVersions[sNewFileSystem].versions[sNewStreamVersion];
+
+    return target;
 }
 
 static Document* CreateLooseDocument(NewFileType type)
@@ -170,7 +200,7 @@ static Document* CreateLooseDocument(NewFileType type)
     if (type == NewFileType::WaveFile && IsNewSwitchOnlyForm(type))
         return AudioResourceDocument::CreateBwav();
 
-    const InnerFileTarget& target = GetNewLooseTarget(type);
+    const InnerFileTarget target = GetNewLooseTarget(type);
 
     if (type == NewFileType::WaveFile)
         return LooseWaveDocument::Create(target);
@@ -264,6 +294,24 @@ static void DrawNewFileFormRow(NewFileType type)
     ComboScroll("##Form", &sNewFileForm, labels, cNewFileFormNum);
 }
 
+static void DrawNewStreamVersionRow()
+{
+    const NewStreamVersionList& list = cNewStreamVersions[sNewFileSystem];
+    const ArchiveFormat format = GetNewSystemInfo(sNewFileSystem).format;
+
+    sead::FixedSafeString<16> texts[cNewStreamVersionMax];
+    const char* labels[cNewStreamVersionMax];
+
+    for (s32 i = 0; i < list.num; i++)
+    {
+        FormatInnerFileVersion(&texts[i], list.versions[i], format);
+        labels[i] = texts[i].cstr();
+    }
+
+    DialogRow(messages::common::cVersion);
+    ComboScrollSectioned("##StreamVersion", &sNewStreamVersion, labels, list.num, list.sectionStart);
+}
+
 static void DrawNewArchiveRows()
 {
     DialogRow(messages::common::cVersion);
@@ -344,7 +392,7 @@ static void FormatNewFileResult(NewFileType type, sead::BufferedSafeString* name
     }
     else
     {
-        const InnerFileTarget& target = GetNewLooseTarget(type);
+        const InnerFileTarget target = GetNewLooseTarget(type);
 
         extension = GetInnerFileExtension(target.format, GetNewFileKind(type));
         format = GetInnerFileDisplayName(target.format, GetNewFileKind(type));
@@ -419,6 +467,9 @@ static void DrawNewFilePage(NewFileType type)
         DrawNewSarcRows();
     else if (HasNewFileForms(type))
         DrawNewFileFormRow(type);
+
+    if (type == NewFileType::StreamFile && !IsNewSwitchOnlyForm(type))
+        DrawNewStreamVersionRow();
 
     DrawNewFileResultRow(type);
 }

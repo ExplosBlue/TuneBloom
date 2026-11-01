@@ -53,19 +53,6 @@ namespace opusstream
             return messages::opus::cDecodeFailed;
         }
 
-        bool areAllTracksAttached(const Sound::StreamSoundInfo::Track::List &tracks)
-        {
-            for (u32 i = 0; i < tracks.size(); i++)
-            {
-                const Sound::StreamSoundInfo::Track &track = *static_cast<const Sound::StreamSoundInfo::Track *>(tracks.nth(i)->val());
-
-                if (!track.getWaveFileRef().isAttached())
-                    return false;
-            }
-
-            return true;
-        }
-
         u8 *loadStreamFile(sead::FileDevice *device, const Bfsar &archive, const sead::SafeString &streamPath, const sead::SafeString *filePathOverride, sead::FileDevice::LoadArg *loadArg)
         {
             if (filePathOverride)
@@ -228,7 +215,7 @@ namespace opusstream
         {
             Sound::StreamSoundInfo::Track &track = *static_cast<Sound::StreamSoundInfo::Track *>(tracks.nth(trackNo)->val());
 
-            if (track.getWaveFileRef().isAttached())
+            if (!track.isWaveUnloaded())
                 continue;
 
             WaveFile *wave = createWave(owner, info, isLoop, loopStartFrame, loopEndFrame);
@@ -286,7 +273,7 @@ namespace opusstream
             return false;
         }
 
-        if (areAllTracksAttached(tracks))
+        if (!strmSoundInfo.hasUnloadedTracks())
             return true;
 
         const bool wasModified = sound->isModifiedSinceBaseline();

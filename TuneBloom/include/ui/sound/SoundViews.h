@@ -46,6 +46,3 @@ void DrawStreamTracksUI(const StreamSource& source);
 bool DrawStreamTracksTabRow(const StreamSource& source);
 void DrawStreamTracksSection(const StreamSource& source, f32 height);
 void HighlightStreamTrack(Item* track);
-
-bool IsTrackMixerView();
-void SetTrackMixerView(bool mixer);

@@ -25,12 +25,19 @@ void EndBoxTools();
 void FillBox(f32 height);
 bool SampleField(const char* id, u32* value, u32 min, u32 max, u32 reset, u32 rate, bool hasValue = true);
 
+enum class SourceLine
+{
+    Full,
+    None
+};
+
 class WaveImportPanel
 {
 public:
-    void draw(const char* header, const char* filePath, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
+    void draw(SourceLine source, const char* sourceName, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
     void reset();
     void tick();
+    bool isDrawnThisFrame() const { return mDrawnThisFrame; }
     bool confirmCancel(bool cancelClicked);
 
     std::string finalizeForCommit(WaveFile::RiffWaveInfo* info);
@@ -151,8 +158,8 @@ private:
     void constrainRanges(FrameContext& ctx);
     void commitLoop(FrameContext& ctx);
 
-    void drawSourceHeader(const char* header, const char* filePath, u32 sampleRate, u32 channelCount, u32 sampleCount);
-    void drawUndecodableSource(const char* header, const char* filePath, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
+    void drawSourceHeader(SourceLine source, const char* sourceName, const WaveFile::RiffWaveInfo& info);
+    void drawUndecodableSource(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info);
 
     void drawWaveformBox(FrameContext& ctx);
     void drawWaveformTools(FrameContext& ctx, f32 groupGap);

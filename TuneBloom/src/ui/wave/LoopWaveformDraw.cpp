@@ -22,8 +22,9 @@ constexpr float  cWaveAmpScale     = 0.92f;
 constexpr float  cTickTargetPx     = 100.0f;
 constexpr float  cSeekPlayedAlpha  = 0.18f;
 constexpr int    cSeekLoopTintA    = 26;
+constexpr int    cOverviewLoopTintA = 12;
 constexpr float  cCropGripSize     = 8.0f;
-constexpr int    cCropDimAlpha     = 190;
+constexpr int    cDroppedDimAlpha  = 190;
 
 constexpr float  cWaveDimMix          = 0.5f;
 constexpr float  cEdgeMix             = 0.14f;
@@ -187,19 +188,22 @@ static void DrawCropHandle(ImDrawList* draw, ImVec2 origin, float x, float heigh
                             ImVec2(origin.x + x, bottom - cCropGripSize), Palette().crop);
 }
 
+static void DimDroppedRange(ImDrawList* draw, ImVec2 origin, float width, float height, float startX, float endX, float rounding = 0.0f)
+{
+    const float clampedStartX = sead::Mathf::clamp2(0.0f, startX, width);
+    const float clampedEndX = sead::Mathf::clamp2(0.0f, endX, width);
+
+    if (clampedEndX > clampedStartX)
+        draw->AddRectFilled(ImVec2(origin.x + clampedStartX, origin.y), ImVec2(origin.x + clampedEndX, origin.y + height), uicolors::WithAlpha(Palette().bg, cDroppedDimAlpha), rounding, ImDrawFlags_RoundCornersRight);
+}
+
 static void DrawCrop(ImDrawList* draw, ImVec2 origin, float width, float height, const LoopWaveformState& state)
 {
     const float cropStartX = SampleToX(state, state.cropStart, width);
     const float cropEndX = SampleToX(state, state.cropEnd, width);
-    const float clampedStartX = sead::Mathf::clamp2(0.0f, cropStartX, width);
-    const float clampedEndX = sead::Mathf::clamp2(0.0f, cropEndX, width);
-    const ImU32 dim = uicolors::WithAlpha(Palette().bg, cCropDimAlpha);
 
-    if (clampedStartX > 0.0f)
-        draw->AddRectFilled(origin, ImVec2(origin.x + clampedStartX, origin.y + height), dim);
-
-    if (clampedEndX < width)
-        draw->AddRectFilled(ImVec2(origin.x + clampedEndX, origin.y), ImVec2(origin.x + width, origin.y + height), dim);
+    DimDroppedRange(draw, origin, width, height, 0.0f, cropStartX);
+    DimDroppedRange(draw, origin, width, height, cropEndX, width);
 
     if (cropStartX >= 0.0f && cropStartX <= width)
         DrawCropHandle(draw, origin, cropStartX, height, true, state.dragging == LoopWaveformState::Dragging::CropStart);
@@ -478,6 +482,9 @@ void DrawWaveform(ImDrawList* draw, ImVec2 origin, float width, float height,
     if (state.showCrop)
         DrawCrop(draw, origin, width, height, state);
 
+    if (showLoop)
+        DimDroppedRange(draw, origin, width, height, loopEndX, state.showCrop ? SampleToX(state, state.cropEnd, width) : width);
+
     if (state.showCurve)
         DrawCurve(draw, origin, width, height, state);
 
@@ -533,7 +540,7 @@ static void DrawRulerTicks(const RulerDraw& ruler, const LoopWaveformState& stat
     if (spanMs <= 0.0)
         return;
 
-    const double targetDivisions = std::max(4.0, static_cast<double>(width) / cTickTargetPx);
+    const double targetDivisions = std::max(1.0, static_cast<double>(width) / cTickTargetPx);
     const double majorStepMs = FindMajorTickStep(spanMs / targetDivisions);
     const double majorStepPx = majorStepMs / spanMs * width;
     int subdivisions = 1;
@@ -546,6 +553,7 @@ static void DrawRulerTicks(const RulerDraw& ruler, const LoopWaveformState& stat
         subdivisions = 2;
 
     const double minorStepMs = majorStepMs / subdivisions;
+    float labelEndX = -FLT_MAX;
     char label[32];
 
     for (s64 i = static_cast<s64>(std::ceil(startMs / minorStepMs)); i * minorStepMs <= endMs; i++)
@@ -560,13 +568,92 @@ static void DrawRulerTicks(const RulerDraw& ruler, const LoopWaveformState& stat
         {
             draw->AddLine(ImVec2(left + tickX, bottom - majorTickLen), ImVec2(left + tickX, bottom), palette.inkFaint);
             FormatTickLabel(label, sizeof(label), timeMs, majorStepMs);
-            draw->AddText(ImVec2(left + tickX + 3, top + 2), palette.inkFaint, label);
+
+            const float labelWidth = CalcTextSize(label).x;
+
+            if (tickX + 3 >= labelEndX && tickX + 3 + labelWidth <= width)
+            {
+                draw->AddText(ImVec2(left + tickX + 3, top + 2), palette.inkFaint, label);
+                labelEndX = tickX + 3 + labelWidth + GetStyle().ItemSpacing.x;
+            }
         }
         else
         {
             draw->AddLine(ImVec2(left + tickX, bottom - minorTickLen), ImVec2(left + tickX, bottom), palette.edgeSoft);
         }
     }
+}
+
+void DrawTimeRuler(ImDrawList* draw, ImVec2 min, ImVec2 max, u32 sampleCount, u32 sampleRate)
+{
+    if (sampleCount == 0 || sampleRate == 0 || max.x <= min.x)
+        return;
+
+    LoopWaveformState state;
+    state.viewStart = 0;
+    state.viewEnd = sampleCount;
+
+    RulerDraw ruler;
+    ruler.draw = draw;
+    ruler.left = min.x;
+    ruler.top = min.y;
+    ruler.bottom = max.y;
+    ruler.width = max.x - min.x;
+
+    DrawRulerTicks(ruler, state, sampleRate);
+}
+
+void DrawWaveOverview(ImDrawList* draw, ImVec2 min, ImVec2 max, const std::vector<float>& peakMin, const std::vector<float>& peakMax, WaveOverviewTone tone, const WaveOverviewLoop* loop, float playRatio)
+{
+    const WaveformPalette& palette = Palette();
+    const u32 blockCount = static_cast<u32>(std::min(peakMin.size(), peakMax.size()));
+    const float width = max.x - min.x;
+    const float midY = ImFloor((min.y + max.y) * 0.5f);
+    const float halfHeight = (max.y - min.y) * 0.5f * cWaveAmpScale;
+    const ImU32 color = tone == WaveOverviewTone::Lit ? palette.waveLit : tone == WaveOverviewTone::Dim ? palette.edge : palette.wave;
+
+    float loopStartX = 0.0f;
+    float loopEndX = 0.0f;
+
+    if (loop)
+    {
+        loopStartX = ImFloor(min.x + width * sead::Mathf::clamp2(0.0f, loop->startRatio, 1.0f)) + 0.5f;
+        loopEndX = ImFloor(min.x + width * sead::Mathf::clamp2(0.0f, loop->endRatio, 1.0f)) + 0.5f;
+
+        draw->AddRectFilled(ImVec2(loopStartX, min.y), ImVec2(loopEndX, max.y), uicolors::WithAlpha(palette.loop, cOverviewLoopTintA));
+    }
+
+    draw->AddLine(ImVec2(min.x, midY), ImVec2(max.x, midY), palette.edgeSoft);
+
+    for (int xi = 0; blockCount > 0 && xi < static_cast<int>(width); xi++)
+    {
+        const u32 first = std::min(blockCount - 1, static_cast<u32>(xi / width * blockCount));
+        const u32 last = std::min(blockCount, std::max(first + 1, static_cast<u32>((xi + 1) / width * blockCount)));
+        float minValue = 1.0f, maxValue = -1.0f;
+
+        for (u32 block = first; block < last; block++)
+        {
+            minValue = std::min(minValue, peakMin[block]);
+            maxValue = std::max(maxValue, peakMax[block]);
+        }
+
+        const float x = min.x + xi + 0.5f;
+
+        draw->AddLine(ImVec2(x, midY - maxValue * halfHeight), ImVec2(x, midY - minValue * halfHeight + 1.0f), color);
+    }
+
+    if (loop)
+    {
+        draw->AddLine(ImVec2(loopStartX, min.y), ImVec2(loopStartX, max.y), palette.loop);
+        draw->AddLine(ImVec2(loopEndX, min.y), ImVec2(loopEndX, max.y), palette.loop);
+    }
+
+    if (playRatio < 0.0f || playRatio > 1.0f)
+        return;
+
+    const float playX = ImFloor(min.x + width * playRatio) + 0.5f;
+
+    draw->AddLine(ImVec2(playX, min.y), ImVec2(playX, max.y), palette.good, 1.5f);
 }
 
 static void DrawRulerLoopEdge(const RulerDraw& ruler, float x, float footLen)
@@ -640,6 +727,7 @@ bool DrawSeekRuler(const char* idStr, ImVec2 origin, float width, float height,
 
     if (showLoop)
     {
+        DimDroppedRange(draw, origin, width, height, SampleToX(state, loopEnd, width), width, 3.0f);
         DrawRulerLoopEdge(ruler, SampleToX(state, loopStart, width), loopFootLen);
         DrawRulerLoopEdge(ruler, SampleToX(state, loopEnd, width), -loopFootLen);
     }

@@ -174,6 +174,13 @@ float ImGui::GetIconStrokeThickness(float font_size)
     return ImMax(1.0f, font_size * ICON_STROKE_THICKNESS);
 }
 
+float ImGui::CalcTabLabelOffset(float tab_width, float frame_padding_x, const char* label)
+{
+    const float label_width = CalcTextSize(label, NULL, true).x;
+
+    return ImMax(frame_padding_x, IM_TRUNC((tab_width - label_width) * 0.5f));
+}
+
 // Hover fade
 struct HoverSlot
 {

@@ -377,7 +377,7 @@ public:
     u64 computeStateSignature() const override;
 
     void drawUI() override;
-    void drawEditorUI(bool fillHeight);
+    void drawEditorUI();
 
     void setup(sead::Endian::Types endian) const
     {
@@ -448,6 +448,11 @@ public:
         return mIsLoopDirty;
     }
 
+    u32 getContentSerial() const
+    {
+        return mContentSerial;
+    }
+
     u32 getSampleRate() const
     {
         return mSampleRate;
@@ -516,6 +521,11 @@ public:
     u32 getLoopFrames() const
     {
         return getOriginalLoopEndFrame() - getOriginalLoopStartFrame();
+    }
+
+    bool hasValidLoop() const
+    {
+        return getIsLoop() && getOriginalLoopEndFrame() > getOriginalLoopStartFrame() && getOriginalLoopEndFrame() <= getSampleCount();
     }
 
     static u32 getSpoolFrames(u32 loopStartFrame, u32 loopStartAlignmentFrames)
@@ -591,6 +601,7 @@ public:
     }
 
     void updateLoop();
+    void copyLoopFrom(const WaveFile& source);
 
     static void buildSeekTable_(const void* samples, u32 sampleCount, snd::SampleFormat sampleFormat, Channel::SeekData* outSeekData, const Channel::SeekData* srcSeekData = nullptr, u32 preserveSamples = 0);
 
@@ -670,6 +681,9 @@ private:
     u32 mMd5Version = 0;
     sead::Endian::Types mMd5Endian = sead::Endian::eBig;
     u32 mWaveArchiveId = UINT32_MAX;
+    u32 mContentSerial = NextContentSerial_();
+
+    static u32 NextContentSerial_();
 
     friend class Bfsar;
     friend class BfwarFile;

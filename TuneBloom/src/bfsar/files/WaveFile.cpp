@@ -23,6 +23,7 @@
 
 #include <libs/md5.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -247,6 +248,8 @@ bool WaveFile::readChannel_(const nw::snd::internal::WaveFileReader& reader, con
 bool WaveFile::doRead(const void* fileAddr)
 {
     LOG_FUNC();
+
+    mContentSerial = NextContentSerial_();
 
     nw::snd::internal::WaveFileReader reader(fileAddr);
     if (!reader.IsAvailable())
@@ -756,6 +759,32 @@ void WaveFile::updateLoop()
     }
 }
 
+void WaveFile::copyLoopFrom(const WaveFile& source)
+{
+    const u32 loopEndFrame = mSampleCount ? sead::Mathu::min(source.mLoopEndFrame, mSampleCount) : source.mLoopEndFrame;
+    const u32 loopStartFrame = sead::Mathu::min(source.mLoopStartFrame, loopEndFrame);
+    const bool isLoop = source.mIsLoop && loopStartFrame < loopEndFrame;
+
+    if (mIsLoop == isLoop && mLoopStartFrame == loopStartFrame && mLoopEndFrame == loopEndFrame)
+        return;
+
+    const bool isRangeChanged = mLoopStartFrame != loopStartFrame || mLoopEndFrame != loopEndFrame;
+
+    disposeChannels_();
+
+    mIsLoop = isLoop;
+    mLoopStartFrame = loopStartFrame;
+    mLoopEndFrame = loopEndFrame;
+    mIsLoopDirty |= source.mIsLoopDirty || isRangeChanged;
+}
+
+u32 WaveFile::NextContentSerial_()
+{
+    static std::atomic<u32> sSerial{ 0 };
+
+    return ++sSerial;
+}
+
 void WaveFile::rebuildSpooledData_()
 {
     disposeChannels_();
@@ -1140,6 +1169,7 @@ bool WaveFile::setupPreviewPcm16(const DecodedPcm& pcm, bool isLoop, u32 loopSta
         mChannels.clear();
     }
 
+    mContentSerial = NextContentSerial_();
     mDataEndian = sead::Endian::getHostEndian();
     mEncoding = Encoding::Pcm16;
     mSampleRate = pcm.sampleRate;

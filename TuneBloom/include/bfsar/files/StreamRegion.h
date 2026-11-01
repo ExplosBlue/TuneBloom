@@ -20,6 +20,13 @@ struct StreamRegion
     sead::FixedSafeString<64> name;
 };
 
+struct StreamMarker
+{
+    u32 position = 0;
+    u32 unknown4 = 0;
+    char name[64] = {};
+};
+
 struct StreamFileLayout
 {
     static constexpr u32 cRegionCountMax = 127;
@@ -27,6 +34,7 @@ struct StreamFileLayout
 
     std::vector<StreamRegion> regions;
     u32 regionRecordBytes = 0;
+    std::vector<StreamMarker> markers;
 
     u32 version = 0;
     bool hasRegionInfo = false;
@@ -79,3 +87,5 @@ void WriteWavRegions(sead::WriteStream* stream, const std::vector<StreamRegion>&
 
 StreamRegionReadResult ReadStreamFileLayout(StreamFileLayout* layout, const nw::snd::internal::StreamSoundFileReader& reader, u32 strmFileSize);
 void WriteStreamRegions(sead::WriteStream* stream, const StreamFileLayout& layout, const StreamRegionSampleData& sampleData);
+u32 CountStreamMarkersUpTo(const StreamFileLayout& layout, u32 sampleCount);
+void WriteStreamMarkers(sead::WriteStream* stream, const StreamFileLayout& layout, u32 sampleCount);

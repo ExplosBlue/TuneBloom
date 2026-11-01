@@ -162,6 +162,8 @@ public:
     u32 getSoloTracks() const { return mSoloTracks; }
     void setTrackSwitches(u32 muteTracks, u32 soloTracks);
     bool isTrackAudible(u32 trackNo) const { return IsTrackAudible(mMuteTracks, mSoloTracks, trackNo); }
+    bool isStreamTrackAudible(const Sound::StreamSoundInfo& stream, const Sound::StreamSoundInfo::Track* track, u32 trackNo) const;
+    void forgetStreamTrack(const Sound::StreamSoundInfo::Track* track);
 
     bool isLoopEnabled() const { return mLoopEnabled; }
     void setLoopEnabled(bool enable);
@@ -171,8 +173,6 @@ public:
     s32 getPlayingStreamRegion() const;
     s32 getNextStreamRegion() const;
     void renumberStreamRegions(const s32* newNos, s32 count);
-
-    void updateStreamTrackMute(const Sound::StreamSoundInfo* stream);
 
     bool hasSeqVarOverride(SeqVarScope scope, u32 trackNo, u32 varNo) const { return getSeqVarInfo_(scope, trackNo, varNo).enable; }
     s16 getSeqVar(SeqVarScope scope, u32 trackNo, u32 varNo) const;
@@ -274,10 +274,10 @@ private:
 
     void initPlayerParam_();
     void initPlayerTrack_();
+    void forgetStreamTracks_();
+    void remapStreamTrackSwitches_(const Sound::StreamSoundInfo& stream, const Sound::StreamSoundInfo::Track* const* tracks);
     void initPlayerLoop_();
     f32 calcTrackVolume_(u32 trackNo) const;
-    void readStreamTrackMute_(const Sound::StreamSoundInfo* stream);
-    const Sound::StreamSoundInfo* getLastPlayedStream_() const;
     void initSeqVars_();
     const SeqVarInfo& getSeqVarInfo_(SeqVarScope scope, u32 trackNo, u32 varNo) const;
     volatile s16* getSeqVarPtr_(SeqVarScope scope, u32 trackNo, u32 varNo);
@@ -362,7 +362,7 @@ private:
     StreamSource mLastPlayedStream;
     const WaveFile* mPlayingWaveFile;
     const Sound::StreamSoundInfo::Track* mPlayingStreamTracks[cStrmTrackNum] = {};
-    u32 mSilentTracks = 0;
+    const Sound::StreamSoundInfo* mPlayingTracksStream = nullptr;
     BasicSoundPlayer* mCurrentPlayer;
     const void* mOwnerContext = nullptr;
     const void* mOwner = nullptr;

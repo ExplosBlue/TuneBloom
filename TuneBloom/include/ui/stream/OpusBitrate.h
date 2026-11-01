@@ -10,3 +10,4 @@ void DrawOpusBitrateRow(const StreamSource& source);
 
 StreamSource FindOpusStreamOfWave(const WaveFile* wave);
 WaveImportEncoding MakeOpusStreamImportEncoding(s32* codec, u32* bitrate, u32 originalBitrate);
+WaveImportEncoding MakeFollowTrackEncoding(const WaveFile& leadWave, s32 leadTrackNo, const Sound::StreamSoundInfo* opusStream, WaveFile::Encoding* encoding, s32* opusCodec, u32* opusBitrate, sead::BufferedSafeString* followsText);

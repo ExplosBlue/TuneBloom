@@ -1036,8 +1036,6 @@ static void PlaybackSettingsReadLine(ImGuiContext*, ImGuiSettingsHandler*, void*
         sShowRemainingTime = open != 0;
     else if (sscanf(line, "Loop=%d", &open) == 1)
         sSoundPlayer.setLoopEnabled(open != 0);
-    else if (sscanf(line, "TrackMixer=%d", &open) == 1)
-        SetTrackMixerView(open != 0);
     else if (sscanf(line, "TrackFolded=%d", &open) == 1)
         SetTrackFolded(open != 0);
     else if (sscanf(line, "TrackHeight=%d", &open) == 1)
@@ -1051,7 +1049,6 @@ static void PlaybackSettingsWriteAll(ImGuiContext*, ImGuiSettingsHandler* handle
     buf->appendf("DrawerView=%d\n", GetPlaybackDrawerView() == PlaybackDrawerView::Variables ? 1 : 0);
     buf->appendf("RemainingTime=%d\n", sShowRemainingTime ? 1 : 0);
     buf->appendf("Loop=%d\n", sSoundPlayer.isLoopEnabled() ? 1 : 0);
-    buf->appendf("TrackMixer=%d\n", IsTrackMixerView() ? 1 : 0);
     buf->appendf("TrackFolded=%d\n", IsTrackFolded() ? 1 : 0);
     buf->appendf("TrackHeight=%d\n\n", static_cast<s32>(GetTrackUnfoldedHeight()));
 }

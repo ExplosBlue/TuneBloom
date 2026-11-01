@@ -334,17 +334,15 @@ static bool ValidateSequenceSound(const Sound::SequenceSoundInfo& seqInfo, sead:
     return true;
 }
 
-static bool ValidateStreamTracks(const Sound::StreamSoundInfo& strmInfo, sead::BufferedSafeString& error)
+bool Sound::StreamSoundInfo::validateTracks(sead::BufferedSafeString& error) const
 {
-    const Sound::StreamSoundInfo::Track::List& tracks = strmInfo.getTrackList();
-
-    if (tracks.size() > cStrmTrackNum)
+    if (mTrackList.size() > cStrmTrackNum)
     {
         error.format(messages::stream::cTrackLimitFormat, cStrmTrackNum);
         return false;
     }
 
-    if (tracks.isEmpty() && strmInfo.getAllocateChannelCount() == 0)
+    if (mTrackList.isEmpty() && getAllocateChannelCount() == 0)
     {
         error = messages::stream::cNoTracksOrChannels;
         return false;
@@ -352,19 +350,17 @@ static bool ValidateStreamTracks(const Sound::StreamSoundInfo& strmInfo, sead::B
 
     const WaveFile* mainWaveFile = nullptr;
 
-    for (s32 i = 0; i < tracks.size(); i++)
+    for (s32 i = 0; i < mTrackList.size(); i++)
     {
-        const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
+        const Track& track = *static_cast<const Track*>(mTrackList.nth(i)->val());
+
+        if (track.isWaveUnloaded())
+            continue;
 
         if (!track.getWaveFileRef().isAttached())
         {
-            if (track.getChannels_().isEmpty())
-            {
-                error.format(messages::playback::cTrackNoWaveFileFormat, i);
-                return false;
-            }
-
-            continue;
+            error.format(messages::playback::cTrackNoWaveFileFormat, i);
+            return false;
         }
 
         const WaveFile& waveFile = *static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
@@ -401,7 +397,7 @@ static bool ValidateStreamSound(const Sound::StreamSoundInfo& strmInfo, sead::Bu
 
     if (strmInfo.getStreamType() == Sound::StreamSoundInfo::StreamType::NwStreamBinary)
     {
-        if (!ValidateStreamTracks(strmInfo, error))
+        if (!strmInfo.validateTracks(error))
             return false;
     }
     else

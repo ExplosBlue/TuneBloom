@@ -803,6 +803,7 @@ bool WaveFile::readWavFile(const RiffWaveInfo& info, Encoding encoding)
         mChannels.clear();
     }
 
+    mContentSerial = NextContentSerial_();
     invalidateOriginalData_();
 
     u8* channels[snd::cWaveChannelMax] = { nullptr, nullptr };

@@ -76,10 +76,6 @@ inline constexpr const char* cTracksSameSampleRate = "All Stream Tracks must hav
 inline constexpr const char* cTrackLimitFormat = "Streams can have up to %u Tracks";
 inline constexpr const char* cTypeUnsupportedFormat = "Only %s and Opus streams are supported";
 
-inline constexpr const char* cTrackAddTip = "Add Track";
-inline constexpr const char* cTrackMixerView = "Mixer View";
-inline constexpr const char* cTrackTableView = "Table View";
-inline constexpr const char* cTrackMixNotInFile = "This file stores no track volume or pan";
 inline constexpr const char* cTrackNoSound = "No Stream Sound Selected";
 inline constexpr const char* cTrackNone = "No Tracks";
 inline constexpr const char* cTrackSurroundPan = "Surround Pan";
@@ -130,11 +126,9 @@ inline constexpr const char* cLoopEndLabel   = "Loop End";
 
 inline constexpr const char* cTrackBypass           = "Bypass";
 inline constexpr const char* cTrackBiquadValue      = "Value";
-inline constexpr const char* cTrackMute             = "Mute";
-inline constexpr const char* cTrackSolo             = "Solo";
-inline constexpr const char* cTrackMuteShort        = "M";
-inline constexpr const char* cTrackSoloShort        = "S";
+inline constexpr const char* cTrackMenuTip          = "Track Actions";
 inline constexpr const char* cTrackMix              = "Mix";
+inline constexpr const char* cTrackLaneNoPreview    = "No Waveform Preview";
 inline constexpr const char* cTrackChannelsFormat   = "%u ch";
 inline constexpr const char* cTrackNameFormat       = "Track %u";
 

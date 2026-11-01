@@ -20,8 +20,6 @@ public:
 public:
     static OutputMeter& instance();
 
-    static void updateChannel(ChannelState& channel, f32 peak, f32 dt);
-
     void install();
     void uninstall();
 
@@ -36,6 +34,8 @@ public:
 
 private:
     OutputMeter() = default;
+
+    static void updateChannel(ChannelState& channel, f32 peak, f32 dt);
 
     std::atomic<f32> mPeakL{0.0f};
     std::atomic<f32> mPeakR{0.0f};
@@ -53,7 +53,6 @@ bool IsOutputMeterWindowVisible();
 void SetOutputMeterWindowVisible(bool visible);
 bool TakeOutputMeterPlaceRequest();
 f32 CalcOutputMeterWindowHeight();
-void DrawOutputMeterBar(const OutputMeter::ChannelState& state, const ImVec2& min, const ImVec2& max, bool horizontal);
 void DrawOutputMeterRows(const ImVec2& min, f32 width, f32 rowHeight, f32 gap);
 f32 OutputMeterDbToPosition(f32 db);
 f32 OutputMeterPositionToDb(f32 position);

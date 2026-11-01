@@ -174,20 +174,18 @@ static bool GetStreamInfoPlaybackError(const Sound::StreamSoundInfo& streamSound
     {
         const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(trackList.nth(i)->val());
 
+        if (track.isWaveUnloaded())
+        {
+            if (outFileNotLoaded)
+                *outFileNotLoaded = true;
+
+            outError->copy(messages::stream::cFileNotLoaded);
+            return true;
+        }
+
         if (!track.getWaveFileRef().isAttached())
         {
-            if (track.getChannels_().isEmpty())
-            {
-                outError->format(messages::playback::cTrackNoWaveFileFormat, i);
-            }
-            else
-            {
-                if (outFileNotLoaded)
-                    *outFileNotLoaded = true;
-
-                outError->copy(messages::stream::cFileNotLoaded);
-            }
-
+            outError->format(messages::playback::cTrackNoWaveFileFormat, i);
             return true;
         }
 
@@ -274,10 +272,6 @@ bool SoundPlayer::playSound(const Sound* sound, u32 startOffsetSample)
     mLastPlayedSound = sound;
     mLastPlayedStream = {};
 
-    const bool isStream = sound->getSoundType() == Sound::SoundType::Strm;
-
-    readStreamTrackMute_(isStream ? &sound->getStreamSoundInfo() : nullptr);
-
     switch (sound->getSoundType())
     {
         case Sound::SoundType::Seq:
@@ -309,34 +303,7 @@ bool SoundPlayer::playStream(const StreamSource& source)
     mLastPlayedSound = nullptr;
     mLastPlayedStream = source;
 
-    readStreamTrackMute_(source.stream);
-
     return playStream_(source);
-}
-
-void SoundPlayer::readStreamTrackMute_(const Sound::StreamSoundInfo* stream)
-{
-    mSilentTracks = 0;
-
-    if (!stream)
-        return;
-
-    for (u32 i = 0; i < cStrmTrackNum; i++)
-    {
-        if (!stream->isTrackAudible(i))
-            mSilentTracks |= 1 << i;
-    }
-}
-
-const Sound::StreamSoundInfo* SoundPlayer::getLastPlayedStream_() const
-{
-    if (mLastPlayedStream.isValid())
-        return mLastPlayedStream.stream;
-
-    if (mLastPlayedSound && mLastPlayedSound->getSoundType() == Sound::SoundType::Strm)
-        return &mLastPlayedSound->getStreamSoundInfo();
-
-    return nullptr;
 }
 
 const Item* SoundPlayer::getLastPlayedItem() const
@@ -354,27 +321,94 @@ void SoundPlayer::forgetStream(const Sound::StreamSoundInfo* stream)
 
     if (mLastPlayedStream.stream == stream)
         mLastPlayedStream = {};
+
+    if (mPlayingTracksStream == stream)
+        forgetStreamTracks_();
 }
 
-void SoundPlayer::updateStreamTrackMute(const Sound::StreamSoundInfo* stream)
+static s32 FindStreamTrackSlot(const Sound::StreamSoundInfo::Track* const* slots, const Sound::StreamSoundInfo::Track* track)
 {
-    SEAD_ASSERT(stream);
+    for (u32 slot = 0; slot < cStrmTrackNum; slot++)
+    {
+        if (slots[slot] == track)
+            return static_cast<s32>(slot);
+    }
 
-    if (stream != getLastPlayedStream_())
+    return -1;
+}
+
+bool SoundPlayer::isStreamTrackAudible(const Sound::StreamSoundInfo& stream, const Sound::StreamSoundInfo::Track* track, u32 trackNo) const
+{
+    if (mPlayingTracksStream != &stream)
+        return isTrackAudible(trackNo);
+
+    const s32 slot = FindStreamTrackSlot(mPlayingStreamTracks, track);
+
+    if (slot < 0)
+        return (mSoloTracks & ((1u << cStrmTrackNum) - 1)) == 0;
+
+    return isTrackAudible(static_cast<u32>(slot));
+}
+
+void SoundPlayer::forgetStreamTrack(const Sound::StreamSoundInfo::Track* track)
+{
+    u32 muteTracks = mMuteTracks;
+    u32 soloTracks = mSoloTracks;
+
+    for (u32 slot = 0; slot < cStrmTrackNum; slot++)
+    {
+        if (mPlayingStreamTracks[slot] != track)
+            continue;
+
+        mPlayingStreamTracks[slot] = nullptr;
+        muteTracks &= ~(1u << slot);
+        soloTracks &= ~(1u << slot);
+    }
+
+    if (muteTracks != mMuteTracks || soloTracks != mSoloTracks)
+        setTrackSwitches(muteTracks, soloTracks);
+}
+
+void SoundPlayer::forgetStreamTracks_()
+{
+    mPlayingTracksStream = nullptr;
+
+    for (u32 slot = 0; slot < cStrmTrackNum; slot++)
+        mPlayingStreamTracks[slot] = nullptr;
+}
+
+void SoundPlayer::remapStreamTrackSwitches_(const Sound::StreamSoundInfo& stream, const Sound::StreamSoundInfo::Track* const* tracks)
+{
+    if (mPlayingTracksStream != &stream)
         return;
 
-    readStreamTrackMute_(stream);
+    u32 muteTracks = 0;
+    u32 soloTracks = 0;
+    f32 trackVolume[cStrmTrackNum];
 
-    snd::internal::driver::SoundThreadLock lock;
-    initPlayerTrack_();
+    for (u32 trackNo = 0; trackNo < cStrmTrackNum; trackNo++)
+    {
+        const s32 slot = tracks[trackNo] ? FindStreamTrackSlot(mPlayingStreamTracks, tracks[trackNo]) : static_cast<s32>(trackNo);
+
+        trackVolume[trackNo] = slot < 0 ? cDefaultTrackVolume : mTrackVolume[slot];
+
+        if (slot < 0)
+            continue;
+
+        muteTracks |= ((mMuteTracks >> slot) & 1u) << trackNo;
+        soloTracks |= ((mSoloTracks >> slot) & 1u) << trackNo;
+    }
+
+    for (u32 trackNo = 0; trackNo < cStrmTrackNum; trackNo++)
+        mTrackVolume[trackNo] = trackVolume[trackNo];
+
+    mMuteTracks = (mMuteTracks & ~((1u << cStrmTrackNum) - 1)) | muteTracks;
+    mSoloTracks = (mSoloTracks & ~((1u << cStrmTrackNum) - 1)) | soloTracks;
 }
 
 f32 SoundPlayer::calcTrackVolume_(u32 trackNo) const
 {
     if (!isTrackAudible(trackNo))
-        return 0.0f;
-
-    if (isCurrentPlayerStream() && (mSilentTracks & (1 << trackNo)) != 0)
         return 0.0f;
 
     return mTrackVolume[trackNo];
@@ -609,6 +643,7 @@ bool SoundPlayer::playStream_(const StreamSource& source)
 
         mStreamPlayer->setup(setupArg);
         mStreamPlayer->prepare(strmSoundInfo);
+        remapStreamTrackSwitches_(strmSoundInfo, playingTracks);
         initPlayerParam_();
         initPlayerTrack_();
         initPlayerLoop_();
@@ -620,6 +655,8 @@ bool SoundPlayer::playStream_(const StreamSource& source)
 
         for (u32 i = 0; i < cStrmTrackNum; i++)
             mPlayingStreamTracks[i] = playingTracks[i];
+
+        mPlayingTracksStream = &strmSoundInfo;
     }
 
     mPlayingStream = source;
@@ -934,6 +971,7 @@ void SoundPlayer::reset()
     resetPlayingSound();
     resetLastPlayedSound();
     resetPlayingWaveFile();
+    forgetStreamTracks_();
 
     mSampleRate = 0;
     mSampleCount = 0;

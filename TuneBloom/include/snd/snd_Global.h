@@ -146,6 +146,7 @@ struct WaveInfo
 
 void GetWaveInfoFromWaveFile(WaveInfo* out, const WaveFile& waveFile, s32 channelIdx = -1);
 void ConvertWaveInfo(::snd::internal::WaveInfo* out, const WaveInfo& waveInfo);
+u32 CalcSeekOffset(const WaveInfo& waveInfo, bool loopEnabled, u32 offsetSample);
 
 } // namespace nw::snd::internal
 

@@ -45,6 +45,8 @@ void ClearInsertAfterItem();
 
 InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback instanciateItemCallback, ItemPropertiesCallback itemPropertiesCallback);
 void SuggestCreateItemName(const sead::SafeString& name);
+void SetNextCreateItemHead(void (*draw)());
+void SetNextCreateItemNameTail(void (*draw)(), f32 width);
 const sead::SafeString& GetCreateItemName();
 
 void WarningPopup(const char* name, const char* content);

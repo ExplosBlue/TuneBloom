@@ -124,12 +124,6 @@ void DrawSequenceStartLabelPanel(Sound::SequenceSoundInfo& seqSoundInfo)
 
     ImGui::EndDisabled();
 
-    ImGui::BeginDisabled(!seqFile);
-
-    if (TrailingButton(ICON_LC_EXTERNAL_LINK "###GoSeq"))
+    if (TrailingGoToButton(ICON_LC_EXTERNAL_LINK "###GoSeq", seqFile, messages::sequence::cMenuGoToDefinition, messages::reference::cNoSequenceFile))
         OpenSequenceAtLabel(static_cast<SequenceFile*>(seqFile), seqSoundInfo, startLabel);
-
-    ImGui::EndDisabled();
-
-    ImGui::SetItemTooltip("%s", seqFile ? messages::sequence::cMenuGoToDefinition : messages::reference::cNoSequenceFile);
 }

@@ -544,6 +544,35 @@ bool ComboScroll(const char *label, int *current_item, const char *const items[]
     return *current_item != oldItem;
 }
 
+bool ComboScrollSectioned(const char* label, s32* current, const char* const items[], s32 itemNum, s32 sectionStart)
+{
+    const s32 oldItem = *current;
+    const bool valid = *current >= 0 && *current < itemNum;
+
+    if (ImGui::BeginCombo(label, valid ? items[*current] : ""))
+    {
+        for (s32 i = 0; i < itemNum; i++)
+        {
+            if (i == sectionStart)
+                ImGui::Separator();
+
+            if (ImGui::Selectable(items[i], i == *current))
+                *current = i;
+
+            if (i == *current)
+                ImGui::SetItemDefaultFocus();
+        }
+
+        ImGui::EndCombo();
+    }
+
+    const s32 wheelSteps = GetItemWheelSteps();
+    if (wheelSteps != 0)
+        *current = sead::MathCalcCommon<s32>::clamp2(0, *current + wheelSteps, itemNum - 1);
+
+    return *current != oldItem;
+}
+
 static s32 StepToEnabledItem(s32 current, s32 steps, const char* const reasons[], s32 itemNum)
 {
     const s32 direction = steps > 0 ? 1 : -1;

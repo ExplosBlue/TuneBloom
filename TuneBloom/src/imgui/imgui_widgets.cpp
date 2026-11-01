@@ -1815,7 +1815,7 @@ bool ImGui::BeginComboPopup(ImGuiID popup_id, const ImRect& bb, ImGuiComboFlags 
 
     // We don't use BeginPopupEx() solely because we have a custom name string, which we could make an argument to BeginPopupEx()
     ImGuiWindowFlags window_flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove;
-    PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(g.Style.FramePadding.x, g.Style.WindowPadding.y)); // Horizontally align ourselves with the framed text
+    PushStyleVar(ImGuiStyleVar_WindowPadding, g.Style.WindowPadding); // TuneBloom: menu row inset
     bool ret = Begin(name, NULL, window_flags);
     PopStyleVar();
     if (!ret)
@@ -6635,14 +6635,15 @@ bool ImGui::Selectable(const char* label, bool selected, ImGuiSelectableFlags fl
         g.LastItemData.StatusFlags |= ImGuiItemStatusFlags_ToggledSelection;
 
     // Render
+    const bool rounded_row = (window->Flags & ImGuiWindowFlags_Popup) && !span_all_columns; // TuneBloom: rounded popup rows
     const float hover_ratio = GetHoverRatio(id, hovered);
     if (hover_ratio > 0.0f || selected)
     {
         const ImU32 col = (held && hovered) ? GetColorU32(ImGuiCol_HeaderActive) : selected ? GetColorU32(ImGuiCol_Header) : GetColorU32(ImGuiCol_HeaderHovered, hover_ratio);
-        RenderFrame(bb.Min, bb.Max, col, false, 0.0f);
+        RenderFrame(bb.Min, bb.Max, col, false, rounded_row ? style.FrameRounding : 0.0f); // TuneBloom: rounded popup rows
     }
     if (g.NavId == id)
-        RenderNavHighlight(bb, id, ImGuiNavHighlightFlags_TypeThin | ImGuiNavHighlightFlags_NoRounding);
+        RenderNavHighlight(bb, id, ImGuiNavHighlightFlags_TypeThin | (rounded_row ? 0 : ImGuiNavHighlightFlags_NoRounding)); // TuneBloom: rounded popup rows
 
     if (span_all_columns)
     {
@@ -8865,7 +8866,23 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
     // Render tab shape
     ImDrawList* display_draw_list = window->DrawList;
     const ImGuiCol tab_idle_col = tab_contents_visible ? (tab_bar_focused ? ImGuiCol_TabActive : ImGuiCol_TabUnfocusedActive) : (tab_bar_focused ? ImGuiCol_Tab : ImGuiCol_TabUnfocused);
-    const ImU32 tab_col = GetHoverColorU32(id, held || hovered, false, tab_idle_col, ImGuiCol_TabHovered, ImGuiCol_TabHovered);
+    ImU32 tab_col;
+    ImVec2 label_padding = tab_bar->FramePadding; // TuneBloom: switch tabs
+    if (docked_window == NULL)
+    {
+        tab_col = GetHoverColorU32(id, held || hovered, false, tab_idle_col, ImGuiCol_TabHovered, ImGuiCol_TabHovered);
+    }
+    else // TuneBloom: switch tabs
+    {
+        const ImVec4& selected = GetStyleColorVec4(ImGuiCol_TabUnfocusedActive);
+        ImVec4 idle = tab_contents_visible ? selected : GetStyleColorVec4(ImGuiCol_Tab);
+        if (idle.w <= 0.0f)
+            idle = ImVec4(selected.x, selected.y, selected.z, 0.0f);
+        const ImVec4 hover = tab_contents_visible ? idle : ImLerp(idle, selected, 0.5f);
+        tab_col = GetHoverColorU32(id, held || hovered, GetColorU32(idle), GetColorU32(hover));
+        if (p_open == NULL)
+            label_padding.x = CalcTabLabelOffset(bb.GetWidth(), label_padding.x, label);
+    }
     TabItemBackground(display_draw_list, bb, flags, tab_col);
     RenderNavHighlight(bb, id);
 
@@ -8881,7 +8898,12 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
     const ImGuiID close_button_id = p_open ? GetIDWithSeed("#CLOSE", NULL, docked_window ? docked_window->ID : id) : 0;
     bool just_closed;
     bool text_clipped;
-    TabItemLabelAndCloseButton(display_draw_list, bb, tab_just_unsaved ? (flags & ~ImGuiTabItemFlags_UnsavedDocument) : flags, tab_bar->FramePadding, label, id, close_button_id, tab_contents_visible, &just_closed, &text_clipped);
+    const bool dims_label = docked_window != NULL && !tab_contents_visible && !hovered && !held; // TuneBloom: switch tabs
+    if (dims_label)
+        PushStyleColor(ImGuiCol_Text, GetStyleColorVec4(ImGuiCol_TextDisabled));
+    TabItemLabelAndCloseButton(display_draw_list, bb, tab_just_unsaved ? (flags & ~ImGuiTabItemFlags_UnsavedDocument) : flags, label_padding, label, id, close_button_id, tab_contents_visible, &just_closed, &text_clipped); // TuneBloom: switch tabs
+    if (dims_label)
+        PopStyleColor();
     if (just_closed && p_open != NULL)
     {
         *p_open = false;

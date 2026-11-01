@@ -11,6 +11,8 @@
 
 #if defined(SEAD_PLATFORM_WINDOWS)
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace fileio
@@ -262,6 +264,15 @@ const char* GetTempFolder()
     }
 
     return ".";
+}
+
+u32 GetOwnProcessId()
+{
+#if defined(SEAD_PLATFORM_WINDOWS)
+    return static_cast<u32>(GetCurrentProcessId());
+#else
+    return static_cast<u32>(getpid());
+#endif
 }
 
 bool HasSameBytes(const char* pathA, const char* pathB)

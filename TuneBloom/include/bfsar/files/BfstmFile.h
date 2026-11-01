@@ -48,6 +48,9 @@ public:
 bool ReadStreamFileTracks(nw::snd::internal::StreamSoundFileReader &reader, Sound::StreamSoundInfo &soundInfo, sead::Heap *heap);
 void ApplyStreamTrackLayout(Sound::StreamSoundInfo &soundInfo, u32 trackCount, u32 channelCount);
 u32 GetDefaultStreamTrackCount(u32 channelCount);
+bool IsStreamTrackWave(const WaveFile& wave);
+void ShareStreamTrackLoop(WaveFile& source);
+const WaveFile* FindOtherStreamTrackWave(const WaveFile& wave, s32* trackNo);
 bool StreamWavesCoverLayout(const Sound::StreamSoundInfo &soundInfo);
 
 bool ReadStreamWaves(StreamWaveOwner &owner, Sound::StreamSoundInfo &soundInfo, const sead::SafeString &streamName, const void *strmFile, u32 strmFileSize);

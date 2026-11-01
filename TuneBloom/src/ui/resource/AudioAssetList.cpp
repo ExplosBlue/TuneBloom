@@ -46,6 +46,7 @@ struct AssetAudioImport
     u32 opusBitrate = aal::cBwavOpusChannelBitrate;
     u32 originalOpusBitrate = 0;
     bool isStream = false;
+    WaveImportMode mode = WaveImportMode::Replace;
     OldAudioData oldData;
     OldAudioClear cleared;
     sead::FixedSafeString<512> fileName;
@@ -165,10 +166,7 @@ static bool AskForWav(AssetAudioImport* import, bool acceptsAnyWav, AudioAsset* 
 static AudioAsset* CommitAudioImport(AssetAudioImport* import, AudioAsset* asset, Item* popupItem)
 {
     const aal::AmtaSourceAudio source = { import->info.sampleRate, import->info.sampleCount };
-    const std::string tempPath = FinalizeImportInfoForCommit(&import->info);
-
-    if (!import->info.isLoop)
-        import->info.loopStartFrame = 0;
+    const ImportCommit commit(&import->info);
 
     AudioResource& resource = ActiveAudioResource();
     const char* error = nullptr;
@@ -184,9 +182,6 @@ static AudioAsset* CommitAudioImport(AssetAudioImport* import, AudioAsset* asset
     else if (resource.replaceAudio(asset, import->info, source, encoding, import->cleared, &error))
         result = asset;
 
-    if (!tempPath.empty())
-        fileio::RemoveFile(tempPath.c_str());
-
     if (!result)
         MessageLog::instance()->addPopup({ error, popupItem });
 
@@ -201,7 +196,34 @@ void RequestAudioAssetReplace(AudioAsset* asset)
         return;
 
     sReplaceImport.target = asset;
+    sReplaceImport.mode = asset->getInfo().sampleCount == 0 ? WaveImportMode::Import : WaveImportMode::Replace;
     sReplaceImport.oldData = ActiveAudioResource().findOldAudioData(*asset);
+    sReplaceImport.cleared = OldAudioClear();
+}
+
+void RequestAudioAssetReimport(AudioAsset* asset)
+{
+    sReplaceImport.target = nullptr;
+
+    DecodedPcm pcm;
+
+    if (!asset->decode(&pcm))
+        pcm = DecodedPcm();
+
+    const AudioAssetInfo& info = asset->getInfo();
+
+    pcm.isLoop = info.isLoop;
+    pcm.loopStartFrame = info.loopStartFrame;
+    pcm.loopEndFrame = info.isLoop ? info.loopEndFrame : info.sampleCount;
+
+    if (!WriteReimportSource(pcm, asset, &sReplaceImport.info))
+        return;
+
+    SetStartFormat(&sReplaceImport, asset);
+    sReplaceImport.fileName = asset->getName();
+    sReplaceImport.target = asset;
+    sReplaceImport.mode = WaveImportMode::Reimport;
+    sReplaceImport.oldData = OldAudioData();
     sReplaceImport.cleared = OldAudioClear();
 }
 
@@ -369,6 +391,12 @@ static void AudioAssetContextMenuFunc(Item* item)
     if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace, canReplace, replaceReason))
         RequestAudioAssetReplace(asset);
 
+    const char* reimportReason = messages::resource::cSelectOneAudioAsset;
+    const bool canReimport = single && ActiveAudioResource().canReimportAudio(*asset, &reimportReason);
+
+    if (ContextMenuItem(ICON_LC_SLIDERS_HORIZONTAL, messages::import::cReimportMenuLabel, canReimport, reimportReason))
+        RequestAudioAssetReimport(asset);
+
     if (ContextMenuItem(ICON_LC_FILE_INPUT, messages::resource::cImportAudioFile, canReplace, replaceReason))
         ImportAssetFile(asset);
 
@@ -427,19 +455,19 @@ static void DrawCreateFormatRow(AssetAudioImport* import)
     SetCreateStream(import, StartsAsStream(import->info));
 }
 
-static void DrawStreamRow(AssetAudioImport* import)
+static void DrawCreateSource()
 {
-    if (!ActiveAudioResource().canCreateStreamAsset())
-        return;
+    DrawWaveImportSource(sCreateImport.info);
+}
 
-    const bool needsStream = NeedsStream(import->info);
+static void DrawCreateStreamCheckbox()
+{
+    const bool needsStream = NeedsStream(sCreateImport.info);
 
-    DialogRow(messages::common::cStream);
-    DetailTooltip(messages::resource::cNewStreamDetail);
     ImGui::BeginDisabled(needsStream);
 
-    if (ImGui::Checkbox("##Stream", &import->isStream))
-        SetCreateStream(import, import->isStream);
+    if (ImGui::Checkbox(messages::common::cStream, &sCreateImport.isStream))
+        SetCreateStream(&sCreateImport, sCreateImport.isStream);
 
     ImGui::EndDisabled();
 
@@ -447,6 +475,19 @@ static void DrawStreamRow(AssetAudioImport* import)
         ImGui::SetItemTooltip("%s", messages::resource::cAudioFormatBfwavWavReason);
     else
         DetailTooltip(messages::resource::cNewStreamDetail);
+}
+
+static void SetCreateFormHooks()
+{
+    SetNextCreateItemHead(&DrawCreateSource);
+
+    if (!ActiveAudioResource().canCreateStreamAsset())
+        return;
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const f32 width = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + ImGui::CalcTextSize(messages::common::cStream).x;
+
+    SetNextCreateItemNameTail(&DrawCreateStreamCheckbox, width);
 }
 
 static void AudioAssetCreateProperties(bool clear, Item* item, bool* validate)
@@ -461,7 +502,6 @@ static void AudioAssetCreateProperties(bool clear, Item* item, bool* validate)
     }
 
     DrawCreateFormatRow(&sCreateImport);
-    DrawStreamRow(&sCreateImport);
     DrawWaveImportFormInfo(GetImportEncoding(sCreateImport, GetCreateKind(), nullptr), &sCreateImport.info);
 }
 
@@ -494,6 +534,8 @@ static InstanciateItemCallback CreateAudioAssetFunc(bool clear)
     if (!sCreateImport.info.isValid)
         return nullptr;
 
+    SetCreateFormHooks();
+
     const InstanciateItemCallback instanciate = CreateItemFunc(clear, &InstanciateAudioAsset, &AudioAssetCreateProperties);
 
     if (pickedFile)
@@ -513,7 +555,10 @@ static void DrawAssetReplacePopup()
     CenterNextDialog();
     ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
 
-    if (!BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ARROW_DOWN_UP " %s###AssetWavImport", messages::common::cReplaceAudio).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    const char* const titles[] = { messages::common::cImportAudio, messages::common::cReplaceAudio, messages::common::cReimportAudio };
+    const WaveImportModeTexts texts = GetWaveImportModeTexts(sReplaceImport.mode);
+
+    if (!BeginDialog(sead::FormatFixedSafeString<64>("%s %s###AssetWavImport", texts.icon, titles[static_cast<s32>(sReplaceImport.mode)]).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         return;
 
     AudioAsset* asset = sReplaceImport.target;
@@ -521,10 +566,10 @@ static void DrawAssetReplacePopup()
 
     if (asset)
     {
-        const sead::FormatFixedSafeString<560> header(messages::import::cWaveReplaceHeaderFormat, sReplaceImport.fileName.cstr());
+        const char* sourceName = sReplaceImport.mode == WaveImportMode::Reimport ? sReplaceImport.fileName.cstr() : nullptr;
 
         SetNextWaveImportOldData(&sReplaceImport.oldData, &sReplaceImport.cleared);
-        result = DrawWaveImportBody(header.cstr(), GetImportEncoding(sReplaceImport, asset->getInfo().kind, asset), &sReplaceImport.info, messages::common::cReplace);
+        result = DrawWaveImportBody(sourceName, GetImportEncoding(sReplaceImport, asset->getInfo().kind, asset), &sReplaceImport.info, texts.commitLabel);
     }
 
     if (result == WaveImportResult::Commit && CommitAudioImport(&sReplaceImport, asset, asset))
@@ -532,6 +577,7 @@ static void DrawAssetReplacePopup()
 
     if (result != WaveImportResult::None)
     {
+        RemoveReimportSource();
         sReplaceImport.target = nullptr;
         ImGui::CloseCurrentPopup();
     }

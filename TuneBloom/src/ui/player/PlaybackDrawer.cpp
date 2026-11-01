@@ -8,6 +8,7 @@
 #include <ui/settings/Theme.h>
 #include <ui/app/UI.h>
 #include <ui/settings/UiColors.h>
+#include <ui/widgets/Widgets.h>
 
 #include <cmath>
 
@@ -30,6 +31,7 @@ constexpr f32 cTrackVolumeMax       = 2.0f;
 constexpr f32 cTrackVolumeDbSpeed   = 0.25f;
 constexpr f32 cTrackSwitchHeightEm  = 1.1f;
 constexpr f32 cTrackWaitBarHeight   = 3.0f;
+constexpr f32 cTrackSilentAlpha     = 0.55f;
 constexpr f32 cOverrideDotRadius    = 2.5f;
 constexpr f32 cOverrideDotInset     = 5.0f;
 constexpr f32 cSeqVarFramePaddingY  = 1.0f;
@@ -283,6 +285,19 @@ static void DrawSequencePanel(const PlaybackDrawerLayout& layout)
         sSoundPlayer.setSeqTempoRatio(cDrawerDefaultRatio);
 
     ImGui::EndDisabled();
+}
+
+static bool DrawTrackToggle(const char* label, bool on, const ImVec4& color, const ImVec2& size)
+{
+    if (on)
+        PushBrightButtonColors(color);
+
+    const bool pressed = ImGui::Button(label, size);
+
+    if (on)
+        PopBrightButtonColors();
+
+    return pressed;
 }
 
 static void DrawTrackSwitch(u32 trackNo, const ImVec2& size, bool exists)

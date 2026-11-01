@@ -1,5 +1,6 @@
 #include <ui/wave/WaveImportPanelInternal.h>
 
+#include <ui/browser/FilesPanel.h>
 #include <ui/widgets/Dialogs.h>
 #include <ui/items/ItemColumns.h>
 #include <ui/widgets/Knob.h>
@@ -12,6 +13,8 @@
 
 #include <bfsar/audio/LoopAnalysis.h>
 
+#include <scan/FileProbe.h>
+
 #include <algorithm>
 #include <cstdio>
 
@@ -23,6 +26,7 @@ constexpr f32 cLabelGapEm       = 0.6f;
 constexpr f32 cFieldWidthEm     = 5.0f;
 constexpr f32 cLoopModeWidthEm  = 9.0f;
 constexpr f32 cSourceFactsGapEm = 2.0f;
+constexpr f32 cSourceLabelGapEm = 0.6f;
 constexpr f32 cSourceNameMinEm  = 8.0f;
 
 constexpr f32 cSampleDragRange       = 2000.0f;
@@ -131,73 +135,42 @@ bool SampleField(const char* id, u32* value, u32 min, u32 max, u32 reset, u32 ra
     return changed;
 }
 
-static void DrawSourceFileRow(const char* path, const char* summary)
-{
-    DialogRow(messages::common::cFile);
-
-    const char* name = pathtext::FileName(path);
-    const f32 em = ImGui::GetFontSize();
-    const f32 gap = ImFloor(em * cSourceFactsGapEm);
-    const f32 summaryWidth = ImGui::CalcTextSize(summary).x;
-    const f32 maxNameWidth = sead::Mathf::max(ImFloor(em * cSourceNameMinEm), ImGui::GetContentRegionAvail().x - summaryWidth - gap);
-
-    ImVec2 namePos = ImGui::GetCursorScreenPos();
-    namePos.y += ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset;
-
-    const f32 nameRight = namePos.x + maxNameWidth;
-    ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), namePos, ImVec2(nameRight, namePos.y + em), nameRight, nameRight, name, nullptr, nullptr);
-    ImGui::Dummy(ImVec2(sead::Mathf::min(ImGui::CalcTextSize(name).x, maxNameWidth), em));
-
-    if (ImGui::BeginItemTooltip())
-    {
-        ImGui::TextUnformatted(name);
-        pathtext::DrawTooltipFolder(path, ImGui::CalcTextSize(name).x);
-        ImGui::EndTooltip();
-    }
-
-    ImGui::SameLine(0.0f, gap);
-    ImGui::TextColored(GetItemValueColor(), "%s", summary);
-    DialogGroupGap();
-}
-
-void WaveImportPanel::drawSourceHeader(const char* header, const char* filePath, u32 sampleRate, u32 channelCount, u32 sampleCount)
+static sead::FixedSafeString<96> FormatSourceFacts(const WaveFile::RiffWaveInfo& info)
 {
     sead::FixedSafeString<32> channels;
 
-    if (channelCount == 1)
+    if (info.numChannels == 1)
         channels.copy(messages::common::cMono);
-    else if (channelCount == 2)
+    else if (info.numChannels == 2)
         channels.copy(messages::common::cStereo);
     else
-        channels.format(messages::common::cChannelCountFormat, channelCount);
+        channels.format(messages::common::cChannelCountFormat, info.numChannels);
 
     sead::FixedSafeString<32> length;
-    FormatSampleTime(&length, sampleCount, sampleRate);
+    FormatSampleTime(&length, info.sampleCount, info.sampleRate);
 
-    const sead::FormatFixedSafeString<96> summary(messages::import::cWaveSourceSummaryFormat, sampleRate, channels.cstr(), length.cstr());
+    return sead::FormatFixedSafeString<96>(messages::import::cWaveSourceSummaryFormat, info.sampleRate, channels.cstr(), length.cstr());
+}
 
-    if (filePath)
-    {
-        DrawSourceFileRow(filePath, summary.cstr());
-        return;
-    }
+void WaveImportPanel::drawSourceHeader(SourceLine source, const char* sourceName, const WaveFile::RiffWaveInfo& info)
+{
+    if (source == SourceLine::Full)
+        DrawWaveImportSource(info, sourceName);
 
-    if (header)
-    {
-        const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const f32 width = ImGui::GetContentRegionAvail().x;
-        const f32 summaryWidth = ImGui::CalcTextSize(summary.cstr()).x;
-        const f32 headerRight = pos.x + sead::Mathf::max(0.0f, width - summaryWidth - ImGui::GetFontSize());
+    DialogRowGap();
+}
 
-        ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), pos, ImVec2(headerRight, pos.y + ImGui::GetTextLineHeight()), headerRight, headerRight, header, nullptr, nullptr);
-        ImGui::SetCursorScreenPos(ImVec2(pos.x + sead::Mathf::max(0.0f, width - summaryWidth), pos.y));
-    }
-
-    ImGui::TextColored(GetItemValueColor(), "%s", summary.cstr());
+static void FixedTooltip(const WaveImportEncoding& encoding)
+{
+    if (encoding.fixedReason)
+        ImGui::SetItemTooltip("%s", encoding.fixedReason);
 }
 
 static bool AcceptsSampleRate(const WaveImportEncoding& encoding, u32 sampleRate)
 {
+    if (encoding.fixedSampleRate != 0)
+        return sampleRate == encoding.fixedSampleRate;
+
     return !encoding.value || !encoding.acceptsSampleRate || encoding.acceptsSampleRate(*encoding.value, sampleRate);
 }
 
@@ -217,10 +190,8 @@ static WaveImportEncoding LimitToSampleRate(const WaveImportEncoding& encoding, 
     return limited;
 }
 
-void WaveImportPanel::drawUndecodableSource(const char* header, const char* filePath, const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
+void WaveImportPanel::drawUndecodableSource(const WaveImportEncoding& encoding, WaveFile::RiffWaveInfo* info)
 {
-    drawSourceHeader(header, filePath, info->sampleRate, info->numChannels, info->sampleCount);
-
     ImGui::TextDisabled("%s", messages::import::cWaveNoPreview);
 
     const f32 labelWidth = CalcLabelWidth({ messages::common::cEncoding, messages::common::cBitrate, messages::common::cStart, messages::common::cEnd });
@@ -311,9 +282,12 @@ void WaveImportPanel::drawFormatBox(FrameContext& ctx)
 
     const f32 labelWidth = CalcLeftLabelWidth();
 
+    ImGui::BeginDisabled(ctx.encoding.fixedReason != nullptr);
     drawEncodingField(ctx.encoding, labelWidth);
     drawBitrateField(ctx.encoding, labelWidth);
     drawSampleRateField(ctx.encoding, labelWidth);
+    ImGui::EndDisabled();
+
     drawChannelsField(labelWidth);
 
     EndGroupBox();
@@ -396,7 +370,10 @@ void WaveImportPanel::drawEncodingField(const WaveImportEncoding& encoding, f32 
 
     RowLabel(messages::common::cEncoding, labelWidth);
 
-    if (!ComboScroll("##Encoding", encoding.value, encoding.names, encoding.details, encoding.reasons, encoding.count))
+    const bool changed = ComboScroll("##Encoding", encoding.value, encoding.names, encoding.details, encoding.reasons, encoding.count);
+    FixedTooltip(encoding);
+
+    if (!changed)
         return;
 
     mTouched = true;
@@ -415,6 +392,12 @@ void WaveImportPanel::drawBitrateField(const WaveImportEncoding& encoding, f32 l
     if (DrawOpusBitrateCombo("##Bitrate", encoding.bitrate, encoding.originalBitrate, isUsed))
         mTouched = true;
 
+    if (encoding.fixedReason)
+    {
+        FixedTooltip(encoding);
+        return;
+    }
+
     if (isUsed)
         return;
 
@@ -427,6 +410,14 @@ void WaveImportPanel::fitSampleRateToEncoding(const WaveImportEncoding& encoding
 {
     if (!mSettings.pcm.isValid())
         return;
+
+    if (encoding.fixedSampleRate != 0)
+    {
+        if (mSettings.targetSampleRate != encoding.fixedSampleRate)
+            selectSampleRate(encoding.fixedSampleRate);
+
+        return;
+    }
 
     if (mRateBeforeFit != 0 && AcceptsSampleRate(encoding, mRateBeforeFit))
     {
@@ -513,6 +504,8 @@ void WaveImportPanel::drawSampleRateField(const WaveImportEncoding& encoding, f3
 
         ImGui::EndCombo();
     }
+
+    FixedTooltip(encoding);
 
     if (WheelAdjustIndex(&current, acceptedCount))
         selectSampleRate(accepted[current]);
@@ -624,6 +617,17 @@ void WaveImportPanel::drawLoopModeField(FrameContext& ctx, f32 width)
     BeginBoxTools(width);
     ImGui::SetNextItemWidth(width);
 
+    if (ctx.encoding.fixedReason)
+    {
+        ImGui::BeginDisabled();
+        if (ImGui::BeginCombo("##LoopMode", ctx.encoding.fixedReason))
+            ImGui::EndCombo();
+
+        ImGui::EndDisabled();
+        EndBoxTools();
+        return;
+    }
+
     const char* loopModeNames[] = { messages::import::cWaveLoopModeDetect, messages::common::cDisabled, messages::common::cManual };
     s32 loopModeIndex = static_cast<s32>(mSettings.loopMode);
 
@@ -649,16 +653,19 @@ void WaveImportPanel::drawLoopRangeFields(FrameContext& ctx, f32 labelWidth)
     const u32 rate = mSettings.workingSampleRate;
     const bool manual = mSettings.loopMode == LoopMode::Manual;
     const bool hasLoop = mSettings.hasLoop();
+    const bool dragOnly = mWaveformState.showCurve;
+    const char* startTip = !manual ? nullptr : dragOnly ? messages::import::cWaveLoopMarkerTip : messages::import::cWaveLoopStartTip;
+    const char* endTip = !manual ? nullptr : dragOnly ? messages::import::cWaveLoopMarkerTip : messages::import::cWaveLoopEndTip;
 
     u32 start = ctx.loopStart;
     u32 end = ctx.loopEnd;
 
     ImGui::BeginGroup();
 
-    RowLabel(messages::common::cStart, labelWidth, manual ? messages::import::cWaveLoopStartTip : nullptr);
+    RowLabel(messages::common::cStart, labelWidth, startTip);
     bool fieldsChanged = SampleField("##LoopStart", &start, 0, total > 0 ? total - 1 : 0, ctx.cropStart, rate, hasLoop);
 
-    RowLabel(messages::common::cEnd, labelWidth, manual && !mSettings.curveEnabled ? messages::import::cWaveLoopEndTip : nullptr);
+    RowLabel(messages::common::cEnd, labelWidth, endTip);
     fieldsChanged |= SampleField("##LoopEnd", &end, 1, total, ctx.cropEnd, rate, hasLoop);
 
     ImGui::EndGroup();
@@ -758,4 +765,44 @@ void WaveImportPanel::drawLoopBox(FrameContext& ctx, f32 labelWidth, f32 fill)
     EndGroupBox();
 }
 
+}
+
+void DrawWaveImportSource(const WaveFile::RiffWaveInfo& info, const char* name)
+{
+    using namespace waveimport;
+
+    const bool isFile = name == nullptr;
+    const char* shownName = isFile ? pathtext::FileName(info.path.cstr()) : name;
+    const sead::FixedSafeString<96> facts = FormatSourceFacts(info);
+
+    const f32 em = ImGui::GetFontSize();
+    const f32 gap = ImFloor(em * cSourceFactsGapEm);
+    const f32 lineRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+
+    ImGui::TextDisabled("%s", messages::import::cWaveSourceLabel);
+    ImGui::SameLine(0.0f, ImFloor(em * cSourceLabelGapEm));
+    ImGui::TextColored(GetFileKindColor(BrowserFileKind::Wav), "%s", GetFileKindIcon(BrowserFileKind::Wav));
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+
+    const f32 factsWidth = ImGui::CalcTextSize(facts.cstr()).x;
+    const f32 nameWidth = ImGui::CalcTextSize(shownName).x;
+    const f32 maxNameWidth = sead::Mathf::max(ImFloor(em * cSourceNameMinEm), ImGui::GetContentRegionAvail().x - factsWidth - gap);
+    const ImVec2 namePos = ImGui::GetCursorScreenPos();
+    const f32 nameRight = namePos.x + maxNameWidth;
+    ImGui::RenderTextEllipsis(ImGui::GetWindowDrawList(), namePos, ImVec2(nameRight, namePos.y + em), nameRight, nameRight, shownName, nullptr, nullptr);
+    ImGui::Dummy(ImVec2(sead::Mathf::min(nameWidth, maxNameWidth), em));
+
+    if ((isFile || nameWidth > maxNameWidth) && ImGui::BeginItemTooltip())
+    {
+        ImGui::TextUnformatted(shownName);
+
+        if (isFile)
+            pathtext::DrawTooltipFolder(info.path.cstr(), nameWidth);
+
+        ImGui::EndTooltip();
+    }
+
+    ImGui::SameLine();
+    ImGui::SetCursorScreenPos(ImVec2(sead::Mathf::max(ImGui::GetCursorScreenPos().x, lineRight - factsWidth), namePos.y));
+    ImGui::TextColored(GetItemValueColor(), "%s", facts.cstr());
 }

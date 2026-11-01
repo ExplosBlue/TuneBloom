@@ -83,15 +83,6 @@ fs::path GetRootDir()
     return fs::path(GetConfigDir()) / cRootFolder;
 }
 
-static u32 GetProcessId()
-{
-#if defined(SEAD_PLATFORM_WINDOWS)
-    return static_cast<u32>(GetCurrentProcessId());
-#else
-    return static_cast<u32>(getpid());
-#endif
-}
-
 #if defined(SEAD_PLATFORM_WINDOWS)
 static std::string GetProcessImageName(HANDLE process)
 {
@@ -199,7 +190,7 @@ static std::string GetArchiveKey()
     std::string& untitledKey = GetUntitledKey();
 
     if (untitledKey.empty())
-        untitledKey = cUntitledPrefix + FormatTimeName(std::time(nullptr)) + "-" + std::to_string(GetProcessId());
+        untitledKey = cUntitledPrefix + FormatTimeName(std::time(nullptr)) + "-" + std::to_string(fileio::GetOwnProcessId());
 
     return untitledKey;
 }
@@ -669,7 +660,7 @@ static fs::path GetMarkerPath()
 {
     const std::string documentSuffix = "-" + std::to_string(ActiveDocumentState().serial);
 
-    return GetRootDir() / (cMarkerPrefix + std::to_string(GetProcessId()) + documentSuffix + cMarkerSuffix);
+    return GetRootDir() / (cMarkerPrefix + std::to_string(fileio::GetOwnProcessId()) + documentSuffix + cMarkerSuffix);
 }
 
 static void WriteMarkerFile(const fs::path& path, const std::string& snapshotDir)
@@ -873,7 +864,7 @@ static bool FindCompleteSnapshot(const fs::path& keyDir, Snapshot* out)
 
 static std::vector<Marker> ListDeadMarkers(std::vector<std::string>* usedKeys)
 {
-    const u32 ownPid = GetProcessId();
+    const u32 ownPid = fileio::GetOwnProcessId();
 
     std::vector<Marker> markers;
     std::error_code ec;
@@ -905,7 +896,7 @@ static bool FindRecovery(const Marker& marker, Recovery* recovery)
     fs::path markerPath = marker.path;
     std::error_code markerError;
 
-    if (marker.pid == GetProcessId())
+    if (marker.pid == fileio::GetOwnProcessId())
     {
         const std::string stem = marker.path.stem().string();
 

@@ -3,6 +3,9 @@
 #include <ui/widgets/ContextMenu.h>
 #include <messages/Messages.h>
 #include <ui/app/UI.h>
+#include <ui/project/FileLists.h>
+
+#include <bfsar/files/BfstmFile.h>
 
 void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)
 {
@@ -25,21 +28,13 @@ void DrawWaveSoundUI(Sound::WaveSoundInfo& waveSoundInfo)
 
         if (BeginContextMenu("WaveFileMenu"))
         {
+            WaveFile* wave = static_cast<WaveFile*>(waveFile);
+
             if (ContextMenuItem(ICON_LC_EXTERNAL_LINK, messages::sound::cWaveFileGoTo))
-                SelectItem(waveFile);
+                SelectItem(wave);
 
             ContextMenuSeparator();
-
-            if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace))
-                RequestWaveFileReplace(static_cast<WaveFile*>(waveFile));
-
-            ImGui::SetItemTooltip("%s", messages::import::cReplaceWaveFileTip);
-
-            if (ContextMenuItem(ICON_LC_SLIDERS_HORIZONTAL, messages::import::cReimportMenuLabel))
-                RequestWaveFileReimport(static_cast<WaveFile*>(waveFile));
-
-            ImGui::SetItemTooltip("%s", messages::import::cReimportWaveFileTip);
-
+            DrawWaveFileMenuItems(wave, { wave }, !IsStreamTrackWave(*wave));
             EndContextMenu();
         }
     }

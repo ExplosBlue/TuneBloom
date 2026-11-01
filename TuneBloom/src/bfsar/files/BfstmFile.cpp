@@ -633,6 +633,21 @@ static void WriteRegionBlock(StreamWriteContext& context)
     writer.closeBlock();
 }
 
+static bool HasMarkerBlock(const StreamWriteContext& context)
+{
+    return context.format == ArchiveFormat::BFSAR && CountStreamMarkersUpTo(*context.layout, context.sampleCount) > 0;
+}
+
+static void WriteMarkerBlock(StreamWriteContext& context)
+{
+    FileWriter& writer = context.writer;
+
+    writer.openBlock(nw::snd::internal::ElementType_StreamSoundFile_MarkerBlock, "MRKR");
+    WriteStreamMarkers(context.stream, *context.layout, context.sampleCount);
+    writer.align(cBlockAlignment);
+    writer.closeBlock();
+}
+
 static void WriteChannelBlock(sead::WriteStream* stream, const StreamChannelData& channelData, u32 offset, u32 blockBytes)
 {
     const u32 availableBytes = offset < channelData.bufferSize ? channelData.bufferSize - offset : 0;
@@ -694,7 +709,8 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
 
     bool hasSeekBlock = context.isDspAdpcm;
     bool hasRegionBlock = HasRegionBlock(context);
-    u32 fileBlockCount = 2 + (hasSeekBlock ? 1 : 0) + (hasRegionBlock ? 1 : 0);
+    bool hasMarkerBlock = HasMarkerBlock(context);
+    u32 fileBlockCount = 2 + (hasSeekBlock ? 1 : 0) + (hasRegionBlock ? 1 : 0) + (hasMarkerBlock ? 1 : 0);
 
     context.writer.openFile(GetInnerFileMagic(target.format, InnerFileKind::Stream), fileBlockCount, version);
 
@@ -705,6 +721,9 @@ bool BfstmFile::WriteBfstmFile(sead::FileHandle& handle, const Sound::StreamSoun
 
     if (hasRegionBlock)
         WriteRegionBlock(context);
+
+    if (hasMarkerBlock)
+        WriteMarkerBlock(context);
 
     WriteDataBlock(context);
 
@@ -1113,6 +1132,67 @@ bool ReadStreamFileTracks(nw::snd::internal::StreamSoundFileReader& reader, Soun
     }
 
     return readAllTracks;
+}
+
+template <typename Func>
+static void ForEachOtherStreamTrackWave(const WaveFile& source, Func func)
+{
+    for (ItemReference* reference : source.getReferences())
+    {
+        Item* owner = reference->getOwner();
+
+        if (owner->getItemType() != Item::ItemType::StreamTrack || !owner->list())
+            continue;
+
+        s32 trackNo = 0;
+
+        for (Item* item : *owner->list())
+        {
+            WaveFile* wave = static_cast<WaveFile*>(static_cast<Sound::StreamSoundInfo::Track*>(item)->getWaveFileRef().getItem());
+
+            if (wave && wave != &source && !func(wave, trackNo))
+                return;
+
+            trackNo++;
+        }
+    }
+}
+
+bool IsStreamTrackWave(const WaveFile& wave)
+{
+    for (const ItemReference* reference : wave.getReferences())
+    {
+        if (reference->getOwner()->getItemType() == Item::ItemType::StreamTrack)
+            return true;
+    }
+
+    return false;
+}
+
+void ShareStreamTrackLoop(WaveFile& source)
+{
+    ForEachOtherStreamTrackWave(source, [&source](WaveFile* wave, s32)
+    {
+        wave->copyLoopFrom(source);
+        return true;
+    });
+}
+
+const WaveFile* FindOtherStreamTrackWave(const WaveFile& wave, s32* trackNo)
+{
+    const WaveFile* found = nullptr;
+
+    ForEachOtherStreamTrackWave(wave, [&found, trackNo](WaveFile* other, s32 otherTrackNo)
+    {
+        found = other;
+
+        if (trackNo)
+            *trackNo = otherTrackNo;
+
+        return false;
+    });
+
+    return found;
 }
 
 u32 GetDefaultStreamTrackCount(u32 channelCount)

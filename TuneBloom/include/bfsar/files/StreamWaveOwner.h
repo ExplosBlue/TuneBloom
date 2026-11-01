@@ -12,6 +12,11 @@ public:
     virtual Item::List& getStreamWaveList() = 0;
     virtual void prepareStreamWave(WaveFile* wave) = 0;
 
+    virtual const Item::List* getArchiveWaveList()
+    {
+        return nullptr;
+    }
+
     virtual void nameStreamWave(WaveFile* wave, const sead::SafeString& streamName, u32 trackNo, u32 trackCount)
     {
         NameStreamTrackWave(wave, streamName, trackNo, trackCount);

@@ -40,7 +40,7 @@ BrowserFileKind LooseWaveDocument::fileKind() const
 
 void LooseWaveDocument::drawInfo(UIType)
 {
-    mFile.getWave()->drawEditorUI(true);
+    mFile.getWave()->drawEditorUI();
 }
 
 bool LooseWaveDocument::drawFileProperties()

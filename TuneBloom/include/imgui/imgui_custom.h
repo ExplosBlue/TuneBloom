@@ -33,6 +33,8 @@ void AddRectFilledSurface(ImDrawList* draw_list, const ImVec2& p_min, const ImVe
 
 float GetIconStrokeThickness(float font_size);
 
+float CalcTabLabelOffset(float tab_width, float frame_padding_x, const char* label);
+
 void SetHoverAnimation(bool enabled);
 float GetHoverRatio(ImGuiID id, bool hovered);
 ImU32 GetHoverColorU32(ImGuiID id, bool hovered, bool active, ImGuiCol idle_col, ImGuiCol hovered_col, ImGuiCol active_col, float alpha_mul = 1.0f);

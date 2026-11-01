@@ -16,6 +16,7 @@ using Dragging = LoopWaveformState::Dragging;
 
 constexpr float  cDefaultCanvasH   = 240.0f;
 constexpr float  cSeekRulerH       = 30.0f;
+constexpr float  cReadoutTextScale = 0.85f;
 constexpr float  cCropGrabPx       = 8.0f;
 constexpr float  cMarkerGrabPx     = 6.0f;
 
@@ -66,10 +67,10 @@ static u32 FindMouseSample(const LoopWaveformState& state, const WaveformCanvas&
     return std::min(sample, canvas.sampleCount);
 }
 
-static void BeginDrag(LoopWaveformState& state, Dragging cropHover, Dragging markerHover, ImGuiMouseButton endButton, bool editable)
+static void BeginDrag(LoopWaveformState& state, Dragging cropHover, Dragging markerHover, bool grabMarkers, ImGuiMouseButton endButton, bool editable)
 {
-    const bool startClicked = IsMouseClicked(ImGuiMouseButton_Left) && (!state.grabMarkers || markerHover == Dragging::Start);
-    const bool endClicked = IsMouseClicked(endButton) && (!state.grabMarkers || markerHover == Dragging::End);
+    const bool startClicked = IsMouseClicked(ImGuiMouseButton_Left) && (!grabMarkers || markerHover == Dragging::Start);
+    const bool endClicked = IsMouseClicked(endButton) && (!grabMarkers || markerHover == Dragging::End);
 
     if (cropHover != Dragging::None && IsMouseClicked(ImGuiMouseButton_Left))
     {
@@ -213,17 +214,26 @@ static bool HandleInteraction(LoopWaveformState& state, const WaveformCanvas& ca
         SetMouseCursor(state.curveHoverTension ? ImGuiMouseCursor_ResizeNS : ImGuiMouseCursor_ResizeAll);
     }
 
+    const bool grabMarkers = state.grabMarkers || state.showCurve;
+    Dragging markerHover = Dragging::None;
+
+    if (grabMarkers && editable && canvas.hovered && state.curveHoverIndex < 0)
+        markerHover = FindEdgeHover(state, canvas, loopStart, loopEnd, cMarkerGrabPx, Dragging::Start, state.lockEnd ? Dragging::None : Dragging::End);
+
+    if (cropHover != Dragging::None && markerHover != Dragging::None)
+    {
+        if (canvas.mouse.y < canvas.height * 0.5f)
+            cropHover = Dragging::None;
+        else
+            markerHover = Dragging::None;
+    }
+
     const bool cropDragging = IsCropDrag(state.dragging);
 
     if (cropDragging || (cropHover != Dragging::None && state.dragging == Dragging::None))
         SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
-    Dragging markerHover = Dragging::None;
-
-    if (state.grabMarkers && editable && canvas.hovered)
-        markerHover = FindEdgeHover(state, canvas, loopStart, loopEnd, cMarkerGrabPx, Dragging::Start, state.lockEnd ? Dragging::None : Dragging::End);
-
-    if (state.grabMarkers && (IsLoopDrag(state.dragging) || (markerHover != Dragging::None && state.dragging == Dragging::None)))
+    if (grabMarkers && (IsLoopDrag(state.dragging) || (markerHover != Dragging::None && state.dragging == Dragging::None)))
         SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
     if (state.dragging == Dragging::None)
@@ -232,14 +242,14 @@ static bool HandleInteraction(LoopWaveformState& state, const WaveformCanvas& ca
     if (state.cuesEditable && (state.dragging == Dragging::Cue || (state.cueHover >= 0 && state.dragging == Dragging::None)))
         SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
-    const ImGuiMouseButton endButton = state.grabMarkers ? ImGuiMouseButton_Left : ImGuiMouseButton_Right;
+    const ImGuiMouseButton endButton = grabMarkers ? ImGuiMouseButton_Left : ImGuiMouseButton_Right;
     const bool curveEdit = state.showCurve && canvas.hovered && state.dragging == Dragging::None && BeginCurveEdit(state, canvas.mouse, canvas.width, canvas.height, &changed);
     const bool canBegin = canvas.hovered && !curveEdit && state.dragging == Dragging::None;
 
     if (canBegin && state.cueHover >= 0 && IsMouseClicked(ImGuiMouseButton_Left))
         BeginCueDrag(state, canvas);
     else if (canBegin)
-        BeginDrag(state, cropHover, markerHover, endButton, editable);
+        BeginDrag(state, cropHover, markerHover, grabMarkers, endButton, editable);
 
     if (state.dragging == Dragging::Cue)
     {
@@ -312,7 +322,7 @@ bool LoopWaveformEditor(const char* idStr, LoopWaveformState& state,
         draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), Palette().bg);
 
     if (sampleCount > 0 && readoutText && readoutText[0])
-        draw->AddText(ImVec2(origin.x + 9.0f, origin.y + 6.0f), Palette().inkFaint, readoutText);
+        draw->AddText(GetFont(), GetFontSize() * cReadoutTextScale, ImVec2(origin.x + 6.0f, origin.y + 4.0f), Palette().inkFaint, readoutText);
 
     InvisibleButton("##canvas", size);
 

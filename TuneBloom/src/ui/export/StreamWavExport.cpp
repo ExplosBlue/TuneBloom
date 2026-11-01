@@ -72,11 +72,6 @@ const WaveFile* FindStreamExportWave(const Sound::StreamSoundInfo& stream)
     return nullptr;
 }
 
-bool HasExportLoop(const WaveFile* wave)
-{
-    return wave->getIsLoop() && wave->getOriginalLoopEndFrame() > wave->getOriginalLoopStartFrame() && wave->getOriginalLoopEndFrame() <= wave->getSampleCount();
-}
-
 static constexpr u64 cExportSampleMax = 0x20000000;
 
 static void ApplyLoopAndFade(std::vector<std::vector<s16>>& channels, u32 loopStart, u32 loopEnd, u32 loopCount, u32 fadeSamples)
@@ -215,7 +210,7 @@ bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool mu
 
     WavLoop loop;
 
-    if (loopWave && HasExportLoop(loopWave))
+    if (loopWave && loopWave->hasValidLoop())
     {
         const f64 rateScale = static_cast<f64>(sampleRate) / loopWave->getSampleRate();
 

@@ -28,6 +28,7 @@ bool RenameOver(const char* tempPath, const char* destPath);
 bool CopyFileOver(const char* srcPath, const char* destPath);
 void RemoveFile(const char* path);
 const char* GetTempFolder();
+u32 GetOwnProcessId();
 bool GetNarrowPath(const std::filesystem::path& path, std::string* out);
 std::string CanonicalPath(const char* path);
 std::string NormalizePath(const char* path);

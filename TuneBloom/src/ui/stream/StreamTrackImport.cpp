@@ -1,113 +1,42 @@
 #include <ui/stream/StreamTrackImport.h>
 
+#include <ui/stream/StreamTrackImportInternal.h>
+
 #include <ui/widgets/Dialogs.h>
 #include <ui/file/File.h>
 #include <ui/file/FileDialogs.h>
-#include <ui/widgets/Knob.h>
+#include <ui/items/ItemList.h>
 #include <messages/Messages.h>
-#include <ui/player/PlayerViews.h>
 #include <bfsar/model/MessageLog.h>
-#include <ui/widgets/Properties.h>
+#include <ui/stream/OpusBitrate.h>
 #include <ui/stream/StreamRegions.h>
-#include <ui/settings/UiColors.h>
+#include <ui/stream/StreamTrackAdd.h>
 #include <ui/file/UnsavedChanges.h>
-#include <ui/wave/WaveFormatUI.h>
-#include <ui/widgets/Widgets.h>
+#include <ui/wave/WaveImportPanel.h>
+
+#include <aal/Bwav.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
 
 #include <bfsar/audio/AudioProcessing.h>
 #include <bfsar/audio/DecodedPcm.h>
+#include <bfsar/io/FileIo.h>
 #include <bfsar/model/Sound.h>
 #include <bfsar/model/StreamSource.h>
 #include <bfsar/audio/TempWavWriter.h>
 #include <bfsar/files/WaveFile.h>
-#include <bfsar/io/FileIo.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <string>
 #include <utility>
 #include <vector>
 
-namespace
+namespace trackimport
 {
 
-constexpr f32 cPanelWidthEm    = 36.0f;
-constexpr f32 cLoopDragRange   = 2000.0f;
-
-constexpr u32 cMaxFiles = cStrmChannelNum;
-
-using ChannelData = std::vector<std::vector<float>>;
-
-enum class TrackLayout : s32
-{
-    PerFile = 0,
-    PairMono = 1,
-    SplitMono = 2,
-};
-
-enum class LoopSource : s32
-{
-    FirstFile = 0,
-    Disabled = 1,
-    Manual = 2,
-};
-
-struct SourceFile
-{
-    WaveFile::RiffWaveInfo info;
-    sead::FixedSafeString<512> name;
-};
-
-struct ChannelSource
-{
-    u32 file = 0;
-    u32 channel = 0;
-};
-
-struct TrackPlan
-{
-    ChannelSource sources[snd::cWaveChannelMax];
-    u32 count = 0;
-};
-
-struct FileTracks
-{
-    s32 first = -1;
-    s32 last = -1;
-    const char* side = nullptr;
-};
-
-struct FileActions
-{
-    s32 moveUp = -1;
-    s32 moveDown = -1;
-    s32 remove = -1;
-    s32 preview = -1;
-};
-
-struct ImportTarget
-{
-    WaveFile::Encoding encoding = WaveFile::Encoding::DspAdpcm;
-    u32 sampleRate = 0;
-    u32 frameCount = 0;
-    bool isLoop = false;
-    u32 loopStart = 0;
-    u32 loopEnd = 0;
-};
-
-u32 ScaleFrames(u32 frames, u32 fromRate, u32 toRate)
-{
-    if (fromRate == toRate || fromRate == 0)
-        return frames;
-
-    return static_cast<u32>(std::llround(static_cast<double>(frames) * toRate / fromRate));
-}
-
-static const WaveFile* FindMainWave(const Sound::StreamSoundInfo& stream)
+const WaveFile* FindMainWave(const Sound::StreamSoundInfo& stream, s32* trackNo)
 {
     const Sound::StreamSoundInfo::Track::List& tracks = stream.getTrackList();
 
@@ -115,185 +44,166 @@ static const WaveFile* FindMainWave(const Sound::StreamSoundInfo& stream)
     {
         const Sound::StreamSoundInfo::Track& track = *static_cast<const Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val());
 
-        if (track.getWaveFileRef().isAttached())
-            return static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
+        if (!track.getWaveFileRef().isAttached())
+            continue;
+
+        if (trackNo)
+            *trackNo = i;
+
+        return static_cast<const WaveFile*>(track.getWaveFileRef().getItem());
     }
 
     return nullptr;
 }
 
-std::string MakeTempPath(u32 index)
+static u32 CountEmptyTracks(const Sound::StreamSoundInfo& stream)
+{
+    return FindMainWave(stream) ? 0 : static_cast<u32>(stream.getTrackList().size());
+}
+
+static u32 sEditSerial = 0;
+
+static std::string MakeTrackTempPath(const char* stem, s32 number = -1)
 {
     char path[700];
-    snprintf(path, sizeof(path), "%s/tunebloom_track_%u.wav", fileio::GetTempFolder(), index);
+
+    const u32 processId = fileio::GetOwnProcessId();
+
+    if (number < 0)
+        snprintf(path, sizeof(path), "%s/tunebloom_track_%u_%s.wav", fileio::GetTempFolder(), processId, stem);
+    else
+        snprintf(path, sizeof(path), "%s/tunebloom_track_%u_%s%d.wav", fileio::GetTempFolder(), processId, stem, number);
 
     return path;
 }
 
-class StreamTrackImport
+static bool ReadSourceFile(SourceFile* file, const std::string& path)
 {
-public:
-    void request(const StreamSource& source);
-    void draw(const StreamSource& source);
+    file->info.clear();
+    file->info.path.copy(path.c_str());
+    file->editedPath.clear();
 
-    bool isPendingFor(const Sound::StreamSoundInfo* stream) const
+    if (!WaveFile::readRiffWavInfo(&file->info, true) || file->info.sampleRate == 0)
     {
-        return targetSource.stream == stream && (openRequested || fileCount > 0);
-    }
-
-    void resetCreate();
-    void setCreateMainWave(WaveFile* wave, const sead::SafeString& name);
-    void setCreateFiles(const std::vector<std::string>& paths);
-    void drawCreate();
-    bool buildCreateWaves(sead::BufferedSafeString* error);
-    void attachCreateWaves(Sound* sound);
-
-    bool hasCreateMainWave() const
-    {
-        return createMainWave != nullptr;
-    }
-
-    bool takeEditRequest()
-    {
-        const bool requested = editRequested;
-        editRequested = false;
-
-        return requested;
-    }
-
-    u32 getFileCount() const
-    {
-        return fileCount;
-    }
-
-    f32 getBodyHeight() const
-    {
-        return bodyHeight;
-    }
-
-private:
-    SourceFile files[cMaxFiles];
-    u32 fileCount = 0;
-
-    StreamSource targetSource;
-    bool openRequested = false;
-
-    WaveFile::Encoding encoding = WaveFile::Encoding::DspAdpcm;
-    u32 sampleRate = 0;
-    TrackLayout layout = TrackLayout::PerFile;
-    LoopSource loopSource = LoopSource::FirstFile;
-    u32 manualLoopStart = 0;
-    u32 manualLoopEnd = 0;
-
-    WaveFile* previewWave = nullptr;
-    s32 previewIndex = -1;
-
-    WaveFile* createMainWave = nullptr;
-    sead::FixedSafeString<512> createMainName;
-    bool editRequested = false;
-
-    WaveFile* createdWaves[cStrmTrackNum] = {};
-    u32 createdWaveCount = 0;
-
-    f32 bodyHeight = 0.0f;
-
-    void reset()
-    {
-        stopPreview();
-
-        fileCount = 0;
-        targetSource = {};
-        openRequested = false;
-        encoding = WaveFile::Encoding::DspAdpcm;
-        sampleRate = 0;
-        layout = TrackLayout::PerFile;
-        loopSource = LoopSource::FirstFile;
-        manualLoopStart = 0;
-        manualLoopEnd = 0;
-    }
-
-    bool hasSampleRate(u32 rate) const
-    {
-        for (u32 i = 0; i < fileCount; i++)
-            if (files[i].info.sampleRate == rate)
-                return true;
-
+        file->info.clear();
         return false;
     }
 
-    bool isOfferedSampleRate(u32 rate) const
-    {
-        for (u32 preset : cImportSampleRates)
-            if (preset == rate)
-                return true;
+    fileio::GetFileStem(&file->name, file->info.path);
+    file->sourceInfo = file->info;
 
-        return hasSampleRate(rate);
+    return true;
+}
+
+static bool ReadMainSourceFile(SourceFile* file, const std::string& path)
+{
+    if (!ReadSourceFile(file, path))
+        return false;
+
+    if (file->info.numChannels <= snd::cWaveChannelMax)
+        return true;
+
+    MessageLog::instance()->addPopup({ messages::wavefile::cWavOnlyMonoStereo });
+    file->info.clear();
+
+    return false;
+}
+
+static size_t ReadFirstMainFile(SourceFile* file, const std::vector<std::string>& paths)
+{
+    size_t first = 0;
+
+    while (first < paths.size() && !ReadMainSourceFile(file, paths[first]))
+        first++;
+
+    return first;
+}
+
+static bool WritePlainPcmCopy(const WaveFile::RiffWaveInfo& info, const std::string& tempPath, WaveFile::RiffWaveInfo* out)
+{
+    ChannelData channels;
+
+    if (!decodeRiffChannels(info, &channels) || !TempWavWriter::writeInfo(channels, info.sampleRate, tempPath, out))
+        return false;
+
+    out->isLoop = info.isLoop;
+    out->loopStartFrame = info.loopStartFrame;
+    out->loopEndFrame = info.loopEndFrame;
+
+    return true;
+}
+
+void RemoveEditedFile(SourceFile* file)
+{
+    if (!file->editedPath.empty())
+        fileio::RemoveFile(file->editedPath.c_str());
+
+    file->editedPath.clear();
+}
+
+void StreamTrackImport::reset()
+{
+    stopPreview();
+
+    for (u32 i = 0; i < fileCount; i++)
+        RemoveEditedFile(&files[i]);
+
+    RemoveEditedFile(&mainFile);
+    fileCount = 0;
+    targetSource = {};
+    openRequested = false;
+    anchorTrack = nullptr;
+    layout = TrackLayout::PerFile;
+
+    delete mainWave;
+    mainWave = nullptr;
+    mainFile.info.clear();
+    mainFile.sourceInfo.clear();
+    mainFile.name.clear();
+    mainEncoding = WaveFile::Encoding::DspAdpcm;
+
+    editIndex = cEditMain;
+    panelOwner = cEditNone;
+    editorOpenRequested = false;
+    editorShown = false;
+    directImport = false;
+
+    if (hasWaveSource)
+        fileio::RemoveFile(MakeTrackTempPath("wave").c_str());
+
+    hasWaveSource = false;
+}
+
+u32 StreamTrackImport::findFirstNewTrack() const
+{
+    if (!targetSource.stream || !FindMainWave(*targetSource.stream))
+        return 0;
+
+    const Sound::StreamSoundInfo::Track::List& tracks = targetSource.stream->getTrackList();
+
+    for (s32 i = 0; i < tracks.size(); i++)
+    {
+        if (tracks.nth(i)->val() != anchorTrack)
+            continue;
+
+        const bool isFilled = static_cast<const Sound::StreamSoundInfo::Track*>(anchorTrack)->getWaveFileRef().isAttached();
+
+        return static_cast<u32>(i) + (isFilled ? 1 : 0);
     }
 
-    bool isMainPreviewing() const
-    {
-        return createMainWave && sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == createMainWave;
-    }
+    return static_cast<u32>(tracks.size());
+}
 
-    u32 scaledLength(const SourceFile& file, u32 rate) const
-    {
-        return ScaleFrames(file.info.sampleCount, file.info.sampleRate, rate);
-    }
+void StreamTrackImport::stopPreview()
+{
+    if (previewWave && sSoundPlayer.getPlayingWaveFile() == previewWave)
+        sSoundPlayer.stopAllPlayers();
 
-    u32 longestLength(u32 rate) const
-    {
-        u32 longest = 0;
+    if (mainWave && sSoundPlayer.getPlayingWaveFile() == mainWave)
+        sSoundPlayer.stopAllPlayers();
 
-        for (u32 i = 0; i < fileCount; i++)
-            longest = std::max(longest, scaledLength(files[i], rate));
-
-        return longest;
-    }
-
-    bool isPreviewing(u32 index) const
-    {
-        return previewIndex == static_cast<s32>(index) && previewWave && sSoundPlayer.isActive() && sSoundPlayer.getPlayingWaveFile() == previewWave;
-    }
-
-    void stopPreview()
-    {
-        if (previewWave && sSoundPlayer.getPlayingWaveFile() == previewWave)
-            sSoundPlayer.stopAllPlayers();
-
-        if (createMainWave && sSoundPlayer.getPlayingWaveFile() == createMainWave)
-            sSoundPlayer.stopAllPlayers();
-
-        previewIndex = -1;
-    }
-
-    void togglePreview(u32 index);
-
-    std::vector<TrackPlan> buildPlan() const;
-    ImportTarget computeTarget(const WaveFile* mainWave) const;
-    bool needsProcessing(const TrackPlan& plan, const ImportTarget& target) const;
-    WaveFile* createWave(const TrackPlan& plan, const ImportTarget& target, const sead::SafeString& name, u32 tempIndex, std::vector<ChannelData>& decoded) const;
-    bool createWaves(const std::vector<TrackPlan>& plans, const ImportTarget& target, std::vector<WaveFile*>* waves, sead::BufferedSafeString* failedName);
-    StreamWaveOwner& waveOwner() const;
-    void attachWaves(Sound::StreamSoundInfo& stream, WaveFile* const* waves, u32 waveCount) const;
-    bool commit(const std::vector<TrackPlan>& plans, const ImportTarget& target);
-
-    bool pickPaths(std::vector<std::string>* paths) const;
-    void appendPaths(const std::vector<std::string>& paths, Item* owner);
-    bool loadFiles(Item* owner);
-    bool findLimitError(const Sound::StreamSoundInfo* stream, const std::vector<TrackPlan>& plans, sead::BufferedSafeString* error) const;
-
-    bool drawBody(const Sound::StreamSoundInfo* stream, std::vector<TrackPlan>* plans, ImportTarget* target);
-    void drawMainRow();
-    void drawFileTable(const std::vector<TrackPlan>& plans, u32 firstTrackIndex, bool hasMainRow);
-    FileTracks findFileTracks(const std::vector<TrackPlan>& plans, u32 index) const;
-    void drawFileRow(u32 index, const FileTracks& tracks, u32 firstTrackIndex, FileActions* actions);
-    void applyFileActions(const FileActions& actions);
-    void drawSettings(const ImportTarget& target, bool locked);
-    void drawSampleRateRow(const ImportTarget& target, bool locked);
-    void drawLoopRows(const ImportTarget& target, bool locked);
-    void drawLayoutRow();
-    void drawNotes(const ImportTarget& target, bool locked, bool isCreate) const;
-};
+    previewIndex = -1;
+}
 
 void StreamTrackImport::togglePreview(u32 index)
 {
@@ -320,6 +230,16 @@ void StreamTrackImport::togglePreview(u32 index)
 
     sSoundPlayer.playWaveFile(*previewWave, -1, nullptr, 0, false);
     previewIndex = static_cast<s32>(index);
+}
+
+void StreamTrackImport::toggleMainPreview()
+{
+    const bool wasPlaying = isMainPreviewing();
+
+    stopPreview();
+
+    if (!wasPlaying)
+        sSoundPlayer.playWaveFile(*mainWave, -1, nullptr, 0, false);
 }
 
 std::vector<TrackPlan> StreamTrackImport::buildPlan() const
@@ -355,54 +275,14 @@ std::vector<TrackPlan> StreamTrackImport::buildPlan() const
     return plans;
 }
 
-ImportTarget StreamTrackImport::computeTarget(const WaveFile* mainWave) const
+ImportTarget StreamTrackImport::computeTarget(const WaveFile& leadWave) const
 {
     ImportTarget target;
-
-    if (mainWave)
-    {
-        target.encoding = mainWave->getEncoding();
-        target.sampleRate = mainWave->getSampleRate();
-        target.frameCount = mainWave->getOriginalLoopEndFrame();
-        target.isLoop = mainWave->getIsLoop();
-        target.loopStart = mainWave->getOriginalLoopStartFrame();
-        target.loopEnd = target.frameCount;
-
-        return target;
-    }
-
-    target.encoding = encoding;
-    target.sampleRate = sampleRate;
-    target.frameCount = longestLength(sampleRate);
-
-    const WaveFile::RiffWaveInfo& first = files[0].info;
-
-    bool wantLoop = false;
-    u32 loopStart = 0;
-    u32 loopEnd = 0;
-
-    if (loopSource == LoopSource::FirstFile && first.isLoop)
-    {
-        wantLoop = true;
-        loopStart = ScaleFrames(first.loopStartFrame, first.sampleRate, sampleRate);
-        loopEnd = ScaleFrames(first.loopEndFrame, first.sampleRate, sampleRate);
-    }
-    else if (loopSource == LoopSource::Manual)
-    {
-        wantLoop = true;
-        loopStart = manualLoopStart;
-        loopEnd = manualLoopEnd;
-    }
-
-    loopEnd = std::min(loopEnd, target.frameCount);
-
-    if (wantLoop && loopStart < loopEnd)
-    {
-        target.isLoop = true;
-        target.loopStart = loopStart;
-        target.frameCount = loopEnd;
-    }
-
+    target.encoding = leadWave.getEncoding();
+    target.sampleRate = leadWave.getSampleRate();
+    target.frameCount = leadWave.getOriginalLoopEndFrame();
+    target.isLoop = leadWave.getIsLoop();
+    target.loopStart = leadWave.getOriginalLoopStartFrame();
     target.loopEnd = target.frameCount;
 
     return target;
@@ -448,7 +328,7 @@ WaveFile* StreamTrackImport::createWave(const TrackPlan& plan, const ImportTarge
             channels.push_back(std::move(channel));
         }
 
-        tempPath = MakeTempPath(tempIndex);
+        tempPath = MakeTrackTempPath("", static_cast<s32>(tempIndex));
 
         if (!TempWavWriter::writeInfo(channels, target.sampleRate, tempPath, &info))
             return nullptr;
@@ -458,23 +338,27 @@ WaveFile* StreamTrackImport::createWave(const TrackPlan& plan, const ImportTarge
     info.loopStartFrame = target.loopStart;
     info.loopEndFrame = target.loopEnd;
 
+    return readStreamWave(info, target.encoding, name, tempPath);
+}
+
+WaveFile* StreamTrackImport::readStreamWave(const WaveFile::RiffWaveInfo& info, WaveFile::Encoding encoding, const sead::SafeString& name, const std::string& tempPath) const
+{
     WaveFile* wave = new WaveFile();
     waveOwner().prepareStreamWave(wave);
     wave->setEnableName(true);
     wave->getName() = name;
 
-    const bool success = wave->readWavFile(info, target.encoding);
+    const bool success = wave->readWavFile(info, encoding);
 
     if (!tempPath.empty())
         fileio::RemoveFile(tempPath.c_str());
 
-    if (!success)
-    {
-        delete wave;
-        return nullptr;
-    }
+    if (success)
+        return wave;
 
-    return wave;
+    delete wave;
+
+    return nullptr;
 }
 
 bool StreamTrackImport::createWaves(const std::vector<TrackPlan>& plans, const ImportTarget& target, std::vector<WaveFile*>* waves, sead::BufferedSafeString* failedName)
@@ -535,16 +419,35 @@ void StreamTrackImport::attachWaves(Sound::StreamSoundInfo& stream, WaveFile* co
 {
     StreamWaveOwner& owner = waveOwner();
     Sound::StreamSoundInfo::Track::List& tracks = stream.getTrackList();
+    const u32 emptyTracks = CountEmptyTracks(stream);
+    Sound::StreamSoundInfo::Track* insertAfter = emptyTracks == 0 ? static_cast<Sound::StreamSoundInfo::Track*>(anchorTrack) : nullptr;
 
     for (u32 i = 0; i < waveCount; i++)
     {
         owner.addStreamWave(waves[i]);
 
+        if (i < emptyTracks)
+        {
+            static_cast<Sound::StreamSoundInfo::Track*>(tracks.nth(i)->val())->getWaveFileRef().attach(waves[i]);
+            continue;
+        }
+
+        if (insertAfter && !insertAfter->getWaveFileRef().isAttached())
+        {
+            insertAfter->getWaveFileRef().attach(waves[i]);
+            continue;
+        }
+
         Sound::StreamSoundInfo::Track* track = new Sound::StreamSoundInfo::Track();
         track->setDefaultName();
         track->getWaveFileRef().attach(waves[i]);
 
-        tracks.pushBack(track);
+        if (insertAfter)
+            insertAfter->insertBack(track);
+        else
+            tracks.pushBack(track);
+
+        insertAfter = insertAfter ? track : nullptr;
     }
 
     Bfsar::updateList(owner.getStreamWaveList());
@@ -552,41 +455,195 @@ void StreamTrackImport::attachWaves(Sound::StreamSoundInfo& stream, WaveFile* co
     SetUnsavedChanges(true);
 }
 
-bool StreamTrackImport::commit(const std::vector<TrackPlan>& plans, const ImportTarget& target)
+bool StreamTrackImport::commit()
 {
+    const WaveFile* leadWave = findLeadWave();
+
+    if (!leadWave)
+        return false;
+
+    const std::vector<TrackPlan> plans = buildPlan();
+    sead::FixedSafeString<1024> error;
+
+    if (findLimitError(plans, &error))
+    {
+        MessageLog::instance()->addPopup({error, targetSource.sound});
+        return false;
+    }
+
     std::vector<WaveFile*> waves;
     sead::FixedSafeString<512> failedName;
 
-    if (!createWaves(plans, target, &waves, &failedName))
+    if (!createWaves(plans, computeTarget(*leadWave), &waves, &failedName))
     {
-        sead::FormatFixedSafeString<1024> msg(messages::import::cTrackImportFailedFormat, failedName.cstr());
-        MessageLog::instance()->addPopup({msg, targetSource.sound});
+        error.format(messages::import::cTrackImportFailedFormat, failedName.cstr());
+        MessageLog::instance()->addPopup({error, targetSource.sound});
 
         return false;
     }
 
+    const bool hasMain = mainWave != nullptr;
+
+    if (hasMain)
+    {
+        waves.insert(waves.begin(), mainWave);
+        mainWave = nullptr;
+    }
+
+    if (waves.empty())
+        return false;
+
+    const SourceFile& firstFile = hasMain ? mainFile : files[plans[0].sources[0].file];
+
     attachWaves(*targetSource.stream, waves.data(), static_cast<u32>(waves.size()));
 
-    if (targetSource.stream->getMainWave() == waves[0])
-        ImportTrackWavRegions(waves[0], files[plans[0].sources[0].file].info.path);
+    if (hasMain && isOpusTarget())
+        SetOpusStreamBitrate(targetSource, mainOpusBitrate);
+
+    if (firstFile.editedPath.empty() && targetSource.stream->getMainWave() == waves[0])
+        ImportTrackWavRegions(waves[0], firstFile.sourceInfo.path);
 
     return true;
 }
 
-bool StreamTrackImport::findLimitError(const Sound::StreamSoundInfo* stream, const std::vector<TrackPlan>& plans, sead::BufferedSafeString* error) const
+WaveImportEncoding StreamTrackImport::makeMainEncoding()
 {
-    u32 trackCount = static_cast<u32>(plans.size());
-    u32 channelCount = 0;
+    if (!isOpusTarget())
+        return MakeWaveImportEncoding(&mainEncoding);
+
+    return MakeOpusStreamImportEncoding(&mainOpusCodec, &mainOpusBitrate, GetOpusOriginalChoice(*targetSource.stream));
+}
+
+WaveFile* StreamTrackImport::importMainWave()
+{
+    if (!storeEdit(&mainFile))
+        return nullptr;
+
+    WaveFile::RiffWaveInfo info = mainFile.info;
+    std::string tempPath;
+
+    if (!IsPlainPcm(info))
+    {
+        tempPath = MakeTrackTempPath("main");
+
+        if (!WritePlainPcmCopy(mainFile.info, tempPath, &info))
+            return nullptr;
+    }
+
+    if (!info.isLoop)
+        info.loopStartFrame = 0;
+
+    return readStreamWave(info, isOpusTarget() ? WaveFile::Encoding::Pcm16 : mainEncoding, mainFile.name, tempPath);
+}
+
+void StreamTrackImport::acceptMainWave(WaveFile* wave)
+{
+    stopPreview();
+
+    delete mainWave;
+    mainWave = wave;
+
+    if (!targetSource.stream)
+        return;
+
+    if (fileCount != 0)
+    {
+        openRequested = !trackDialogOpen;
+        return;
+    }
+
+    commit();
+    reset();
+}
+
+WaveImportEncoding StreamTrackImport::makeTrackEncoding()
+{
+    const bool isOpus = isOpusTarget();
+    s32 leadTrackNo = 0;
+
+    if (!mainWave && targetSource.stream)
+        FindMainWave(*targetSource.stream, &leadTrackNo);
+
+    if (isOpus)
+    {
+        editOpusCodec = static_cast<s32>(aal::BwavCodec::Opus);
+        editOpusBitrate = GetOpusBitrateChoice(*targetSource.stream);
+    }
+
+    return MakeFollowTrackEncoding(*findLeadWave(), leadTrackNo, isOpus ? targetSource.stream : nullptr, &editEncoding, &editOpusCodec, &editOpusBitrate, &followsText);
+}
+
+bool StreamTrackImport::storeEdit(SourceFile* file)
+{
+    WaveFile::RiffWaveInfo info = editInfo;
+    const std::string processedPath = FinalizeImportInfoForCommit(&info);
+
+    if (processedPath.empty())
+    {
+        if (!info.isValid)
+            return false;
+
+        if (file->editedPath != info.path.cstr())
+            RemoveEditedFile(file);
+
+        file->info = info;
+        return true;
+    }
+
+    const std::string editedPath = MakeTrackTempPath("edit_", static_cast<s32>(sEditSerial++));
+    const bool moved = fileio::CopyFileOver(processedPath.c_str(), editedPath.c_str());
+
+    fileio::RemoveFile(processedPath.c_str());
+
+    if (!moved)
+        return false;
+
+    RemoveEditedFile(file);
+    file->editedPath = editedPath;
+    info.path.copy(editedPath.c_str());
+    file->info = info;
+
+    return true;
+}
+
+void StreamTrackImport::openEditor(s32 index)
+{
+    stopPreview();
+
+    if (index != panelOwner)
+    {
+        ResetWaveImport();
+        panelOwner = index;
+        editInfo = index >= 0 ? files[index].sourceInfo : mainFile.sourceInfo;
+    }
+
+    editIndex = index;
+    editorOpenRequested = true;
+}
+
+bool StreamTrackImport::commitsOnEditorImport() const
+{
+    if (editIndex == cEditMain)
+        return fileCount == 0;
+
+    return directImport;
+}
+
+bool StreamTrackImport::findLimitError(const std::vector<TrackPlan>& plans, sead::BufferedSafeString* error) const
+{
+    const Sound::StreamSoundInfo* stream = targetSource.stream;
+    const u32 newTracks = static_cast<u32>(plans.size()) + (mainWave ? 1 : 0);
+
+    u32 trackCount = newTracks;
+    u32 channelCount = mainWave ? static_cast<u32>(mainWave->getChannels().size()) : 0;
 
     if (stream)
     {
-        trackCount += static_cast<u32>(stream->getTrackList().size());
-        channelCount = stream->getAllocateChannelCount();
-    }
-    else if (createMainWave)
-    {
-        trackCount++;
-        channelCount = static_cast<u32>(createMainWave->getChannels().size());
+        const u32 emptyTracks = CountEmptyTracks(*stream);
+        const bool fillsAnchor = emptyTracks == 0 && newTracks > 0 && anchorTrack && !static_cast<const Sound::StreamSoundInfo::Track*>(anchorTrack)->getWaveFileRef().isAttached();
+
+        trackCount = static_cast<u32>(stream->getTrackList().size()) - emptyTracks + std::max(emptyTracks, newTracks) - (fillsAnchor ? 1 : 0);
+        channelCount += stream->getAllocateChannelCount();
     }
 
     for (u32 i = 0; i < fileCount; i++)
@@ -607,21 +664,230 @@ bool StreamTrackImport::findLimitError(const Sound::StreamSoundInfo* stream, con
     return false;
 }
 
-void StreamTrackImport::request(const StreamSource& source)
+static bool CanImportTracks(const StreamSource& source)
 {
     SEAD_ASSERT(source.isValid());
 
-    if (!source.stream->getTrackList().isEmpty() && !FindMainWave(*source.stream))
+    if (!source.stream->hasUnloadedTracks())
+        return true;
+
+    MessageLog::instance()->addPopup({messages::stream::cFileNotLoaded, source.sound});
+    return false;
+}
+
+void StreamTrackImport::request(const StreamSource& source, Item* anchor)
+{
+    std::vector<std::string> paths;
+
+    if (!CanImportTracks(source) || !pickPaths(&paths))
+        return;
+
+    reset();
+    start(source, anchor, paths);
+}
+
+void StreamTrackImport::requestWave(const StreamSource& source, Item* anchor, WaveFile* wave)
+{
+    if (!CanImportTracks(source))
+        return;
+
+    reset();
+
+    const std::string path = MakeTrackTempPath("wave");
+    hasWaveSource = true;
+
+    if (wave->getChannels().isEmpty() || !wave->writeWavFile(path.c_str()))
     {
-        MessageLog::instance()->addPopup({messages::stream::cFileNotLoaded, source.sound});
+        const sead::FormatFixedSafeString<512> message(messages::import::cTrackImportFailedFormat, wave->getName().cstr());
+        MessageLog::instance()->addPopup({message, source.sound});
+
+        reset();
         return;
     }
 
-    if (!loadFiles(source.sound))
+    start(source, anchor, { path });
+    nameSource(path, wave->getName());
+}
+
+void StreamTrackImport::nameSource(const std::string& path, const sead::SafeString& name)
+{
+    if (hasMainSource() && path == mainFile.info.path.cstr())
+        mainFile.name.copy(name);
+
+    for (u32 i = 0; i < fileCount; i++)
+    {
+        if (path == files[i].info.path.cstr())
+            files[i].name.copy(name);
+    }
+}
+
+void StreamTrackImport::start(const StreamSource& source, Item* anchor, const std::vector<std::string>& paths)
+{
+    targetSource = source;
+    anchorTrack = anchor;
+
+    if (FindMainWave(*source.stream))
+        appendPaths(paths, source.sound);
+    else
+    {
+        SourceFile main;
+        const size_t first = ReadFirstMainFile(&main, paths);
+
+        if (first < paths.size())
+            beginMain(main, paths, first, source.sound);
+    }
+
+    if (fileCount == 0 && !hasMainSource())
+    {
+        reset();
+        return;
+    }
+
+    if (hasMainSource())
         return;
 
-    targetSource = source;
-    openRequested = true;
+    directImport = fileCount == 1;
+
+    if (!directImport)
+    {
+        openRequested = true;
+        return;
+    }
+
+    sead::FixedSafeString<1024> error;
+
+    if (findLimitError(buildPlan(), &error))
+    {
+        MessageLog::instance()->addPopup({error, source.sound});
+        reset();
+        return;
+    }
+
+    openEditor(0);
+}
+
+bool StreamTrackImport::startCreate(const std::vector<std::string>& paths)
+{
+    SourceFile main;
+    const size_t first = ReadFirstMainFile(&main, paths);
+
+    if (first == paths.size())
+        return false;
+
+    resetCreate();
+    beginMain(main, paths, first, nullptr);
+
+    return true;
+}
+
+void StreamTrackImport::beginMain(const SourceFile& main, const std::vector<std::string>& paths, size_t first, Item* owner)
+{
+    mainFile = main;
+    mainEncoding = WaveFile::Encoding::DspAdpcm;
+
+    if (isOpusTarget())
+    {
+        mainOpusCodec = static_cast<s32>(aal::BwavCodec::Opus);
+        mainOpusBitrate = GetOpusBitrateChoice(*targetSource.stream);
+    }
+
+    appendPaths(std::vector<std::string>(paths.begin() + first + 1, paths.end()), owner);
+    openEditor(cEditMain);
+}
+
+void StreamTrackImport::drawEditor()
+{
+    ImGui::PushOverrideID(ImHashStr(cEditorId));
+    drawEditorDialog();
+    ImGui::PopID();
+}
+
+bool StreamTrackImport::applyEditor()
+{
+    if (editIndex == cEditMain)
+    {
+        WaveFile* wave = importMainWave();
+
+        if (!wave)
+            return false;
+
+        acceptMainWave(wave);
+        return true;
+    }
+
+    if (!storeEdit(&files[editIndex]))
+        return false;
+
+    if (directImport)
+    {
+        commit();
+        reset();
+    }
+
+    return true;
+}
+
+void StreamTrackImport::cancelEditor()
+{
+    const bool keepsImport = editIndex == cEditMain ? mainWave != nullptr : !directImport;
+
+    panelOwner = cEditNone;
+
+    if (!keepsImport)
+        reset();
+}
+
+void StreamTrackImport::drawEditorDialog()
+{
+    if (editorShown && !ImGui::IsPopupOpen(cEditorId))
+        editorOpenRequested = true;
+
+    if (editorOpenRequested)
+    {
+        ImGui::OpenPopup(cEditorId);
+        editorOpenRequested = false;
+    }
+
+    CenterNextDialog();
+    ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
+
+    editorShown = BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_IMPORT " %s%s", messages::import::cTrackImportTitle, cEditorId).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+
+    if (!editorShown)
+        return;
+
+    const bool isMain = editIndex == cEditMain;
+
+    if (isMain ? !hasMainSource() : editIndex >= static_cast<s32>(fileCount))
+    {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        editorShown = false;
+        return;
+    }
+    const SourceFile& file = isMain ? mainFile : files[editIndex];
+    const char* commitLabel = commitsOnEditorImport() ? messages::common::cImport : messages::dialog::cOk;
+    const WaveImportResult result = DrawWaveImportBody(file.name.cstr(), isMain ? makeMainEncoding() : makeTrackEncoding(), &editInfo, commitLabel, nullptr, false);
+
+    if (result == WaveImportResult::Commit && applyEditor())
+    {
+        ImGui::CloseCurrentPopup();
+        editorShown = false;
+    }
+    else if (result == WaveImportResult::Commit)
+    {
+        ImGui::OpenPopup(cEditorFailedId);
+    }
+    else if (result == WaveImportResult::Cancel)
+    {
+        ImGui::CloseCurrentPopup();
+        editorShown = false;
+        cancelEditor();
+    }
+
+    WarningPopup(cEditorFailedId, messages::import::cWaveReadFailed);
+
+    ImGui::EndPopup();
 }
 
 void StreamTrackImport::resetCreate()
@@ -632,47 +898,22 @@ void StreamTrackImport::resetCreate()
         delete createdWaves[i];
 
     createdWaveCount = 0;
-
-    delete createMainWave;
-    createMainWave = nullptr;
-    createMainName.clear();
-    editRequested = false;
-}
-
-void StreamTrackImport::setCreateMainWave(WaveFile* wave, const sead::SafeString& name)
-{
-    stopPreview();
-
-    delete createMainWave;
-    createMainWave = wave;
-    createMainName.copy(name);
-}
-
-void StreamTrackImport::setCreateFiles(const std::vector<std::string>& paths)
-{
-    reset();
-    appendPaths(paths, nullptr);
 }
 
 void StreamTrackImport::drawCreate()
 {
-    if (!createMainWave)
-        return;
-
-    std::vector<TrackPlan> plans;
-    ImportTarget target;
-
-    drawBody(nullptr, &plans, &target);
+    if (mainWave)
+        drawBody(true);
 }
 
 bool StreamTrackImport::buildCreateWaves(sead::BufferedSafeString* error)
 {
-    SEAD_ASSERT(createMainWave);
+    SEAD_ASSERT(mainWave);
 
     const std::vector<TrackPlan> plans = buildPlan();
-    const ImportTarget target = computeTarget(createMainWave);
+    const ImportTarget target = computeTarget(*mainWave);
 
-    if (findLimitError(nullptr, plans, error))
+    if (findLimitError(plans, error))
         return false;
 
     std::vector<WaveFile*> waves;
@@ -696,10 +937,10 @@ void StreamTrackImport::attachCreateWaves(Sound* sound)
 {
     stopPreview();
 
-    attachWaves(sound->getStreamSoundInfo(), &createMainWave, 1);
+    attachWaves(sound->getStreamSoundInfo(), &mainWave, 1);
     attachWaves(sound->getStreamSoundInfo(), createdWaves, createdWaveCount);
 
-    createMainWave = nullptr;
+    mainWave = nullptr;
     createdWaveCount = 0;
     reset();
 }
@@ -713,19 +954,6 @@ bool StreamTrackImport::pickPaths(std::vector<std::string>* paths) const
     return OpenFilesDialog(paths, nullptr, 1, filters);
 }
 
-bool StreamTrackImport::loadFiles(Item* owner)
-{
-    std::vector<std::string> paths;
-
-    if (!pickPaths(&paths))
-        return false;
-
-    reset();
-    appendPaths(paths, owner);
-
-    return fileCount != 0;
-}
-
 void StreamTrackImport::appendPaths(const std::vector<std::string>& paths, Item* owner)
 {
     for (const std::string& path : paths)
@@ -737,497 +965,29 @@ void StreamTrackImport::appendPaths(const std::vector<std::string>& paths, Item*
             break;
         }
 
-        SourceFile& file = files[fileCount];
-        file.info.clear();
-        file.info.path.copy(path.c_str());
-
-        if (!WaveFile::readRiffWavInfo(&file.info, true) || file.info.sampleRate == 0)
-            continue;
-
-        fileio::GetFileStem(&file.name, file.info.path);
-
-        fileCount++;
+        if (ReadSourceFile(&files[fileCount], path))
+            fileCount++;
     }
-
-    if (fileCount != 0 && !isOfferedSampleRate(sampleRate))
-        sampleRate = files[0].info.sampleRate;
 }
 
-void StreamTrackImport::drawMainRow()
+}
+
+static trackimport::StreamTrackImport sImport;
+static trackimport::StreamTrackImport sCreateImport;
+
+void RequestStreamTrackImport(const StreamSource& source, Item* anchorTrack)
 {
-    const u32 channelCount = static_cast<u32>(createMainWave->getChannels().size());
-    const u32 rate = createMainWave->getSampleRate();
-    const double seconds = rate ? static_cast<double>(createMainWave->getOriginalLoopEndFrame()) / rate : 0.0;
-
-    ImGui::PushID("main");
-    ImGui::TableNextRow();
-
-    ImGui::TableNextColumn();
-
-    if (TransportButton(isMainPreviewing() ? TransportGlyph::Stop : TransportGlyph::Play, "##glyph"))
-    {
-        const bool wasPlaying = isMainPreviewing();
-
-        stopPreview();
-
-        if (!wasPlaying)
-            sSoundPlayer.playWaveFile(*createMainWave, -1, nullptr, 0, false);
-    }
-
-    ImGui::TableNextColumn();
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(createMainName.cstr());
-
-    ImGui::TableNextColumn();
-    ImGui::TextUnformatted(channelCount == 1 ? messages::common::cMono : messages::common::cStereo);
-
-    ImGui::TableNextColumn();
-    ImGui::TextUnformatted(WaveFile::sEncodingTypes[static_cast<s32>(createMainWave->getEncoding())]);
-
-    ImGui::TableNextColumn();
-    ImGui::Text(messages::unit::cHertzFormat, rate);
-
-    ImGui::TableNextColumn();
-    ImGui::Text(messages::common::cSecondsFormat, seconds);
-
-    if (createMainWave->getIsLoop())
-    {
-        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-        ImGui::TextDisabled(ICON_LC_REPEAT);
-    }
-
-    ImGui::TableNextColumn();
-    ImGui::Text(messages::stream::cTrackNameFormat, 0);
-
-    ImGui::TableNextColumn();
-
-    if (ImGui::Button(ICON_LC_PENCIL))
-        editRequested = true;
-
-    ImGui::SetItemTooltip("%s", messages::import::cTrackImportEditTip);
-
-    ImGui::PopID();
+    sImport.request(source, anchorTrack);
 }
 
-FileTracks StreamTrackImport::findFileTracks(const std::vector<TrackPlan>& plans, u32 index) const
+void RequestStreamTrackWaveImport(const StreamSource& source, Item* anchorTrack, WaveFile* wave)
 {
-    FileTracks tracks;
-
-    for (u32 p = 0; p < plans.size(); p++)
-    {
-        for (u32 s = 0; s < plans[p].count; s++)
-        {
-            if (plans[p].sources[s].file != index)
-                continue;
-
-            if (tracks.first < 0)
-                tracks.first = static_cast<s32>(p);
-
-            tracks.last = static_cast<s32>(p);
-
-            if (files[index].info.numChannels == 1 && plans[p].count > 1)
-                tracks.side = s == 0 ? messages::common::cLeft : messages::common::cRight;
-        }
-    }
-
-    return tracks;
-}
-
-void StreamTrackImport::drawFileRow(u32 index, const FileTracks& tracks, u32 firstTrackIndex, FileActions* actions)
-{
-    const WaveFile::RiffWaveInfo& info = files[index].info;
-    const double seconds = info.sampleRate ? static_cast<double>(info.sampleCount) / info.sampleRate : 0.0;
-
-    ImGui::PushID(static_cast<int>(index));
-    ImGui::TableNextRow();
-
-    ImGui::TableNextColumn();
-
-    if (TransportButton(isPreviewing(index) ? TransportGlyph::Stop : TransportGlyph::Play, "##glyph"))
-        actions->preview = static_cast<s32>(index);
-
-    ImGui::TableNextColumn();
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(files[index].name.cstr());
-
-    ImGui::TableNextColumn();
-
-    if (info.numChannels <= 2)
-        ImGui::TextUnformatted(info.numChannels == 1 ? messages::common::cMono : messages::common::cStereo);
-    else
-        ImGui::Text(messages::stream::cTrackChannelsFormat, info.numChannels);
-
-    ImGui::TableNextColumn();
-    ImGui::Text(info.format == cRiffFormatFloat ? messages::import::cTrackImportBitsFloatFormat : messages::import::cTrackImportBitsFormat, info.bitsPerSample);
-
-    ImGui::TableNextColumn();
-    ImGui::Text(messages::unit::cHertzFormat, info.sampleRate);
-
-    ImGui::TableNextColumn();
-    ImGui::Text(messages::common::cSecondsFormat, seconds);
-
-    ImGui::TableNextColumn();
-
-    if (tracks.first != tracks.last)
-        ImGui::Text(messages::import::cTrackImportTrackRangeFormat, firstTrackIndex + tracks.first, firstTrackIndex + tracks.last);
-    else if (tracks.side)
-        ImGui::Text(messages::import::cTrackImportTrackSideFormat, firstTrackIndex + tracks.first, tracks.side);
-    else
-        ImGui::Text(messages::stream::cTrackNameFormat, firstTrackIndex + tracks.first);
-
-    ImGui::TableNextColumn();
-    ImGui::BeginDisabled(index == 0);
-
-    if (ImGui::ArrowButton("##up", ImGuiDir_Up))
-        actions->moveUp = static_cast<s32>(index);
-
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
-    ImGui::BeginDisabled(index + 1 == fileCount);
-
-    if (ImGui::ArrowButton("##down", ImGuiDir_Down))
-        actions->moveDown = static_cast<s32>(index);
-
-    ImGui::EndDisabled();
-
-    ImGui::SameLine();
-    if (ImGui::Button(ICON_LC_X))
-        actions->remove = static_cast<s32>(index);
-
-    ImGui::SetItemTooltip("%s", messages::import::cTrackImportRemoveTip);
-
-    ImGui::PopID();
-}
-
-void StreamTrackImport::applyFileActions(const FileActions& actions)
-{
-    if (actions.preview >= 0)
-        togglePreview(static_cast<u32>(actions.preview));
-
-    if (actions.moveUp > 0 || actions.moveDown >= 0 || actions.remove >= 0)
-        stopPreview();
-
-    if (actions.moveUp > 0)
-        std::swap(files[actions.moveUp], files[actions.moveUp - 1]);
-
-    if (actions.moveDown >= 0)
-        std::swap(files[actions.moveDown], files[actions.moveDown + 1]);
-
-    if (actions.remove >= 0)
-    {
-        for (u32 i = static_cast<u32>(actions.remove); i + 1 < fileCount; i++)
-            files[i] = files[i + 1];
-
-        fileCount--;
-    }
-}
-
-void StreamTrackImport::drawFileTable(const std::vector<TrackPlan>& plans, u32 firstTrackIndex, bool hasMainRow)
-{
-    FileActions actions;
-
-    if (ImGui::BeginTable("##files", 8, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit))
-    {
-        ImGui::TableSetupColumn("##preview");
-        ImGui::TableSetupColumn(messages::common::cFile, ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableSetupColumn(messages::common::cChannels);
-        ImGui::TableSetupColumn(messages::common::cFormat);
-        ImGui::TableSetupColumn(messages::common::cSampleRate);
-        ImGui::TableSetupColumn(messages::common::cLength);
-        ImGui::TableSetupColumn(messages::common::cTrack);
-        ImGui::TableSetupColumn("##actions");
-        ImGui::TableHeadersRow();
-
-        if (hasMainRow)
-            drawMainRow();
-
-        for (u32 index = 0; index < fileCount; index++)
-            drawFileRow(index, findFileTracks(plans, index), firstTrackIndex, &actions);
-
-        ImGui::EndTable();
-    }
-
-    applyFileActions(actions);
-}
-
-void StreamTrackImport::drawSampleRateRow(const ImportTarget& target, bool locked)
-{
-    char preview[32];
-    snprintf(preview, sizeof(preview), messages::unit::cHertzFormat, locked ? target.sampleRate : sampleRate);
-
-    DialogRow(messages::common::cSampleRate);
-
-    if (!ImGui::BeginCombo("##rate", preview))
-        return;
-
-    for (u32 i = 0; i < fileCount; i++)
-    {
-        const u32 rate = files[i].info.sampleRate;
-        bool listed = false;
-
-        for (u32 j = 0; j < i; j++)
-            listed = listed || files[j].info.sampleRate == rate;
-
-        if (listed)
-            continue;
-
-        char label[40];
-        snprintf(label, sizeof(label), messages::import::cWaveRateSourceFormat, rate);
-
-        if (ImGui::Selectable(label, rate == sampleRate))
-            sampleRate = rate;
-    }
-
-    for (u32 rate : cImportSampleRates)
-    {
-        if (hasSampleRate(rate))
-            continue;
-
-        char label[40];
-        snprintf(label, sizeof(label), messages::unit::cHertzFormat, rate);
-
-        if (ImGui::Selectable(label, rate == sampleRate))
-            sampleRate = rate;
-    }
-
-    ImGui::EndCombo();
-}
-
-void DrawLoopSampleRow(const char* label, const char* id, u32* value, f32 dragSpeed, u32 min, u32 max)
-{
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 unitWidth = ImGui::CalcTextSize(messages::common::cSamples).x + style.ItemInnerSpacing.x;
-
-    DialogRow(label);
-    ImGui::SetNextItemWidth(-unitWidth);
-    DragField(id, ImGuiDataType_U32, value, dragSpeed, &min, &max);
-    ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-    ImGui::TextDisabled("%s", messages::common::cSamples);
-}
-
-void StreamTrackImport::drawLoopRows(const ImportTarget& target, bool locked)
-{
-    const char* loopSourceNames[] = { messages::import::cTrackImportLoopFromFirst, messages::common::cDisabled, messages::common::cManual };
-    const u32 longest = longestLength(sampleRate);
-
-    DialogRow(messages::common::cLoop);
-
-    if (ComboScroll("##loop", reinterpret_cast<s32*>(&loopSource), loopSourceNames, IM_ARRAYSIZE(loopSourceNames)) && manualLoopEnd == 0)
-        manualLoopEnd = longest;
-
-    const bool isManual = loopSource == LoopSource::Manual && !locked;
-
-    u32 shownStart = isManual ? manualLoopStart : (target.isLoop ? target.loopStart : 0);
-    u32 shownEnd = isManual ? manualLoopEnd : (target.isLoop ? target.loopEnd : 0);
-
-    const f32 dragSpeed = std::max(1.0f, static_cast<f32>(longest) / cLoopDragRange);
-
-    ImGui::BeginDisabled(!isManual && !locked);
-
-    DrawLoopSampleRow(messages::stream::cLoopStartLabel, "##loopstart", &shownStart, dragSpeed, 0, longest);
-    DrawLoopSampleRow(messages::stream::cLoopEndLabel, "##loopend", &shownEnd, dragSpeed, 1, longest);
-
-    ImGui::EndDisabled();
-
-    if (isManual)
-    {
-        manualLoopEnd = std::max<u32>(1, std::min(shownEnd, longest));
-        manualLoopStart = std::min(shownStart, manualLoopEnd - 1);
-    }
-}
-
-void StreamTrackImport::drawSettings(const ImportTarget& target, bool locked)
-{
-    ImGui::BeginDisabled(locked);
-
-    WaveFile::Encoding shownEncoding = locked ? target.encoding : encoding;
-
-    DialogRow(messages::common::cEncoding);
-    ComboScroll("##encoding", reinterpret_cast<s32*>(&shownEncoding), WaveFile::sEncodingTypes, IM_ARRAYSIZE(WaveFile::sEncodingTypes));
-
-    if (!locked)
-        encoding = shownEncoding;
-
-    drawSampleRateRow(target, locked);
-    drawLoopRows(target, locked);
-
-    ImGui::EndDisabled();
-
-    drawLayoutRow();
-}
-
-void StreamTrackImport::drawLayoutRow()
-{
-    const char* layoutNames[] = { messages::import::cTrackImportLayoutPerFile, messages::import::cTrackImportLayoutPairMono, messages::import::cTrackImportLayoutPerChannel };
-    const char* layoutDetails[] = { messages::import::cTrackImportLayoutPerFileDetail, messages::import::cTrackImportLayoutPairMonoDetail, nullptr };
-
-    DialogRow(messages::import::cTrackImportLayout);
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    ComboScroll("##layout", reinterpret_cast<s32*>(&layout), layoutNames, layoutDetails, IM_ARRAYSIZE(layoutNames));
-}
-
-void StreamTrackImport::drawNotes(const ImportTarget& target, bool locked, bool isCreate) const
-{
-    if (fileCount == 0)
-        return;
-
-    u32 resampled = 0;
-    u32 padded = 0;
-    u32 trimmed = 0;
-
-    for (u32 i = 0; i < fileCount; i++)
-    {
-        const u32 length = scaledLength(files[i], target.sampleRate);
-
-        if (files[i].info.sampleRate != target.sampleRate)
-            resampled++;
-
-        if (length < target.frameCount)
-            padded++;
-        else if (length > target.frameCount)
-            trimmed++;
-    }
-
-    const double seconds = target.sampleRate ? static_cast<double>(target.frameCount) / target.sampleRate : 0.0;
-
-    if (locked)
-        ImGui::TextDisabled("%s", isCreate ? messages::import::cTrackImportFollowsFirst : messages::import::cTrackImportFollowsExisting);
-
-    if (resampled)
-        ImGui::TextDisabled(resampled == 1 ? messages::import::cTrackImportResampleOneFormat : messages::import::cTrackImportResampleFormat, resampled, target.sampleRate);
-
-    if (padded)
-        ImGui::TextDisabled(padded == 1 ? messages::import::cTrackImportPadOneFormat : messages::import::cTrackImportPadFormat, padded, seconds);
-
-    if (trimmed)
-        ImGui::TextDisabled(trimmed == 1 ? messages::import::cTrackImportTrimOneFormat : messages::import::cTrackImportTrimFormat, trimmed, seconds);
-}
-
-bool StreamTrackImport::drawBody(const Sound::StreamSoundInfo* stream, std::vector<TrackPlan>* plans, ImportTarget* target)
-{
-    const bool isCreate = stream == nullptr;
-
-    if (fileCount != 0 && !isOfferedSampleRate(sampleRate))
-        sampleRate = files[0].info.sampleRate;
-
-    const WaveFile* mainWave = isCreate ? createMainWave : FindMainWave(*stream);
-    const bool locked = mainWave != nullptr;
-    const u32 existingTracks = isCreate ? 1 : static_cast<u32>(stream->getTrackList().size());
-
-    *plans = buildPlan();
-    *target = computeTarget(mainWave);
-
-    sead::FixedSafeString<128> error;
-    findLimitError(stream, *plans, &error);
-
-    const f32 startY = ImGui::GetCursorPosY();
-
-    ImGui::PushID(this);
-    ImGui::Dummy(ImVec2(ImFloor(ImGui::GetFontSize() * cPanelWidthEm), 0.0f));
-
-    const sead::FormatFixedSafeString<64> addLabel("%s %s", ICON_LC_PLUS, messages::import::cTrackImportAddFiles);
-    bool addPressed = false;
-
-    if (BeginGroupBox(isCreate ? messages::common::cTracks : messages::common::cFiles, isCreate ? addLabel.cstr() : nullptr, &addPressed))
-    {
-        DialogRowGap();
-        drawFileTable(*plans, existingTracks, isCreate);
-
-        if (isCreate && fileCount != 0)
-            drawLayoutRow();
-
-        EndGroupBox();
-    }
-
-    if (!isCreate && BeginGroupBox(messages::common::cFormat))
-    {
-        drawSettings(*target, locked);
-        EndGroupBox();
-    }
-
-    drawNotes(*target, locked, isCreate);
-
-    if (!error.isEmpty())
-        ImGui::TextColored(uicolors::Marker(), "%s", error.cstr());
-
-    ImGui::PopID();
-
-    bodyHeight = ImGui::GetCursorPosY() - startY;
-
-    if (addPressed)
-    {
-        std::vector<std::string> paths;
-
-        if (pickPaths(&paths))
-            appendPaths(paths, nullptr);
-    }
-
-    return error.isEmpty();
-}
-
-void StreamTrackImport::draw(const StreamSource& source)
-{
-    if (openRequested)
-    {
-        ImGui::OpenPopup("###StreamTrackImport");
-        openRequested = false;
-    }
-
-    ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-
-    if (!BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_PLUS " %s###StreamTrackImport", messages::import::cTrackImportTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-        return;
-
-    if (source.stream != targetSource.stream || fileCount == 0)
-    {
-        reset();
-        ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-        return;
-    }
-
-    ImGui::Text(fileCount == 1 ? messages::import::cTrackImportHeaderOneFormat : messages::import::cTrackImportHeaderFormat, fileCount, source.getDisplayName().cstr());
-    DialogRowGap();
-
-    std::vector<TrackPlan> plans;
-    ImportTarget target;
-
-    const bool canImport = drawBody(source.stream, &plans, &target);
-
-    BeginDialogFooter({messages::common::cImport, messages::common::cCancel});
-
-    ImGui::BeginDisabled(!canImport);
-    const bool importClicked = DialogButton(messages::common::cImport);
-    ImGui::EndDisabled();
-
-    const bool cancelClicked = DialogButton(messages::common::cCancel);
-
-    if (importClicked)
-        commit(plans, target);
-
-    if (importClicked || cancelClicked)
-    {
-        reset();
-        ImGui::CloseCurrentPopup();
-    }
-
-    ImGui::EndPopup();
-}
-
-StreamTrackImport sImport;
-StreamTrackImport sCreateImport;
-
-}
-
-void RequestStreamTrackImport(const StreamSource& source)
-{
-    sImport.request(source);
+    sImport.requestWave(source, anchorTrack, wave);
 }
 
 void DrawStreamTrackImportPopup(const StreamSource& source)
 {
+    DrawTrackWaveBrowser(source);
     sImport.draw(source);
 }
 
@@ -1236,24 +996,35 @@ bool IsStreamTrackImportPending(const StreamSource& source)
     return source.isValid() && sImport.isPendingFor(source.stream);
 }
 
+void CancelStreamTrackImports()
+{
+    sImport.resetCreate();
+    sCreateImport.resetCreate();
+}
+
 void ResetStreamCreateImport()
 {
     sCreateImport.resetCreate();
 }
 
-void SetStreamCreateMainWave(WaveFile* wave, const sead::SafeString& name)
+bool StartStreamCreateImport(const std::vector<std::string>& paths)
 {
-    sCreateImport.setCreateMainWave(wave, name);
+    return sCreateImport.startCreate(paths);
+}
+
+void DrawStreamCreateMainEditor()
+{
+    sCreateImport.drawEditor();
 }
 
 bool HasStreamCreateMainWave()
 {
-    return sCreateImport.hasCreateMainWave();
+    return sCreateImport.hasMainWave();
 }
 
-void SetStreamCreateFiles(const std::vector<std::string>& paths)
+const sead::SafeString& GetStreamCreateMainName()
 {
-    sCreateImport.setCreateFiles(paths);
+    return sCreateImport.getMainName();
 }
 
 u32 GetStreamCreateFileCount()
@@ -1261,14 +1032,9 @@ u32 GetStreamCreateFileCount()
     return sCreateImport.getFileCount();
 }
 
-bool TakeStreamCreateEditRequest()
-{
-    return sCreateImport.takeEditRequest();
-}
-
 f32 CalcStreamCreateImportWidth()
 {
-    return ImFloor(ImGui::GetFontSize() * cPanelWidthEm);
+    return ImFloor(ImGui::GetFontSize() * trackimport::cPanelWidthEm);
 }
 
 f32 CalcStreamCreateImportHeight()

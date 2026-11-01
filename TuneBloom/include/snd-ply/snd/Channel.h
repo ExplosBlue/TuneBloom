@@ -326,11 +326,6 @@ public:
         mIsIgnoreNoteOff = flag;
     }
 
-    f32 fetchVoicePeak()
-    {
-        return mVoice ? mVoice->fetchPeak() : 0.0f;
-    }
-
     //void setFrontBypass(bool flag)
     //{
     //    mVoice->setFrontBypass(flag);

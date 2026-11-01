@@ -43,7 +43,6 @@ void DrawExportIdCheck(const char* exampleName, const char* extension);
 void BuildExportPathFromDir(sead::BufferedSafeString *outPath, const char *dir, const Sound *sound, const char *ext, u32 idWidth);
 
 const WaveFile* FindStreamExportWave(const Sound::StreamSoundInfo& stream);
-bool HasExportLoop(const WaveFile* wave);
 bool ExportStreamToWav(Sound::StreamSoundInfo& stream, const char* path, bool multiChannel, u32 loopCount, f32 fadeSec, u32 targetRate, bool loopMarkers);
 bool ExportLooseStreamToWav(Sound::StreamSoundInfo& stream, const char* path);
 

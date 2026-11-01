@@ -273,7 +273,7 @@ static void DrawAddItemDialog(ItemListContext& ctx, const ImVec2& center)
             ImGui::CloseCurrentPopup();
         }
 
-        BeginDialogFooter({messages::common::cAdd, messages::common::cCancel});
+        BeginDialogFooter({messages::common::cAdd, messages::common::cCancel}, !IsWaveImportDrawn());
 
         if (ctx.disableAddWindow || DialogButton(messages::common::cAdd))
         {

@@ -19,6 +19,7 @@
 #include <bfsar/model/MessageLog.h>
 #include <ui/items/Selection.h>
 #include <ui/app/Shortcuts.h>
+#include <ui/stream/StreamTrackImport.h>
 #include <ui/settings/UiColors.h>
 #include <ui/file/UnsavedChanges.h>
 #include <ui/wave/WaveImportPanel.h>
@@ -182,6 +183,7 @@ void CancelPendingExportsAndImports()
     CancelFileExports();
     CancelBankBundleTransfers();
     CancelAudioResourceRequests();
+    CancelStreamTrackImports();
     ResetWaveImport();
 
     sPendingUnusedWaves.clear();

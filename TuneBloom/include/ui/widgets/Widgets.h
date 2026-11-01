@@ -54,6 +54,7 @@ void DrawProgressBar(const ImVec2& min, const ImVec2& max, f32 fraction);
 s32 GetItemWheelSteps();
 f32 CalcFitComboWidth(const char* const* items, s32 itemNum);
 bool ComboScroll(const char *label, int *current_item, const char *const items[], int items_count, int popup_max_height_in_items = -1);
+bool ComboScrollSectioned(const char* label, s32* current, const char* const items[], s32 itemNum, s32 sectionStart);
 bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], s32 itemNum, const char* detail = nullptr);
 bool ComboScroll(const char* label, s32* current, const char* const items[], const char* const details[], const char* const reasons[], s32 itemNum, const char* detail = nullptr);
 

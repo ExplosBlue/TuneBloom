@@ -168,8 +168,11 @@ void WaveImportPanel::finishPreviewJob()
     const u64 position = oldTotal > 0 ? oldPosition * mPreview.totalSamples / oldTotal : oldPosition;
     u32 offset = position > mPreview.cropStart ? static_cast<u32>(position - mPreview.cropStart) : 0u;
 
-    if (offset >= mPreview.sampleCount)
-        offset = 0;
+    const bool loops = mPreviewWave->getIsLoop();
+    const u32 playEnd = loops ? mPreviewWave->getLoopEndFrame(false) : mPreview.sampleCount;
+
+    if (offset >= playEnd)
+        offset = loops ? mPreviewWave->getLoopStartFrame(false) : 0u;
 
     if (playPreview(offset, paused) && paused)
         sSoundPlayer.pause(true);

@@ -28,7 +28,14 @@ void FormatClock(char* buffer, size_t bufferSize, double seconds)
 
 void FormatTimeLabel(char* buffer, size_t bufferSize, double seconds, double majorStepSeconds)
 {
-    const int decimals = majorStepSeconds < 0.001 ? 4 : majorStepSeconds < 0.01 ? 3 : 2;
+    if (majorStepSeconds >= 1.0)
+    {
+        const int wholeSeconds = static_cast<int>(seconds + 0.5);
+        snprintf(buffer, bufferSize, "%d:%02d", wholeSeconds / 60, wholeSeconds % 60);
+        return;
+    }
+
+    const int decimals = majorStepSeconds < 0.001 ? 4 : majorStepSeconds < 0.01 ? 3 : majorStepSeconds < 0.1 ? 2 : 1;
 
     if (seconds >= 60.0)
     {

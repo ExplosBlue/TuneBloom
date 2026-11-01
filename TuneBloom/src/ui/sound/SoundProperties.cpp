@@ -63,6 +63,17 @@ bool TrailingButton(const char* label)
     return ImGui::Button(label, ImVec2(size, size));
 }
 
+bool TrailingGoToButton(const char* label, bool canGo, const char* tooltip, const char* missingReason)
+{
+    ImGui::BeginDisabled(!canGo);
+    const bool pressed = TrailingButton(label);
+    ImGui::EndDisabled();
+
+    ImGui::SetItemTooltip("%s", canGo ? tooltip : missingReason);
+
+    return pressed;
+}
+
 bool ItemSelectorRow(const char* label, const Item::List& list, Item** item, bool allowNone, f32 trailingWidth)
 {
     const bool missing = *item == nullptr && !allowNone;

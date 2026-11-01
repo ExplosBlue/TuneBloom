@@ -21,6 +21,7 @@ void DrawAudioResourceDialogs();
 void CancelAudioResourceRequests();
 void PlayAudioAsset(AudioAsset* asset);
 void RequestAudioAssetReplace(AudioAsset* asset);
+void RequestAudioAssetReimport(AudioAsset* asset);
 bool IsAudioAssetReplacePending(const AudioAsset* asset);
 void ReleaseAudioAssetView();
 bool IsResourceAsset(const AudioAsset* asset);

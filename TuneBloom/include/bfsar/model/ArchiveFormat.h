@@ -131,8 +131,8 @@ inline u32 GetArchiveVersionByteCount(ArchiveFormat format)
 
 inline void FormatInnerFileVersion(sead::BufferedSafeString* out, u32 version, ArchiveFormat format)
 {
-    if (GetArchiveVersionByteCount(format) == 4)
-        out->format("%u.%u.%u.%u", (version >> 24) & 0xFF, (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
+    if (format == ArchiveFormat::BCSAR || ((version >> 24) & 0xFF))
+        out->format("%u.%u.%u", (version >> 24) & 0xFF, (version >> 16) & 0xFF, (version >> 8) & 0xFF);
     else
         out->format("%u.%u.%u", (version >> 16) & 0xFF, (version >> 8) & 0xFF, version & 0xFF);
 }

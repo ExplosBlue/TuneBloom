@@ -21,9 +21,10 @@ inline constexpr const char* cWaveLoadFailed = "The WAV file could not be loaded
 inline constexpr const char* cNativeDeviceUnavailable = "The native file device could not be accessed";
 
 inline constexpr const char* cReimportWriteFailed = "A temporary WAV file for the reimport could not be written";
-inline constexpr const char* cReimportDecodeFailed = "This Wave File could not be decoded for the reimport";
+inline constexpr const char* cReimportDecodeFailed = "The audio could not be decoded for the reimport";
 
 inline constexpr const char* cReimportMenuLabel = "Reimport";
+inline constexpr const char* cImportWaveFileTitle = "Import Wave File";
 inline constexpr const char* cReplaceWaveFileMenuLabel = "Replace Wave File";
 inline constexpr const char* cReimportWaveFileMenuLabel = "Reimport Wave File";
 inline constexpr const char* cReplaceWaveFileTip = "Replace the audio with a WAV file";
@@ -37,36 +38,27 @@ inline constexpr const char* cWaveTrimStartTip = "First sample that is kept";
 inline constexpr const char* cWaveTrimEndTip = "First sample that is removed";
 inline constexpr const char* cWaveTrimSilenceTip = "Trims audio below -60 dBFS at both ends";
 
-inline constexpr const char* cTrackImportMenuLabel = "Import WAVs as Tracks";
+inline constexpr const char* cTrackImportMenuLabel = "Add Tracks";
 inline constexpr const char* cTrackImportTitle = "Import Tracks";
-inline constexpr const char* cTrackImportHeaderFormat = "Import %u WAV files into '%s'";
-inline constexpr const char* cTrackImportHeaderOneFormat = "Import %u WAV file into '%s'";
+inline constexpr const char* cTrackImportStreamFactsFormat = "%s  -  %u Hz  -  %s";
+inline constexpr const char* cTrackImportStreamFactsLoopFormat = "%s  -  %u Hz  -  %s  -  Loop";
 inline constexpr const char* cTrackImportTooManyFilesFormat = "Only the first %u files were kept";
-inline constexpr const char* cTrackImportFollowsExisting = "Encoding, sample rate, length and loop follow the existing Tracks";
-inline constexpr const char* cTrackImportResampleFormat = "%u files will be resampled to %u Hz";
-inline constexpr const char* cTrackImportResampleOneFormat = "%u file will be resampled to %u Hz";
-inline constexpr const char* cTrackImportPadFormat = "%u files will be padded with silence to %.2f s";
-inline constexpr const char* cTrackImportPadOneFormat = "%u file will be padded with silence to %.2f s";
-inline constexpr const char* cTrackImportTrimFormat = "%u files will be trimmed to %.2f s";
-inline constexpr const char* cTrackImportTrimOneFormat = "%u file will be trimmed to %.2f s";
 inline constexpr const char* cTrackImportChannelLimitFormat = "Streams can have up to %u channels";
 inline constexpr const char* cTrackImportFailedFormat = "'%s' could not be imported as a Track";
 
-inline constexpr const char* cTrackImportAddFiles    = "Add WAV";
-inline constexpr const char* cTrackImportEditTip     = "Edit Import Settings";
-inline constexpr const char* cTrackImportFollowsFirst = "Tracks after Track 0 follow its encoding, sample rate, length and loop";
+inline constexpr const char* cTrackImportAddFiles          = "Add WAV";
+inline constexpr const char* cTrackImportEditTip           = "Edit Import Settings";
+inline constexpr const char* cTrackImportFollowsFormat     = "Follows Track %d";
 
 inline constexpr const char* cTrackImportLayoutPerFileDetail = "Files with over 2 channels split into pairs";
 inline constexpr const char* cTrackImportLayoutPairMonoDetail = "Two adjacent mono files become L and R";
 
 inline constexpr const char* cWaveDiscardTitle = "Cancel import?";
 inline constexpr const char* cWaveDiscardQuestion = "Cancel importing this file?";
-inline constexpr const char* cWaveRegionTitle = "Import Wave File";
 inline constexpr const char* cWaveRateSourceFormat = "%u Hz (source)";
 inline constexpr const char* cWaveSourceSummaryFormat = "%u Hz  -  %s  -  %s";
-inline constexpr const char* cWaveNoPreview = "No waveform for this sample format";
-inline constexpr const char* cWaveLoopReadoutPeriodsFormat = "Loop %s  -  %u samples  -  %.2f periods";
-inline constexpr const char* cWaveLoopReadoutFormat = "Loop %s  -  %u samples";
+inline constexpr const char* cWaveSourceLabel = "Source";inline constexpr const char* cWaveNoPreview = "No waveform for this sample format";
+inline constexpr const char* cWaveLoopReadoutFormat = "Loop duration: %s";
 inline constexpr const char* cWavePreviewResume = "Resume";
 inline constexpr const char* cWavePreviewPlay = "Play preview";
 inline constexpr const char* cWaveFitAll = "Fit All";
@@ -116,6 +108,7 @@ inline constexpr const char* cWaveSuggestLoopTip = "Finds a loop with a clean se
 inline constexpr const char* cWaveSnapLoopTip = "Snaps to 14-sample frames and whole periods";
 inline constexpr const char* cWaveLoopStartTip = "Left-click the waveform to set it";
 inline constexpr const char* cWaveLoopEndTip = "Right-click the waveform to set it";
+inline constexpr const char* cWaveLoopMarkerTip = "Drag its marker on the waveform to move it";
 inline constexpr const char* cWaveCrossfade = "Crossfade";
 inline constexpr const char* cWaveEqualPower = "Equal Power";
 inline constexpr const char* cWaveEqualPowerTip = "Constant loudness through the crossfade";
@@ -135,9 +128,8 @@ inline constexpr const char* cWaveCurveHalfSine = "Half Sine";
 inline constexpr const char* cTrackImportRemoveTip = "Remove from Import";
 inline constexpr const char* cTrackImportBitsFloatFormat = "%u-bit float";
 inline constexpr const char* cTrackImportBitsFormat = "%u-bit";
-inline constexpr const char* cTrackImportTrackRangeFormat = "Tracks %u-%u";
-inline constexpr const char* cTrackImportTrackSideFormat = "Track %u (%s)";
-inline constexpr const char* cTrackImportLoopFromFirst = "From first file";
+inline constexpr const char* cTrackImportTrackRangeFormat = "%u-%u";
+inline constexpr const char* cTrackImportTrackSideFormat = "%u (%s)";
 inline constexpr const char* cTrackImportLayout = "Layout";
 inline constexpr const char* cTrackImportLayoutPerFile = "One Track per file";
 inline constexpr const char* cTrackImportLayoutPairMono = "Pair mono files into stereo Tracks";
@@ -148,9 +140,6 @@ inline constexpr const char* cInstrumentImportTitle    = "Import Instrument";
 inline constexpr const char* cInstrumentReplacingFormat = "Replacing: Program %d";
 inline constexpr const char* cWavesToImportFormat      = "Waves to import: %u";
 
-inline constexpr const char* cWaveHeaderFormat        = "Import '%s'";
-inline constexpr const char* cWaveReplaceHeaderFormat = "Replace with '%s'";
-inline constexpr const char* cWaveRegionHeaderFormat  = "Import '%s' onto velocity region";
 inline constexpr const char* cWaveImportFailed        = "The WAV file could not be imported";
 inline constexpr const char* cWaveDropNeedsRegion     = "Drop a WAV onto a velocity region to import it";
 inline constexpr const char* cWaveRegionDrop          = "Import onto velocity region";
@@ -168,8 +157,6 @@ inline constexpr const char* cSamplesFormat    = "%u samples";
 inline constexpr const char* cTimeFormat       = "%u:%06.3f";
 
 inline constexpr const char* cWaveform         = "Waveform";
-inline constexpr const char* cPlayLeft         = "Play the left channel";
-inline constexpr const char* cPlayRight        = "Play the right channel";
 inline constexpr const char* cTooLong          = "Too long to show as a waveform";
 inline constexpr const char* cNoData           = "No sample data";
 

@@ -2,7 +2,6 @@
 
 #include <bfsar/model/Item.h>
 #include <bfsar/files/SequenceFile.h>
-#include <bfsar/player/TrackSwitch.h>
 
 #include <snd/Global.h>
 
@@ -376,6 +375,11 @@ public:
                 return mChannels;
             }
 
+            bool isWaveUnloaded() const
+            {
+                return !mWaveFileRef.isAttached() && !mChannels.isEmpty();
+            }
+
             void clearChannels()
             {
                 mChannels.clear();
@@ -536,7 +540,7 @@ public:
 
         u16 getAllocateChannelCount() const
         {
-            const bool countsWaves = mStreamType == StreamType::NwStreamBinary || (mStreamType == StreamType::Opus && areTrackWavesAttached());
+            const bool countsWaves = mStreamType == StreamType::NwStreamBinary || (mStreamType == StreamType::Opus && !hasUnloadedTracks());
 
             if (!countsWaves || mTrackList.isEmpty())
             {
@@ -571,16 +575,18 @@ public:
             return mTrackList;
         }
 
-        bool areTrackWavesAttached() const
+        bool hasUnloadedTracks() const
         {
             for (const Item* item : mTrackList)
             {
-                if (!static_cast<const Track*>(item)->getWaveFileRef().isAttached())
-                    return false;
+                if (static_cast<const Track*>(item)->isWaveUnloaded())
+                    return true;
             }
 
-            return true;
+            return false;
         }
+
+        bool validateTracks(sead::BufferedSafeString& error) const;
 
         const WaveFile* getMainWave() const
         {
@@ -769,31 +775,6 @@ public:
             mOriginalOpusChannelBitrate = other.mOriginalOpusChannelBitrate;
         }
 
-        u32 getMuteTracks() const
-        {
-            return mMuteTracks;
-        }
-
-        void setMuteTracks(u32 muteTracks)
-        {
-            mMuteTracks = muteTracks;
-        }
-
-        u32 getSoloTracks() const
-        {
-            return mSoloTracks;
-        }
-
-        void setSoloTracks(u32 soloTracks)
-        {
-            mSoloTracks = soloTracks;
-        }
-
-        bool isTrackAudible(u32 trackNo) const
-        {
-            return IsTrackAudible(mMuteTracks, mSoloTracks, trackNo);
-        }
-
     private:
         sead::FixedSafeString<512> mPath; //? Temp solution, will probably not leave like this
 
@@ -810,9 +791,6 @@ public:
         u16 mStreamTypeInfoUpper = 0;
         u32 mLoopStartFrame;
         u32 mLoopEndFrame;
-
-        u32 mMuteTracks = 0;
-        u32 mSoloTracks = 0;
 
         bool mHasPrefetch = false;
         std::vector<u8> mPrefetchSource;

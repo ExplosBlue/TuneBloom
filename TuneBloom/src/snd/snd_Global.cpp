@@ -4,7 +4,11 @@
 
 #include <bfsar/files/WaveFile.h>
 
+#include <algorithm>
+
 namespace nw { namespace snd { namespace internal {
+
+static constexpr u32 cLoopEndLeadSeconds = 1;
 
 void GetWaveInfoFromWaveFile(WaveInfo* out, const ::WaveFile& waveFile, s32 channelIdx)
 {
@@ -47,6 +51,19 @@ void GetWaveInfoFromWaveFile(WaveInfo* out, const ::WaveFile& waveFile, s32 chan
             channelParam.adpcmLoopParam.loopYn2 = adpcmLoopParam.loopYn2;
         }
     }
+}
+
+u32 CalcSeekOffset(const WaveInfo& waveInfo, bool loopEnabled, u32 offsetSample)
+{
+    if (offsetSample < waveInfo.loopEndFrame)
+        return offsetSample;
+
+    if (!waveInfo.loopFlag || !loopEnabled)
+        return waveInfo.loopEndFrame;
+
+    const u32 leadFrames = std::min(static_cast<u32>(waveInfo.sampleRate) * cLoopEndLeadSeconds, waveInfo.loopEndFrame);
+
+    return std::max(waveInfo.loopStartFrame, waveInfo.loopEndFrame - leadFrames);
 }
 
 void ConvertWaveInfo(::snd::internal::WaveInfo* out, const WaveInfo& waveInfo)

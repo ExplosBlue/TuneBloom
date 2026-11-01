@@ -172,8 +172,18 @@ void LooseStreamFile::nameStreamWave(WaveFile* wave, const sead::SafeString&, u3
     wave->getName().format(messages::stream::cTrackNameFormat, trackNo);
 }
 
-bool LooseStreamFile::writeTo(const sead::SafeString& path) const
+bool LooseStreamFile::writeTo(const sead::SafeString& path, sead::BufferedSafeString* outError) const
 {
+    sead::FixedSafeString<128> error;
+
+    if (!mStream.validateTracks(error))
+    {
+        if (outError)
+            outError->copy(error);
+
+        return false;
+    }
+
     fileio::StagedFile file;
 
     if (!file.open(path))
@@ -369,13 +379,21 @@ SaveResult LooseStreamFile::saveAs(const sead::SafeString& path, sead::BufferedS
     const bool isUnchanged = signature == mSavedSignature && !testhooks::IsStreamRewriteForced(path.cstr());
     const bool isCopied = isUnchanged && packfile::CopyFileOver(mFilePath.cstr(), path.cstr());
 
-    if (!isCopied && !writeTo(path))
+    if (!isCopied)
     {
-        sead::FixedSafeString<256> fileName;
-        sead::Path::getFileName(&fileName, path);
+        outError->clear();
 
-        outError->format(messages::stream::cWriteFailedFormat, fileName.cstr());
-        return SaveResult::Failed;
+        if (!writeTo(path, outError))
+        {
+            if (outError->isEmpty())
+            {
+                sead::FixedSafeString<256> fileName;
+                sead::Path::getFileName(&fileName, path);
+                outError->format(messages::stream::cWriteFailedFormat, fileName.cstr());
+            }
+
+            return SaveResult::Failed;
+        }
     }
 
     mFilePath = path;

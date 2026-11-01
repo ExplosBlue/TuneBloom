@@ -8,8 +8,12 @@
 #include <messages/Messages.h>
 #include <core/TestHooks.h>
 #include <ui/items/Selection.h>
+#include <ui/project/FileLists.h>
 #include <ui/widgets/Widgets.h>
 #include <ui/settings/UiColors.h>
+
+#include <bfsar/files/BfstmFile.h>
+#include <bfsar/files/WaveFile.h>
 
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_custom.h>
@@ -28,6 +32,14 @@ static void DrawGoToContextMenu(Item* target, const char* disabledReason)
 
     if (ContextMenuItem(ICON_LC_EXTERNAL_LINK, messages::common::cGoTo, target != nullptr, disabledReason))
         SelectItem(target);
+
+    if (target && target->getItemType() == Item::ItemType::WaveFile && !ImGui::GetTopMostPopupModal())
+    {
+        WaveFile* wave = static_cast<WaveFile*>(target);
+
+        ContextMenuSeparator();
+        DrawWaveFileMenuItems(wave, { wave }, !IsStreamTrackWave(*wave));
+    }
 
     EndContextMenu();
 }

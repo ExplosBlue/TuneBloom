@@ -613,15 +613,11 @@ void RegisterOutputMeterSettings()
     ImGui::AddSettingsHandler(&handler);
 }
 
-void DrawOutputMeterBar(const OutputMeter::ChannelState& state, const ImVec2& min, const ImVec2& max, bool horizontal)
-{
-    DrawBar(ImGui::GetWindowDrawList(), state, min, max, horizontal);
-}
-
 void DrawOutputMeterRows(const ImVec2& min, f32 width, f32 rowHeight, f32 gap)
 {
     const OutputMeter& meter = OutputMeter::instance();
     const ImVec2 max(min.x + width, min.y + rowHeight * 2.0f + gap);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
 
     if (meter.isMono())
     {
@@ -629,12 +625,12 @@ void DrawOutputMeterRows(const ImVec2& min, f32 width, f32 rowHeight, f32 gap)
         merged.level = std::max(meter.getLeft().level, meter.getRight().level);
         merged.peakHold = std::max(meter.getLeft().peakHold, meter.getRight().peakHold);
 
-        DrawOutputMeterBar(merged, min, max, true);
+        DrawBar(drawList, merged, min, max, true);
         return;
     }
 
-    DrawOutputMeterBar(meter.getLeft(), min, ImVec2(max.x, min.y + rowHeight), true);
-    DrawOutputMeterBar(meter.getRight(), ImVec2(min.x, max.y - rowHeight), max, true);
+    DrawBar(drawList, meter.getLeft(), min, ImVec2(max.x, min.y + rowHeight), true);
+    DrawBar(drawList, meter.getRight(), ImVec2(min.x, max.y - rowHeight), max, true);
 }
 
 f32 OutputMeterDbToPosition(f32 db)

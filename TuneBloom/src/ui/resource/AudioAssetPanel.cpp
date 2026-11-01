@@ -25,8 +25,7 @@
 
 #include <vector>
 
-static constexpr f32 cWaveViewHeightEm   = 7.0f;
-static constexpr u32 cWaveViewMaxSamples = 12000000;
+static constexpr f32 cWaveViewHeightEm = 7.0f;
 
 class AudioAssetPanel
 {
@@ -220,8 +219,8 @@ void AudioAssetPanel::drawWaveCanvas(FrameContext& ctx)
     if (dragBefore == ImGui::LoopWaveformState::Dragging::Start && mState.dragging != dragBefore && mLoopStartFrame != ctx.info->loopStartFrame)
         commitLoop(ctx, true, mLoopStartFrame);
 
-    if (seekSample >= 0.0 && ctx.playing && sSoundPlayer.getSampleCount() > 0)
-        sSoundPlayer.seek(sead::Mathf::clamp2(0.0f, static_cast<f32>(seekSample / static_cast<f64>(sSoundPlayer.getSampleCount())), 1.0f));
+    if (ctx.playing)
+        SeekPlayerToSample(seekSample);
 }
 
 void AudioAssetPanel::drawWaveformBox(FrameContext& ctx)
@@ -231,14 +230,19 @@ void AudioAssetPanel::drawWaveformBox(FrameContext& ctx)
 
     const f32 buttonSize = ImGui::GetFrameHeight();
 
-    WaveformReplaceTool replace;
+    WaveformTool replace;
     replace.tooltip = messages::common::cReplaceAudio;
+    ActiveAudioResource().canReplaceAudio(*ctx.asset, &replace.disabledReason);
 
-    if (!ActiveAudioResource().canReplaceAudio(*ctx.asset, &replace.disabledReason) && !replace.disabledReason)
-        replace.disabledReason = messages::resource::cReplaceUnsupported;
+    WaveformTool reimport;
+    reimport.tooltip = messages::common::cReimportAudio;
+    ActiveAudioResource().canReimportAudio(*ctx.asset, &reimport.disabledReason);
 
-    if (BeginWaveformHeader(buttonSize, ctx.info->isLoop, ctx.canSetLoop ? nullptr : ctx.loopReason, &replace))
+    if (BeginWaveformHeader(buttonSize, ctx.info->isLoop, ctx.canSetLoop ? nullptr : ctx.loopReason, { &reimport, &replace }))
         commitLoop(ctx, !ctx.info->isLoop, ctx.info->loopStartFrame);
+
+    if (reimport.pressed)
+        RequestAudioAssetReimport(ctx.asset);
 
     if (replace.pressed)
         RequestAudioAssetReplace(ctx.asset);

@@ -14,6 +14,20 @@ static sead::FixedSafeString<256> sName;
 static bool sEnableName = true;
 static InstanciateItemCallback sInstanciateItemCallback = nullptr;
 static ItemPropertiesCallback sItemPropertiesCallback = nullptr;
+static void (*sNextHead)() = nullptr;
+static void (*sNextNameTail)() = nullptr;
+static f32 sNextNameTailWidth = 0.0f;
+
+void SetNextCreateItemHead(void (*draw)())
+{
+    sNextHead = draw;
+}
+
+void SetNextCreateItemNameTail(void (*draw)(), f32 width)
+{
+    sNextNameTail = draw;
+    sNextNameTailWidth = width;
+}
 
 const sead::SafeString& GetCreateItemName()
 {
@@ -106,9 +120,16 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
 
     const f32 em = ImGui::GetFontSize();
 
-    ImGui::Dummy(ImVec2(ImFloor(em * cDialogFormWidthEm), 0.0f));
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    window->DC.CursorMaxPos.x = ImMax(window->DC.CursorMaxPos.x, window->DC.CursorPos.x + ImFloor(em * cDialogFormWidthEm));
+
+    if (sNextHead)
+        sNextHead();
 
     DialogRow(messages::common::cName);
+
+    if (sNextNameTail)
+        ImGui::SetNextItemWidth(-(sNextNameTailWidth + ImGui::GetStyle().ItemSpacing.x * 2.0f));
 
     if (!sEnableName)
         ImGui::BeginDisabled();
@@ -117,6 +138,15 @@ InstanciateItemCallback CreateItemFunc(bool clear, InstanciateItemCallback insta
 
     if (!sEnableName)
         ImGui::EndDisabled();
+
+    if (sNextNameTail)
+    {
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x * 2.0f);
+        sNextNameTail();
+    }
+
+    sNextHead = nullptr;
+    sNextNameTail = nullptr;
 
     WarningPopup("###InvalidName", GetDocumentNameRuleDetail());
     WarningPopup("###EmptyName", messages::item::cNameEmpty);

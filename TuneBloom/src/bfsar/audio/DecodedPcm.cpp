@@ -149,6 +149,17 @@ DecodedPcm decodePcmForPreview(const WaveFile::RiffWaveInfo& info)
     if (!info.isValid || info.sampleBytes == 0 || info.numChannels == 0)
         return out;
 
+    if (info.format != cRiffFormatPcm || info.bitsPerSample > 16)
+    {
+        if (decodeRiffChannels(info, &out.channels))
+        {
+            out.sampleRate = info.sampleRate;
+            out.sampleCount = info.sampleCount;
+        }
+
+        return out;
+    }
+
     if (info.sampleFormat != snd::SampleFormat::PcmS8 && info.sampleFormat != snd::SampleFormat::PcmS16)
         return out;
 

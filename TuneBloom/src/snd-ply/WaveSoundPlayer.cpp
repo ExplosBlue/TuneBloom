@@ -124,7 +124,8 @@ void WaveSoundPlayer::prepare(const WaveFile& waveFile, s32 channelIdx, const So
     nw::snd::internal::WaveInfo waveInfo;
     nw::snd::internal::GetWaveInfoFromWaveFile(&waveInfo, waveFile, channelIdx);
 
-    startChannel(&waveInfo, sound, isFilterSupported);
+    if (!startChannel(&waveInfo, sound, isFilterSupported))
+        return;
 
     mActiveFlag = true;
 }
@@ -204,10 +205,7 @@ bool WaveSoundPlayer::seek(u32 offsetSample)
         return false;
     }
 
-    if (offsetSample > mWaveInfo.loopEndFrame)
-    {
-        offsetSample = mWaveInfo.loopEndFrame;
-    }
+    offsetSample = nw::snd::internal::CalcSeekOffset(mWaveInfo, mLoopEnabled, offsetSample);
 
     // Free
     if (mChannel)

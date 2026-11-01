@@ -22,6 +22,7 @@ void DrawBankFileMenuItems(bool hasItem, const std::vector<BankFile*>& bankFiles
 void RequestWaveFileReplace(WaveFile* wave);
 bool IsWaveFileReplacePending(const WaveFile* wave);
 void RequestWaveFileReimport(WaveFile* wave);
+void DrawWaveFileMenuItems(WaveFile* wave, const std::vector<WaveFile*>& waves, bool canExportFile);
 void DrawWaveFileReplacePopup();
 
 extern sead::FixedSafeString<512> sDroppedWavPath;

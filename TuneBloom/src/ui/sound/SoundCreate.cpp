@@ -53,10 +53,6 @@ static s32 sStreamSource = cSourceImport;
 static sead::FixedSafeString<512> sStreamPath;
 static sead::FixedSafeString<512> sNewStreamPath;
 static bool sNewStreamPathEdited = false;
-static WaveFile::RiffWaveInfo sStreamMainInfo;
-static WaveFile::Encoding sStreamMainEncoding = WaveFile::Encoding::DspAdpcm;
-static sead::FixedSafeString<512> sStreamMainName;
-static bool sStreamMainOpenRequest = false;
 
 static Item* sSequenceFile = nullptr;
 static Item* sBank = nullptr;
@@ -96,15 +92,6 @@ static void ClearImportWave()
     ResetWaveImport();
 }
 
-static void ClearStreamImport()
-{
-    sStreamMainInfo.clear();
-    sStreamMainName.clear();
-    sStreamMainEncoding = WaveFile::Encoding::DspAdpcm;
-    sStreamMainOpenRequest = false;
-    ResetStreamCreateImport();
-}
-
 static void ResetSoundCreate()
 {
     Bfsar& archive = ActiveSoundArchive();
@@ -119,7 +106,7 @@ static void ResetSoundCreate()
     sStreamPath.clear();
     sNewStreamPath.clear();
     sNewStreamPathEdited = false;
-    ClearStreamImport();
+    ResetStreamCreateImport();
 
     sSequenceFile = nullptr;
     sBank = nullptr;
@@ -198,48 +185,22 @@ static void PickImportWave()
     if (!OpenFileDialog(&path, nullptr, 1, filters))
         return;
 
-    ClearImportWave();
-    sImportInfo.path = path;
+    WaveFile::RiffWaveInfo info;
+    info.path = path;
 
-    if (!WaveFile::readRiffWavInfo(&sImportInfo))
-    {
-        sImportInfo.clear();
+    if (!WaveFile::readRiffWavInfo(&info))
         return;
-    }
 
+    ClearImportWave();
+    sImportInfo = info;
     fileio::GetFileStem(&sImportName, sImportInfo.path);
 
     SuggestCreateItemName(sImportName);
 }
 
-static WaveFile* ImportWave(WaveFile::RiffWaveInfo* info, WaveFile::Encoding encoding, const sead::SafeString& name)
-{
-    std::string tempPath = FinalizeImportInfoForCommit(info);
-
-    if (!info->isLoop)
-        info->loopStartFrame = 0;
-
-    WaveFile* wave = new WaveFile();
-    wave->setArchive(&ActiveSoundArchive());
-    wave->setEnableName(true);
-    wave->getName() = name;
-
-    const bool success = wave->readWavFile(*info, encoding);
-
-    if (!tempPath.empty())
-        fileio::RemoveFile(tempPath.c_str());
-
-    if (success)
-        return wave;
-
-    delete wave;
-
-    return nullptr;
-}
-
 static WaveFile* ImportPickedWave()
 {
-    WaveFile* wave = ImportWave(&sImportInfo, sImportEncoding, sImportName);
+    WaveFile* wave = CreateImportedArchiveWave(&sImportInfo, sImportEncoding, sImportName);
 
     if (!wave)
         ClearImportWave();
@@ -334,11 +295,11 @@ static void DrawWaveSourceUI()
     if (ImGui::Button(sead::FormatFixedSafeString<64>("%s %s", ICON_LC_FOLDER_OPEN, messages::sound::cBrowseLabel).cstr()))
         PickImportWave();
 
-    ImGui::SameLine();
     if (sImportName.isEmpty())
+    {
+        ImGui::SameLine();
         ImGui::TextDisabled("%s", messages::sound::cNoImportFile);
-    else
-        ImGui::TextUnformatted(sImportName.cstr());
+    }
 
     EndSourceBox(2);
 
@@ -367,79 +328,11 @@ static void PickStreamImportFiles()
     if (!OpenFilesDialog(&paths, nullptr, 1, filters))
         return;
 
-    WaveFile::RiffWaveInfo info;
-    info.clear();
-    info.path.copy(paths[0].c_str());
-
-    if (!WaveFile::readRiffWavInfo(&info))
+    if (!StartStreamCreateImport(paths))
         return;
 
-    ClearStreamImport();
     ClearImportWave();
-
-    sStreamMainInfo = info;
-    fileio::GetFileStem(&sStreamMainName, sStreamMainInfo.path);
-
-    paths.erase(paths.begin());
-    SetStreamCreateFiles(paths);
-
-    SuggestCreateItemName(sStreamMainName);
-    sStreamMainOpenRequest = true;
-}
-
-static WaveFile* ImportStreamMainWave()
-{
-    WaveFile::RiffWaveInfo info = sStreamMainInfo;
-
-    return ImportWave(&info, sStreamMainEncoding, sStreamMainName);
-}
-
-static void DrawStreamMainImportDialog()
-{
-    if (sStreamMainOpenRequest)
-    {
-        ImGui::OpenPopup("###StreamMainImport");
-        sStreamMainOpenRequest = false;
-    }
-
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-    ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
-
-    if (!BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_AUDIO_LINES " %s###StreamMainImport", messages::import::cWaveRegionTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-        return;
-
-    DrawWaveImportInfo(&sStreamMainEncoding, &sStreamMainInfo, sead::FormatFixedSafeString<560>(messages::import::cWaveHeaderFormat, sStreamMainName.cstr()).cstr());
-
-    BeginDialogFooter({messages::common::cImport, messages::common::cCancel}, false);
-
-    const bool importClicked = DialogButton(messages::common::cImport);
-    const bool cancelClicked = DialogButton(messages::common::cCancel);
-
-    if (importClicked)
-    {
-        WaveFile* wave = ImportStreamMainWave();
-
-        if (wave)
-        {
-            SetStreamCreateMainWave(wave, sStreamMainName);
-            ImGui::CloseCurrentPopup();
-        }
-        else
-        {
-            ImGui::OpenPopup("###StreamMainFailed");
-        }
-    }
-    else if (WaveImportConfirmCancel(cancelClicked))
-    {
-        if (!HasStreamCreateMainWave())
-            ClearStreamImport();
-
-        ImGui::CloseCurrentPopup();
-    }
-
-    WarningPopup("###StreamMainFailed", messages::import::cWaveReadFailed);
-
-    ImGui::EndPopup();
+    SuggestCreateItemName(GetStreamCreateMainName());
 }
 
 static void DrawStreamImportSource(const char* browseLabel)
@@ -447,13 +340,14 @@ static void DrawStreamImportSource(const char* browseLabel)
     if (TextButton(browseLabel))
         PickStreamImportFiles();
 
+    const sead::SafeString& mainName = GetStreamCreateMainName();
     const u32 fileCount = GetStreamCreateFileCount() + 1;
 
     ImGui::SameLine();
-    if (sStreamMainName.isEmpty())
+    if (mainName.isEmpty())
         ImGui::TextDisabled("%s", messages::sound::cNoImportFile);
     else if (fileCount == 1)
-        ImGui::TextUnformatted(sStreamMainName.cstr());
+        ImGui::TextUnformatted(mainName.cstr());
     else
         ImGui::Text(messages::sound::cImportFileCountFormat, fileCount);
 }
@@ -546,10 +440,7 @@ static void DrawStreamSourceUI()
 
     EndSourceBox(3);
 
-    DrawStreamMainImportDialog();
-
-    if (TakeStreamCreateEditRequest())
-        sStreamMainOpenRequest = true;
+    DrawStreamCreateMainEditor();
 
     if (sStreamSource != cSourceImport || !HasStreamCreateMainWave())
         return;

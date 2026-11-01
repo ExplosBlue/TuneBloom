@@ -29,12 +29,11 @@
 #include <filedevice/seadFileDeviceMgr.h>
 
 #include <bfsar/files/BankFile.h>
+#include <bfsar/files/BfstmFile.h>
 
 #include <bfsar/audio/DecodedPcm.h>
-#include <bfsar/audio/TempWavWriter.h>
 #include <bfsar/io/FileIo.h>
 
-#include <cstdio>
 #include <vector>
 
 sead::FixedSafeString<512> sDroppedWavPath;
@@ -163,34 +162,11 @@ InstanciateItemCallback CreateWaveFileFunc(bool clear)
     }
 
     if (!sFileName.isEmpty())
-        DrawWaveImportFormInfo(MakeWaveImportEncoding(&sEncoding), &sRiffWaveInfo);
+        DrawWaveImportInfo(MakeWaveImportEncoding(&sEncoding), &sRiffWaveInfo);
 
     return []() -> Item*
     {
-        WaveFile* waveFile = new WaveFile();
-        waveFile->setArchive(&ActiveSoundArchive());
-        waveFile->setEnableName(true);
-        waveFile->getName() = sFileName;
-
-        std::string tempPath = FinalizeImportInfoForCommit(&sRiffWaveInfo);
-
-        if (!sRiffWaveInfo.isLoop)
-        {
-            sRiffWaveInfo.loopStartFrame = 0;
-        }
-
-        bool success = waveFile->readWavFile(sRiffWaveInfo, sEncoding);
-
-        if (!tempPath.empty())
-            fileio::RemoveFile(tempPath.c_str());
-
-        if (!success)
-        {
-            delete waveFile;
-            return nullptr;
-        }
-
-        return waveFile;
+        return CreateImportedArchiveWave(&sRiffWaveInfo, sEncoding, sFileName);
     };
 }
 
@@ -216,10 +192,13 @@ static OldAudioClear sImportCleared;
 static StreamSource sImportOpusStream;
 static s32 sImportOpusCodec = static_cast<s32>(aal::BwavCodec::Opus);
 static u32 sImportOpusBitrate = 0;
+static WaveImportMode sImportMode = WaveImportMode::Replace;
+static sead::FixedSafeString<64> sImportFollowsText;
 
-static void StartWaveImport(WaveFile* wave)
+static void StartWaveImport(WaveFile* wave, WaveImportMode mode)
 {
     sImportWaveFile = wave;
+    sImportMode = mode;
     sImportOpusStream = FindOpusStreamOfWave(wave);
 
     if (sImportOpusStream.isValid())
@@ -228,10 +207,17 @@ static void StartWaveImport(WaveFile* wave)
 
 static WaveImportEncoding GetReplaceEncoding()
 {
-    if (!sImportOpusStream.isValid())
-        return MakeWaveImportEncoding(&sEncoding);
+    const bool isOpus = sImportOpusStream.isValid();
+    s32 trackNo = 0;
+    const WaveFile* trackWave = sImportWaveFile ? FindOtherStreamTrackWave(*sImportWaveFile, &trackNo) : nullptr;
 
-    return MakeOpusStreamImportEncoding(&sImportOpusCodec, &sImportOpusBitrate, GetOpusOriginalChoice(*sImportOpusStream.stream));
+    if (trackWave)
+        return MakeFollowTrackEncoding(*trackWave, trackNo, isOpus ? sImportOpusStream.stream : nullptr, &sEncoding, &sImportOpusCodec, &sImportOpusBitrate, &sImportFollowsText);
+
+    if (isOpus)
+        return MakeOpusStreamImportEncoding(&sImportOpusCodec, &sImportOpusBitrate, GetOpusOriginalChoice(*sImportOpusStream.stream));
+
+    return MakeWaveImportEncoding(&sEncoding);
 }
 
 static OldAudioData FindWaveOldData(const WaveFile& wave)
@@ -263,7 +249,7 @@ void RequestWaveFileReplace(WaveFile* wave)
         return;
 
     sEncoding = WaveFile::Encoding::DspAdpcm;
-    StartWaveImport(wave);
+    StartWaveImport(wave, wave->getChannels().isEmpty() ? WaveImportMode::Import : WaveImportMode::Replace);
     sImportOldData = FindWaveOldData(*wave);
     sImportCleared = OldAudioClear();
     fileio::GetFileStem(&sWavFileName, sRiffWaveInfo.path);
@@ -282,32 +268,11 @@ void RequestWaveFileReimport(WaveFile* wave)
     sRiffWaveInfo.clear();
     sWavFileName.clear();
 
-    DecodedPcm pcm = decodeWaveFileForEditing(*wave);
-    if (!pcm.isValid())
-    {
-        MessageLog::instance()->addPopup({messages::import::cReimportDecodeFailed, wave});
-        return;
-    }
-
-    char tempPath[700];
-    snprintf(tempPath, sizeof(tempPath), "%s/tunebloom_reimport_%u.wav", fileio::GetTempFolder(), wave->getId());
-
-    std::string written = TempWavWriter::write(
-        pcm.channels, pcm.sampleRate, pcm.isLoop,
-        pcm.loopStartFrame, pcm.loopEndFrame, tempPath);
-
-    if (written.empty())
-    {
-        MessageLog::instance()->addPopup({messages::import::cReimportWriteFailed, wave});
-        return;
-    }
-
-    sRiffWaveInfo.path.copy(written.c_str());
-    if (!WaveFile::readRiffWavInfo(&sRiffWaveInfo))
+    if (!WriteReimportSource(decodeWaveFileForEditing(*wave), wave, &sRiffWaveInfo))
         return;
 
     sEncoding = wave->getEncoding();
-    StartWaveImport(wave);
+    StartWaveImport(wave, WaveImportMode::Reimport);
     sImportOldData = OldAudioData();
     sImportCleared = OldAudioClear();
     sWavFileName.copy(wave->getName().cstr());
@@ -329,28 +294,36 @@ void WaveFileContextMenuFunc(Item* item)
 
     if (item)
     {
-        WaveFile* wave = static_cast<WaveFile*>(item);
-        const std::vector<WaveFile*> waves = CollectForAction<WaveFile>(item);
-        const bool single = waves.size() == 1;
-
-        if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace, single, messages::menu::cSelectOneWaveFile))
-            RequestWaveFileReplace(wave);
-
-        if (ContextMenuItem(ICON_LC_SLIDERS_HORIZONTAL, messages::import::cReimportMenuLabel, single, messages::menu::cSelectOneWaveFile))
-            RequestWaveFileReimport(wave);
-
-        ContextMenuSeparator();
-
-        if (ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::common::cExport))
-            RequestExportWaveFiles(waves);
-
-        if (ContextMenuItem(ICON_LC_FILE_AUDIO, messages::menu::cExportWav))
-            RequestExportWaveFilesToWav(waves);
-
+        DrawWaveFileMenuItems(static_cast<WaveFile*>(item), CollectForAction<WaveFile>(item), true);
         ContextMenuSeparator();
     }
 
     DrawMergeDuplicatesMenuItem();
+}
+
+void DrawWaveFileMenuItems(WaveFile* wave, const std::vector<WaveFile*>& waves, bool canExportFile)
+{
+    const bool single = waves.size() == 1;
+
+    if (ContextMenuItem(ICON_LC_ARROW_DOWN_UP, messages::common::cReplace, single, messages::menu::cSelectOneWaveFile))
+        RequestWaveFileReplace(wave);
+
+    if (single)
+        ImGui::SetItemTooltip("%s", messages::import::cReplaceWaveFileTip);
+
+    if (ContextMenuItem(ICON_LC_SLIDERS_HORIZONTAL, messages::import::cReimportMenuLabel, single, messages::menu::cSelectOneWaveFile))
+        RequestWaveFileReimport(wave);
+
+    if (single)
+        ImGui::SetItemTooltip("%s", messages::import::cReimportWaveFileTip);
+
+    ContextMenuSeparator();
+
+    if (canExportFile && ContextMenuItem(ICON_LC_FILE_OUTPUT, messages::common::cExport))
+        RequestExportWaveFiles(waves);
+
+    if (ContextMenuItem(ICON_LC_FILE_AUDIO, messages::menu::cExportWav))
+        RequestExportWaveFilesToWav(waves);
 }
 
 static bool sWaveFilesIncludeStream = true;
@@ -534,32 +507,29 @@ void DrawWaveFileReplacePopup()
     CenterNextDialog();
     ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
 
-    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_ARROW_DOWN_UP " %s###WavImport", messages::import::cReplaceWaveFileMenuLabel).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    const char* const titles[] = { messages::import::cImportWaveFileTitle, messages::import::cReplaceWaveFileMenuLabel, messages::import::cReimportWaveFileMenuLabel };
+    const WaveImportModeTexts texts = GetWaveImportModeTexts(sImportMode);
+
+    if (BeginDialog(sead::FormatFixedSafeString<64>("%s %s###WavImport", texts.icon, titles[static_cast<s32>(sImportMode)]).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         SetNextWaveImportOldData(&sImportOldData, &sImportCleared);
 
-        const WaveImportResult result = DrawWaveImportBody(
-            sead::FormatFixedSafeString<560>(messages::import::cWaveReplaceHeaderFormat, sWavFileName.cstr()).cstr(),
-            GetReplaceEncoding(), &sRiffWaveInfo, messages::common::cReplace);
+        const char* sourceName = sImportMode == WaveImportMode::Reimport ? sWavFileName.cstr() : nullptr;
+        const WaveImportResult result = DrawWaveImportBody(sourceName, GetReplaceEncoding(), &sRiffWaveInfo, texts.commitLabel);
 
         if (result == WaveImportResult::Commit)
         {
-            std::string tempPath = FinalizeImportInfoForCommit(&sRiffWaveInfo);
-
-            if (!sRiffWaveInfo.isLoop)
-                sRiffWaveInfo.loopStartFrame = 0;
-
             const bool isOpus = sImportOpusStream.isValid();
-            bool success = sImportWaveFile->readWavFile(sRiffWaveInfo, isOpus ? WaveFile::Encoding::Pcm16 : sEncoding);
-
-            if (!tempPath.empty())
-                fileio::RemoveFile(tempPath.c_str());
+            const bool success = ReadImportedWave(sImportWaveFile, &sRiffWaveInfo, isOpus ? WaveFile::Encoding::Pcm16 : sEncoding);
 
             if (success && isOpus)
                 SetOpusStreamBitrate(sImportOpusStream, sImportOpusBitrate);
 
             if (success)
             {
+                if (const WaveFile* trackWave = FindOtherStreamTrackWave(*sImportWaveFile, nullptr))
+                    sImportWaveFile->copyLoopFrom(*trackWave);
+
                 if (CanRenameItem(sImportWaveFile))
                     sImportWaveFile->getName() = sWavFileName;
 
@@ -574,6 +544,8 @@ void DrawWaveFileReplacePopup()
 
         if (result != WaveImportResult::None)
         {
+            RemoveReimportSource();
+
             sImportWaveFile = nullptr;
             sImportOpusStream = StreamSource();
             sRiffWaveInfo.clear();
@@ -616,35 +588,18 @@ void DrawWavRegionDropImport()
     CenterNextDialog();
     ImGui::SetNextWindowContentSize(ImVec2(CalcWaveImportWidth(), 0.0f));
 
-    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_PLUS " %s###WavRegionImport", messages::import::cWaveRegionTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (BeginDialog(sead::FormatFixedSafeString<64>(ICON_LC_PLUS " %s###WavRegionImport", messages::import::cImportWaveFileTitle).cstr(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        const WaveImportResult result = DrawWaveImportBody(
-            sead::FormatFixedSafeString<560>(messages::import::cWaveRegionHeaderFormat, sDropName.cstr()).cstr(),
-            &sDropEncoding, &sDropInfo, messages::common::cImport);
+        const WaveImportResult result = DrawWaveImportBody(nullptr, &sDropEncoding, &sDropInfo, messages::common::cImport);
 
         if (result == WaveImportResult::Commit)
         {
             sSoundPlayer.stopAllPlayers();
 
-            std::string tempPath = FinalizeImportInfoForCommit(&sDropInfo);
-
-            if (!sDropInfo.isLoop)
-                sDropInfo.loopStartFrame = 0;
-
-            Bfsar& archive = ActiveSoundArchive();
-
-            WaveFile* wave = new WaveFile();
-            wave->setArchive(&archive);
-            wave->setEnableName(true);
-            wave->getName() = sDropName;
-
-            const bool success = wave->readWavFile(sDropInfo, sDropEncoding);
-
-            if (!tempPath.empty())
-                fileio::RemoveFile(tempPath.c_str());
-
-            if (success)
+            if (WaveFile* wave = CreateImportedArchiveWave(&sDropInfo, sDropEncoding, sDropName))
             {
+                Bfsar& archive = ActiveSoundArchive();
+
                 archive.getWaveFileList().pushBack(wave);
                 archive.updateList(archive.getWaveFileList());
 
@@ -654,10 +609,7 @@ void DrawWavRegionDropImport()
                 SetUnsavedChanges(true);
             }
             else
-            {
-                delete wave;
                 MessageLog::instance()->addPopup({ messages::import::cWaveImportFailed });
-            }
         }
 
         if (result != WaveImportResult::None)

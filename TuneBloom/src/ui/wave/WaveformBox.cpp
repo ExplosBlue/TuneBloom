@@ -5,6 +5,9 @@
 #include <ui/widgets/Knob.h>
 #include <ui/widgets/Widgets.h>
 
+#include <bfsar/audio/WaveFileEditDecode.h>
+#include <bfsar/player/SoundPlayer.h>
+
 #include <libs/IconsLucide.h>
 #include <imgui/imgui_internal.h>
 
@@ -16,6 +19,14 @@ static constexpr f32 cFieldMinEm      = 3.5f;
 static constexpr f32 cFieldMaxEm      = 7.0f;
 static constexpr f32 cFieldGroupGapEm = 1.5f;
 static constexpr f32 cFieldDragRange  = 2000.0f;
+
+void SeekPlayerToSample(f64 sample)
+{
+    if (sample < 0.0 || sSoundPlayer.getSampleCount() == 0)
+        return;
+
+    sSoundPlayer.seek(sead::Mathf::clamp2(0.0f, static_cast<f32>(sample / static_cast<f64>(sSoundPlayer.getSampleCount())), 1.0f));
+}
 
 static bool DrawLoopSwitch(bool isLoop, f32 size, const char* disabledReason)
 {
@@ -29,23 +40,46 @@ static bool DrawLoopSwitch(bool isLoop, f32 size, const char* disabledReason)
     return pressed && !disabledReason;
 }
 
-static void DrawReplaceTool(WaveformReplaceTool* replace, f32 size, f32 groupGap)
+static void DrawSourceTool(WaveformTool* tool, const char* label, f32 size)
 {
-    ImGui::BeginDisabled(replace->disabledReason != nullptr);
+    ImGui::BeginDisabled(tool->disabledReason != nullptr);
 
-    replace->pressed = ImGui::Button(ICON_LC_ARROW_DOWN_UP "###ReplaceTool", ImVec2(size, size)) && !replace->disabledReason;
+    tool->pressed = ImGui::Button(label, ImVec2(size, size)) && !tool->disabledReason;
 
     ImGui::EndDisabled();
-    ImGui::SetItemTooltip("%s", replace->disabledReason ? replace->disabledReason : replace->tooltip);
-    ImGui::SameLine(0.0f, groupGap);
+    ImGui::SetItemTooltip("%s", tool->disabledReason ? tool->disabledReason : tool->tooltip);
 }
 
-bool BeginWaveformHeader(f32 playToolsWidth, bool isLoop, const char* loopDisabledReason, WaveformReplaceTool* replace)
+static f32 CalcSourceToolsWidth(const WaveformSourceTools& tools, f32 buttonSize, f32 groupGap)
+{
+    const u32 toolNum = (tools.reimport ? 1 : 0) + (tools.replace ? 1 : 0);
+
+    if (toolNum == 0)
+        return 0.0f;
+
+    return buttonSize * toolNum + ImGui::GetStyle().ItemSpacing.x * (toolNum - 1) + groupGap;
+}
+
+static void DrawSourceTools(const WaveformSourceTools& tools, f32 buttonSize, f32 groupGap)
+{
+    if (tools.reimport)
+        DrawSourceTool(tools.reimport, ICON_LC_SLIDERS_HORIZONTAL "###ReimportTool", buttonSize);
+
+    if (tools.reimport && tools.replace)
+        ImGui::SameLine();
+
+    if (tools.replace)
+        DrawSourceTool(tools.replace, ICON_LC_ARROW_DOWN_UP "###ReplaceTool", buttonSize);
+
+    if (tools.reimport || tools.replace)
+        ImGui::SameLine(0.0f, groupGap);
+}
+
+bool BeginWaveformHeader(f32 playToolsWidth, bool isLoop, const char* loopDisabledReason, const WaveformSourceTools& sourceTools)
 {
     const f32 buttonSize = ImGui::GetFrameHeight();
     const f32 groupGap = ImFloor(ImGui::GetFontSize() * cToolGroupGapEm);
-    const f32 replaceWidth = replace ? buttonSize + groupGap : 0.0f;
-    const f32 toolsWidth = replaceWidth + buttonSize + groupGap + playToolsWidth;
+    const f32 toolsWidth = CalcSourceToolsWidth(sourceTools, buttonSize, groupGap) + buttonSize + groupGap + playToolsWidth;
     const ImVec2 headerPos = ImGui::GetCursorScreenPos();
     const f32 toolsX = headerPos.x + ImGui::GetContentRegionAvail().x - toolsWidth;
 
@@ -54,8 +88,7 @@ bool BeginWaveformHeader(f32 playToolsWidth, bool isLoop, const char* loopDisabl
     ImGui::SameLine();
     ImGui::SetCursorScreenPos(ImVec2(toolsX, headerPos.y));
 
-    if (replace)
-        DrawReplaceTool(replace, buttonSize, groupGap);
+    DrawSourceTools(sourceTools, buttonSize, groupGap);
 
     const bool loopToggled = DrawLoopSwitch(isLoop, buttonSize, loopDisabledReason);
 
@@ -135,4 +168,19 @@ LoopFieldsResult DrawLoopFields(u32* loopStartFrame, u32* loopEndFrame, u32 samp
     ImGui::EndDisabled();
 
     return result;
+}
+
+bool DecodeWaveViewMono(const WaveFile& wave, std::vector<f32>* mono)
+{
+    mono->clear();
+
+    if (wave.getSampleCount() > cWaveViewMaxSamples)
+        return false;
+
+    const DecodedPcm pcm = decodeWaveFileForEditing(wave);
+
+    if (pcm.isValid())
+        *mono = pcm.monoMix();
+
+    return true;
 }

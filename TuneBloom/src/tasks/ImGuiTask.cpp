@@ -157,6 +157,23 @@ static void UpdateWindowFrameTheme()
     windowframe::SetDark(window, isDark);
 }
 
+static bool UpdateFontAtlas()
+{
+    ImGuiIO& io = ImGui::GetIO();
+    const bool hasTexture = io.Fonts->TexID != nullptr;
+
+    if (!BuildAppFonts(io.DisplayFramebufferScale.x))
+        return false;
+
+    if (hasTexture)
+    {
+        ImGui_ImplOpenGL3_DestroyFontsTexture();
+        ImGui_ImplOpenGL3_CreateFontsTexture();
+    }
+
+    return true;
+}
+
 ImGuiTask::ImGuiTask(const sead::TaskConstructArg& arg)
     : sead::Task(arg, "ImGuiTask")
     , mCalcMeter("ImGuiTask::calc", sead::Color4f::cCyan)
@@ -204,7 +221,7 @@ void ImGuiTask::prepare()
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowMenuButtonPosition = ImGuiDir_Right;
 
-    LoadAppFonts();
+    LoadAppFontFiles();
 
     sead::GameFrameworkGlfwGL* fw = sead::DynamicCast<sead::GameFrameworkGlfwGL>(getFramework());
     SEAD_ASSERT(fw);
@@ -256,8 +273,14 @@ void ImGuiTask::calc()
 
     mCalcMeter.measureBegin();
 
-    ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
+
+    const bool isNewFontAtlas = UpdateFontAtlas();
+    ImGui_ImplOpenGL3_NewFrame();
+
+    if (isNewFontAtlas)
+        ImGui::GetIO().Fonts->ClearTexData();
+
     testhooks::ApplyInputOverrides();
     ImGui::NewFrame();
 

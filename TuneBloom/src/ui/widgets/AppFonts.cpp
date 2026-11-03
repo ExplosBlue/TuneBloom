@@ -57,7 +57,11 @@ static constexpr f32 cCodeFontSize    = 20.0f;
 static constexpr f32 cIconSizeEm      = 0.9f;
 static constexpr f32 cIconOffsetEm    = 0.2f;
 
-static ImFont* sCodeFont = nullptr;
+static FontFile sTextFile  = {};
+static FontFile sCodeFile  = {};
+static FontFile sIconsFile = {};
+static f32      sDensity   = 0.0f;
+static ImFont*  sCodeFont  = nullptr;
 
 static FontFile LoadFontFile(const char* path)
 {
@@ -84,12 +88,20 @@ static f32 CalcFaceAscent(const FontFace& face, f32 lineSize)
     return CalcAscent(face.metrics, lineSize * face.scale);
 }
 
+static ImFontConfig MakeFontConfig()
+{
+    ImFontConfig config;
+    config.FontDataOwnedByAtlas = false;
+    config.RasterizerDensity = sDensity;
+
+    return config;
+}
+
 static ScaledFont AddScaledFont(const FontFile& file, const FontFace& face, f32 lineSize, f32 iconGap, bool isTabular = false)
 {
     const f32 glyphSize = lineSize * face.scale;
 
-    ImFontConfig config;
-    config.FontDataOwnedByAtlas = false;
+    ImFontConfig config = MakeFontConfig();
     config.RasterizerMultiply = face.rasterizerMultiply;
     config.GlyphOffset.y = ImFloor(CalcCapCenter(cLayoutMetrics, lineSize) - CalcCapCenter(face.metrics, glyphSize) + 0.5f);
 
@@ -105,8 +117,7 @@ static void MergeIcons(const FontFile& file, f32 lineSize, f32 baseAscent)
 {
     static const ImWchar cIconRanges[] = { ICON_MIN_LC, ICON_MAX_LC, 0 };
 
-    ImFontConfig config;
-    config.FontDataOwnedByAtlas = false;
+    ImFontConfig config = MakeFontConfig();
     config.MergeMode = true;
     config.PixelSnapH = true;
     config.OversampleH = 1;
@@ -117,8 +128,7 @@ static void MergeIcons(const FontFile& file, f32 lineSize, f32 baseAscent)
 
 static void AddDialogIconFont(const FontFile& file)
 {
-    ImFontConfig config;
-    config.FontDataOwnedByAtlas = false;
+    ImFontConfig config = MakeFontConfig();
     config.PixelSnapH = true;
     config.OversampleH = 1;
 
@@ -150,7 +160,7 @@ static void EqualizeDigits(ImFont* font)
             continue;
 
         ImFontGlyph& glyph = font->Glyphs[font->IndexLookup[c]];
-        const f32 shift = (width - glyph.AdvanceX) * 0.5f;
+        const f32 shift = ImFloor((width - glyph.AdvanceX) * 0.5f * sDensity + 0.5f) / sDensity;
 
         glyph.X0 += shift;
         glyph.X1 += shift;
@@ -162,7 +172,7 @@ static void EqualizeDigits(ImFont* font)
 static void FitScaledFont(const ScaledFont& scaled)
 {
     ImFont* font = scaled.font;
-    const f32 baseline = font->Ascent + font->ConfigData->GlyphOffset.y;
+    const f32 baseline = ImFloor(font->Ascent + 0.5f) + font->ConfigData->GlyphOffset.y;
 
     font->FontSize = scaled.lineSize;
     font->Ascent = baseline;
@@ -173,46 +183,59 @@ static void FitScaledFont(const ScaledFont& scaled)
         EqualizeDigits(font);
 }
 
-void LoadAppFonts()
+void LoadAppFontFiles()
 {
+    sTextFile = LoadFontFile(cTextFace.path);
+    sCodeFile = LoadFontFile(cCodeFace.path);
+    sIconsFile = LoadFontFile("main://fonts/" FONT_ICON_FILE_NAME_LC);
+}
+
+bool BuildAppFonts(f32 density)
+{
+    if (density <= 0.0f || density == sDensity)
+        return false;
+
     ImGuiIO& io = ImGui::GetIO();
 
-    const FontFile textFile = LoadFontFile(cTextFace.path);
-    const FontFile codeFile = LoadFontFile(cCodeFace.path);
-    const FontFile iconsFile = LoadFontFile("main://fonts/" FONT_ICON_FILE_NAME_LC);
+    io.Fonts->Clear();
+    io.Fonts->Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
+    io.FontDefault = nullptr;
+    sDensity = density;
 
     ScaledFont fonts[3 + IM_ARRAYSIZE(cIconFontSizes)];
     s32 fontNum = 0;
 
-    fonts[fontNum++] = AddTextFont(textFile, ScaleSize(cTitleFontSize), true);
+    fonts[fontNum++] = AddTextFont(sTextFile, ScaleSize(cTitleFontSize), true);
 
     for (f32 baseSize : cIconFontSizes)
     {
         const f32 lineSize = ScaleSize(baseSize);
-        const ScaledFont text = AddTextFont(textFile, lineSize);
+        const ScaledFont text = AddTextFont(sTextFile, lineSize);
 
         fonts[fontNum++] = text;
-        MergeIcons(iconsFile, lineSize, CalcFaceAscent(cTextFace, lineSize));
+        MergeIcons(sIconsFile, lineSize, CalcFaceAscent(cTextFace, lineSize));
 
         if (!io.FontDefault)
             io.FontDefault = text.font;
     }
 
-    fonts[fontNum++] = AddTextFont(textFile, ScaleSize(cSmallFontSize));
+    fonts[fontNum++] = AddTextFont(sTextFile, ScaleSize(cSmallFontSize));
 
-    AddDialogIconFont(iconsFile);
+    AddDialogIconFont(sIconsFile);
 
     const f32 codeSize = ScaleSize(cCodeFontSize);
-    const ScaledFont code = AddScaledFont(codeFile, cCodeFace, codeSize, 0.0f);
+    const ScaledFont code = AddScaledFont(sCodeFile, cCodeFace, codeSize, 0.0f);
 
     fonts[fontNum++] = code;
     sCodeFont = code.font;
-    MergeIcons(iconsFile, codeSize, CalcFaceAscent(cCodeFace, codeSize));
+    MergeIcons(sIconsFile, codeSize, CalcFaceAscent(cCodeFace, codeSize));
 
     io.Fonts->Build();
 
     for (s32 i = 0; i < fontNum; i++)
         FitScaledFont(fonts[i]);
+
+    return true;
 }
 
 ImFont* GetCodeFont()

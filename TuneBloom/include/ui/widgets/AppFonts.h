@@ -6,7 +6,8 @@ struct ImDrawList;
 struct ImFont;
 struct ImVec2;
 
-void LoadAppFonts();
+void LoadAppFontFiles();
+bool BuildAppFonts(f32 density);
 ImFont* GetCodeFont();
 
 f32 CalcTabularTextWidth(ImFont* font, f32 fontSize, const char* text, const char* textEnd = nullptr);
